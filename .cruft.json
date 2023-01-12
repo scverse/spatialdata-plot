@@ -1,0 +1,23 @@
+{
+    "template": "/Users/tim.treis/Documents/GitHub/cookiecutter-scverse",
+    "commit": "7cc5403b05e299d7a4bb169c2bd8c27a2a7676f3",
+    "checkout": null,
+    "context": {
+        "cookiecutter": {
+            "project_name": "spatialdata-plot",
+            "package_name": "spatialdata_plot",
+            "project_description": "A very interesting piece of code",
+            "author_full_name": "scverse",
+            "author_email": "scverse",
+            "github_user": "scverse",
+            "project_repo": "https://github.com/scverse/spatialdata-plot",
+            "license": "BSD 3-Clause License",
+            "_copy_without_render": [
+                ".github/workflows/**.yaml",
+                "docs/_templates/autosummary/**.rst"
+            ],
+            "_template": "/Users/tim.treis/Documents/GitHub/cookiecutter-scverse"
+        }
+    },
+    "directory": null
+}
