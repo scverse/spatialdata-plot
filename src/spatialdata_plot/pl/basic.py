@@ -1,4 +1,35 @@
+from ..accessor import register_spatial_data_accessor
+from matplotlib import pyplot as plt
+import numpy as np
 from anndata import AnnData
+
+
+@register_spatial_data_accessor("pl")
+class PlotAccessor:
+    
+    def __init__(self, spatialdata_obj):
+        self._obj = spatialdata_obj
+        
+    def imshow(self, ax=None, **kwargs):
+        ax = ax or plt.gca()
+        
+        
+        # get selection
+        sel = self._obj.table.uns['sel'] 
+        
+        # unpack selection
+        image_key = sel['image_key']
+        c_slice = sel['c_slice']
+        y_slice = sel['y_slice']
+        x_slice = sel['x_slice']
+        
+        ax.imshow(self._obj.images[image_key][c_slice, y_slice, x_slice])
+        
+        return self._obj
+        
+    def test_plot(self):
+        plt.plot(np.arange(10), np.arange(10))
+        
 
 
 def basic_plot(adata: AnnData) -> int:
