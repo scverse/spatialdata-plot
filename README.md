@@ -7,7 +7,7 @@
 [link-tests]: https://github.com/scverse/spatialdata-plot/actions/workflows/test.yml
 [badge-docs]: https://img.shields.io/readthedocs/spatialdata-plot
 
-A very interesting piece of code
+doc -> https://docs.google.com/document/d/1fNYJV88gBLKnshIWkATn4pxgUsgPI0UNwWe7KGVkiEo/edit
 
 ## Getting started
 
