@@ -7,28 +7,42 @@ from anndata import AnnData
 @register_spatial_data_accessor("pl")
 class PlotAccessor:
     
-    def __init__(self, spatialdata_obj):
-        self._obj = spatialdata_obj
+    def __init__(self, sdata):
+        self._sdata = sdata
         
-    def imshow(self, ax=None, **kwargs):
-        ax = ax or plt.gca()
+    def imshow(self, ax=None, ncols=4, width=4, height=3, **kwargs):
+        image_data = self._sdata.im.get_selection()
+        num_images = len(image_data)
         
-        
-        # get selection
-        sel = self._obj.table.uns['sel'] 
-        
-        # unpack selection
-        image_key = sel['image_key']
-        c_slice = sel['c_slice']
-        y_slice = sel['y_slice']
-        x_slice = sel['x_slice']
-        
-        ax.imshow(self._obj.images[image_key][c_slice, y_slice, x_slice])
-        
-        return self._obj
+        if num_images == 1:
+            ax = ax or plt.gca()
+            key = [ k for k in image_data.keys()] [0]
+            ax.imshow(image_data[key].values.T)        
+            ax.set_title(key)
+        else:
+            nrows, reminder = divmod(num_images, ncols)
+            if reminder > 0:
+                nrows += 1
+            
+            fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*width, nrows*height))
+            
+            for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), image_data.items())):
+                if i < num_images:
+                    ax.imshow(v.values.T)
+                    ax.set_title(k)
+            
+            # get rid of the empty axes
+            for i in range(num_images, ncols*nrows):
+                axes.ravel()[i].axis("off")
+                            
+
+        return self._sdata
         
     def test_plot(self):
         plt.plot(np.arange(10), np.arange(10))
+        
+    def scatter(self):
+        plt.scatter(np.random.randn(20), np.random.randn(20))
         
 
 
