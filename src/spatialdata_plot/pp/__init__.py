@@ -1,2 +1,5 @@
-from .basic import basic_preproc
-from .basic import QueryAccessor
+from .basic import PreprocessingAccessor
+
+__all__ = [
+    "PreprocessingAccessor",
+]

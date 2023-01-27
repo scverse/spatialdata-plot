@@ -1,7 +1,5 @@
-from .basic import BasicClass, basic_plot, PlotAccessor
+from .basic import PlotAccessor
 
 __all__ = [
     "PlotAccessor",
-    "BasicClass",
-    "basic_plot"    
 ]
