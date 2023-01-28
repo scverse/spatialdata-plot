@@ -61,11 +61,11 @@ class PreprocessingAccessor:
             subsetted SpatialData object
         """
         
-        if not isinstance(x, Union[slice, list, tuple]):
+        if not isinstance(x, (slice, list, tuple)):
             
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
         
-        if isinstance(x, Union[list, tuple]):
+        if isinstance(x, (list, tuple)):
             
             if len(x) != 2:
                 
@@ -85,11 +85,11 @@ class PreprocessingAccessor:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
         
         
-        if not isinstance(y, Union[slice, list, tuple]):
+        if not isinstance(y, (slice, list, tuple)):
             
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
         
-        if isinstance(y, Union[list, tuple]):
+        if isinstance(y, (list, tuple)):
             
             if len(y) != 2:
                 
@@ -137,7 +137,7 @@ class PreprocessingAccessor:
         """
         # TODO: error handling if keys are not in images
 
-        if not isinstance(keys, Union[list, str]):
+        if not isinstance(keys, (list, str)):
             
             raise TypeError("Parameter 'keys' must either be of type 'str' or 'list'.")
 
