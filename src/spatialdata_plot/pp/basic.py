@@ -109,10 +109,6 @@ class PreprocessingAccessor:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
                 
                 
-                
-        
-        
-        # TODO: add support for list and tuple inputs ? (currently only slice is supported)
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
@@ -169,8 +165,6 @@ class PreprocessingAccessor:
         selected_labels = {key: img for key, img in self._sdata.labels.items() if label_func(key) in keys}
 
         #TODO(ttreis): Subset table, but library_id in mibitof.table.obs is of format /labels/point8 <- bug or not? NEED DATA
-
-        table = self._sdata.table.obs
 
 
         return self._copy(images=selected_images, labels=selected_labels)

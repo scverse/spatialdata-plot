@@ -21,6 +21,21 @@ urls.Source = "https://github.com/scverse/spatialdata-plot"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot"
 dependencies = [
     "anndata",
+    "numpy",
+    "xarray",
+    "zarr",
+#    "ome_zarr",
+    "ome_zarr@git+https://github.com/LucaMarconato/ome-zarr-py@bug_fix_io",
+    "spatial_image",
+    "multiscale_spatial_image",
+    "xarray-schema",
+    "pygeos",
+    "geopandas",
+    "shapely==2.0rc2",
+    "pyarrow",
+    "rich",
+    "tqdm",
+    "typing_extensions>=4.0.0",
     # for debug logging (referenced from the issue template)
     "session-info"
 ]
