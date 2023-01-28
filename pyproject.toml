@@ -26,6 +26,7 @@ dependencies = [
     "zarr",
 #    "ome_zarr",
     "ome_zarr@git+https://github.com/LucaMarconato/ome-zarr-py@bug_fix_io",
+    "spatialdata@git+https://github.com/scverse/spatialdata",
     "spatial_image",
     "multiscale_spatial_image",
     "xarray-schema",
