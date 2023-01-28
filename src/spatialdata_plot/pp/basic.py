@@ -38,6 +38,12 @@ class PreprocessingAccessor:
             table=self._sdata.table if table is None else table,
         )
 
+    def get_region_key(self) -> str:
+        
+        "Quick access to the data's region key."
+        
+        return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
+
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
         
         """Get bounding box around a point.
@@ -65,7 +71,7 @@ class PreprocessingAccessor:
                 
                 raise ValueError("Parameter 'x' must be of length 2.")
             
-            if x[1] >= x[0]:
+            if x[1] <= x[0]:
                 
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
             
@@ -74,7 +80,7 @@ class PreprocessingAccessor:
             
         elif isinstance(x, slice):
             
-            if x.stop >= x.start:
+            if x.stop <= x.start:
                 
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
         
@@ -89,7 +95,7 @@ class PreprocessingAccessor:
                 
                 raise ValueError("Parameter 'y' must be of length 2.")
             
-            if y[1] >= y[0]:
+            if y[1] <= y[0]:
                 
                 raise ValueError("The current choice of 'y' would result in an empty slice.")
             
@@ -98,7 +104,7 @@ class PreprocessingAccessor:
             
         elif isinstance(y, slice):
             
-            if y.stop >= y.start:
+            if y.stop <= y.start:
                 
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
                 
@@ -150,7 +156,7 @@ class PreprocessingAccessor:
             
         assert all([isinstance(key, str) for key in keys])
         
-        valid_keys = list(self.images.keys())
+        valid_keys = list(self._sdata.images.keys())
         
         for key in keys:
             
@@ -164,7 +170,7 @@ class PreprocessingAccessor:
 
         #TODO(ttreis): Subset table, but library_id in mibitof.table.obs is of format /labels/point8 <- bug or not? NEED DATA
 
-        table = self.table.obs.query(f"library_id in ")
+        table = self._sdata.table.obs
 
 
         return self._copy(images=selected_images, labels=selected_labels)
