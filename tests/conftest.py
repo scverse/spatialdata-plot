@@ -25,9 +25,6 @@ from spatialdata._core.models import (
 
 RNG = default_rng()
 
-
-
-
 @pytest.fixture
 def test_sdata_single_image():
     """Creates a simple sdata object."""
@@ -44,6 +41,26 @@ def test_sdata_multiple_images():
         'data3': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
     }  
     sdata = sd.SpatialData(images=images)
+    return sdata
+
+@pytest.fixture
+def test_sdata_multiple_images_with_table():
+    """Creates an sdata object with multiple images."""
+    images = { 
+        'data1': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
+        'data2': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
+        'data3': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
+    }  
+    
+    instance_key = "instance_id"
+    region_key = "annotated_region"
+
+    adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
+    adata.obs[instance_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
+    adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
+    table = TableModel.parse(adata=adata, instance_key=instance_key, region_key=region_key)
+    sdata = sd.SpatialData(images=images, table=table)
+    
     return sdata
 
 @pytest.fixture
@@ -319,3 +336,5 @@ def _get_table(
         adata.obs[region_key] = RNG.choice(region, size=adata.n_obs)
         adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
         return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+    else:
+        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)

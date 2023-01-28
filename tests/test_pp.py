@@ -25,21 +25,21 @@ def test_can_subset_to_images(sdata, keys, request):
     
 
 @pytest.mark.parametrize(
-    "sdata, bb_x, bb_y",
+    "sdata",
     [
-        ("test_sdata_single_image", [0, 5], [5, 10]),
-        ("test_sdata_single_image", (0, 5), (5, 10)),
-        ("test_sdata_single_image", slice(0, 5), slice(5, 10)),
+        ("test_sdata_multiple_images_with_table"),
     ],
 )   
-def test_can_clip_a_single_img_to_bb(sdata, bb_x, bb_y, request):
+def test_table_gets_subset_when_images_are_subset(sdata, request):
     
     """Tests wether the images inside sdata can be clipped to a bounding box."""
     
-    sdata = request.getfixturevalue(sdata)
+    sdata = request.getfixturevalue(sdata)    
     
-    clipped_sdata = sdata.pp.get_bb(bb_x, bb_y)
+    assert sdata.table.n_obs == 30
     
-    assert clipped_sdata.images['data1'].shape == (1, 5, 5)
+    new_sdata = sdata.pp.get_images("data1")
+    
+    assert new_sdata.table.n_obs == 3
     
     

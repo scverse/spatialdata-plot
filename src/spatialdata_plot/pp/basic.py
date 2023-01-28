@@ -164,10 +164,22 @@ class PreprocessingAccessor:
         # TODO: how to handle labels ? there might be multiple labels per image (e.g. nuclei and cell segmentation masks)
         selected_labels = {key: img for key, img in self._sdata.labels.items() if label_func(key) in keys}
 
-        #TODO(ttreis): Subset table, but library_id in mibitof.table.obs is of format /labels/point8 <- bug or not? NEED DATA
+        # initialise empty so that it is only overwritten if needed
+        new_table = None
+        # make sure that table exists
+        if hasattr(self._sdata, "table"):
+            
+            if hasattr(self._sdata.table, "obs"):
+                
+                # create mask of used keys
+                mask = self._sdata.table.obs[self._sdata.pp.get_region_key()]
+                mask = list(mask.str.contains("|".join(keys)))
+                # print(mask)
+                
+                new_table = self._sdata.table[mask, :]
+                
 
-
-        return self._copy(images=selected_images, labels=selected_labels)
+        return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
     def get_channels(self, keys: Union[list, slice]) -> sd.SpatialData:
         """Get channels from a list of keys.
