@@ -6,9 +6,9 @@ requires = ["hatchling"]
 [project]
 name = "spatialdata-plot"
 version = "0.0.1"
-description = "A very interesting piece of code"
+description = "Static plotting for spatialdata."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
     {name = "scverse"},
@@ -36,26 +36,21 @@ dependencies = [
     "rich",
     "tqdm",
     "typing_extensions>=4.0.0",
-    # for debug logging (referenced from the issue template)
-    "session-info"
 ]
 
 [project.optional-dependencies]
 dev = [
-    # CLI for bumping the version number
+    # dev version generation
     "bump2version",
-    "pre-commit",
-    "twine>=4.0.2"
 ]
 doc = [
-    "sphinx>=4",
+    "sphinx>=4.5",
     "sphinx-book-theme>=0.3.3",
     "myst-nb",
     "sphinxcontrib-bibtex>=1.0.0",
     "sphinx-autodoc-typehints",
     # For notebooks
-    "ipykernel",
-    "ipython",
+    "ipython>=8.6.0",
     "sphinx-copybutton",
 ]
 test = [
@@ -64,7 +59,7 @@ test = [
 ]
 
 [tool.coverage.run]
-source = ["spatialdata_plot"]
+source = ["spatialdata"]
 omit = [
     "**/test_*.py",
 ]
@@ -73,7 +68,12 @@ omit = [
 testpaths = ["tests"]
 xfail_strict = true
 addopts = [
+#    "-Werror",  # if 3rd party libs raise DeprecationWarnings, just use filterwarnings below
     "--import-mode=importlib",  # allow using test files with same name
+]
+# info on how to use this https://stackoverflow.com/questions/57925071/how-do-i-avoid-getting-deprecationwarning-from-inside-dependencies-with-pytest
+filterwarnings = [
+    #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
 ]
 
 [tool.isort]
@@ -84,7 +84,7 @@ skip_glob = ["docs/*"]
 
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ['py39']
 include = '\.pyi?$'
 exclude = '''
 (
@@ -106,14 +106,5 @@ exclude = '''
 [tool.jupytext]
 formats = "ipynb,md"
 
-[tool.cruft]
-skip = [
-    "tests",
-    "src/**/__init__.py",
-    "src/**/basic.py",
-    "docs/api.md",
-    "docs/changelog.md",
-    "docs/references.bib",
-    "docs/references.md",
-    "docs/notebooks/example.ipynb"
-]
+[tool.hatch.metadata]
+allow-direct-references = true
