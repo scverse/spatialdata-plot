@@ -25,12 +25,13 @@ def test_can_subset_to_images(sdata, keys, request):
     
 
 @pytest.mark.parametrize(
-    "sdata",
+    "sdata, keys, nrows ",
     [
-        ("test_sdata_multiple_images_with_table"),
+        ("test_sdata_multiple_images_with_table", "data1", 3),
+        ("test_sdata_multiple_images_with_table", ["data1", "data3"], 23),
     ],
 )   
-def test_table_gets_subset_when_images_are_subset(sdata, request):
+def test_table_gets_subset_when_images_are_subset(sdata, keys, nrows, request):
     
     """Tests wether the images inside sdata can be clipped to a bounding box."""
     
@@ -38,8 +39,8 @@ def test_table_gets_subset_when_images_are_subset(sdata, request):
     
     assert sdata.table.n_obs == 30
     
-    new_sdata = sdata.pp.get_images("data1")
+    new_sdata = sdata.pp.get_images(keys)
     
-    assert new_sdata.table.n_obs == 3
+    assert new_sdata.table.n_obs == nrows
     
     
