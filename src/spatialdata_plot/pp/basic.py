@@ -297,7 +297,7 @@ class PreprocessingAccessor:
             if isinstance(polygons[key_major], list):
 
                 polygons[key_major] = GeoDataFrame(({"geometry": polygons[key_major]}))
-                polygons[key_major] = PolygonsModel.parse(polygons, name=key_major)
+                polygons[key_major] = PolygonsModel.parse(polygons[key_major], name=key_major)
 
         sdata = self._copy(polygons=polygons)
 
