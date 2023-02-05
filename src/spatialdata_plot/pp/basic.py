@@ -2,11 +2,16 @@ from typing import Callable, List, Union
 
 import spatialdata as sd
 from anndata import AnnData
+from geopandas import GeoDataFrame
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
 from .render import _render_label
 from .utils import _get_listed_colormap
+
+from spatialdata._core.models import (
+    PolygonsModel,
+)
 
 
 @register_spatial_data_accessor("pp")
@@ -23,12 +28,12 @@ class PreprocessingAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-        
+
         """
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
         """
-        
+
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -39,13 +44,13 @@ class PreprocessingAccessor:
         )
 
     def get_region_key(self) -> str:
-        
+
         "Quick access to the data's region key."
-        
+
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
-        
+
         """Get bounding box around a point.
 
         Parameters
@@ -60,55 +65,53 @@ class PreprocessingAccessor:
         sd.SpatialData
             subsetted SpatialData object
         """
-        
+
         if not isinstance(x, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(x, (list, tuple)):
-            
+
             if len(x) != 2:
-                
+
                 raise ValueError("Parameter 'x' must be of length 2.")
-            
+
             if x[1] <= x[0]:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-            
+
             # x is clean
             x = slice(x[0], x[1])
-            
+
         elif isinstance(x, slice):
-            
+
             if x.stop <= x.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-        
-        
+
         if not isinstance(y, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(y, (list, tuple)):
-            
+
             if len(y) != 2:
-                
+
                 raise ValueError("Parameter 'y' must be of length 2.")
-            
+
             if y[1] <= y[0]:
-                
+
                 raise ValueError("The current choice of 'y' would result in an empty slice.")
-            
+
             # y is clean
             y = slice(y[0], y[1])
-            
+
         elif isinstance(y, slice):
-            
+
             if y.stop <= y.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-                
-                
+
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
@@ -138,26 +141,26 @@ class PreprocessingAccessor:
         # TODO: error handling if keys are not in images
 
         if not isinstance(keys, (list, str)):
-            
+
             raise TypeError("Parameter 'keys' must either be of type 'str' or 'list'.")
 
-        if isinstance(keys, list): 
-            
+        if isinstance(keys, list):
+
             if not all([isinstance(key, str) for key in keys]):
-                
+
                 raise TypeError("All elements in 'keys' must be of type 'str'.")
 
         if isinstance(keys, str):
             keys = [keys]
-            
+
         assert all([isinstance(key, str) for key in keys])
-        
+
         valid_keys = list(self._sdata.images.keys())
-        
+
         for key in keys:
-            
+
             if key not in valid_keys:
-                
+
                 raise ValueError(f"Key '{key}' is not a valid key. Valid choices are: " + ", ".join(valid_keys))
 
         selected_images = {key: img for key, img in self._sdata.images.items() if key in keys}
@@ -168,16 +171,15 @@ class PreprocessingAccessor:
         new_table = None
         # make sure that table exists
         if hasattr(self._sdata, "table"):
-            
+
             if hasattr(self._sdata.table, "obs"):
-                
+
                 # create mask of used keys
                 mask = self._sdata.table.obs[self._sdata.pp.get_region_key()]
                 mask = list(mask.str.contains("|".join(keys)))
                 # print(mask)
-                
+
                 new_table = self._sdata.table[mask, :]
-                
 
         return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
@@ -199,6 +201,107 @@ class PreprocessingAccessor:
         channels_images = {key: img.sel(selection) for key, img in self._sdata.images.items()}
 
         return self._copy(images=channels_images)
+
+    def get_polygons(self, keys: Union[str, list[str]]) -> sd.SpatialData:
+        """Get polygons from a list of keys.
+
+        Parameters
+        ----------
+        keys : list
+            ist of keys to select
+
+        Returns
+        -------
+        sd.SpatialData
+            subsetted SpatialData object
+        """
+
+        if len(keys) == 0:
+
+            raise ValueError("No keys specified")
+
+        if not (isinstance(keys, str) or isinstance(keys, list)):
+
+            raise TypeError("Parameter 'keys' must either be a string or a list of strings.")
+
+        if isinstance(keys, list):
+
+            if not all(isinstance(x, str) for x in keys):
+
+                raise TypeError("Not all elements in 'keys' are strings.")
+
+        # 1) collect and verify all polygons
+
+        polygons_to_retain = []
+        keys = [keys] if isinstance(keys, str) else keys
+        for key in keys:
+
+            key = key.split("/")
+
+            if len(key) > 2:
+
+                raise ValueError(f"Key '{key}' is specified in an invalid format.")
+
+            if len(key) == 2:
+
+                key_major, key_minor = key
+
+            elif len(key) == 1:
+
+                key_major, key_minor = (key[0], None)
+
+            # TODO(ttreis) error handling if key_minor cannot be converted to int
+
+            if key_major not in list(self._sdata.polygons.keys()):
+
+                raise ValueError(f"Polygon with key '{key_major}' does not exist.")
+
+            if key_minor is not None:
+
+                if int(key_minor) not in self._sdata.polygons[key_major].index:
+
+                    raise ValueError(f"Polygon with key '{key_major}/{key_minor}' does not exist.")
+
+            key_minor = "all" if key_minor is None else key_minor
+
+            polygons_to_retain.append([key_major, key_minor])
+
+        # 2) Collect polygons
+        polygons = {}
+
+        # 2a) Initialize polygon dict
+        for key_major, key_minor in polygons_to_retain:
+
+            if key_minor != "all":
+
+                polygons[key_major] = []
+
+        # 2b) Collect polygons
+        for key_major, key_minor in polygons_to_retain:
+
+            if key_minor == "all":
+
+                polygons[key_major] = self._sdata.polygons[key_major]
+
+            else:
+
+                polygons[key_major].append(
+                    self._sdata.polygons[key_major].loc[
+                        int(key_minor),
+                    ]["geometry"]
+                )
+
+        # 2c) If not a full GeoDataFrame, convert subset to GeoDataFrame
+        for key_major in polygons.keys():
+
+            if isinstance(polygons[key_major], list):
+
+                polygons[key_major] = GeoDataFrame(({"geometry": polygons[key_major]}))
+                polygons[key_major] = PolygonsModel.parse(polygons[key_major], name=key_major)
+
+        sdata = self._copy(polygons=polygons)
+
+        return sdata
 
     def colorize(
         self,
