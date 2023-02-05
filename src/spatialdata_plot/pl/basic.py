@@ -82,6 +82,10 @@ class PlotAccessor:
         # TODO(ttreis): figure out nesting of geometries
         # TODO(ttreis): figure out how to handle multiple polygon colours
         # TODO(ttreis): include cmap
+        # TODO(ttreis): include optimal tiling if split
+        
+        # Figure out how many polygons to plot there are
+        
         
         if split_by:
             for key, value in self._sdata.polygons.items():

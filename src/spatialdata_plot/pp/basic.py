@@ -2,11 +2,16 @@ from typing import Callable, List, Union
 
 import spatialdata as sd
 from anndata import AnnData
+from geopandas import GeoDataFrame
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
 from .render import _render_label
 from .utils import _get_listed_colormap
+
+from spatialdata._core.models import (
+    PolygonsModel,
+)
 
 
 @register_spatial_data_accessor("pp")
@@ -38,9 +43,6 @@ class PreprocessingAccessor:
             table=self._sdata.table if table is None else table,
         )
 
-
-        
-        
     def get_region_key(self) -> str:
 
         "Quick access to the data's region key."
@@ -200,7 +202,7 @@ class PreprocessingAccessor:
 
         return self._copy(images=channels_images)
 
-    def get_polygons(self, keys: list) -> sd.SpatialData:
+    def get_polygons(self, keys: Union[str, list[str]]) -> sd.SpatialData:
         """Get polygons from a list of keys.
 
         Parameters
@@ -213,6 +215,93 @@ class PreprocessingAccessor:
         sd.SpatialData
             subsetted SpatialData object
         """
+
+        if len(keys) == 0:
+
+            raise ValueError("No keys specified")
+
+        if not (isinstance(keys, str) or isinstance(keys, list)):
+
+            raise TypeError("Parameter 'keys' must either be a string or a list of strings.")
+
+        if isinstance(keys, list):
+
+            if not all(isinstance(x, str) for x in keys):
+
+                raise TypeError("Not all elements in 'keys' are strings.")
+
+        # 1) collect and verify all polygons
+
+        polygons_to_retain = []
+        keys = [keys] if isinstance(keys, str) else keys
+        for key in keys:
+
+            key = key.split("/")
+
+            if len(key) > 2:
+
+                raise ValueError(f"Key '{key}' is specified in an invalid format.")
+
+            if len(key) == 2:
+
+                key_major, key_minor = key
+
+            elif len(key) == 1:
+
+                key_major, key_minor = (key[0], None)
+
+            # TODO(ttreis) error handling if key_minor cannot be converted to int
+
+            if key_major not in list(self._sdata.polygons.keys()):
+
+                raise ValueError(f"Polygon with key '{key_major}' does not exist.")
+
+            if key_minor is not None:
+
+                if int(key_minor) not in self._sdata.polygons[key_major].index:
+
+                    raise ValueError(f"Polygon with key '{key_major}/{key_minor}' does not exist.")
+
+            key_minor = "all" if key_minor is None else key_minor
+
+            polygons_to_retain.append([key_major, key_minor])
+
+        # 2) Collect polygons
+        polygons = {}
+
+        # 2a) Initialize polygon dict
+        for key_major, key_minor in polygons_to_retain:
+
+            if key_minor != "all":
+
+                polygons[key_major] = []
+
+        # 2b) Collect polygons
+        for key_major, key_minor in polygons_to_retain:
+
+            if key_minor == "all":
+
+                polygons[key_major] = self._sdata.polygons[key_major]
+
+            else:
+
+                polygons[key_major].append(
+                    self._sdata.polygons[key_major].loc[
+                        int(key_minor),
+                    ]["geometry"]
+                )
+
+        # 2c) If not a full GeoDataFrame, convert subset to GeoDataFrame
+        for key_major in polygons.keys():
+
+            if isinstance(polygons[key_major], list):
+
+                polygons[key_major] = GeoDataFrame(({"geometry": polygons[key_major]}))
+                polygons[key_major] = PolygonsModel.parse(polygons, name=key_major)
+
+        sdata = self._copy(polygons=polygons)
+
+        return sdata
 
     def colorize(
         self,
