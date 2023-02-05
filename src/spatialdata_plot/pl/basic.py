@@ -1,4 +1,7 @@
+from typing import Union
+
 import numpy as np
+import matplotlib
 from matplotlib import pyplot as plt
 
 from ..accessor import register_spatial_data_accessor
@@ -36,8 +39,69 @@ class PlotAccessor:
 
         return self._sdata
 
-    def test_plot(self):
-        plt.plot(np.arange(10), np.arange(10))
+    def render_polygon(
+        self,
+        ax: Union[matplotlib.axes.Axes, list[matplotlib.axes.Axes]] = None,
+        cmap=plt.cm.viridis,
+        alpha_boundary: float = 1.0,
+        alpha_fill: float = 0.3,
+        split_by=True,
+        **kwargs,
+    ):
 
-    def scatter(self):
-        plt.scatter(np.random.randn(20), np.random.randn(20))
+        if ax is not None:
+
+            if not (isinstance(ax, matplotlib.axes.Axes) or all([isinstance(a, matplotlib.axes.Axes) for a in ax])):
+
+                raise TypeError("Parameter 'ax' must be one or more objects of of type 'matplotlib.axes.Axes'.")
+
+        if not isinstance(cmap, matplotlib.colors.Colormap):
+
+            raise TypeError("Parameter 'cmap' must be of type 'matplotlib.colors.Colormap'.")
+
+        if not isinstance(alpha_boundary, (int, float)):
+
+            raise TypeError("Parameter 'alpha_boundary' must be numeric.")
+
+        if not (0 <= alpha_boundary <= 1):
+
+            raise ValueError("Parameter 'alpha_boundary' must be between 0 and 1.")
+
+        if not (0 <= alpha_fill <= 1):
+
+            raise ValueError("Parameter 'alpha_fill' must be between 0 and 1.")
+
+        if not isinstance(alpha_fill, (int, float)):
+
+            raise TypeError("Parameter 'alpha_fill' must be numeric.")
+
+        if not isinstance(split_by, bool):
+
+            raise TypeError("Parameter 'split_by' must be of type 'bool'.")
+
+        # TODO(ttreis): figure out nesting of geometries
+        # TODO(ttreis): figure out how to handle multiple polygon colours
+        # TODO(ttreis): include cmap
+        # TODO(ttreis): include optimal tiling if split
+        
+        # Figure out how many polygons to plot there are
+        
+        
+        if split_by:
+            for key, value in self._sdata.polygons.items():
+                ax = ax or plt.gca()
+                for geometry in value.geometry:
+                    (
+                        x,
+                        y,
+                    ) = geometry.exterior.xy
+                    ax.plot(x, y, alpha=alpha_boundary, **kwargs)
+
+                    (
+                        x,
+                        y,
+                    ) = geometry.exterior.xy
+                    ax.fill(x, y, alpha=alpha_fill, **kwargs)
+                    
+
+        return self._sdata
