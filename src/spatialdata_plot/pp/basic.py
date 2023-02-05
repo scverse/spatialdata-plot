@@ -2,6 +2,8 @@ from typing import Callable, List, Union
 
 import spatialdata as sd
 from anndata import AnnData
+import pandas as pd
+
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
@@ -23,12 +25,12 @@ class PreprocessingAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-        
+
         """
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
         """
-        
+
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -39,76 +41,74 @@ class PreprocessingAccessor:
         )
 
     def get_region_key(self) -> str:
-        
+
         "Quick access to the data's region key."
-        
+
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
-        
+
         """Get bounding box around a point.
 
         Parameters
         ----------
         x : Union[slice, list, tuple]
-            x range of the bounding box
+            x range of the bounding box. Stepsize will be ignored if slice
         y : Union[slice, list, tuple]
-            y range of the bounding box
+            y range of the bounding box. Stepsize will be ignored if slice
 
         Returns
         -------
         sd.SpatialData
             subsetted SpatialData object
         """
-        
+
         if not isinstance(x, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(x, (list, tuple)):
-            
+
             if len(x) != 2:
-                
+
                 raise ValueError("Parameter 'x' must be of length 2.")
-            
+
             if x[1] <= x[0]:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-            
+
             # x is clean
             x = slice(x[0], x[1])
-            
+
         elif isinstance(x, slice):
-            
+
             if x.stop <= x.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-        
-        
+
         if not isinstance(y, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(y, (list, tuple)):
-            
+
             if len(y) != 2:
-                
+
                 raise ValueError("Parameter 'y' must be of length 2.")
-            
+
             if y[1] <= y[0]:
-                
+
                 raise ValueError("The current choice of 'y' would result in an empty slice.")
-            
+
             # y is clean
             y = slice(y[0], y[1])
-            
+
         elif isinstance(y, slice):
-            
+
             if y.stop <= y.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-                
-                
+
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
@@ -138,26 +138,26 @@ class PreprocessingAccessor:
         # TODO: error handling if keys are not in images
 
         if not isinstance(keys, (list, str)):
-            
+
             raise TypeError("Parameter 'keys' must either be of type 'str' or 'list'.")
 
-        if isinstance(keys, list): 
-            
+        if isinstance(keys, list):
+
             if not all([isinstance(key, str) for key in keys]):
-                
+
                 raise TypeError("All elements in 'keys' must be of type 'str'.")
 
         if isinstance(keys, str):
             keys = [keys]
-            
+
         assert all([isinstance(key, str) for key in keys])
-        
+
         valid_keys = list(self._sdata.images.keys())
-        
+
         for key in keys:
-            
+
             if key not in valid_keys:
-                
+
                 raise ValueError(f"Key '{key}' is not a valid key. Valid choices are: " + ", ".join(valid_keys))
 
         selected_images = {key: img for key, img in self._sdata.images.items() if key in keys}
@@ -168,35 +168,67 @@ class PreprocessingAccessor:
         new_table = None
         # make sure that table exists
         if hasattr(self._sdata, "table"):
-            
+
             if hasattr(self._sdata.table, "obs"):
-                
+
                 # create mask of used keys
                 mask = self._sdata.table.obs[self._sdata.pp.get_region_key()]
                 mask = list(mask.str.contains("|".join(keys)))
                 # print(mask)
-                
+
                 new_table = self._sdata.table[mask, :]
-                
 
         return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
-    def get_channels(self, keys: Union[list, slice]) -> sd.SpatialData:
-        """Get channels from a list of keys.
+    def get_channels(self, channels: Union[list, slice]) -> sd.SpatialData:
+        """Subset a spatialdata object to the selected channels.
 
-        Parameters
-        ----------
-        keys : list
-            list of keys to select
+        Images that don't have the selected channels will be dropped.
 
-        Returns
-        -------
-        sd.SpatialData
-            subsetted SpatialData object
         """
-        selection = dict(c=keys)
-        # TODO: error handling if selection is out of bounds
-        channels_images = {key: img.sel(selection) for key, img in self._sdata.images.items()}
+
+        if not isinstance(channels, (list, slice)):
+
+            raise TypeError("Parameter 'channels' must either be of type 'list' or 'slice'.")
+
+        if isinstance(channels, list):
+
+            if not all([isinstance(channel, int) for channel in channels]):
+
+                raise TypeError("All elements in 'channels' must be of type 'int'.")
+
+        if isinstance(channels, list):
+
+            if not len(channels) > 0:
+
+                raise ValueError("The list of channels cannot be empty.")
+
+        # validate that selection is within bounds
+        # 1) parse slice into list, respecting stepsize
+        if isinstance(channels, slice):
+
+            channels = [x for x in range(start=channels.start, stop=channels.stop, step=channels.step or 1)]
+
+        # 2) check which images have how many channels
+        image_names = []
+        n_channels = []
+        for image_name, image in self._sdata.images.items():
+            image_names.append(image_name)
+            n_channels.append(image.shape[0])
+
+        channels_in_image = pd.DataFrame({"image_name": image_names, "n_channels": n_channels})
+
+        # 3) drop images that don't have enough channels for the selection
+        channels_in_image = channels_in_image[channels_in_image.n_channels - 1 >= max(channels)]
+        valid_images = channels_in_image.image_name.values.tolist()
+        sdata_with_valid_images = self._sdata.pp.get_images(keys=valid_images)
+
+        if len(sdata_with_valid_images.images.keys()) < 1:
+
+            raise ValueError("The choice of channels results in an empty selection.")
+
+        selected_channels = dict(c=channels)
+        channels_images = {key: img.sel(selected_channels) for key, img in self._sdata.images.items()}
 
         return self._copy(images=channels_images)
 
