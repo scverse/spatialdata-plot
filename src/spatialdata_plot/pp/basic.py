@@ -23,12 +23,12 @@ class PreprocessingAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-        
+
         """
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
         """
-        
+
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -39,13 +39,13 @@ class PreprocessingAccessor:
         )
 
     def get_region_key(self) -> str:
-        
+
         "Quick access to the data's region key."
-        
+
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
-        
+
         """Get bounding box around a point.
 
         Parameters
@@ -60,55 +60,53 @@ class PreprocessingAccessor:
         sd.SpatialData
             subsetted SpatialData object
         """
-        
+
         if not isinstance(x, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(x, (list, tuple)):
-            
+
             if len(x) != 2:
-                
+
                 raise ValueError("Parameter 'x' must be of length 2.")
-            
+
             if x[1] <= x[0]:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-            
+
             # x is clean
             x = slice(x[0], x[1])
-            
+
         elif isinstance(x, slice):
-            
+
             if x.stop <= x.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-        
-        
+
         if not isinstance(y, (slice, list, tuple)):
-            
+
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
-        
+
         if isinstance(y, (list, tuple)):
-            
+
             if len(y) != 2:
-                
+
                 raise ValueError("Parameter 'y' must be of length 2.")
-            
+
             if y[1] <= y[0]:
-                
+
                 raise ValueError("The current choice of 'y' would result in an empty slice.")
-            
+
             # y is clean
             y = slice(y[0], y[1])
-            
+
         elif isinstance(y, slice):
-            
+
             if y.stop <= y.start:
-                
+
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-                
-                
+
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
@@ -138,26 +136,26 @@ class PreprocessingAccessor:
         # TODO: error handling if keys are not in images
 
         if not isinstance(keys, (list, str)):
-            
+
             raise TypeError("Parameter 'keys' must either be of type 'str' or 'list'.")
 
-        if isinstance(keys, list): 
-            
+        if isinstance(keys, list):
+
             if not all([isinstance(key, str) for key in keys]):
-                
+
                 raise TypeError("All elements in 'keys' must be of type 'str'.")
 
         if isinstance(keys, str):
             keys = [keys]
-            
+
         assert all([isinstance(key, str) for key in keys])
-        
+
         valid_keys = list(self._sdata.images.keys())
-        
+
         for key in keys:
-            
+
             if key not in valid_keys:
-                
+
                 raise ValueError(f"Key '{key}' is not a valid key. Valid choices are: " + ", ".join(valid_keys))
 
         selected_images = {key: img for key, img in self._sdata.images.items() if key in keys}
@@ -168,16 +166,15 @@ class PreprocessingAccessor:
         new_table = None
         # make sure that table exists
         if hasattr(self._sdata, "table"):
-            
+
             if hasattr(self._sdata.table, "obs"):
-                
+
                 # create mask of used keys
                 mask = self._sdata.table.obs[self._sdata.pp.get_region_key()]
                 mask = list(mask.str.contains("|".join(keys)))
                 # print(mask)
-                
+
                 new_table = self._sdata.table[mask, :]
-                
 
         return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
