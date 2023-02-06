@@ -1,3 +1,5 @@
+from typing import Union
+
 import numpy as np
 import spatialdata as sd
 from matplotlib import pyplot as plt
@@ -10,19 +12,38 @@ class PlotAccessor:
     def __init__(self, sdata):
         self._sdata = sdata
 
-    def _subplots(self, num_images, ncols=4, width=4, height=3):
-        """Helper function to set up axes for plotting."""
+    def _subplots(
+        self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
+    ) -> Union[plt.Figure, plt.Axes]:
+        """Helper function to set up axes for plotting.
 
-        if num_images == 1:
-            fig, ax = plt.subplots()
-            return fig, ax
+        Parameters
+        ----------
+        num_images : int
+            Number of images to plot. Must be greater than 1.
+        ncols : int, optional
+            Number of columns in the subplot grid, by default 4
+        width : int, optional
+            Width of each subplot, by default 4
 
-        nrows, reminder = divmod(num_images, ncols)
-
-        if nrows == 0:
+        Returns
+        -------
+        Union[plt.Figure, plt.Axes]
+            Matplotlib figure and axes object.
+        """
+        if num_images <= 1:
+            raise ValueError("Number of images must be greater than 1.")
+        
+        if num_images < ncols:
             nrows = 1
-        if reminder > 0:
-            nrows += 1
+            ncols = num_images
+        else:
+            nrows, reminder = divmod(num_images, ncols)
+
+            if nrows == 0:
+                nrows = 1
+            if reminder > 0:
+                nrows += 1
 
         fig, axes = plt.subplots(nrows, ncols, figsize=(width * ncols, height * nrows))
 
@@ -34,8 +55,8 @@ class PlotAccessor:
         """
         Plot the images in the SpatialData object.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         ax : matplotlib.axes.Axes, optional
             Matplotlib axes object to plot on. If None, a new figure is created.
             Works only if there is one image in the SpatialData object.
@@ -46,8 +67,8 @@ class PlotAccessor:
         height : int, optional
             Height of each subplot. Default is 3.
 
-        Returns:
-        --------
+        Returns
+        -------
         sd.SpatialData
             A SpatialData object.
         """
