@@ -1,17 +1,47 @@
-from anndata import AnnData
+from typing import Union
+
+import pandas as pd
+from skimage.measure import regionprops_table
+
+from ..accessor import register_spatial_data_accessor
 
 
-def basic_tool(adata: AnnData) -> int:
-    """Run a tool on the AnnData object.
+@register_spatial_data_accessor("tl")
+class ToolsAccessor:
+    def __init__(self, sdata):
+        self._sdata = sdata
 
-    Parameters
-    ----------
-    adata
-        The AnnData object to preprocess.
+    def label_property(self, properties: Union[str, list], obsm_key_added="label_props", **kwargs):
+        """Extract properties from the label images.
+        """
+        if isinstance(properties, str):
+            properties = [properties]
 
-    Returns
-    -------
-    Some integer value.
-    """
-    print("Implement a tool to run on the AnnData object.")
-    return 0
+        if "label" not in properties:
+            properties = ["label"] + properties
+
+        region_key = self._sdata.pp.get_region_key()
+        instance_key = self._sdata.pp.get_instance_key()
+        regions = self._sdata.table.obs[region_key].unique().tolist()
+        region_key_dict = {key.split("/")[-1]: key for key in regions}
+
+        properties_list = []
+        for label in self._sdata.labels:
+            props = regionprops_table(self._sdata.labels[label].values, properties=properties, **kwargs)
+
+            df = pd.DataFrame(props).assign(region_key=region_key_dict[label])
+            properties_list.append(df)
+
+        property_table = pd.concat(properties_list).rename(
+            columns={"label": instance_key, "region_key": region_key, "centroid-0": "y", "centroid-1": "x"}
+        )
+        # align with obs
+        property_table = (
+            self._sdata.table.obs[[region_key, instance_key]]
+            .reset_index()
+            .merge(property_table, on=[region_key, instance_key], how="left")
+            .set_index("index")
+        )
+        adata = self._sdata.table.copy()
+        adata.obsm[obsm_key_added] = property_table
+        return self._sdata.pp._copy(table=adata)

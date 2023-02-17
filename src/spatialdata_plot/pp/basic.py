@@ -1,9 +1,8 @@
 from typing import Callable, List, Union
 
+import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
-import pandas as pd
-
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
@@ -45,6 +44,11 @@ class PreprocessingAccessor:
         "Quick access to the data's region key."
 
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
+
+    def get_instance_key(self) -> str:
+        "Quick access to the data's instance key."
+
+        return self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
 
