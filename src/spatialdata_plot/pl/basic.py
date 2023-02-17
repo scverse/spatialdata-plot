@@ -83,7 +83,8 @@ class PlotAccessor:
         if num_images == 1:
             ax = ax or plt.gca()
             key = [k for k in image_data.keys()][0]
-            ax.imshow(image_data[key].values.T)
+            bb = self._sdata.table.uns["bounding_box"] if "bounding_box" in self._sdata.table.uns else None
+            ax.imshow(image_data[key].values.T, extent=bb)
             ax.set_title(key)
 
         if num_images > 1:
@@ -92,7 +93,8 @@ class PlotAccessor:
             # iterate over each image and plot it onto the axes
             for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), image_data.items())):
                 if i < num_images:
-                    ax.imshow(v.values.T)
+                    bb = self._sdata.table.uns["bounding_box"] if "bounding_box" in self._sdata.table.uns else None
+                    ax.imshow(v.values.T, extent=bb)
                     ax.set_title(k)
 
         return self._sdata
