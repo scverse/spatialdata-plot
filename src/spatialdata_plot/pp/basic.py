@@ -1,9 +1,8 @@
 from typing import Callable, List, Union
 
+import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
-import pandas as pd
-
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
@@ -41,10 +40,18 @@ class PreprocessingAccessor:
         )
 
     def get_region_key(self) -> str:
-
         "Quick access to the data's region key."
 
+        # TODO: check if this intended behavior
+        if self._sdata.table.uns["spatialdata_attrs"]["region_key"] is None:
+            return self._sdata.table.uns["spatialdata_attrs"]["region"]
+
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
+
+    def get_instance_key(self) -> str:
+        "Quick access to the data's instance key."
+
+        return self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
 
@@ -115,10 +122,23 @@ class PreprocessingAccessor:
         cropped_images = {key: img.sel(selection) for key, img in self._sdata.images.items()}
         cropped_labels = {key: img.sel(selection) for key, img in self._sdata.labels.items()}
 
-        sdata = self._copy(
-            images=cropped_images,
-            labels=cropped_labels,
+        # subset table
+        if "label_coords" not in self._sdata.table.obsm:
+            coordinates = self._sdata.tl.label_property("centroid", return_df=True)
+        else:
+            coordinates = self._sdata.table.obsm["label_coords"]
+
+        query = (
+            (coordinates["x"] > x.start)
+            & (coordinates["x"] < x.stop)
+            & (coordinates["y"] > y.start)
+            & (coordinates["y"] < y.stop)
         )
+
+        cropped_table = self._sdata.table.copy()[query]
+        cropped_table.uns["bounding_box"] = [x.start, x.stop, y.start, y.stop]
+
+        sdata = self._copy(images=cropped_images, labels=cropped_labels, table=cropped_table)
 
         return sdata
 

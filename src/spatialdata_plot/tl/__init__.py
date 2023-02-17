@@ -1,1 +1,1 @@
-from .basic import basic_tool
+from .basic import ToolsAccessor
