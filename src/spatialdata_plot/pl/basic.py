@@ -1,4 +1,5 @@
 from typing import Union
+from collections import OrderedDict
 
 import numpy as np
 import spatialdata as sd
@@ -51,6 +52,22 @@ class PlotAccessor:
         _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
         return fig, axes
 
+    def _render_images(self, params, axs):
+
+        pass
+
+    def _render_channels(self, params, axs):
+
+        pass
+
+    def _render_shapes(self, params, axs):
+
+        pass
+
+    def _render_points(self, params, axs):
+
+        pass
+
     def imshow(
         self, ax: Union[plt.Axes, None] = None, ncols: int = 4, width: int = 4, height: int = 3, **kwargs
     ) -> sd.SpatialData:
@@ -80,22 +97,92 @@ class PlotAccessor:
         if num_images == 0:
             raise ValueError("No images found in the SpatialData object.")
 
-        if num_images == 1:
-            ax = ax or plt.gca()
-            key = [k for k in image_data.keys()][0]
-            ax.imshow(image_data[key].values.T)
-            ax.set_title(key)
+        # Evaluate execution tree for plotting
 
-        if num_images > 1:
-            fig, axes = self._subplots(num_images, ncols, width, height)
+        valid_commands = [
+            "get_images",
+            "get_channels",
+            "get_shapes",  # formerly polygons
+            "render_images",
+            "render_channels",
+            "render_shapes",
+            "render_points",
+        ]
 
-            # iterate over each image and plot it onto the axes
-            for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), image_data.items())):
-                if i < num_images:
-                    ax.imshow(v.values.T)
-                    ax.set_title(k)
+        if (
+            "plotting_tree" not in self._sdata.table.uns.keys()
+            or len(self._sdata.table.uns["plotting_tree"].keys()) == 0
+        ):
 
-        return self._sdata
+            raise ValueError("No operations have been performed yet.")
+
+            # if num_images == 1:
+            #     ax = ax or plt.gca()
+            #     key = [k for k in image_data.keys()][0]
+            #     ax.imshow(image_data[key].values.T)
+            #     ax.set_title(key)
+
+            # if num_images > 1:
+            #     fig, axes = self._subplots(num_images, ncols, width, height)
+
+            #     # iterate over each image and plot it onto the axes
+            #     for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), image_data.items())):
+            #         if i < num_images:
+            #             ax.imshow(v.values.T)
+            #             ax.set_title(k)
+
+        elif len(self._sdata.table.uns["plotting_tree"].keys()) > 0:
+
+            render_cmds = OrderedDict()
+
+            for cmd, params in self._sdata.table.uns["plotting_tree"].items():
+
+                # strip prefix from cmd and verify it's valid
+                cmd = "_".join(cmd.split("_")[1:])
+
+                if cmd not in valid_commands:
+
+                    raise ValueError(f"Command {cmd} is not valid.")
+
+                elif "render" in cmd:
+                    # verify that rendering commands have been called before
+                    render_cmds[cmd] = params
+
+            if len(render_cmds.keys()) == 0:
+
+                raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+
+            # set up canvas
+            num_images = len(self._sdata.images.keys())
+
+            if num_images == 1:
+                axs = ax or plt.gca()
+
+            if num_images > 1:
+                fig, axs = self._subplots(num_images, ncols, width, height)
+
+            # go through tree
+            for cmd, params in render_cmds.items():
+
+                cmd = "_".join(cmd.split("_")[1:])
+
+                if cmd == "render_images":
+
+                    self._render_images(params, axs)
+
+                elif cmd == "render_channels":
+
+                    self._render_channels(params, axs)
+
+                elif cmd == "render_shapes":
+
+                    self._render_shapes(params, axs)
+
+                elif cmd == "render_points":
+
+                    self._render_points(params, axs)
+                    
+        return fig, axs
 
     def scatter(
         self,
