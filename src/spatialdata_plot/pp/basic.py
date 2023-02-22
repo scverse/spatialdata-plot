@@ -1,5 +1,5 @@
 from typing import Callable, List, Union
-
+from collections import OrderedDict
 import spatialdata as sd
 from anndata import AnnData
 import pandas as pd
@@ -21,7 +21,6 @@ class PreprocessingAccessor:
         images: Union[None, dict] = None,
         labels: Union[None, dict] = None,
         points: Union[None, dict] = None,
-        polygons: Union[None, dict] = None,
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
@@ -35,12 +34,22 @@ class PreprocessingAccessor:
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
             points=self._sdata.points if points is None else points,
-            polygons=self._sdata.polygons if polygons is None else polygons,
             shapes=self._sdata.shapes if shapes is None else shapes,
             table=self._sdata.table if table is None else table,
         )
 
-    def get_region_key(self) -> str:
+    def _verify_plotting_tree_exists(self):
+
+        if not hasattr(self._sdata, "table"):
+            raise ValueError("SpatialData object does not have a table.")
+
+        if not hasattr(self._sdata.table, "uns"):
+            raise ValueError("Table in SpatialData object does not have a 'uns' attribute.")
+
+        if "plotting_tree" not in self._sdata.table.uns.keys():
+            self._sdata.table.uns["plotting_tree"] = OrderedDict()
+
+    def _get_region_key(self) -> str:
 
         "Quick access to the data's region key."
 
@@ -109,6 +118,16 @@ class PreprocessingAccessor:
 
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_get_bb"] = {
+            "x": x,
+            "y": y,
+        }
+
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
@@ -118,6 +137,7 @@ class PreprocessingAccessor:
         sdata = self._copy(
             images=cropped_images,
             labels=cropped_labels,
+            table=table,
         )
 
         return sdata
@@ -147,6 +167,16 @@ class PreprocessingAccessor:
 
                 raise TypeError("All elements in 'keys' must be of type 'str'.")
 
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_get_images"] = {
+            "keys": keys,
+            "label_func": label_func,
+        }
+
         if isinstance(keys, str):
             keys = [keys]
 
@@ -172,11 +202,11 @@ class PreprocessingAccessor:
             if hasattr(self._sdata.table, "obs"):
 
                 # create mask of used keys
-                mask = self._sdata.table.obs[self._sdata.pp.get_region_key()]
+                mask = self._sdata.table.obs[self._sdata.pp._get_region_key()]
                 mask = list(mask.str.contains("|".join(keys)))
                 # print(mask)
 
-                new_table = self._sdata.table[mask, :]
+                new_table = table[mask, :]
 
         return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
@@ -202,6 +232,15 @@ class PreprocessingAccessor:
             if not len(channels) > 0:
 
                 raise ValueError("The list of channels cannot be empty.")
+
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_get_channels"] = {
+            "channels": channels,
+        }
 
         # validate that selection is within bounds
         # 1) parse slice into list, respecting stepsize
@@ -230,7 +269,7 @@ class PreprocessingAccessor:
         selected_channels = dict(c=channels)
         channels_images = {key: img.sel(selected_channels) for key, img in self._sdata.images.items()}
 
-        return self._copy(images=channels_images)
+        return self._copy(images=channels_images, table=table)
 
     def colorize(
         self,
@@ -271,24 +310,86 @@ class PreprocessingAccessor:
 
         return self._copy(images=rendered)
 
-    def render_labels(self, alpha=0, alpha_boundary=1, mode="inner", label_func=lambda x: x):
-        color_dict = {1: "white"}
-        cmap = _get_listed_colormap(color_dict)
+    def render_labels(
+        self,
+        border_colour: Union[str, None] = "#000000",
+        border_alpha=1,
+        fill_colour: Union[str, None] = None,
+        fill_alpha=1,
+        mode="inner",
+        **kwargs,
+    ):
 
-        # mask = _label_segmentation_mask(segmentation, cells_dict)
-        rendered = {}
+        self._verify_plotting_tree_exists()
 
-        for key, img in self._sdata.images.items():
-            labels = self._sdata.labels[label_func(key)]
-            rendered_image = _render_label(
-                labels.values,
-                cmap,
-                img.values.T,
-                alpha=alpha,
-                alpha_boundary=alpha_boundary,
-                mode=mode,
-            )
-            # print(rendered.swapaxes(0, 2).shape)
-            rendered[key] = sd.Image2DModel.parse(rendered_image.swapaxes(0, 2))
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_render_labels"] = {
+            "border_colour": border_colour,
+            "border_alpha": border_alpha,
+            "fill_colour": fill_colour,
+            "fill_alpha": fill_alpha,
+            "mode": mode,
+            "kwargs": kwargs,
+        }
 
-        return self._copy(images=rendered)
+        # color_dict = {1: "white"}
+        # cmap = _get_listed_colormap(color_dict)
+
+        # # mask = _label_segmentation_mask(segmentation, cells_dict)
+        # rendered = {}
+
+        # for key, img in self._sdata.images.items():
+        #     labels = self._sdata.labels[label_func(key)]
+        #     rendered_image = _render_label(
+        #         labels.values,
+        #         cmap,
+        #         img.values.T,
+        #         alpha=alpha,
+        #         alpha_boundary=alpha_boundary,
+        #         mode=mode,
+        #     )
+        #     # print(rendered.swapaxes(0, 2).shape)
+        #     rendered[key] = sd.Image2DModel.parse(rendered_image.swapaxes(0, 2))
+
+        return self._copy(table=table)
+
+    def render_images(self, **kwargs):
+
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_render_images"] = {
+            "kwargs": kwargs,
+        }
+
+        return self._copy(table=table)
+
+    def render_shapes(self, **kwargs):
+
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_render_shapes"] = {
+            "kwargs": kwargs,
+        }
+
+        return self._copy(table=table)
+
+    def render_points(self, **kwargs):
+
+        self._verify_plotting_tree_exists()
+
+        # get current number of steps to create a unique key
+        table = self._sdata.table.copy()
+        n_steps = len(table.uns["plotting_tree"].keys())
+        table.uns["plotting_tree"][f"{n_steps+1}_render_points"] = {
+            "kwargs": kwargs,
+        }
+
+        return self._copy(table=table)
