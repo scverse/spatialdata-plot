@@ -9,6 +9,7 @@ from matplotlib.colors import ListedColormap, to_hex
 from matplotlib.cm import get_cmap
 from anndata import AnnData
 import pandas as pd
+from skimage.segmentation import find_boundaries
 
 
 from ..accessor import register_spatial_data_accessor
@@ -117,7 +118,7 @@ class PlotAccessor:
         border_colour: Optional[Union[str, None]] = None,
         fill_alpha: float = 1.0,
         fill_colour: Optional[Union[str, None]] = None,
-        mode: str = "inner",
+        mode: str = "outer",
         bg_colour: Optional[Union[str, None]] = None,
         cmap: Optional[Union[str, Colormap]] = matplotlib.pyplot.cm.gist_rainbow,
     ) -> matplotlib.pyplot.Axes:
@@ -211,13 +212,7 @@ class PlotAccessor:
 
         instance_key = self._get_instance_key()
         region_key = self._get_region_key()
-
-        # First plot the infill, if desired
-        if params["fill_alpha"] != 0:
-
-            pass
-
-        # 1) Get matching of regions to images
+        # Get matching of regions to images
         regions = self._sdata.table.obs[region_key].unique().tolist()
         region_mapping = {k.split("/")[-1]: k for k in regions}
 
@@ -225,7 +220,12 @@ class PlotAccessor:
             if k not in region_mapping.keys():
                 del region_mapping[k]
 
-        # 2) First identify colourmap, then create discrete colours from it
+        table = self._sdata.table.obs
+        table = table[table[region_key] == region_mapping[key]]
+        groups = self._sdata.table.obs[params["colour_key"]].unique()
+        seg = self._sdata.labels[key].values
+
+        # Prepare cmap
         if isinstance(params["cmap"], str):
             try:
                 cmap = get_cmap(params["cmap"])
@@ -236,8 +236,6 @@ class PlotAccessor:
         else:
             raise TypeError("Parameter 'cmap' must be a string or a matplotlib.colors.Colormap.")
 
-        groups = self._sdata.table.obs[params["colour_key"]].unique()
-
         if len(groups) > 256:
             raise ValueError("Too many colours needed for plotting.")
 
@@ -245,8 +243,11 @@ class PlotAccessor:
         group_to_colour = pd.DataFrame(
             {params["colour_key"]: groups, "color": [color for color in colors(range(len(groups)))]}
         )
+
+        cells_ids_in_seg = np.unique(seg)
+
         cell_to_group = pd.DataFrame(
-            self._sdata.table.obs[[params["cell_key"], params["colour_key"]]].values,
+            table[[params["cell_key"], params["colour_key"]]].values,
             columns=[params["cell_key"], params["colour_key"]],
         )
         cell_to_colour = cell_to_group.merge(group_to_colour, on=params["colour_key"], how="left").drop(
@@ -254,30 +255,59 @@ class PlotAccessor:
         )
 
         # apply alpha to background
-        cell_to_colour.color = [[c[0], c[1], c[2], params["fill_alpha"]] for c in cell_to_colour.color]
+        cell_to_colour["color_fill"] = [[c[0], c[1], c[2], params["fill_alpha"]] for c in cell_to_colour.color]
+        # cell_to_colour["color_border"] = [[c[0], c[1], c[2], params["border_alpha"]] for c in cell_to_colour.color]
 
-        # 3) Plot each image with segmentation
+        # Add group color if cell_id is in table, else background color
+        color_list = pd.DataFrame({"cell_id": cells_ids_in_seg})
+        color_list = color_list.merge(cell_to_colour, on="cell_id", how="left").drop("color", axis=1)
 
-        seg = self._sdata.labels[key].to_numpy()
-        values = np.unique(seg)
+        color_list["color_fill"] = color_list["color_fill"].fillna(params["bg_colour"])
+        # color_list["color_border"] = color_list["color_border"].fillna(params["bg_colour"])
 
-        # Create a list of colors corresponding to each integer value
-        color_list = []
-        for v in values:
-            color = (
-                cell_to_colour.loc[cell_to_colour[params["cell_key"]] == v, "color"].iloc[0]
-                if v in cell_to_colour[params["cell_key"]].values
-                else params["bg_colour"]
-            )
-            color_list.append(color)
+        bounds = np.arange(len(cells_ids_in_seg) + 1)
+        cmap_fill = ListedColormap(color_list["color_fill"].values)
+        norm = BoundaryNorm(bounds, cmap_fill.N)
 
-        cmap = ListedColormap(color_list)
-        cmap.set_bad(color=params["bg_colour"])
-        bounds = np.arange(len(values) + 1)
-        norm = BoundaryNorm(bounds, cmap.N)
+        # First plot the infill, if desired
+        if params["fill_alpha"] != 0:
 
-        ax.imshow(seg, cmap=cmap, norm=norm, interpolation="nearest")
-        
+            for group in groups:
+
+                vaid_cell_ids = table[table[params["colour_key"]] == group][params["cell_key"]].values
+                seg
+                seg_for_border = seg.copy()
+                seg_for_border[~np.isin(seg, vaid_cell_ids)] = 0
+                seg_for_fill = seg_for_border > 0
+                # print(seg_for_fill)
+                border_mask = find_boundaries(seg_for_border, mode=params["mode"])
+                seg_masked = np.ma.masked_array(seg_for_border, ~border_mask)
+
+                group_color = list(group_to_colour[group_to_colour[params["colour_key"]] == group].color.values[0])
+                group_color[-1] = params["fill_alpha"]
+
+                colors = [[0,0,0,0], group_color]
+
+                ax.imshow(seg_for_fill, cmap=ListedColormap(colors), interpolation="nearest")
+
+        # Then plot the borders, if desired
+        if params["border_alpha"] != 0:
+
+            # Extract the segmentation for each group
+            for group in groups:
+
+                vaid_cell_ids = table[table[params["colour_key"]] == group][params["cell_key"]].values
+                
+                seg_for_group = seg.copy()
+                seg_for_group[~np.isin(seg, vaid_cell_ids)] = 0
+                # print(seg_for_group)
+                border_mask = find_boundaries(seg_for_group, mode=params["mode"])
+                seg_masked = np.ma.masked_array(seg_for_group, ~border_mask)
+                #                 #
+                colors = [ list(group_to_colour[group_to_colour[params["colour_key"]] == group].color.values[0])]
+
+                ax.imshow(seg_masked, cmap=ListedColormap(colors), interpolation="nearest")
+
         ax.set_title(key)
         ax.set_xlabel("spatial1")
         ax.set_ylabel("spatial2")
@@ -319,6 +349,7 @@ class PlotAccessor:
             "get_images",
             "get_channels",
             "get_shapes",  # formerly polygons
+            "get_bb",
             "render_images",
             "render_channels",
             "render_shapes",
