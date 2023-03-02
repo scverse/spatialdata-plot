@@ -1,7 +1,7 @@
-from typing import Union, Optional
+from typing import Union, Optional, List
 from collections import OrderedDict
 from collections.abc import Iterable
-from matplotlib.colors import Colormap, BoundaryNorm
+from matplotlib.colors import to_rgb
 import numpy as np
 import spatialdata as sd
 import matplotlib
@@ -12,7 +12,7 @@ from anndata import AnnData
 import pandas as pd
 import matplotlib.patches as mpatches
 from skimage.segmentation import find_boundaries
-
+from spatialdata_plot.pl._categorical_utils import add_colors_for_categorical_sample_annotation
 
 from ..accessor import register_spatial_data_accessor
 
@@ -124,7 +124,7 @@ class PlotAccessor:
         fill_alpha: float = 0.5,
         fill_color: Optional[Union[str, None]] = None,
         mode: str = "thick",
-        cmap: Optional[Union[str, Colormap]] = matplotlib.pyplot.cm.gist_rainbow,
+        palette: Optional[List[str]] = None,
         add_legend: bool = True,
     ) -> matplotlib.pyplot.Axes:
 
@@ -174,12 +174,12 @@ class PlotAccessor:
         if not isinstance(add_legend, bool):
             raise TypeError("Parameter 'add_legend' must be a boolean.")
 
-        # TODO(ttreis): Steal cmap type checking from squidpy
-
         self._verify_plotting_tree_exists()
 
         # get current number of steps to create a unique key
         table = self._sdata.table.copy()
+        add_colors_for_categorical_sample_annotation(table, cell_key, table.obs[color_key], palette=palette)
+
         n_steps = len(table.uns["plotting_tree"].keys())
         table.uns["plotting_tree"][f"{n_steps+1}_render_labels"] = {
             "cell_key": cell_key,
@@ -189,7 +189,7 @@ class PlotAccessor:
             "fill_alpha": fill_alpha,
             "fill_color": fill_color,
             "mode": mode,
-            "cmap": cmap,
+            "palette": palette,
             "add_legend": add_legend,
         }
 
@@ -228,32 +228,15 @@ class PlotAccessor:
         table = self._sdata.table.obs
         table = table[table[region_key] == region_mapping[key]]
 
-        # Matching the colors to the groups in the table
-        if isinstance(params["cmap"], str):
-
-            try:
-                cmap = get_cmap(params["cmap"])
-
-            except ValueError:
-
-                raise ValueError(f"Colormap '{params['cmap']}' not found.")
-
-        elif isinstance(params["cmap"], matplotlib.colors.Colormap):
-
-            cmap = params["cmap"]
-
-        else:
-
-            raise TypeError("Parameter 'cmap' must be a string or a matplotlib.colors.Colormap.")
+        # If palette is not None, table.uns contains the relevant vector
+        if f"{params['cell_key']}_colors" in self._sdata.table.uns.keys():
+            
+            colors = [to_rgb(c) for c in self._sdata.table.uns[f"{params['cell_key']}_colors"]]
+            colors = [tuple(list(c) + [1]) for c in colors]
 
         groups = self._sdata.table.obs[params["color_key"]].unique()
-
-        if len(groups) > 256:
-            raise ValueError("Too many colors needed for plotting.")
-
-        colors = ListedColormap(cmap(np.linspace(0, 1, len(groups) + 1)))
         group_to_color = pd.DataFrame(
-            {params["color_key"]: groups, "color": [color for color in colors(range(len(groups)))]}
+            {params["color_key"]: groups, "color": colors}
         )
 
         segmentation = self._sdata.labels[key].values
@@ -292,10 +275,10 @@ class PlotAccessor:
         if params["add_legend"]:
 
             patches = []
-            for group, colour in group_to_color.values:
-                patches.append(mpatches.Patch(color=colour, label=group))
+            for group, color in group_to_color.values:
+                patches.append(mpatches.Patch(color=color, label=group))
 
-            fig.legend(handles=patches, bbox_to_anchor=(.9, .9), loc="upper left")
+            fig.legend(handles=patches, bbox_to_anchor=(.9, .9), loc="upper left", frameon=False)
 
         ax.set_title(key)
         ax.set_xlabel("spatial1")
@@ -303,7 +286,7 @@ class PlotAccessor:
         ax.set_xticks([])
         ax.set_yticks([])
 
-    def imshow(
+    def show(
         self,
         ax: Union[plt.Axes, None] = None,
         ncols: int = 4,
