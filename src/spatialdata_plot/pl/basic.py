@@ -1,6 +1,7 @@
-from typing import Union, Optional
+from typing import Union, Optional, List
 from collections import OrderedDict
-from matplotlib.colors import Colormap, BoundaryNorm
+from collections.abc import Iterable
+from matplotlib.colors import to_rgb
 import numpy as np
 import spatialdata as sd
 import matplotlib
@@ -9,7 +10,9 @@ from matplotlib.colors import ListedColormap, to_hex
 from matplotlib.cm import get_cmap
 from anndata import AnnData
 import pandas as pd
-
+import matplotlib.patches as mpatches
+from skimage.segmentation import find_boundaries
+from spatialdata_plot.pl._categorical_utils import add_colors_for_categorical_sample_annotation
 
 from ..accessor import register_spatial_data_accessor
 
@@ -105,6 +108,9 @@ class PlotAccessor:
 
         fig, axes = plt.subplots(nrows, ncols, figsize=(width * ncols, height * nrows))
 
+        if not isinstance(axes, Iterable):
+            axes = [axes]
+
         # get rid of the empty axes
         # _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
         return fig, axes
@@ -112,14 +118,14 @@ class PlotAccessor:
     def render_labels(
         self,
         cell_key: str,
-        colour_key: Optional[Union[str, None]] = None,
+        color_key: Optional[Union[str, None]] = None,
         border_alpha: float = 1.0,
-        border_colour: Optional[Union[str, None]] = None,
-        fill_alpha: float = 1.0,
-        fill_colour: Optional[Union[str, None]] = None,
-        mode: str = "inner",
-        bg_colour: Optional[Union[str, None]] = None,
-        cmap: Optional[Union[str, Colormap]] = matplotlib.pyplot.cm.gist_rainbow,
+        border_color: Optional[Union[str, None]] = None,
+        fill_alpha: float = 0.5,
+        fill_color: Optional[Union[str, None]] = None,
+        mode: str = "thick",
+        palette: Optional[List[str]] = None,
+        add_legend: bool = True,
     ) -> matplotlib.pyplot.Axes:
 
         if not isinstance(cell_key, str):
@@ -128,13 +134,13 @@ class PlotAccessor:
         if cell_key not in self._sdata.table.obs.columns:
             raise ValueError(f"The provided cell_key '{cell_key}' is not a valid table column.")
 
-        if colour_key is not None:
+        if color_key is not None:
 
-            if not isinstance(colour_key, (str, type(None))):
-                raise TypeError("Parameter 'colour_key' must be a string.")
+            if not isinstance(color_key, (str, type(None))):
+                raise TypeError("Parameter 'color_key' must be a string.")
 
-            if colour_key not in self._sdata.table.obs.columns:
-                raise ValueError(f"The provided colour_key '{colour_key}' is not a valid table column.")
+            if color_key not in self._sdata.table.obs.columns:
+                raise ValueError(f"The provided color_key '{color_key}' is not a valid table column.")
 
         if not isinstance(border_alpha, (int, float)):
             raise TypeError("Parameter 'border_alpha' must be a float.")
@@ -142,10 +148,10 @@ class PlotAccessor:
         if not (border_alpha <= 1 and border_alpha >= 0):
             raise ValueError("Parameter 'border_alpha' must be between 0 and 1.")
 
-        if border_colour is not None:
+        if border_color is not None:
 
-            if not isinstance(colour_key, (str, type(None))):
-                raise TypeError("If specified, parameter 'border_colour' must be a string.")
+            if not isinstance(color_key, (str, type(None))):
+                raise TypeError("If specified, parameter 'border_color' must be a string.")
 
         if not isinstance(fill_alpha, (int, float)):
             raise TypeError("Parameter 'fill_alpha' must be a float.")
@@ -153,10 +159,10 @@ class PlotAccessor:
         if not (fill_alpha <= 1 and fill_alpha >= 0):
             raise ValueError("Parameter 'fill_alpha' must be between 0 and 1.")
 
-        if fill_colour is not None:
+        if fill_color is not None:
 
-            if not isinstance(fill_colour, (str, type(None))):
-                raise TypeError("If specified, parameter 'fill_colour' must be a string.")
+            if not isinstance(fill_color, (str, type(None))):
+                raise TypeError("If specified, parameter 'fill_color' must be a string.")
 
         valid_modes = ["thick", "inner", "outer", "subpixel"]
         if not isinstance(mode, str):
@@ -165,28 +171,26 @@ class PlotAccessor:
         if mode not in valid_modes:
             raise ValueError("Parameter 'mode' must be one of 'thick', 'inner', 'outer', 'subpixel'.")
 
-        if bg_colour is not None:
-
-            if not isinstance(bg_colour, (str, type(None))):
-                raise TypeError("If specified, parameter 'bg_colour' must be a string.")
-
-        # TODO(ttreis): Steal cmap type checking from squidpy
+        if not isinstance(add_legend, bool):
+            raise TypeError("Parameter 'add_legend' must be a boolean.")
 
         self._verify_plotting_tree_exists()
 
         # get current number of steps to create a unique key
         table = self._sdata.table.copy()
+        add_colors_for_categorical_sample_annotation(table, cell_key, table.obs[color_key], palette=palette)
+
         n_steps = len(table.uns["plotting_tree"].keys())
         table.uns["plotting_tree"][f"{n_steps+1}_render_labels"] = {
             "cell_key": cell_key,
-            "colour_key": colour_key,
+            "color_key": color_key,
             "border_alpha": border_alpha,
-            "border_colour": border_colour,
+            "border_color": border_color,
             "fill_alpha": fill_alpha,
-            "fill_colour": fill_colour,
+            "fill_color": fill_color,
             "mode": mode,
-            "bg_colour": bg_colour,
-            "cmap": cmap,
+            "palette": palette,
+            "add_legend": add_legend,
         }
 
         return self._copy(table=table)
@@ -207,85 +211,89 @@ class PlotAccessor:
 
         pass
 
-    def _render_labels(self, params, key: str, ax):
+    def _render_labels(self, params, key: str, fig, ax):
 
-        instance_key = self._get_instance_key()
+        # Match the table keys to the label keys
         region_key = self._get_region_key()
-
-        # First plot the infill, if desired
-        if params["fill_alpha"] != 0:
-
-            pass
-
-        # 1) Get matching of regions to images
         regions = self._sdata.table.obs[region_key].unique().tolist()
         region_mapping = {k.split("/")[-1]: k for k in regions}
 
         for k in self._sdata.images.keys():
+
             if k not in region_mapping.keys():
+
                 del region_mapping[k]
 
-        # 2) First identify colourmap, then create discrete colours from it
-        if isinstance(params["cmap"], str):
-            try:
-                cmap = get_cmap(params["cmap"])
-            except ValueError:
-                raise ValueError(f"Colormap '{params['cmap']}' not found.")
-        elif isinstance(params["cmap"], matplotlib.colors.Colormap):
-            cmap = params["cmap"]
-        else:
-            raise TypeError("Parameter 'cmap' must be a string or a matplotlib.colors.Colormap.")
+        # subset table to only the entires specified by 'key'
+        table = self._sdata.table.obs
+        table = table[table[region_key] == region_mapping[key]]
 
-        groups = self._sdata.table.obs[params["colour_key"]].unique()
+        # If palette is not None, table.uns contains the relevant vector
+        if f"{params['cell_key']}_colors" in self._sdata.table.uns.keys():
+            
+            colors = [to_rgb(c) for c in self._sdata.table.uns[f"{params['cell_key']}_colors"]]
+            colors = [tuple(list(c) + [1]) for c in colors]
 
-        if len(groups) > 256:
-            raise ValueError("Too many colours needed for plotting.")
-
-        colors = ListedColormap(cmap(np.linspace(0, 1, len(groups) + 1)))
-        group_to_colour = pd.DataFrame(
-            {params["colour_key"]: groups, "color": [color for color in colors(range(len(groups)))]}
-        )
-        cell_to_group = pd.DataFrame(
-            self._sdata.table.obs[[params["cell_key"], params["colour_key"]]].values,
-            columns=[params["cell_key"], params["colour_key"]],
-        )
-        cell_to_colour = cell_to_group.merge(group_to_colour, on=params["colour_key"], how="left").drop(
-            params["colour_key"], axis=1
+        groups = self._sdata.table.obs[params["color_key"]].unique()
+        group_to_color = pd.DataFrame(
+            {params["color_key"]: groups, "color": colors}
         )
 
-        # apply alpha to background
-        cell_to_colour.color = [[c[0], c[1], c[2], params["fill_alpha"]] for c in cell_to_colour.color]
+        segmentation = self._sdata.labels[key].values
 
-        # 3) Plot each image with segmentation
+        for group in groups:
 
-        seg = self._sdata.labels[key].to_numpy()
-        values = np.unique(seg)
+            vaid_cell_ids = table[table[params["color_key"]] == group][params["cell_key"]].values
 
-        # Create a list of colors corresponding to each integer value
-        color_list = []
-        for v in values:
-            color = (
-                cell_to_colour.loc[cell_to_colour[params["cell_key"]] == v, "color"].iloc[0]
-                if v in cell_to_colour[params["cell_key"]].values
-                else params["bg_colour"]
-            )
-            color_list.append(color)
+            # define all out-of-group cells as background
+            in_group_mask = segmentation.copy()
+            in_group_mask[~np.isin(segmentation, vaid_cell_ids)] = 0
 
-        cmap = ListedColormap(color_list)
-        cmap.set_bad(color=params["bg_colour"])
-        bounds = np.arange(len(values) + 1)
-        norm = BoundaryNorm(bounds, cmap.N)
+            # get correct color for the group
+            group_color = list(group_to_color[group_to_color[params["color_key"]] == group].color.values[0])
 
-        ax.imshow(seg, cmap=cmap, norm=norm, interpolation="nearest")
-        
+            if params["fill_alpha"] != 0:
+
+                infill_mask = in_group_mask > 0
+
+                fill_color = group_color.copy()
+                fill_color[-1] = params["fill_alpha"]
+                colors = [[0, 0, 0, 0], fill_color]  # add transparent for bg
+
+                ax.imshow(infill_mask, cmap=ListedColormap(colors), interpolation="nearest")
+
+            if params["border_alpha"] != 0:
+
+                border_mask = find_boundaries(in_group_mask, mode=params["mode"])
+                border_mask = np.ma.masked_array(in_group_mask, ~border_mask)
+
+                border_color = group_color.copy()
+                border_color[-1] = params["border_alpha"]
+
+                ax.imshow(border_mask, cmap=ListedColormap([border_color]), interpolation="nearest")
+
+        if params["add_legend"]:
+
+            patches = []
+            for group, color in group_to_color.values:
+                patches.append(mpatches.Patch(color=color, label=group))
+
+            fig.legend(handles=patches, bbox_to_anchor=(.9, .9), loc="upper left", frameon=False)
+
         ax.set_title(key)
         ax.set_xlabel("spatial1")
         ax.set_ylabel("spatial2")
         ax.set_xticks([])
         ax.set_yticks([])
 
-    def imshow(
-        self, ax: Union[plt.Axes, None] = None, ncols: int = 4, width: int = 4, height: int = 3, **kwargs
+    def show(
+        self,
+        ax: Union[plt.Axes, None] = None,
+        ncols: int = 4,
+        width: int = 4,
+        height: int = 3,
+        bg_color: str = "black",
+        **kwargs,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -307,6 +315,32 @@ class PlotAccessor:
         sd.SpatialData
             A SpatialData object.
         """
+
+        if not isinstance(ax, (matplotlib.pyplot.Axes, type(None))):
+            raise TypeError("If provided, Parameter 'ax' must be of type 'matplotlib.pyplot.Axes.")
+
+        if not isinstance(ncols, int):
+            raise TypeError("Parameter 'ncols' must be an integer.")
+
+        if not ncols >= 1:
+            raise ValueError("Parameter 'ncols' must be at least 1.")
+
+        if not isinstance(width, int):
+            raise ValueError("Parameter 'width' must be an integer.")
+
+        if not width > 0:
+            raise ValueError("Parameter 'width' must be greater than 0.")
+
+        if not isinstance(height, int):
+            raise TypeError("Parameter 'height' must be an integer.")
+
+        if not height > 0:
+            raise ValueError("Parameter 'height' must be greater than 0.")
+
+        if not isinstance(bg_color, str):
+
+            raise TypeError("If specified, parameter 'bg_color' must be a string.")
+
         image_data = self._sdata.images
         num_images = len(image_data)
 
@@ -319,6 +353,7 @@ class PlotAccessor:
             "get_images",
             "get_channels",
             "get_shapes",  # formerly polygons
+            "get_bb",
             "render_images",
             "render_channels",
             "render_shapes",
@@ -332,21 +367,6 @@ class PlotAccessor:
         ):
 
             raise ValueError("No operations have been performed yet.")
-
-            # if num_images == 1:
-            #     ax = ax or plt.gca()
-            #     key = [k for k in image_data.keys()][0]
-            #     ax.imshow(image_data[key].values.T)
-            #     ax.set_title(key)
-
-            # if num_images > 1:
-            #     fig, axes = self._subplots(num_images, ncols, width, height)
-
-            #     # iterate over each image and plot it onto the axes
-            #     for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), image_data.items())):
-            #         if i < num_images:
-            #             ax.imshow(v.values.T)
-            #             ax.set_title(k)
 
         elif len(self._sdata.table.uns["plotting_tree"].keys()) > 0:
 
@@ -372,6 +392,12 @@ class PlotAccessor:
             # set up canvas
             num_images = len(self._sdata.images.keys())
             fig, axs = self._subplots(num_images, ncols, width, height)
+
+            # Set background color
+            for idx, ax in enumerate(axs):
+
+                key = list(self._sdata.labels.keys())[idx]
+                ax.imshow(self._sdata.labels[key].values, cmap=ListedColormap([bg_color]))
 
             # go through tree
             for cmd, params in render_cmds.items():
@@ -399,7 +425,7 @@ class PlotAccessor:
                     for idx, ax in enumerate(axs):
 
                         key = list(self._sdata.labels.keys())[idx]
-                        self._render_labels(params=params, key=key, ax=ax)
+                        self._render_labels(params=params, key=key, fig=fig, ax=ax)
 
                 else:
 
