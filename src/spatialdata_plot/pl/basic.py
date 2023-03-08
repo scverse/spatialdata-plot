@@ -13,6 +13,7 @@ import pandas as pd
 import matplotlib.patches as mpatches
 from skimage.segmentation import find_boundaries
 from spatialdata_plot.pl._categorical_utils import add_colors_for_categorical_sample_annotation
+from spatialdata._core._spatialdata_ops import get_transformation
 
 from ..accessor import register_spatial_data_accessor
 
@@ -43,6 +44,53 @@ class PlotAccessor:
             shapes=self._sdata.shapes if shapes is None else shapes,
             table=self._sdata.table if table is None else table,
         )
+
+    def _get_coordinate_system_mapping(self) -> dict:
+
+        has_images = hasattr(self._sdata, "images")
+        has_labels = hasattr(self._sdata, "labels")
+        has_polygons = hasattr(self._sdata, "polygons")
+
+        coordsys_keys = self._sdata.coordinate_systems
+        image_keys = self._sdata.images.keys() if has_images else []
+        label_keys = self._sdata.labels.keys() if has_labels else []
+        polygon_keys = self._sdata.images.keys() if has_polygons else []
+
+        mapping = {}
+
+        if len(coordsys_keys) < 1:
+
+            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+
+        for key in coordsys_keys:
+
+            mapping[key] = []
+
+            for image_key in image_keys:
+
+                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(image_key)
+
+            for label_key in label_keys:
+
+                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(label_key)
+
+            for polygon_key in polygon_keys:
+
+                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(polygon_key)
+
+        return mapping
 
     def _get_region_key(self) -> str:
 
@@ -213,31 +261,20 @@ class PlotAccessor:
 
     def _render_labels(self, params, key: str, fig, ax):
 
-        # Match the table keys to the label keys
         region_key = self._get_region_key()
-        regions = self._sdata.table.obs[region_key].unique().tolist()
-        region_mapping = {k.split("/")[-1]: k for k in regions}
-
-        for k in self._sdata.images.keys():
-
-            if k not in region_mapping.keys():
-
-                del region_mapping[k]
 
         # subset table to only the entires specified by 'key'
         table = self._sdata.table.obs
-        table = table[table[region_key] == region_mapping[key]]
+        table = table[table[region_key] == key]
 
         # If palette is not None, table.uns contains the relevant vector
         if f"{params['cell_key']}_colors" in self._sdata.table.uns.keys():
-            
+
             colors = [to_rgb(c) for c in self._sdata.table.uns[f"{params['cell_key']}_colors"]]
             colors = [tuple(list(c) + [1]) for c in colors]
 
         groups = self._sdata.table.obs[params["color_key"]].unique()
-        group_to_color = pd.DataFrame(
-            {params["color_key"]: groups, "color": colors}
-        )
+        group_to_color = pd.DataFrame({params["color_key"]: groups, "color": colors})
 
         segmentation = self._sdata.labels[key].values
 
@@ -278,7 +315,7 @@ class PlotAccessor:
             for group, color in group_to_color.values:
                 patches.append(mpatches.Patch(color=color, label=group))
 
-            fig.legend(handles=patches, bbox_to_anchor=(.9, .9), loc="upper left", frameon=False)
+            fig.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
 
         ax.set_title(key)
         ax.set_xlabel("spatial1")
