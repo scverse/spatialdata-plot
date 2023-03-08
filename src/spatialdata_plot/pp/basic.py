@@ -97,33 +97,35 @@ class PreprocessingAccessor:
         
         if (valid_coord_keys is not None) and (len(found_coord_keys) > 0):
             sdata = sdata.filter_by_coordinate_system(found_coord_keys)
+        
+        elif len(found_coord_keys) == 0:
             
-        if valid_image_keys is not None:
-            if len(found_image_keys) == 0:
-                for valid_image_key in valid_image_keys:
-                    del sdata.images[valid_image_key]
-            elif len(found_image_keys) > 0:
-                for valid_image_key in valid_image_keys:
-                    if valid_image_key not in found_image_keys:
+            if valid_image_keys is not None:
+                if len(found_image_keys) == 0:
+                    for valid_image_key in valid_image_keys:
                         del sdata.images[valid_image_key]
-            
-        if valid_label_keys is not None:
-            if len(found_label_keys) == 0:
-                for valid_label_key in valid_label_keys:
-                    del sdata.labels[valid_label_key]
-            elif len(found_label_keys) > 0:
-                for valid_label_key in valid_label_keys:
-                    if valid_label_key not in found_label_keys:
+                elif len(found_image_keys) > 0:
+                    for valid_image_key in valid_image_keys:
+                        if valid_image_key not in found_image_keys:
+                            del sdata.images[valid_image_key]
+                
+            if valid_label_keys is not None:
+                if len(found_label_keys) == 0:
+                    for valid_label_key in valid_label_keys:
                         del sdata.labels[valid_label_key]
-            
-        if valid_polygon_keys is not None:
-            if len(found_polygon_keys) == 0:
-                for valid_polygon_key in valid_polygon_keys:
-                    del sdata.polygons[valid_polygon_key]
-            elif len(found_polygon_keys) > 0:
-                for valid_polygon_key in valid_polygon_keys:
-                    if valid_polygon_key not in found_polygon_keys:
+                elif len(found_label_keys) > 0:
+                    for valid_label_key in valid_label_keys:
+                        if valid_label_key not in found_label_keys:
+                            del sdata.labels[valid_label_key]
+                
+            if valid_polygon_keys is not None:
+                if len(found_polygon_keys) == 0:
+                    for valid_polygon_key in valid_polygon_keys:
                         del sdata.polygons[valid_polygon_key]
+                elif len(found_polygon_keys) > 0:
+                    for valid_polygon_key in valid_polygon_keys:
+                        if valid_polygon_key not in found_polygon_keys:
+                            del sdata.polygons[valid_polygon_key]
 
         #TODO(ttreis): Implement table filtering
 
