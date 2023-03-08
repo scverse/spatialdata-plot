@@ -9,6 +9,7 @@ from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
 from .render import _render_label
 from .utils import _get_listed_colormap
+from spatialdata._core._spatialdata_ops import get_transformation
 
 
 @register_spatial_data_accessor("pp")
@@ -37,6 +38,54 @@ class PreprocessingAccessor:
             shapes=self._sdata.shapes if shapes is None else shapes,
             table=self._sdata.table if table is None else table,
         )
+
+    def _get_coordinate_system_mapping(self) -> dict:
+
+        has_images = hasattr(self._sdata, "images")
+        has_labels = hasattr(self._sdata, "labels")
+        has_polygons = hasattr(self._sdata, "polygons")
+        
+        coordsys_keys = self._sdata.coordinate_systems
+        image_keys = self._sdata.images.keys() if has_images else []
+        label_keys = self._sdata.labels.keys() if has_labels else []
+        polygon_keys = self._sdata.images.keys() if has_polygons else []
+        
+        mapping = {}
+        
+        if len(coordsys_keys) < 1:
+            
+            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+        
+        for key in coordsys_keys:
+            
+            mapping[key] = []
+            
+            for image_key in image_keys:
+                
+                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
+                
+                if key in list(transformations.keys()):
+            
+                    mapping[key].append(image_key)
+            
+            for label_key in label_keys:
+                
+                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
+                
+                if key in list(transformations.keys()):
+            
+                    mapping[key].append(label_key)
+            
+            for polygon_key in polygon_keys:
+                
+                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
+                
+                if key in list(transformations.keys()):
+            
+                    mapping[key].append(polygon_key)
+        
+
+        return mapping
 
     def _verify_plotting_tree_exists(self):
 
