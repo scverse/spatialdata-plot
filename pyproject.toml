@@ -2,7 +2,6 @@
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
-
 [project]
 name = "spatialdata-plot"
 version = "0.0.1"
