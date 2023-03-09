@@ -63,7 +63,6 @@ def test_sdata_multiple_images_with_table():
         adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
     )
     sdata = sd.SpatialData(images=images, table=table)
-
     return sdata
 
 
