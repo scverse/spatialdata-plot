@@ -59,7 +59,9 @@ def test_sdata_multiple_images_with_table():
     adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
     adata.obs[instance_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
     adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
-    table = TableModel.parse(adata=adata, instance_key=instance_key, region_key=region_key)
+    table = TableModel.parse(
+        adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
+    )
     sdata = sd.SpatialData(images=images, table=table)
 
     return sdata
@@ -338,4 +340,4 @@ def _get_table(
         adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
         return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
-        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
