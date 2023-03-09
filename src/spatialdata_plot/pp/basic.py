@@ -9,6 +9,7 @@ from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
 from .render import _render_label
 from .utils import _get_listed_colormap
+from spatialdata._core._spatialdata_ops import get_transformation
 
 
 @register_spatial_data_accessor("pp")
@@ -43,6 +44,53 @@ class PreprocessingAccessor:
         if not hasattr(self._sdata, "plotting_tree"):
             self._sdata.plotting_tree = OrderedDict()
 
+    def _get_coordinate_system_mapping(self) -> dict:
+
+        has_images = hasattr(self._sdata, "images")
+        has_labels = hasattr(self._sdata, "labels")
+        has_polygons = hasattr(self._sdata, "polygons")
+
+        coordsys_keys = self._sdata.coordinate_systems
+        image_keys = self._sdata.images.keys() if has_images else []
+        label_keys = self._sdata.labels.keys() if has_labels else []
+        polygon_keys = self._sdata.images.keys() if has_polygons else []
+
+        mapping = {}
+
+        if len(coordsys_keys) < 1:
+
+            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+
+        for key in coordsys_keys:
+
+            mapping[key] = []
+
+            for image_key in image_keys:
+
+                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(image_key)
+
+            for label_key in label_keys:
+
+                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(label_key)
+
+            for polygon_key in polygon_keys:
+
+                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
+
+                if key in list(transformations.keys()):
+
+                    mapping[key].append(polygon_key)
+
+        return mapping
+
     def _get_region_key(self) -> str:
 
         "Quick access to the data's region key."
@@ -58,28 +106,41 @@ class PreprocessingAccessor:
             raise TypeError("When parameter 'elements' is a list, all elements must be strings.")
 
         if isinstance(elements, str):
-            
+
             elements = [elements]
 
+        coord_keys = []
+        image_keys = []
+        label_keys = []
+        polygon_keys = []
+
+        # prepare list of valid keys to sort elements on
         valid_coord_keys = self._sdata.coordinate_systems if hasattr(self._sdata, "coordinate_systems") else None
         valid_image_keys = list(self._sdata.images.keys()) if hasattr(self._sdata, "images") else None
         valid_label_keys = list(self._sdata.labels.keys()) if hasattr(self._sdata, "labels") else None
         valid_polygon_keys = list(self._sdata.polygons.keys()) if hasattr(self._sdata, "polygons") else None
 
-        found_coord_keys = []
-        found_image_keys = []
-        found_label_keys = []
-        found_polygon_keys = []
+        # for key_dict in [coord_keys, image_keys, label_keys, polygon_keys]:
+        #     key_dict = []
+        #     key_dict["implicit"] = []
 
+        # first, extract coordinate system keys becasuse they generate implicit keys
+        mapping = self._get_coordinate_system_mapping()
+        implicit_keys = []
         for e in elements:
             if (valid_coord_keys is not None) and (e in valid_coord_keys):
-                found_coord_keys.append(e)
+                coord_keys.append(e)
+                implicit_keys += mapping[e]
+
+        for e in elements + implicit_keys:
+            if (valid_coord_keys is not None) and (e in valid_coord_keys):
+                coord_keys.append(e)
             elif (valid_image_keys is not None) and (e in valid_image_keys):
-                found_image_keys.append(e)
+                image_keys.append(e)
             elif (valid_label_keys is not None) and (e in valid_label_keys):
-                found_label_keys.append(e)
+                label_keys.append(e)
             elif (valid_polygon_keys is not None) and (e in valid_polygon_keys):
-                found_polygon_keys.append(e)
+                polygon_keys.append(e)
             else:
                 msg = f"Element '{e}' not found. Valid choices are:"
                 if valid_coord_keys is not None:
@@ -98,40 +159,59 @@ class PreprocessingAccessor:
 
         # copy that we hard-modify
         sdata = self._copy()
-        
-        if (valid_coord_keys is not None) and (len(found_coord_keys) > 0):
-            sdata = sdata.filter_by_coordinate_system(found_coord_keys)
-        
-        elif len(found_coord_keys) == 0:
-            
+
+        if (valid_coord_keys is not None) and (len(coord_keys) > 0):
+            sdata = sdata.filter_by_coordinate_system(coord_keys)
+
+        elif len(coord_keys) == 0:
+
             if valid_image_keys is not None:
-                if len(found_image_keys) == 0:
+                if len(image_keys) == 0:
                     for valid_image_key in valid_image_keys:
                         del sdata.images[valid_image_key]
-                elif len(found_image_keys) > 0:
+                elif len(image_keys) > 0:
                     for valid_image_key in valid_image_keys:
-                        if valid_image_key not in found_image_keys:
+                        if valid_image_key not in image_keys:
                             del sdata.images[valid_image_key]
-                
+
             if valid_label_keys is not None:
-                if len(found_label_keys) == 0:
+                if len(label_keys) == 0:
                     for valid_label_key in valid_label_keys:
                         del sdata.labels[valid_label_key]
-                elif len(found_label_keys) > 0:
+                elif len(label_keys) > 0:
                     for valid_label_key in valid_label_keys:
-                        if valid_label_key not in found_label_keys:
+                        if valid_label_key not in label_keys:
                             del sdata.labels[valid_label_key]
-                
+
             if valid_polygon_keys is not None:
-                if len(found_polygon_keys) == 0:
+                if len(polygon_keys) == 0:
                     for valid_polygon_key in valid_polygon_keys:
                         del sdata.polygons[valid_polygon_key]
-                elif len(found_polygon_keys) > 0:
+                elif len(polygon_keys) > 0:
                     for valid_polygon_key in valid_polygon_keys:
-                        if valid_polygon_key not in found_polygon_keys:
+                        if valid_polygon_key not in polygon_keys:
                             del sdata.polygons[valid_polygon_key]
 
-        #TODO(ttreis): Implement table filtering
+        # subset table if label info is given
+        if len(label_keys) > 0:
+
+            assert hasattr(sdata, "table"), "SpatialData object does not have a table."
+            assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
+            assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
+
+            # create mask of used keys
+            mask = sdata.table.obs[sdata.pp._get_region_key()]
+            mask = list(mask.str.contains("|".join(label_keys)))
+
+            # create copy and delete original so we can reuse slot
+            table = sdata.table.copy()
+            table.uns["spatialdata_attrs"]["region"] = label_keys
+            del sdata.table
+
+            sdata.table = table[mask, :]
+
+        else:
+            del sdata.table
 
         return sdata
 
@@ -197,7 +277,6 @@ class PreprocessingAccessor:
             if y.stop <= y.start:
 
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
-
 
         selection = dict(x=x, y=y)  # makes use of xarray sel method
 
@@ -468,6 +547,5 @@ class PreprocessingAccessor:
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
             "kwargs": kwargs,
         }
-
 
         return sdata

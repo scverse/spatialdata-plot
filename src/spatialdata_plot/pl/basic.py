@@ -13,7 +13,6 @@ import pandas as pd
 import matplotlib.patches as mpatches
 from skimage.segmentation import find_boundaries
 from spatialdata_plot.pl._categorical_utils import add_colors_for_categorical_sample_annotation
-from spatialdata._core._spatialdata_ops import get_transformation
 
 from ..accessor import register_spatial_data_accessor
 
@@ -37,6 +36,7 @@ class PlotAccessor:
         object to the subsetted SpatialData object.
         """
 
+
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -45,52 +45,6 @@ class PlotAccessor:
             table=self._sdata.table if table is None else table,
         )
 
-    def _get_coordinate_system_mapping(self) -> dict:
-
-        has_images = hasattr(self._sdata, "images")
-        has_labels = hasattr(self._sdata, "labels")
-        has_polygons = hasattr(self._sdata, "polygons")
-
-        coordsys_keys = self._sdata.coordinate_systems
-        image_keys = self._sdata.images.keys() if has_images else []
-        label_keys = self._sdata.labels.keys() if has_labels else []
-        polygon_keys = self._sdata.images.keys() if has_polygons else []
-
-        mapping = {}
-
-        if len(coordsys_keys) < 1:
-
-            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
-
-        for key in coordsys_keys:
-
-            mapping[key] = []
-
-            for image_key in image_keys:
-
-                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(image_key)
-
-            for label_key in label_keys:
-
-                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(label_key)
-
-            for polygon_key in polygon_keys:
-
-                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(polygon_key)
-
-        return mapping
 
     def _get_region_key(self) -> str:
 
@@ -112,14 +66,8 @@ class PlotAccessor:
 
     def _verify_plotting_tree_exists(self):
 
-        if not hasattr(self._sdata, "table"):
-            raise ValueError("SpatialData object does not have a table.")
-
-        if not hasattr(self._sdata.table, "uns"):
-            raise ValueError("Table in SpatialData object does not have a 'uns' attribute.")
-
-        if "plotting_tree" not in self._sdata.table.uns.keys():
-            self._sdata.table.uns["plotting_tree"] = OrderedDict()
+        if not hasattr(self._sdata, "plotting_tree"):
+            self._sdata.plotting_tree = OrderedDict()
 
     def _subplots(
         self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
@@ -228,8 +176,10 @@ class PlotAccessor:
         table = self._sdata.table.copy()
         add_colors_for_categorical_sample_annotation(table, cell_key, table.obs[color_key], palette=palette)
 
-        n_steps = len(table.uns["plotting_tree"].keys())
-        table.uns["plotting_tree"][f"{n_steps+1}_render_labels"] = {
+        sdata = self._copy(table=table)
+        sdata.pp._verify_plotting_tree_exists()
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
             "cell_key": cell_key,
             "color_key": color_key,
             "border_alpha": border_alpha,
@@ -241,7 +191,7 @@ class PlotAccessor:
             "add_legend": add_legend,
         }
 
-        return self._copy(table=table)
+        return sdata
 
     def _render_images(self, params, axs):
 
@@ -398,18 +348,15 @@ class PlotAccessor:
             "render_labels",
         ]
 
-        if (
-            "plotting_tree" not in self._sdata.table.uns.keys()
-            or len(self._sdata.table.uns["plotting_tree"].keys()) == 0
-        ):
+        if not hasattr(self._sdata, "plotting_tree") or len(self._sdata.plotting_tree.keys()) == 0:
 
             raise ValueError("No operations have been performed yet.")
 
-        elif len(self._sdata.table.uns["plotting_tree"].keys()) > 0:
+        elif len(self._sdata.plotting_tree.keys()) > 0:
 
             render_cmds = OrderedDict()
 
-            for cmd, params in self._sdata.table.uns["plotting_tree"].items():
+            for cmd, params in self._sdata.plotting_tree.items():
 
                 # strip prefix from cmd and verify it's valid
                 cmd = "_".join(cmd.split("_")[1:])
