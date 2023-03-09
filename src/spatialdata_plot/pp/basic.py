@@ -208,7 +208,7 @@ class PreprocessingAccessor:
             table.uns["spatialdata_attrs"]["region"] = label_keys
             del sdata.table
 
-            sdata.table = table[mask, :]
+            sdata.table = table[mask, :].copy()
 
         else:
             del sdata.table
