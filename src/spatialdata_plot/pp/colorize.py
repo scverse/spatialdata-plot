@@ -1,4 +1,4 @@
-from typing import List
+from typing import Tuple
 
 import numpy as np
 
@@ -47,7 +47,7 @@ def _normalize(
 
 def _colorize(
     img: np.ndarray,
-    colors: List[str] = ["C1", "C2", "C3", "C4", "C5"],
+    colors: Tuple[str] = ("C1", "C2", "C3", "C4", "C5"),
     background: str = "black",
     normalize: bool = True,
     name: str = "colored",

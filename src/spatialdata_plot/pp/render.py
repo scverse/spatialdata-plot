@@ -19,9 +19,7 @@ def _format_labels(labels):
 
 
 def _label_segmentation_mask(segmentation: np.ndarray, annotations: dict) -> np.ndarray:
-    """
-    Relabels a segmentation according to the annotations df (contains the columns type, cell).
-    """
+    """Relabels a segmentation according to the annotations df."""
     labeled_segmentation = segmentation.copy()
     all_cells = []
 

@@ -1,11 +1,11 @@
 import collections.abc as cabc
+import logging
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from cycler import Cycler, cycler
-from loguru import logger
 from matplotlib import cm, colors
 from matplotlib import pyplot as pl
 from matplotlib import rcParams
@@ -241,7 +241,7 @@ def _validate_palette(adata: AnnData, key: str) -> None:
             if color in additional_colors:
                 color = additional_colors[color]
             else:
-                logger.warning(
+                logging.warning(
                     f"The following color value found in adata.uns['{key}_colors'] "
                     f"is not valid: '{color!r}'. Default colors will be used instead."
                 )
@@ -291,7 +291,7 @@ def _set_colors_for_categorical_obs(
         # it doesnt matter if the list is shorter than the categories length:
         if isinstance(palette, cabc.Sequence):
             if len(palette) < len(categories):
-                logger.warning(
+                logging.warning(
                     "Length of palette colors is smaller than the number of "
                     f"categories (palette length: {len(palette)}, "
                     f"categories length: {len(categories)}. "
@@ -361,7 +361,7 @@ def _set_default_colors_for_categorical_obs(
             palette = default_102
         else:
             palette = ["grey" for _ in range(length)]
-            logger.info(
+            logging.info(
                 f"the obs value {value_to_plot!r} has more than 103 categories. Uniform "
                 "'grey' color will be used for all categories."
             )

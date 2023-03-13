@@ -16,7 +16,7 @@ def test_typerror_when_key_is_invalid(sdata, keys, request):
     sdata = request.getfixturevalue(sdata)
 
     with pytest.raises(TypeError):
-        sdata.pp.get_images(keys)
+        sdata.pp.get_elements(keys)
 
 
 @pytest.mark.parametrize(
@@ -32,4 +32,4 @@ def test_valuerror_when_key_is_of_correct_type_but_not_in_sdata(sdata, keys, req
     sdata = request.getfixturevalue(sdata)
 
     with pytest.raises(ValueError):
-        sdata.pp.get_images(keys)
+        sdata.pp.get_elements(keys)
