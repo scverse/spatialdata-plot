@@ -13,7 +13,6 @@ from matplotlib.colors import ListedColormap, to_rgb
 from skimage.segmentation import find_boundaries
 from spatialdata._core._spatialdata_ops import get_transformation
 
-
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
@@ -38,7 +37,6 @@ class PlotAccessor:
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
         """
-
 
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
@@ -105,7 +103,6 @@ class PlotAccessor:
     def _verify_plotting_tree_exists(self):
         if not hasattr(self._sdata, "plotting_tree"):
             self._sdata.plotting_tree = OrderedDict()
-
 
     def _subplots(
         self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
@@ -372,15 +369,12 @@ class PlotAccessor:
         ]
 
         if not hasattr(self._sdata, "plotting_tree") or len(self._sdata.plotting_tree.keys()) == 0:
-
             raise ValueError("No operations have been performed yet.")
 
         elif len(self._sdata.plotting_tree.keys()) > 0:
-
             render_cmds = OrderedDict()
 
             for cmd, params in self._sdata.plotting_tree.items():
-
                 # strip prefix from cmd and verify it's valid
                 cmd = "_".join(cmd.split("_")[1:])
 
