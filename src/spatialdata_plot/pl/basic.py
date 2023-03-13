@@ -13,6 +13,7 @@ from matplotlib.colors import ListedColormap, to_rgb
 from skimage.segmentation import find_boundaries
 from spatialdata._core._spatialdata_ops import get_transformation
 
+
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
@@ -37,6 +38,7 @@ class PlotAccessor:
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
         """
+
 
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
@@ -101,14 +103,9 @@ class PlotAccessor:
         return self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
 
     def _verify_plotting_tree_exists(self):
-        if not hasattr(self._sdata, "table"):
-            raise ValueError("SpatialData object does not have a table.")
+        if not hasattr(self._sdata, "plotting_tree"):
+            self._sdata.plotting_tree = OrderedDict()
 
-        if not hasattr(self._sdata.table, "uns"):
-            raise ValueError("Table in SpatialData object does not have a 'uns' attribute.")
-
-        if "plotting_tree" not in self._sdata.table.uns.keys():
-            self._sdata.table.uns["plotting_tree"] = OrderedDict()
 
     def _subplots(
         self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
@@ -213,8 +210,10 @@ class PlotAccessor:
         table = self._sdata.table.copy()
         add_colors_for_categorical_sample_annotation(table, cell_key, table.obs[color_key], palette=palette)
 
-        n_steps = len(table.uns["plotting_tree"].keys())
-        table.uns["plotting_tree"][f"{n_steps+1}_render_labels"] = {
+        sdata = self._copy(table=table)
+        sdata.pp._verify_plotting_tree_exists()
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
             "cell_key": cell_key,
             "color_key": color_key,
             "border_alpha": border_alpha,
@@ -226,7 +225,7 @@ class PlotAccessor:
             "add_legend": add_legend,
         }
 
-        return self._copy(table=table)
+        return sdata
 
     def _render_images(self, params, axs):
         pass
@@ -372,16 +371,16 @@ class PlotAccessor:
             "render_labels",
         ]
 
-        if (
-            "plotting_tree" not in self._sdata.table.uns.keys()
-            or len(self._sdata.table.uns["plotting_tree"].keys()) == 0
-        ):
+        if not hasattr(self._sdata, "plotting_tree") or len(self._sdata.plotting_tree.keys()) == 0:
+
             raise ValueError("No operations have been performed yet.")
 
-        elif len(self._sdata.table.uns["plotting_tree"].keys()) > 0:
+        elif len(self._sdata.plotting_tree.keys()) > 0:
+
             render_cmds = OrderedDict()
 
-            for cmd, params in self._sdata.table.uns["plotting_tree"].items():
+            for cmd, params in self._sdata.plotting_tree.items():
+
                 # strip prefix from cmd and verify it's valid
                 cmd = "_".join(cmd.split("_")[1:])
 
