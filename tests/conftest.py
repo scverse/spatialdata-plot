@@ -23,6 +23,8 @@ from spatialdata._core.models import (
 )
 from xarray import DataArray
 
+import spatialdata_plot  # noqa: F401
+
 RNG = default_rng()
 
 
