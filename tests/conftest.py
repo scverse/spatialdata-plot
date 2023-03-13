@@ -4,91 +4,93 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+import spatialdata as sd
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
-
-import spatialdata as sd
 from spatialdata import SpatialData
 from spatialdata._core.models import (
     Image2DModel,
     Labels2DModel,
     Labels3DModel,
     PointsModel,
-    PolygonsModel,
     ShapesModel,
     TableModel,
 )
 
 RNG = default_rng()
 
+
 @pytest.fixture
 def test_sdata_single_image():
     """Creates a simple sdata object."""
-    images = { 'data1': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')) }  
+    images = {"data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
     sdata = sd.SpatialData(images=images)
     return sdata
+
 
 @pytest.fixture
 def test_sdata_multiple_images():
     """Creates an sdata object with multiple images."""
-    images = { 
-        'data1': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-        'data2': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-        'data3': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-    }  
+    images = {
+        "data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+    }
     sdata = sd.SpatialData(images=images)
     return sdata
+
 
 @pytest.fixture
 def test_sdata_multiple_images_with_table():
     """Creates an sdata object with multiple images."""
-    images = { 
-        'data1': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-        'data2': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-        'data3': sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=('c', 'y', 'x')),
-    }  
-    
+    images = {
+        "data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+    }
+
     instance_key = "instance_id"
     region_key = "annotated_region"
 
     adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
     adata.obs[instance_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
     adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
-    table = TableModel.parse(adata=adata, instance_key=instance_key, region_key=region_key)
+    table = TableModel.parse(
+        adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
+    )
     sdata = sd.SpatialData(images=images, table=table)
-    
     return sdata
+
 
 @pytest.fixture
 def test_sdata_multiple_images_dims():
     """Creates an sdata object with multiple images."""
-    images = { 
-        'data1': sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=('c', 'y', 'x')),
-        'data2': sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=('c', 'y', 'x')),
-        'data3': sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=('c', 'y', 'x')),
-    }  
+    images = {
+        "data1": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+    }
     sdata = sd.SpatialData(images=images)
     return sdata
+
 
 @pytest.fixture
 def test_sdata_multiple_images_diverging_dims():
     """Creates an sdata object with multiple images."""
-    images = { 
-        'data1': sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=('c', 'y', 'x')),
-        'data2': sd.Image2DModel.parse(np.zeros((6, 10, 10)), dims=('c', 'y', 'x')),
-        'data3': sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=('c', 'y', 'x')),
-    }  
+    images = {
+        "data1": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.Image2DModel.parse(np.zeros((6, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+    }
     sdata = sd.SpatialData(images=images)
     return sdata
 
 
-
 # Code below taken from spatialdata main repo
-
 
 
 @pytest.fixture()
@@ -288,8 +290,8 @@ def _get_polygons() -> dict[str, GeoDataFrame]:
         }
     )
 
-    out["poly"] = PolygonsModel.parse(poly, name="poly")
-    out["multipoly"] = PolygonsModel.parse(multipoly, name="multipoly")
+    out["poly"] = ShapesModel.parse(poly, name="poly")
+    out["multipoly"] = ShapesModel.parse(multipoly, name="multipoly")
 
     return out
 
@@ -337,4 +339,4 @@ def _get_table(
         adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
         return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
-        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)

@@ -1,18 +1,22 @@
-from typing import Union, Optional, List
 from collections import OrderedDict
 from collections.abc import Iterable
-from matplotlib.colors import to_rgb
-import numpy as np
-import spatialdata as sd
+from typing import List, Optional, Union
+
 import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, to_hex
-from matplotlib.cm import get_cmap
-from anndata import AnnData
-import pandas as pd
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import spatialdata as sd
+from anndata import AnnData
+from matplotlib.colors import ListedColormap, to_rgb
 from skimage.segmentation import find_boundaries
-from spatialdata_plot.pl._categorical_utils import add_colors_for_categorical_sample_annotation
+from spatialdata._core._spatialdata_ops import get_transformation
+
+
+from spatialdata_plot.pl._categorical_utils import (
+    add_colors_for_categorical_sample_annotation,
+)
 
 from ..accessor import register_spatial_data_accessor
 
@@ -30,7 +34,6 @@ class PlotAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-
         """
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
@@ -45,9 +48,45 @@ class PlotAccessor:
             table=self._sdata.table if table is None else table,
         )
 
+    def _get_coordinate_system_mapping(self) -> dict:
+        has_images = hasattr(self._sdata, "images")
+        has_labels = hasattr(self._sdata, "labels")
+        has_polygons = hasattr(self._sdata, "polygons")
+
+        coordsys_keys = self._sdata.coordinate_systems
+        image_keys = self._sdata.images.keys() if has_images else []
+        label_keys = self._sdata.labels.keys() if has_labels else []
+        polygon_keys = self._sdata.images.keys() if has_polygons else []
+
+        mapping = {}
+
+        if len(coordsys_keys) < 1:
+            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+
+        for key in coordsys_keys:
+            mapping[key] = []
+
+            for image_key in image_keys:
+                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
+
+                if key in list(transformations.keys()):
+                    mapping[key].append(image_key)
+
+            for label_key in label_keys:
+                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
+
+                if key in list(transformations.keys()):
+                    mapping[key].append(label_key)
+
+            for polygon_key in polygon_keys:
+                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
+
+                if key in list(transformations.keys()):
+                    mapping[key].append(polygon_key)
+
+        return mapping
 
     def _get_region_key(self) -> str:
-
         "Quick access to the data's region key."
 
         if not hasattr(self._sdata, "table"):
@@ -56,7 +95,6 @@ class PlotAccessor:
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
 
     def _get_instance_key(self) -> str:
-
         if not hasattr(self._sdata, "table"):
             raise ValueError("SpatialData object does not have a table.")
 
@@ -65,9 +103,9 @@ class PlotAccessor:
         return self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
 
     def _verify_plotting_tree_exists(self):
-
         if not hasattr(self._sdata, "plotting_tree"):
             self._sdata.plotting_tree = OrderedDict()
+
 
     def _subplots(
         self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
@@ -123,7 +161,6 @@ class PlotAccessor:
         palette: Optional[List[str]] = None,
         add_legend: bool = True,
     ) -> matplotlib.pyplot.Axes:
-
         if not isinstance(cell_key, str):
             raise TypeError("Parameter 'cell_key' must be a string.")
 
@@ -131,7 +168,6 @@ class PlotAccessor:
             raise ValueError(f"The provided cell_key '{cell_key}' is not a valid table column.")
 
         if color_key is not None:
-
             if not isinstance(color_key, (str, type(None))):
                 raise TypeError("Parameter 'color_key' must be a string.")
 
@@ -145,7 +181,6 @@ class PlotAccessor:
             raise ValueError("Parameter 'border_alpha' must be between 0 and 1.")
 
         if border_color is not None:
-
             if not isinstance(color_key, (str, type(None))):
                 raise TypeError("If specified, parameter 'border_color' must be a string.")
 
@@ -156,7 +191,6 @@ class PlotAccessor:
             raise ValueError("Parameter 'fill_alpha' must be between 0 and 1.")
 
         if fill_color is not None:
-
             if not isinstance(fill_color, (str, type(None))):
                 raise TypeError("If specified, parameter 'fill_color' must be a string.")
 
@@ -194,23 +228,18 @@ class PlotAccessor:
         return sdata
 
     def _render_images(self, params, axs):
-
         pass
 
     def _render_channels(self, params, axs):
-
         pass
 
     def _render_shapes(self, params, axs):
-
         pass
 
     def _render_points(self, params, axs):
-
         pass
 
     def _render_labels(self, params, key: str, fig, ax):
-
         region_key = self._get_region_key()
 
         # subset table to only the entires specified by 'key'
@@ -219,7 +248,6 @@ class PlotAccessor:
 
         # If palette is not None, table.uns contains the relevant vector
         if f"{params['cell_key']}_colors" in self._sdata.table.uns.keys():
-
             colors = [to_rgb(c) for c in self._sdata.table.uns[f"{params['cell_key']}_colors"]]
             colors = [tuple(list(c) + [1]) for c in colors]
 
@@ -229,7 +257,6 @@ class PlotAccessor:
         segmentation = self._sdata.labels[key].values
 
         for group in groups:
-
             vaid_cell_ids = table[table[params["color_key"]] == group][params["cell_key"]].values
 
             # define all out-of-group cells as background
@@ -240,7 +267,6 @@ class PlotAccessor:
             group_color = list(group_to_color[group_to_color[params["color_key"]] == group].color.values[0])
 
             if params["fill_alpha"] != 0:
-
                 infill_mask = in_group_mask > 0
 
                 fill_color = group_color.copy()
@@ -250,7 +276,6 @@ class PlotAccessor:
                 ax.imshow(infill_mask, cmap=ListedColormap(colors), interpolation="nearest")
 
             if params["border_alpha"] != 0:
-
                 border_mask = find_boundaries(in_group_mask, mode=params["mode"])
                 border_mask = np.ma.masked_array(in_group_mask, ~border_mask)
 
@@ -260,7 +285,6 @@ class PlotAccessor:
                 ax.imshow(border_mask, cmap=ListedColormap([border_color]), interpolation="nearest")
 
         if params["add_legend"]:
-
             patches = []
             for group, color in group_to_color.values:
                 patches.append(mpatches.Patch(color=color, label=group))
@@ -325,7 +349,6 @@ class PlotAccessor:
             raise ValueError("Parameter 'height' must be greater than 0.")
 
         if not isinstance(bg_color, str):
-
             raise TypeError("If specified, parameter 'bg_color' must be a string.")
 
         image_data = self._sdata.images
@@ -362,7 +385,6 @@ class PlotAccessor:
                 cmd = "_".join(cmd.split("_")[1:])
 
                 if cmd not in valid_commands:
-
                     raise ValueError(f"Command {cmd} is not valid.")
 
                 elif "render" in cmd:
@@ -370,7 +392,6 @@ class PlotAccessor:
                     render_cmds[cmd] = params
 
             if len(render_cmds.keys()) == 0:
-
                 raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
             # set up canvas
@@ -379,40 +400,30 @@ class PlotAccessor:
 
             # Set background color
             for idx, ax in enumerate(axs):
-
                 key = list(self._sdata.labels.keys())[idx]
                 ax.imshow(self._sdata.labels[key].values, cmap=ListedColormap([bg_color]))
 
             # go through tree
             for cmd, params in render_cmds.items():
-
                 if cmd == "render_images":
-
                     self._render_images(params, axs)
 
                 elif cmd == "render_channels":
-
                     self._render_channels(params, axs)
 
                 elif cmd == "render_shapes":
-
                     self._render_shapes(params, axs)
 
                 elif cmd == "render_points":
-
                     for ax in axs:
-
                         self._render_points(params, ax)
 
                 elif cmd == "render_labels":
-
                     for idx, ax in enumerate(axs):
-
                         key = list(self._sdata.labels.keys())[idx]
                         self._render_labels(params=params, key=key, fig=fig, ax=ax)
 
                 else:
-
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
         return fig, axs

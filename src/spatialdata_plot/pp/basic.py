@@ -1,15 +1,17 @@
-from typing import Callable, List, Union
 from collections import OrderedDict
+from typing import List, Union
+
+import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
-import pandas as pd
-
 
 from ..accessor import register_spatial_data_accessor
 from .colorize import _colorize
+
 from .render import _render_label
 from .utils import _get_listed_colormap
 from spatialdata._core._spatialdata_ops import get_transformation
+
 
 
 @register_spatial_data_accessor("pp")
@@ -25,7 +27,6 @@ class PreprocessingAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-
         """
         Helper function to copies the references from the original SpatialData
         object to the subsetted SpatialData object.
@@ -40,7 +41,6 @@ class PreprocessingAccessor:
         )
 
     def _verify_plotting_tree_exists(self):
-
         if not hasattr(self._sdata, "plotting_tree"):
             self._sdata.plotting_tree = OrderedDict()
 
@@ -92,13 +92,11 @@ class PreprocessingAccessor:
         return mapping
 
     def _get_region_key(self) -> str:
-
         "Quick access to the data's region key."
 
         return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
 
     def get_elements(self, elements: Union[str, List[str]]) -> sd.SpatialData:
-
         if not isinstance(elements, (str, list)):
             raise TypeError("Parameter 'elements' must be a string or a list of strings.")
 
@@ -106,7 +104,6 @@ class PreprocessingAccessor:
             raise TypeError("When parameter 'elements' is a list, all elements must be strings.")
 
         if isinstance(elements, str):
-
             elements = [elements]
 
         coord_keys = []
@@ -164,7 +161,6 @@ class PreprocessingAccessor:
             sdata = sdata.filter_by_coordinate_system(coord_keys)
 
         elif len(coord_keys) == 0:
-
             if valid_image_keys is not None:
                 if len(image_keys) == 0:
                     for valid_image_key in valid_image_keys:
@@ -216,7 +212,6 @@ class PreprocessingAccessor:
         return sdata
 
     def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
-
         """Get bounding box around a point.
 
         Parameters
@@ -233,49 +228,37 @@ class PreprocessingAccessor:
         """
 
         if not isinstance(x, (slice, list, tuple)):
-
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
 
         if isinstance(x, (list, tuple)):
-
             if len(x) != 2:
-
                 raise ValueError("Parameter 'x' must be of length 2.")
 
             if x[1] <= x[0]:
-
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
             # x is clean
             x = slice(x[0], x[1])
 
         elif isinstance(x, slice):
-
             if x.stop <= x.start:
-
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
         if not isinstance(y, (slice, list, tuple)):
-
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
 
         if isinstance(y, (list, tuple)):
-
             if len(y) != 2:
-
                 raise ValueError("Parameter 'y' must be of length 2.")
 
             if y[1] <= y[0]:
-
                 raise ValueError("The current choice of 'y' would result in an empty slice.")
 
             # y is clean
             y = slice(y[0], y[1])
 
         elif isinstance(y, slice):
-
             if y.stop <= y.start:
-
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
         selection = dict(x=x, y=y)  # makes use of xarray sel method
@@ -375,19 +358,14 @@ class PreprocessingAccessor:
         """
 
         if not isinstance(channels, (list, slice)):
-
             raise TypeError("Parameter 'channels' must either be of type 'list' or 'slice'.")
 
         if isinstance(channels, list):
-
             if not all([isinstance(channel, int) for channel in channels]):
-
                 raise TypeError("All elements in 'channels' must be of type 'int'.")
 
         if isinstance(channels, list):
-
             if not len(channels) > 0:
-
                 raise ValueError("The list of channels cannot be empty.")
 
         self._verify_plotting_tree_exists()
@@ -402,7 +380,6 @@ class PreprocessingAccessor:
         # validate that selection is within bounds
         # 1) parse slice into list, respecting stepsize
         if isinstance(channels, slice):
-
             channels = [x for x in range(start=channels.start, stop=channels.stop, step=channels.step or 1)]
 
         # 2) check which images have how many channels
@@ -420,7 +397,6 @@ class PreprocessingAccessor:
         sdata_with_valid_images = self._sdata.pp.get_images(keys=valid_images)
 
         if len(sdata_with_valid_images.images.keys()) < 1:
-
             raise ValueError("The choice of channels results in an empty selection.")
 
         selected_channels = dict(c=channels)
@@ -476,7 +452,6 @@ class PreprocessingAccessor:
         mode="inner",
         **kwargs,
     ):
-
         self._verify_plotting_tree_exists()
 
         # get current number of steps to create a unique key
@@ -513,7 +488,6 @@ class PreprocessingAccessor:
         return sdata
 
     def render_images(self, **kwargs):
-
         self._verify_plotting_tree_exists()
 
         # get current number of steps to create a unique key
@@ -526,7 +500,6 @@ class PreprocessingAccessor:
         return sdata
 
     def render_shapes(self, **kwargs):
-
         self._verify_plotting_tree_exists()
 
         # get current number of steps to create a unique key
@@ -539,7 +512,6 @@ class PreprocessingAccessor:
         return sdata
 
     def render_points(self, **kwargs):
-
         self._verify_plotting_tree_exists()
 
         sdata = self._copy()

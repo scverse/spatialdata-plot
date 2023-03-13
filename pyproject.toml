@@ -2,7 +2,6 @@
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
-
 [project]
 name = "spatialdata-plot"
 version = "0.0.1"
@@ -20,24 +19,8 @@ urls.Documentation = "https://spatialdata-plot.readthedocs.io/"
 urls.Source = "https://github.com/scverse/spatialdata-plot"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot"
 dependencies = [
-    "anndata",
-    "numpy",
-    "xarray",
-    "zarr",
-#    "ome_zarr",
-    "ome_zarr@git+https://github.com/LucaMarconato/ome-zarr-py@bug_fix_io",
     "spatialdata@git+https://github.com/scverse/spatialdata",
-    "spatial_image",
-    "multiscale_spatial_image",
-    "xarray-schema",
-    "pygeos",
     "matplotlib",
-    "geopandas",
-    "shapely==2.0rc2",
-    "pyarrow",
-    "rich",
-    "tqdm",
-    "typing_extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
