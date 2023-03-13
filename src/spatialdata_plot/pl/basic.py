@@ -22,8 +22,58 @@ from ..accessor import register_spatial_data_accessor
 
 @register_spatial_data_accessor("pl")
 class PlotAccessor:
-    def __init__(self, sdata):
-        self._sdata = sdata
+    """
+    A class to provide plotting functions for `SpatialData` objects.
+
+    Parameters
+    ----------
+    sdata : sd.SpatialData
+        The `SpatialData` object to provide plotting functions for.
+
+    Attributes
+    ----------
+    sdata : sd.SpatialData
+        The `SpatialData` object to provide plotting functions for.
+
+    Notes
+    -----
+    This class provides a number of methods that can be used to generate
+    plots of the data stored in a `SpatialData` object. These methods are
+    accessed via the `SpatialData.pl` accessor.
+
+    Examples
+    --------
+    To plot the images in a `SpatialData` object, use the `plot_images`
+    method:
+
+    >>> sdata.pl.plot_images()
+
+    To plot the labels in a `SpatialData` object, use the `plot_labels`
+    method:
+
+    >>> sdata.pl.plot_labels()
+
+    To plot the points in a `SpatialData` object, use the `plot_points`
+    method:
+
+    >>> sdata.pl.plot_points()
+
+    To plot the shapes in a `SpatialData` object, use the `plot_shapes`
+    method:
+
+    >>> sdata.pl.plot_shapes()
+
+    To plot the table in a `SpatialData` object, use the `plot_table`
+    method:
+
+    >>> sdata.pl.plot_table()
+
+    To plot the polygons in a `SpatialData` object, use the `plot_polygons`
+    method:
+
+    >>> sdata.pl.plot_polygons()
+
+    """
 
     def _copy(
         self,
@@ -33,11 +83,44 @@ class PlotAccessor:
         shapes: Union[None, dict] = None,
         table: Union[dict, AnnData] = None,
     ) -> sd.SpatialData:
-        """
-        Helper function to copies the references from the original SpatialData
-        object to the subsetted SpatialData object.
-        """
+        """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
+        Parameters
+        ----------
+        images : Union[None, dict], optional
+            A dictionary containing image data to replace the images in the
+            original `SpatialData` object, or `None` to keep the original
+            images. Defaults to `None`.
+        labels : Union[None, dict], optional
+            A dictionary containing label data to replace the labels in the
+            original `SpatialData` object, or `None` to keep the original
+            labels. Defaults to `None`.
+        points : Union[None, dict], optional
+            A dictionary containing point data to replace the points in the
+            original `SpatialData` object, or `None` to keep the original
+            points. Defaults to `None`.
+        shapes : Union[None, dict], optional
+            A dictionary containing shape data to replace the shapes in the
+            original `SpatialData` object, or `None` to keep the original
+            shapes. Defaults to `None`.
+        table : Union[dict, AnnData], optional
+            A dictionary or `AnnData` object containing table data to replace
+            the table in the original `SpatialData` object, or `None` to keep
+            the original table. Defaults to `None`.
+
+        Returns
+        -------
+        sd.SpatialData
+            A new `SpatialData` object that is a copy of the original
+            `SpatialData` object, with any specified modifications.
+
+        Notes
+        -----
+        This method creates a new `SpatialData` object with the same metadata
+        and similar data as the original `SpatialData` object. The new object
+        can be modified without affecting the original object.
+
+        """
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -47,6 +130,24 @@ class PlotAccessor:
         )
 
     def _get_coordinate_system_mapping(self) -> dict:
+        """Returns a mapping from coordinate systems to data keys.
+
+        Return a dictionary mapping each coordinate system in the `SpatialData`
+        object to a list of data keys that use that coordinate system.
+
+        Returns
+        -------
+        dict
+            A dictionary mapping each coordinate system in the `SpatialData`
+            object to a list of data keys that use that coordinate system.
+
+        Raises
+        ------
+        ValueError
+            If the `SpatialData` object does not have at least one coordinate
+            system.
+
+        """
         has_images = hasattr(self._sdata, "images")
         has_labels = hasattr(self._sdata, "labels")
         has_polygons = hasattr(self._sdata, "polygons")
@@ -85,8 +186,7 @@ class PlotAccessor:
         return mapping
 
     def _get_region_key(self) -> str:
-        "Quick access to the data's region key."
-
+        """Quick access to the data's region key."""
         if not hasattr(self._sdata, "table"):
             raise ValueError("SpatialData object does not have a table.")
 
@@ -158,6 +258,56 @@ class PlotAccessor:
         palette: Optional[List[str]] = None,
         add_legend: bool = True,
     ) -> matplotlib.pyplot.Axes:
+        """Plot cell labels for a scanpy object.
+
+        Parameters
+        ----------
+        self : object
+            The scanpy object.
+        cell_key : str
+            The name of the column in the table to use for labeling cells.
+        color_key : str or None, optional (default: None)
+            The name of the column in the table to use for coloring cells.
+        border_alpha : float, optional (default: 1.0)
+            The alpha value of the label border. Must be between 0 and 1.
+        border_color : str or None, optional (default: None)
+            The color of the border of the labels.
+        fill_alpha : float, optional (default: 0.5)
+            The alpha value of the fill of the labels. Must be between 0 and 1.
+        fill_color : str or None, optional (default: None)
+            The color of the fill of the labels.
+        mode : str, optional (default: 'thick')
+            The rendering mode of the labels. Must be one of 'thick', 'inner',
+            'outer', or 'subpixel'.
+        palette : list or None, optional (default: None)
+            The color palette to use when coloring cells. If None, a default
+            palette will be used.
+        add_legend : bool, optional (default: True)
+            Whether to add a legend to the plot.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            The resulting plot axes.
+
+        Raises
+        ------
+        TypeError
+            If any of the parameters have an invalid type.
+        ValueError
+            If any of the parameters have an invalid value.
+            If the provided cell_key or color_key is not a valid table column.
+            If the provided mode is not one of 'thick', 'inner', 'outer', or
+            'subpixel'.
+
+        Notes
+        -----
+        This function plots cell labels for a spatialdata object. The cell labels are
+        based on a column in the table, and can optionally be colored based on another
+        column in the table. The resulting plot can be customized by specifying the
+        alpha, color, and rendering mode of the labels, as well as whether to add a
+        legend to the plot.
+        """
         if not isinstance(cell_key, str):
             raise TypeError("Parameter 'cell_key' must be a string.")
 
@@ -303,8 +453,7 @@ class PlotAccessor:
         bg_color: str = "black",
         **kwargs,
     ) -> sd.SpatialData:
-        """
-        Plot the images in the SpatialData object.
+        """Plot the images in the SpatialData object.
 
         Parameters
         ----------
@@ -323,7 +472,6 @@ class PlotAccessor:
         sd.SpatialData
             A SpatialData object.
         """
-
         if not isinstance(ax, (matplotlib.pyplot.Axes, type(None))):
             raise TypeError("If provided, Parameter 'ax' must be of type 'matplotlib.pyplot.Axes.")
 
@@ -478,7 +626,7 @@ class PlotAccessor:
             if color is not None:
                 kwargs["c"] = self._sdata.table.obs[color]
             ax.scatter(self._sdata.table.obs[x], self._sdata.table.obs[y], **kwargs)
-            key = [k for k in image_data.keys()][0]
+            key = list(image_data.keys())[0]
             ax.set_title(key)
             ax.margins(x=0.01)
             ax.margins(y=0.01)
