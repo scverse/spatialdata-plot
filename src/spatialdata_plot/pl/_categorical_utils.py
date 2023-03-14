@@ -1,6 +1,7 @@
 import collections.abc as cabc
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Union
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -231,7 +232,7 @@ def _validate_palette(adata: AnnData, key: str) -> None:
     # and updates the color list in adata.uns[f'{key}_colors'] if needed.
     # Not only valid matplotlib colors are checked but also if the color name
     # is a valid R color name, in which case it will be translated to a valid name.
-    _palette: List[str] = []
+    _palette: list[str] = []
     color_key = f"{key}_colors"
 
     for color in adata.uns[color_key]:
@@ -370,7 +371,7 @@ def _set_default_colors_for_categorical_obs(
 
 
 def add_colors_for_categorical_sample_annotation(
-    adata: AnnData, key: str, vec: pd.Series, palette: Optional[List[str]] = None, force_update_colors: bool = False
+    adata: AnnData, key: str, vec: pd.Series, palette: Optional[list[str]] = None, force_update_colors: bool = False
 ) -> None:
     """Add colors for categorical annotation."""
     color_key = f"{key}_colors"
@@ -390,7 +391,7 @@ def add_colors_for_categorical_sample_annotation(
 def _add_categorical_legend(
     ax: Axes,
     color_source_vector: pd.Series,
-    palette: Dict[str, str],
+    palette: dict[str, str],
     legend_loc: str = "right margin",
     legend_fontweight: str = "bold",
     legend_fontsize: Optional[float] = None,
