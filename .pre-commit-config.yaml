@@ -5,8 +5,6 @@ default_stages:
     - commit
     - push
 minimum_pre_commit_version: 2.16.0
-ci:
-    skip: [mypy]
 repos:
     - repo: https://github.com/nbQA-dev/nbQA
       rev: 1.6.3
