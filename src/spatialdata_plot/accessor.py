@@ -1,8 +1,8 @@
-from spatialdata import SpatialData
+import spatialdata as sd
 from xarray.core.extensions import _register_accessor
 
 
-def register_spatial_data_accessor(name):
+def register_spatial_data_accessor(name: str) -> sd.SpatialData:
     """Hijacks xarray _register_accessor to register a SpatialData accessor.
 
     Parameters
@@ -15,4 +15,4 @@ def register_spatial_data_accessor(name):
     --------
     register_dataset_accessor
     """
-    return _register_accessor(name, SpatialData)
+    return _register_accessor(name, sd.SpatialData)

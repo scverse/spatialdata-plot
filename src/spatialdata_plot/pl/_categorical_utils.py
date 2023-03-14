@@ -1,11 +1,12 @@
 import collections.abc as cabc
-from typing import Any, Dict, List, Optional, Sequence, Union
+import logging
+from collections.abc import Sequence
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from cycler import Cycler, cycler
-from loguru import logger
 from matplotlib import cm, colors
 from matplotlib import pyplot as pl
 from matplotlib import rcParams
@@ -231,7 +232,7 @@ def _validate_palette(adata: AnnData, key: str) -> None:
     # and updates the color list in adata.uns[f'{key}_colors'] if needed.
     # Not only valid matplotlib colors are checked but also if the color name
     # is a valid R color name, in which case it will be translated to a valid name.
-    _palette: List[str] = []
+    _palette: list[str] = []
     color_key = f"{key}_colors"
 
     for color in adata.uns[color_key]:
@@ -241,7 +242,7 @@ def _validate_palette(adata: AnnData, key: str) -> None:
             if color in additional_colors:
                 color = additional_colors[color]
             else:
-                logger.warning(
+                logging.warning(
                     f"The following color value found in adata.uns['{key}_colors'] "
                     f"is not valid: '{color!r}'. Default colors will be used instead."
                 )
@@ -291,7 +292,7 @@ def _set_colors_for_categorical_obs(
         # it doesnt matter if the list is shorter than the categories length:
         if isinstance(palette, cabc.Sequence):
             if len(palette) < len(categories):
-                logger.warning(
+                logging.warning(
                     "Length of palette colors is smaller than the number of "
                     f"categories (palette length: {len(palette)}, "
                     f"categories length: {len(categories)}. "
@@ -361,7 +362,7 @@ def _set_default_colors_for_categorical_obs(
             palette = default_102
         else:
             palette = ["grey" for _ in range(length)]
-            logger.info(
+            logging.info(
                 f"the obs value {value_to_plot!r} has more than 103 categories. Uniform "
                 "'grey' color will be used for all categories."
             )
@@ -370,7 +371,7 @@ def _set_default_colors_for_categorical_obs(
 
 
 def add_colors_for_categorical_sample_annotation(
-    adata: AnnData, key: str, vec: pd.Series, palette: Optional[List[str]] = None, force_update_colors: bool = False
+    adata: AnnData, key: str, vec: pd.Series, palette: Optional[list[str]] = None, force_update_colors: bool = False
 ) -> None:
     """Add colors for categorical annotation."""
     color_key = f"{key}_colors"
@@ -390,7 +391,7 @@ def add_colors_for_categorical_sample_annotation(
 def _add_categorical_legend(
     ax: Axes,
     color_source_vector: pd.Series,
-    palette: Dict[str, str],
+    palette: dict[str, str],
     legend_loc: str = "right margin",
     legend_fontweight: str = "bold",
     legend_fontsize: Optional[float] = None,

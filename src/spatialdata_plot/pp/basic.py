@@ -1,37 +1,58 @@
 from collections import OrderedDict
-from typing import List, Union
+from typing import Union
 
-import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
+from dask.dataframe.core import DataFrame as DaskDataFrame
+from geopandas import GeoDataFrame
+from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
+from spatial_image import SpatialImage
+
+from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 from ..accessor import register_spatial_data_accessor
-from .colorize import _colorize
+from ..pp.utils import _get_region_key, _verify_plotting_tree_exists
 
-from .render import _render_label
-from .utils import _get_listed_colormap
-from spatialdata._core._spatialdata_ops import get_transformation
-
+# from .colorize import _colorize
 
 
 @register_spatial_data_accessor("pp")
 class PreprocessingAccessor:
-    def __init__(self, sdata):
+    """
+    Preprocessing functions for SpatialData objects.
+
+    Parameters
+    ----------
+    sdata : sd.SpatialData
+        A spatial data object.
+
+    Attributes
+    ----------
+    sdata : sd.SpatialData
+        A spatial data object.
+    """
+
+    @property
+    def sdata(self) -> sd.SpatialData:
+        """The `SpatialData` object to provide preprocessing functions for."""
+        return self._sdata
+
+    @sdata.setter
+    def sdata(self, sdata: sd.SpatialData) -> None:
+        self._sdata = sdata
+
+    def __init__(self, sdata: sd.SpatialData) -> None:
         self._sdata = sdata
 
     def _copy(
         self,
-        images: Union[None, dict] = None,
-        labels: Union[None, dict] = None,
-        points: Union[None, dict] = None,
-        shapes: Union[None, dict] = None,
-        table: Union[dict, AnnData] = None,
+        images: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
+        labels: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
+        points: Union[None, dict[str, DaskDataFrame]] = None,
+        shapes: Union[None, dict[str, GeoDataFrame]] = None,
+        table: Union[None, AnnData] = None,
     ) -> sd.SpatialData:
-        """
-        Helper function to copies the references from the original SpatialData
-        object to the subsetted SpatialData object.
-        """
-
+        """Copies the references from the original to the new SpatialData object."""
         return sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
@@ -40,63 +61,58 @@ class PreprocessingAccessor:
             table=self._sdata.table if table is None else table,
         )
 
-    def _verify_plotting_tree_exists(self):
+    def _verify_plotting_tree_exists(self) -> None:
         if not hasattr(self._sdata, "plotting_tree"):
             self._sdata.plotting_tree = OrderedDict()
 
-    def _get_coordinate_system_mapping(self) -> dict:
+    def get_elements(self, elements: Union[str, list[str]]) -> sd.SpatialData:
+        """
+        Get a subset of the spatial data object by specifying elements to keep.
 
-        has_images = hasattr(self._sdata, "images")
-        has_labels = hasattr(self._sdata, "labels")
-        has_polygons = hasattr(self._sdata, "polygons")
+        Parameters
+        ----------
+        elements : Union[str, List[str]]
+            A string or a list of strings specifying the elements to keep.
+            Valid element types are:
 
-        coordsys_keys = self._sdata.coordinate_systems
-        image_keys = self._sdata.images.keys() if has_images else []
-        label_keys = self._sdata.labels.keys() if has_labels else []
-        polygon_keys = self._sdata.images.keys() if has_polygons else []
+            - 'coordinate_systems'
+            - 'images'
+            - 'labels'
+            - 'polygons'
 
-        mapping = {}
+        Returns
+        -------
+        sd.SpatialData
+            A new spatial data object containing only the specified elements.
 
-        if len(coordsys_keys) < 1:
+        Raises
+        ------
+        TypeError
+            If `elements` is not a string or a list of strings.
+            If `elements` is a list of strings but one or more of the strings
+            are not valid element types.
 
-            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+        ValueError
+            If any of the specified elements is not present in the original
+            spatialdata object.
 
-        for key in coordsys_keys:
+        AssertionError
+            If `label_keys` is not an empty list but the spatial data object
+            does not have a table or the table does not have 'uns' or 'obs'
+            attributes.
 
-            mapping[key] = []
+        Notes
+        -----
+        If the original spatialdata object has a table, and `elements`
+        includes label keys, the returned spatialdata object will have a
+        subset of the original table with only the rows corresponding to the
+        specified label keys. The `region` attribute of the returned spatial
+        data object's table will be set to the list of specified label keys.
 
-            for image_key in image_keys:
-
-                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(image_key)
-
-            for label_key in label_keys:
-
-                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(label_key)
-
-            for polygon_key in polygon_keys:
-
-                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
-
-                if key in list(transformations.keys()):
-
-                    mapping[key].append(polygon_key)
-
-        return mapping
-
-    def _get_region_key(self) -> str:
-        "Quick access to the data's region key."
-
-        return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
-
-    def get_elements(self, elements: Union[str, List[str]]) -> sd.SpatialData:
+        If the original spatial data object has no table, or if `elements` does
+        not include label keys, the returned spatialdata object will have no
+        table.
+        """
         if not isinstance(elements, (str, list)):
             raise TypeError("Parameter 'elements' must be a string or a list of strings.")
 
@@ -122,7 +138,7 @@ class PreprocessingAccessor:
         #     key_dict["implicit"] = []
 
         # first, extract coordinate system keys becasuse they generate implicit keys
-        mapping = self._get_coordinate_system_mapping()
+        mapping = _get_coordinate_system_mapping(self._sdata)
         implicit_keys = []
         for e in elements:
             if (valid_coord_keys is not None) and (e in valid_coord_keys):
@@ -189,14 +205,14 @@ class PreprocessingAccessor:
                             del sdata.polygons[valid_polygon_key]
 
         # subset table if label info is given
+        print(label_keys)
         if len(label_keys) > 0:
-
             assert hasattr(sdata, "table"), "SpatialData object does not have a table."
             assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
             assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
 
             # create mask of used keys
-            mask = sdata.table.obs[sdata.pp._get_region_key()]
+            mask = sdata.table.obs[_get_region_key(sdata)]
             mask = list(mask.str.contains("|".join(label_keys)))
 
             # create copy and delete original so we can reuse slot
@@ -211,7 +227,11 @@ class PreprocessingAccessor:
 
         return sdata
 
-    def get_bb(self, x: Union[slice, list, tuple], y: Union[slice, list, tuple]) -> sd.SpatialData:
+    def get_bb(
+        self,
+        x: Union[slice, list[int], tuple[int, int]] = (0, 0),
+        y: Union[slice, list[int], tuple[int, int]] = (0, 0),
+    ) -> sd.SpatialData:
         """Get bounding box around a point.
 
         Parameters
@@ -226,23 +246,20 @@ class PreprocessingAccessor:
         sd.SpatialData
             subsetted SpatialData object
         """
-
         if not isinstance(x, (slice, list, tuple)):
             raise TypeError("Parameter 'x' must be one of 'slice', 'list', 'tuple'.")
 
-        if isinstance(x, (list, tuple)):
-            if len(x) != 2:
-                raise ValueError("Parameter 'x' must be of length 2.")
-
+        if isinstance(x, (list, tuple)) and len(x) == 2:
             if x[1] <= x[0]:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
-            # x is clean
             x = slice(x[0], x[1])
 
         elif isinstance(x, slice):
             if x.stop <= x.start:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
+        else:
+            raise ValueError("Parameter 'x' must be of length 2.")
 
         if not isinstance(y, (slice, list, tuple)):
             raise TypeError("Parameter 'y' must be one of 'slice', 'list', 'tuple'.")
@@ -261,7 +278,7 @@ class PreprocessingAccessor:
             if y.stop <= y.start:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
-        selection = dict(x=x, y=y)  # makes use of xarray sel method
+        selection = {x: x, y: y}  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
         cropped_images = {key: img.sel(selection) for key, img in self._sdata.images.items()}
@@ -271,7 +288,7 @@ class PreprocessingAccessor:
             images=cropped_images,
             labels=cropped_labels,
         )
-        self._verify_plotting_tree_exists()
+        self._sdata = _verify_plotting_tree_exists(self._sdata)
 
         # get current number of steps to create a unique key
         n_steps = self._sdata.plotting_tree.keys()
@@ -307,7 +324,7 @@ class PreprocessingAccessor:
 
     #             raise TypeError("All elements in 'keys' must be of type 'str'.")
 
-    #     self._verify_plotting_tree_exists()
+    #     self._sdata = _verify_plotting_tree_exists(self._sdata)
 
     #     # get current number of steps to create a unique key
     #     table = self._sdata.table.copy()
@@ -350,109 +367,133 @@ class PreprocessingAccessor:
 
     #     return self._copy(images=selected_images, labels=selected_labels, table=new_table)
 
-    def get_channels(self, channels: Union[list, slice]) -> sd.SpatialData:
-        """Subset a spatialdata object to the selected channels.
+    # def get_channels(self, channels: Union[list, slice]) -> sd.SpatialData:
+    #     """Subset a spatialdata object to the selected channels.
 
-        Images that don't have the selected channels will be dropped.
+    #     Images that don't have the selected channels will be dropped.
 
-        """
+    #     """
 
-        if not isinstance(channels, (list, slice)):
-            raise TypeError("Parameter 'channels' must either be of type 'list' or 'slice'.")
+    #     if not isinstance(channels, (list, slice)):
+    #         raise TypeError("Parameter 'channels' must either be of type 'list' or 'slice'.")
 
-        if isinstance(channels, list):
-            if not all([isinstance(channel, int) for channel in channels]):
-                raise TypeError("All elements in 'channels' must be of type 'int'.")
+    #     if isinstance(channels, list):
+    #         if not all([isinstance(channel, int) for channel in channels]):
+    #             raise TypeError("All elements in 'channels' must be of type 'int'.")
 
-        if isinstance(channels, list):
-            if not len(channels) > 0:
-                raise ValueError("The list of channels cannot be empty.")
+    #     if isinstance(channels, list):
+    #         if not len(channels) > 0:
+    #             raise ValueError("The list of channels cannot be empty.")
 
-        self._verify_plotting_tree_exists()
+    #     self._sdata = _verify_plotting_tree_exists(self._sdata)
 
-        # get current number of steps to create a unique key
-        table = self._sdata.table.copy()
-        n_steps = self._sdata.plotting_tree.keys()
-        sdata.plotting_tree[f"{n_steps+1}_get_channels"] = {
-            "channels": channels,
-        }
+    #     # get current number of steps to create a unique key
+    #     table = self._sdata.table.copy()
+    #     n_steps = self._sdata.plotting_tree.keys()
+    #     sdata.plotting_tree[f"{n_steps+1}_get_channels"] = {
+    #         "channels": channels,
+    #     }
 
-        # validate that selection is within bounds
-        # 1) parse slice into list, respecting stepsize
-        if isinstance(channels, slice):
-            channels = [x for x in range(start=channels.start, stop=channels.stop, step=channels.step or 1)]
+    #     # validate that selection is within bounds
+    #     # 1) parse slice into list, respecting stepsize
+    #     if isinstance(channels, slice):
+    #         channels = [x for x in range(start=channels.start, stop=channels.stop, step=channels.step or 1)]
 
-        # 2) check which images have how many channels
-        image_names = []
-        n_channels = []
-        for image_name, image in self._sdata.images.items():
-            image_names.append(image_name)
-            n_channels.append(image.shape[0])
+    #     # 2) check which images have how many channels
+    #     image_names = []
+    #     n_channels = []
+    #     for image_name, image in self._sdata.images.items():
+    #         image_names.append(image_name)
+    #         n_channels.append(image.shape[0])
 
-        channels_in_image = pd.DataFrame({"image_name": image_names, "n_channels": n_channels})
+    #     channels_in_image = pd.DataFrame({"image_name": image_names, "n_channels": n_channels})
 
-        # 3) drop images that don't have enough channels for the selection
-        channels_in_image = channels_in_image[channels_in_image.n_channels - 1 >= max(channels)]
-        valid_images = channels_in_image.image_name.values.tolist()
-        sdata_with_valid_images = self._sdata.pp.get_images(keys=valid_images)
+    #     # 3) drop images that don't have enough channels for the selection
+    #     channels_in_image = channels_in_image[channels_in_image.n_channels - 1 >= max(channels)]
+    #     valid_images = channels_in_image.image_name.values.tolist()
+    #     sdata_with_valid_images = self._sdata.pp.get_images(keys=valid_images)
 
-        if len(sdata_with_valid_images.images.keys()) < 1:
-            raise ValueError("The choice of channels results in an empty selection.")
+    #     if len(sdata_with_valid_images.images.keys()) < 1:
+    #         raise ValueError("The choice of channels results in an empty selection.")
 
-        selected_channels = dict(c=channels)
-        channels_images = {key: img.sel(selected_channels) for key, img in self._sdata.images.items()}
+    #     selected_channels = dict(c=channels)
+    #     channels_images = {key: img.sel(selected_channels) for key, img in self._sdata.images.items()}
 
-        return self._copy(images=channels_images, table=table)
+    #     return self._copy(images=channels_images, table=table)
 
-    def colorize(
-        self,
-        colors: List[str] = ["C0", "C1", "C2", "C3"],
-        background: str = "black",
-        normalize: bool = True,
-        merge=True,
-    ) -> sd.SpatialData:
-        """Colorizes a stack of images.
+    # def colorize(
+    #     self,
+    #     colors: tuple[str] = ("C0", "C1", "C2", "C3"),
+    #     background: str = "black",
+    #     normalize: bool = True,
+    #     merge=True,
+    # ) -> sd.SpatialData:
+    #     """Colorizes a stack of images.
 
-        Parameters
-        ----------
-        colors: List[str]
-            A list of strings that denote the color of each channel.
-        background: float
-            Background color of the colorized image.
-        normalize: bool
-            Normalizes the image prior to colorizing it.
-        merge: True
-            Merge the channel dimension.
+    #     Parameters
+    #     ----------
+    #     colors: List[str]
+    #         A list of strings that denote the color of each channel.
+    #     background: float
+    #         Background color of the colorized image.
+    #     normalize: bool
+    #         Normalizes the image prior to colorizing it.
+    #     merge: True
+    #         Merge the channel dimension.
 
+    #     Returns
+    #     -------
+    #     xr.Dataset
+    #         The image container with the colorized image stored in Layers.PLOT.
+    #     """
+    #     rendered = {}
 
-        Returns
-        -------
-        xr.Dataset
-            The image container with the colorized image stored in Layers.PLOT.
-        """
-        rendered = {}
+    #     for key, img in self._sdata.images.items():
+    #         colored_image = _colorize(
+    #             img,
+    #             colors=colors,
+    #             background=background,
+    #             normalize=normalize,
+    #         ).sum(0)
+    #         rendered[key] = sd.Image2DModel.parse(colored_image.swapaxes(0, 2))
 
-        for key, img in self._sdata.images.items():
-            colored_image = _colorize(
-                img,
-                colors=colors,
-                background=background,
-                normalize=normalize,
-            ).sum(0)
-            rendered[key] = sd.Image2DModel.parse(colored_image.swapaxes(0, 2))
-
-        return self._copy(images=rendered)
+    #     return self._copy(images=rendered)
 
     def render_labels(
         self,
         border_colour: Union[str, None] = "#000000",
-        border_alpha=1,
+        border_alpha: float = 1.0,
         fill_colour: Union[str, None] = None,
-        fill_alpha=1,
-        mode="inner",
-        **kwargs,
-    ):
-        self._verify_plotting_tree_exists()
+        fill_alpha: float = 1.0,
+        mode: str = "inner",
+        **kwargs: str,
+    ) -> sd.SpatialData:
+        """
+        Add labels to the plot.
+
+        Parameters
+        ----------
+        border_colour : str or None, optional
+            The border colour of the label box. Default is "#000000".
+        border_alpha : float, optional
+            The alpha (transparency) of the border colour. Default is 1.
+        fill_colour : str or None, optional
+            The fill colour of the label box. Default is None.
+        fill_alpha : float, optional
+            The alpha (transparency) of the fill colour. Default is 1.
+        mode : {'inner', 'outer'}, optional
+            The position of the label box relative to the data point.
+            'inner' places the label box inside the data point, while 'outer'
+            places the label box outside the data point. Default is 'inner'.
+        kwargs : dict
+            Additional keyword arguments to pass to the plotting function.
+
+        Returns
+        -------
+        object
+            A copy of the current plot with the labels added.
+        """
+        self._sdata = _verify_plotting_tree_exists(self._sdata)
 
         # get current number of steps to create a unique key
         sdata = self._copy()
@@ -466,58 +507,39 @@ class PreprocessingAccessor:
             "kwargs": kwargs,
         }
 
-        # color_dict = {1: "white"}
-        # cmap = _get_listed_colormap(color_dict)
-
-        # # mask = _label_segmentation_mask(segmentation, cells_dict)
-        # rendered = {}
-
-        # for key, img in self._sdata.images.items():
-        #     labels = self._sdata.labels[label_func(key)]
-        #     rendered_image = _render_label(
-        #         labels.values,
-        #         cmap,
-        #         img.values.T,
-        #         alpha=alpha,
-        #         alpha_boundary=alpha_boundary,
-        #         mode=mode,
-        #     )
-        #     # print(rendered.swapaxes(0, 2).shape)
-        #     rendered[key] = sd.Image2DModel.parse(rendered_image.swapaxes(0, 2))
-
         return sdata
 
-    def render_images(self, **kwargs):
-        self._verify_plotting_tree_exists()
+    # def render_images(self, **kwargs):
+    #     self._sdata = _verify_plotting_tree_exists(self._sdata)
 
-        # get current number of steps to create a unique key
-        sdata = self._copy()
-        n_steps = self._sdata.plotting_tree.keys()
-        sdata.plotting_tree[f"{n_steps+1}_render_images"] = {
-            "kwargs": kwargs,
-        }
+    #     # get current number of steps to create a unique key
+    #     sdata = self._copy()
+    #     n_steps = self._sdata.plotting_tree.keys()
+    #     sdata.plotting_tree[f"{n_steps+1}_render_images"] = {
+    #         "kwargs": kwargs,
+    #     }
 
-        return sdata
+    #     return sdata
 
-    def render_shapes(self, **kwargs):
-        self._verify_plotting_tree_exists()
+    # def render_shapes(self, **kwargs):
+    #     self._sdata = _verify_plotting_tree_exists(self._sdata)
 
-        # get current number of steps to create a unique key
-        sdata = self._copy()
-        n_steps = self._sdata.plotting_tree.keys()
-        sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
-            "kwargs": kwargs,
-        }
+    #     # get current number of steps to create a unique key
+    #     sdata = self._copy()
+    #     n_steps = self._sdata.plotting_tree.keys()
+    #     sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
+    #         "kwargs": kwargs,
+    #     }
 
-        return sdata
+    #     return sdata
 
-    def render_points(self, **kwargs):
-        self._verify_plotting_tree_exists()
+    # def render_points(self, **kwargs):
+    #     self._sdata = _verify_plotting_tree_exists(self._sdata)
 
-        sdata = self._copy()
-        n_steps = self._sdata.plotting_tree.keys()
-        sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
-            "kwargs": kwargs,
-        }
+    #     sdata = self._copy()
+    #     n_steps = self._sdata.plotting_tree.keys()
+    #     sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
+    #         "kwargs": kwargs,
+    #     }
 
-        return sdata
+    #     return sdata
