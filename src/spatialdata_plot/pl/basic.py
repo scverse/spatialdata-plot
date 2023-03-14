@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import Iterable
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -9,15 +9,19 @@ import numpy as np
 import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
+from dask.dataframe.core import DataFrame as DaskDataFrame
+from geopandas import GeoDataFrame
 from matplotlib.colors import ListedColormap, to_rgb
+from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from skimage.segmentation import find_boundaries
-from spatialdata._core._spatialdata_ops import get_transformation
+from spatial_image import SpatialImage
 
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
 
 from ..accessor import register_spatial_data_accessor
+from ..pp.utils import _get_region_key, _verify_plotting_tree_exists
 
 
 @register_spatial_data_accessor("pl")
@@ -75,13 +79,25 @@ class PlotAccessor:
 
     """
 
+    @property
+    def sdata(self) -> sd.SpatialData:
+        """The `SpatialData` object to provide plotting functions for."""
+        return self._sdata
+
+    @sdata.setter
+    def sdata(self, sdata: sd.SpatialData) -> None:
+        self._sdata = sdata
+
+    def __init__(self, sdata: sd.SpatialData) -> None:
+        self._sdata = sdata
+
     def _copy(
         self,
-        images: Union[None, dict] = None,
-        labels: Union[None, dict] = None,
-        points: Union[None, dict] = None,
-        shapes: Union[None, dict] = None,
-        table: Union[dict, AnnData] = None,
+        images: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
+        labels: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
+        points: Union[None, dict[str, DaskDataFrame]] = None,
+        shapes: Union[None, dict[str, GeoDataFrame]] = None,
+        table: Union[None, AnnData] = None,
     ) -> sd.SpatialData:
         """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
@@ -128,81 +144,6 @@ class PlotAccessor:
             shapes=self._sdata.shapes if shapes is None else shapes,
             table=self._sdata.table if table is None else table,
         )
-
-    def _get_coordinate_system_mapping(self) -> dict:
-        """Returns a mapping from coordinate systems to data keys.
-
-        Return a dictionary mapping each coordinate system in the `SpatialData`
-        object to a list of data keys that use that coordinate system.
-
-        Returns
-        -------
-        dict
-            A dictionary mapping each coordinate system in the `SpatialData`
-            object to a list of data keys that use that coordinate system.
-
-        Raises
-        ------
-        ValueError
-            If the `SpatialData` object does not have at least one coordinate
-            system.
-
-        """
-        has_images = hasattr(self._sdata, "images")
-        has_labels = hasattr(self._sdata, "labels")
-        has_polygons = hasattr(self._sdata, "polygons")
-
-        coordsys_keys = self._sdata.coordinate_systems
-        image_keys = self._sdata.images.keys() if has_images else []
-        label_keys = self._sdata.labels.keys() if has_labels else []
-        polygon_keys = self._sdata.images.keys() if has_polygons else []
-
-        mapping = {}
-
-        if len(coordsys_keys) < 1:
-            raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
-
-        for key in coordsys_keys:
-            mapping[key] = []
-
-            for image_key in image_keys:
-                transformations = get_transformation(self._sdata.images[image_key], get_all=True)
-
-                if key in list(transformations.keys()):
-                    mapping[key].append(image_key)
-
-            for label_key in label_keys:
-                transformations = get_transformation(self._sdata.labels[label_key], get_all=True)
-
-                if key in list(transformations.keys()):
-                    mapping[key].append(label_key)
-
-            for polygon_key in polygon_keys:
-                transformations = get_transformation(self._sdata.polygons[polygon_key], get_all=True)
-
-                if key in list(transformations.keys()):
-                    mapping[key].append(polygon_key)
-
-        return mapping
-
-    def _get_region_key(self) -> str:
-        """Quick access to the data's region key."""
-        if not hasattr(self._sdata, "table"):
-            raise ValueError("SpatialData object does not have a table.")
-
-        return self._sdata.table.uns["spatialdata_attrs"]["region_key"]
-
-    def _get_instance_key(self) -> str:
-        if not hasattr(self._sdata, "table"):
-            raise ValueError("SpatialData object does not have a table.")
-
-        "Quick access to the data's instance key."
-
-        return self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
-
-    def _verify_plotting_tree_exists(self):
-        if not hasattr(self._sdata, "plotting_tree"):
-            self._sdata.plotting_tree = OrderedDict()
 
     def _subplots(
         self, num_images: int, ncols: int = 4, width: int = 4, height: int = 3
@@ -255,7 +196,7 @@ class PlotAccessor:
         fill_alpha: float = 0.5,
         fill_color: Optional[Union[str, None]] = None,
         mode: str = "thick",
-        palette: Optional[List[str]] = None,
+        palette: Optional[list[str]] = None,
         add_legend: bool = True,
     ) -> matplotlib.pyplot.Axes:
         """Plot cell labels for a scanpy object.
@@ -351,14 +292,14 @@ class PlotAccessor:
         if not isinstance(add_legend, bool):
             raise TypeError("Parameter 'add_legend' must be a boolean.")
 
-        self._verify_plotting_tree_exists()
+        # self._sdata = _verify_plotting_tree_exists(self._sdata)
 
         # get current number of steps to create a unique key
         table = self._sdata.table.copy()
         add_colors_for_categorical_sample_annotation(table, cell_key, table.obs[color_key], palette=palette)
 
         sdata = self._copy(table=table)
-        sdata.pp._verify_plotting_tree_exists()
+        sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
             "cell_key": cell_key,
@@ -374,20 +315,14 @@ class PlotAccessor:
 
         return sdata
 
-    def _render_images(self, params, axs):
-        pass
-
-    def _render_channels(self, params, axs):
-        pass
-
-    def _render_shapes(self, params, axs):
-        pass
-
-    def _render_points(self, params, axs):
-        pass
-
-    def _render_labels(self, params, key: str, fig, ax):
-        region_key = self._get_region_key()
+    def _render_labels(
+        self,
+        params: dict[str, Union[str, int, float]],
+        key: str,
+        fig: matplotlib.figure.Figure,
+        ax: matplotlib.axes.SubplotBase,
+    ) -> None:
+        region_key = _get_region_key(self._sdata)
 
         # subset table to only the entires specified by 'key'
         table = self._sdata.table.obs
@@ -451,7 +386,7 @@ class PlotAccessor:
         width: int = 4,
         height: int = 3,
         bg_color: str = "black",
-        **kwargs,
+        **kwargs: str,
     ) -> sd.SpatialData:
         """Plot the images in the SpatialData object.
 
@@ -548,17 +483,21 @@ class PlotAccessor:
             # go through tree
             for cmd, params in render_cmds.items():
                 if cmd == "render_images":
-                    self._render_images(params, axs)
+                    # self._render_images(params, axs)
+                    pass
 
                 elif cmd == "render_channels":
-                    self._render_channels(params, axs)
+                    # self._render_channels(params, axs)
+                    pass
 
                 elif cmd == "render_shapes":
-                    self._render_shapes(params, axs)
+                    # self._render_shapes(params, axs)
+                    pass
 
                 elif cmd == "render_points":
-                    for ax in axs:
-                        self._render_points(params, ax)
+                    # for ax in axs:
+                    # self._render_points(params, ax)
+                    pass
 
                 elif cmd == "render_labels":
                     for idx, ax in enumerate(axs):
@@ -579,7 +518,7 @@ class PlotAccessor:
         ncols: int = 4,
         width: int = 4,
         height: int = 3,
-        **kwargs,
+        **kwargs: str,
     ) -> sd.SpatialData:
         """Plots a scatter plot of observations in the table of a SpatialData object.
 
