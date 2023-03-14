@@ -33,7 +33,6 @@ repos:
       rev: v1.1.1
       hooks:
           - id: mypy
-            additional_dependencies: [numpy==1.22.0, types-requests]
             exclude: tests/|docs/|temp/
     - repo: https://github.com/asottile/yesqa
       rev: v1.4.0
