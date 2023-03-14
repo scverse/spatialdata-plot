@@ -8,6 +8,13 @@ minimum_pre_commit_version: 2.16.0
 ci:
     skip: [mypy]
 repos:
+    - repo: https://github.com/nbQA-dev/nbQA
+      rev: 1.6.3
+      hooks:
+          - id: nbqa-pyupgrade
+            args: [--py38-plus]
+          - id: nbqa-black
+          - id: nbqa-isort
     - repo: https://github.com/psf/black
       rev: 23.1.0
       hooks:
@@ -25,11 +32,11 @@ repos:
       hooks:
           - id: isort
     - repo: https://github.com/pre-commit/mirrors-mypy
-      rev: v1.0.1
+      rev: v1.1.1
       hooks:
           - id: mypy
             additional_dependencies: [numpy==1.22.0, types-requests]
-            exclude: tests/|docs/|temp/|spatialdata/_core/reader.py
+            exclude: tests/|docs/|temp/
     - repo: https://github.com/asottile/yesqa
       rev: v1.4.0
       hooks:
@@ -53,7 +60,7 @@ repos:
           - id: check-case-conflict
           - id: check-docstring-first
     - repo: https://github.com/PyCQA/autoflake
-      rev: v2.0.1
+      rev: v2.0.2
       hooks:
           - id: autoflake
             args:
