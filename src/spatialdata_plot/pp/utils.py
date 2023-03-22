@@ -3,7 +3,7 @@ from collections import OrderedDict
 import matplotlib
 import spatialdata as sd
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
-from spatialdata._core._spatialdata_ops import get_transformation
+from spatialdata.transformations import get_transformation
 
 
 def _get_linear_colormap(colors: list[str], background: str) -> list[matplotlib.colors.LinearSegmentedColormap]:
