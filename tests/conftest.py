@@ -12,7 +12,7 @@ from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
-from spatialdata._core.models import (
+from spatialdata.models import (
     Image2DModel,
     Image3DModel,
     Labels2DModel,
@@ -42,7 +42,7 @@ def full_sdata() -> SpatialData:
 @pytest.fixture
 def test_sdata_single_image():
     """Creates a simple sdata object."""
-    images = {"data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
+    images = {"data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
     sdata = sd.SpatialData(images=images)
     return sdata
 
@@ -51,9 +51,9 @@ def test_sdata_single_image():
 def test_sdata_multiple_images():
     """Creates an sdata object with multiple images."""
     images = {
-        "data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
     }
     sdata = sd.SpatialData(images=images)
     return sdata
@@ -63,9 +63,9 @@ def test_sdata_multiple_images():
 def test_sdata_multiple_images_with_table():
     """Creates an sdata object with multiple images."""
     images = {
-        "data1": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
     }
 
     instance_key = "instance_id"
@@ -85,9 +85,9 @@ def test_sdata_multiple_images_with_table():
 def test_sdata_multiple_images_dims():
     """Creates an sdata object with multiple images."""
     images = {
-        "data1": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data1": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
     sdata = sd.SpatialData(images=images)
     return sdata
@@ -97,9 +97,9 @@ def test_sdata_multiple_images_dims():
 def test_sdata_multiple_images_diverging_dims():
     """Creates an sdata object with multiple images."""
     images = {
-        "data1": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.Image2DModel.parse(np.zeros((6, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data1": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
+        "data2": sd.models.Image2DModel.parse(np.zeros((6, 10, 10)), dims=("c", "y", "x")),
+        "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
     sdata = sd.SpatialData(images=images)
     return sdata
@@ -148,7 +148,7 @@ def table_multiple_annotations() -> SpatialData:
 #     geo_df = GeoDataFrame(
 #         geometry=[],
 #     )
-#     from spatialdata import Identity
+#     from spatialdata.transformations import Identity
 #     set_transform(geo_df, Identity())
 #
 #     return SpatialData(points={"empty": geo_df})
