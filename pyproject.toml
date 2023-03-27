@@ -40,7 +40,6 @@ doc = [
     "sphinx-copybutton",
 ]
 test = [
-    "sklearn",
     "pytest",
     "pytest-cov",
 ]
