@@ -53,13 +53,16 @@ class PreprocessingAccessor:
         table: Union[None, AnnData] = None,
     ) -> sd.SpatialData:
         """Copies the references from the original to the new SpatialData object."""
-        return sd.SpatialData(
+        sdata = sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
             points=self._sdata.points if points is None else points,
             shapes=self._sdata.shapes if shapes is None else shapes,
             table=self._sdata.table if table is None else table,
         )
+        sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+
+        return sdata
 
     def _verify_plotting_tree_exists(self) -> None:
         if not hasattr(self._sdata, "plotting_tree"):
@@ -205,7 +208,6 @@ class PreprocessingAccessor:
                             del sdata.polygons[valid_polygon_key]
 
         # subset table if label info is given
-        print(label_keys)
         if len(label_keys) > 0:
             assert hasattr(sdata, "table"), "SpatialData object does not have a table."
             assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
@@ -278,7 +280,7 @@ class PreprocessingAccessor:
             if y.stop <= y.start:
                 raise ValueError("The current choice of 'x' would result in an empty slice.")
 
-        selection = {x: x, y: y}  # makes use of xarray sel method
+        selection = {"x": x, "y": y}  # makes use of xarray sel method
 
         # TODO: error handling if selection is out of bounds
         cropped_images = {key: img.sel(selection) for key, img in self._sdata.images.items()}
@@ -291,7 +293,7 @@ class PreprocessingAccessor:
         self._sdata = _verify_plotting_tree_exists(self._sdata)
 
         # get current number of steps to create a unique key
-        n_steps = self._sdata.plotting_tree.keys()
+        n_steps = len(self._sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_get_bb"] = {
             "x": x,
             "y": y,
