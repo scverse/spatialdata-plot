@@ -370,7 +370,7 @@ class PlotAccessor:
             # set up canvas
             if ax is None:
                 num_images = len(sdata.images.keys())
-                _, axs = _get_subplots(num_images, ncols, width, height)
+                fig, axs = _get_subplots(num_images, ncols, width, height)
             elif isinstance(ax, matplotlib.pyplot.Axes):
                 axs = [ax]
             elif isinstance(ax, list):
@@ -382,12 +382,30 @@ class PlotAccessor:
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
 
+            # get biggest image after transformations to set ax size
+            element_shapes = []
+            for cmd, _ in render_cmds.items():
+                if cmd == "render_images":
+                    element_shapes += [(x.shape[1], x.shape[2]) for x in sdata.images.values()]  # drop channel
+
+                elif cmd == "render_shapes":
+                    element_shapes += [x.shape for x in sdata.shapes.values()]
+
+                elif cmd == "render_points":
+                    element_shapes += [x.shape for x in sdata.points.values()]
+
+                elif cmd == "render_labels":
+                    element_shapes += [x.shape for x in sdata.labels.values()]
+
+            final_size = [max(values) for values in zip(*element_shapes)]
+            extent = {"x": [0, final_size[1]], "y": [final_size[0], 0]}
+
             # go through tree
             for cmd, params in render_cmds.items():
                 if cmd == "render_images":
                     for idx, ax in enumerate(axs):
                         key = list(sdata.images.keys())[idx]
-                        _render_images(sdata=sdata, params=params, key=key, ax=ax)
+                        _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_channels":
                     # self._render_channels(params, axs)
@@ -484,11 +502,12 @@ class PlotAccessor:
 
                     for idx, ax in enumerate(axs):
                         key = list(sdata.labels.keys())[idx]
-                        _render_labels(sdata=sdata, params=params, key=key, ax=ax)
+                        _render_labels(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 else:
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
+        fig.show()
         return axs
 
     def scatter(

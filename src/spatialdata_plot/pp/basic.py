@@ -208,7 +208,7 @@ class PreprocessingAccessor:
                             del sdata.polygons[valid_polygon_key]
 
         # subset table if label info is given
-        if len(label_keys) > 0:
+        if len(label_keys) > 0 and sdata.table is not None:
             assert hasattr(sdata, "table"), "SpatialData object does not have a table."
             assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
             assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."

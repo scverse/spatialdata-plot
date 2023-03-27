@@ -19,6 +19,7 @@ def _render_images(
     params: dict[str, Union[str, int, float]],
     key: str,
     ax: matplotlib.axes.SubplotBase,
+    extent: dict[str, list[int]],
 ) -> None:
     n_channels, y_dim, x_dim = sdata.images[key].shape  # (c, y, x)
     img = sdata.images[key].values.copy()
@@ -38,11 +39,12 @@ def _render_images(
         elif n_channels == 2:
             colors = ListedColormap(["#d30cb8", "#6df1d8"])
         elif n_channels == 3:
-            bg = [(1, 1, 1, 1)]
-            cmap_red = ListedColormap([(1, 0, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            cmap_green = ListedColormap([(0, 1, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            cmap_blue = ListedColormap([(0, 0, 1, i) for i in reversed(range(0, 256, 1))] + bg)
-            colors = [cmap_red, cmap_green, cmap_blue]
+            # bg = [(1, 1, 1, 1)]
+            # cmap_red = ListedColormap([(1, 0, 0, i) for i in reversed(range(0, 256, 1))] + bg)
+            # cmap_green = ListedColormap([(0, 1, 0, i) for i in reversed(range(0, 256, 1))] + bg)
+            # cmap_blue = ListedColormap([(0, 0, 1, i) for i in reversed(range(0, 256, 1))] + bg)
+            # colors = [cmap_red, cmap_green, cmap_blue]
+            colors = ListedColormap(["red", "blue", "green"])
         else:
             # we do PCA to reduce to 3 channels
             flattened_img = np.reshape(img, (n_channels, -1))
@@ -53,18 +55,19 @@ def _render_images(
 
     img = xr.DataArray(img, dims=("c", "y", "x")).transpose("y", "x", "c")  # for plotting
 
-    for i in range(n_channels):
-        ax.imshow(
-            img[..., i],
-            cmap=colors[i],
-            interpolation="nearest",
-        )
+    ax.set_xlim(extent["x"][0], extent["x"][1])
+    ax.set_ylim(extent["y"][0], extent["y"][1])
+    ax.imshow(
+        img.transpose("y", "x", "c").data,
+        cmap=colors,
+        interpolation="nearest",
+    )
 
     ax.set_title(key)
-    ax.set_xlabel("spatial1")
-    ax.set_ylabel("spatial2")
-    ax.set_xticks([])
-    ax.set_yticks([])
+    # ax.set_xlabel("spatial1")
+    # ax.set_ylabel("spatial2")
+    # ax.set_xticks([])
+    # ax.set_yticks([])
 
 
 def _render_labels(
@@ -72,6 +75,7 @@ def _render_labels(
     params: dict[str, Union[str, int, float]],
     key: str,
     ax: matplotlib.axes.SubplotBase,
+    extent: dict[str, list[int]],
 ) -> None:
     region_key = _get_region_key(sdata)
 
@@ -88,6 +92,9 @@ def _render_labels(
     group_to_color = pd.DataFrame({params["color_key"]: groups, "color": colors})
 
     segmentation = sdata.labels[key].values
+
+    ax.set_xlim(extent["x"][0], extent["x"][1])
+    ax.set_ylim(extent["y"][0], extent["y"][1])
 
     for group in groups:
         vaid_cell_ids = table[table[params["color_key"]] == group][params["cell_key"]].values
@@ -106,7 +113,11 @@ def _render_labels(
             fill_color[-1] = params["fill_alpha"]
             colors = [[0, 0, 0, 0], fill_color]  # add transparent for bg
 
-            ax.imshow(infill_mask, cmap=ListedColormap(colors), interpolation="nearest")
+            ax.imshow(
+                infill_mask,
+                cmap=ListedColormap(colors),
+                interpolation="nearest",
+            )
 
         if params["border_alpha"] != 0:
             border_mask = find_boundaries(in_group_mask, mode=params["mode"])
@@ -115,7 +126,11 @@ def _render_labels(
             border_color = group_color.copy()
             border_color[-1] = params["border_alpha"]
 
-            ax.imshow(border_mask, cmap=ListedColormap([border_color]), interpolation="nearest")
+            ax.imshow(
+                border_mask,
+                cmap=ListedColormap([border_color]),
+                interpolation="nearest",
+            )
 
     if params["add_legend"]:
         patches = []
@@ -125,7 +140,7 @@ def _render_labels(
         ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
 
     ax.set_title(key)
-    ax.set_xlabel("spatial1")
-    ax.set_ylabel("spatial2")
-    ax.set_xticks([])
-    ax.set_yticks([])
+    # ax.set_xlabel("spatial1")
+    # ax.set_ylabel("spatial2")
+    # ax.set_xticks([])
+    # ax.set_yticks([])
