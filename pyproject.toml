@@ -21,7 +21,7 @@ urls.Home-page = "https://github.com/scverse/spatialdata-plot"
 dependencies = [
     "spatialdata@git+https://github.com/scverse/spatialdata",
     "matplotlib",
-    "sklearn",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
