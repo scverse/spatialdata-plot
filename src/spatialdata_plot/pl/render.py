@@ -26,18 +26,18 @@ def _render_shapes(
     extent: dict[str, list[int]],
 ) -> None:
 
+    ax.set_xlim(extent["x"][0], extent["x"][1])
+    ax.set_ylim(extent["y"][0], extent["y"][1])
+    
     shape_transformation = get_transformation(sdata.shapes[key])
     transformed_shapes = transform(sdata.shapes[key], shape_transformation)
-    print(extent, transformed_shapes)
 
     ax.scatter(
         x=transformed_shapes.geometry.x,
         y=transformed_shapes.geometry.y,
         s=transformed_shapes.radius,
-        color="red",
+        color=params["palette"],
     )
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
 
     ax.set_title(key)
 
@@ -52,7 +52,7 @@ def _render_images(
     n_channels, y_dim, x_dim = sdata.images[key].shape  # (c, y, x)
     img = sdata.images[key].values.copy()
     img = img.astype("float")
-
+    print(extent)
     if params["trans_fun"] is not None:
         trans_fun: Callable[[xr.DataArray], xr.DataArray] = params["trans_fun"]  # type: ignore
         img = trans_fun(img)

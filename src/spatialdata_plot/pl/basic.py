@@ -122,7 +122,7 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        palette: Optional[list[str]] = ["blue"],
+        palette: Optional[list[str]] = None,
     ) -> sd.SpatialData:
         """Render images for a scanpy object.
 
@@ -371,14 +371,10 @@ class PlotAccessor:
         # Evaluate execution tree for plotting
 
         valid_commands = [
-            "get_images",
-            "get_channels",
-            "get_shapes",  # formerly polygons
+            "get_elements",
             "get_bb",
             "render_images",
-            "render_channels",
             "render_shapes",
-            "render_points",
             "render_labels",
         ]
 
@@ -434,23 +430,32 @@ class PlotAccessor:
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
 
             # get biggest image after transformations to set ax size
-            element_shapes = []
+            x_dims = []
+            y_dims = []
             for cmd, _ in render_cmds.items():
 
                 if cmd == "render_images":
-                    element_shapes += [(x.shape[1], x.shape[2]) for x in sdata.images.values()]  # drop channel
+
+                    y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
+                    x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
 
                 elif cmd == "render_shapes":
-                    element_shapes += [(g.x, g.y) for k in sdata.shapes.keys() for g in sdata.shapes[k].geometry]
-
-                elif cmd == "render_points":
-                    element_shapes += [x.shape for x in sdata.points.values()]
+                    
+                    for k in sdata.shapes.keys():
+                        x_dims += [(min(sdata.shapes[k].geometry.x), max(sdata.shapes[k].geometry.x))]
+                        y_dims += [(min(sdata.shapes[k].geometry.y), max(sdata.shapes[k].geometry.y))]
 
                 elif cmd == "render_labels":
-                    element_shapes += [x.shape for x in sdata.labels.values()]
 
-            final_size = [max(values) for values in zip(*element_shapes)]
-            extent = {"x": [0, final_size[1]], "y": [final_size[0], 0]}
+                    y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
+                    x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
+
+            max_x = [max(values) for values in zip(*x_dims)]
+            min_x = [min(values) for values in zip(*x_dims)]
+            max_y = [max(values) for values in zip(*y_dims)]
+            min_y = [min(values) for values in zip(*y_dims)]
+
+            extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
 
             # go through tree
             for cmd, params in render_cmds.items():
@@ -460,20 +465,11 @@ class PlotAccessor:
                         key = list(sdata.images.keys())[idx]
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
-                elif cmd == "render_channels":
-                    # self._render_channels(params, axs)
-                    pass
-
                 elif cmd == "render_shapes":
 
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
                         _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
-                elif cmd == "render_points":
-                    # for ax in axs:
-                    # self._render_points(params, ax)
-                    pass
 
                 elif cmd == "render_labels":
 
@@ -565,81 +561,3 @@ class PlotAccessor:
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
         return axs
-
-    def scatter(
-        self,
-        x: str,
-        y: str,
-        color: Union[str, None] = None,
-        ax: plt.Axes = None,
-        ncols: int = 4,
-        width: int = 4,
-        height: int = 3,
-        **kwargs: str,
-    ) -> sd.SpatialData:
-        """Plots a scatter plot of observations in the table of a SpatialData object.
-
-        Parameters
-        ----------
-        x : str
-            Column name of the x-coordinates.
-        y : str
-            Column name of the y-coordinates.
-        color : str, optional
-            Column name of the color, by default None.
-        ax : matplotlib.axes.Axes, optional
-            Matplotlib axes object to plot on. If None, a new figure is created.
-            Only works if there is one image in the SpatialData object.
-        ncols : int, optional
-            Number of columns in the figure. Default is 4.
-        width : int, optional
-            Width of each subplot. Default is 4.
-        height : int, optional
-            Height of each subplot. Default is 3.
-        kwargs : dict
-            Additional keyword arguments to pass to the scatter plot.
-
-        Returns
-        -------
-        sd.SpatialData
-            A SpatialData object.
-        """
-        image_data = self._sdata.images
-        region_key = self._sdata.pp.get_region_key()
-        regions = self._sdata.table.obs[region_key].unique().tolist()
-
-        region_mapping = {k.split("/")[-1]: k for k in regions}
-
-        for k in image_data.keys():
-            if k not in region_mapping.keys():
-                del region_mapping[k]
-
-        num_images = len(region_mapping)
-
-        if num_images == 1:
-            ax = ax or plt.gca()
-            # TODO: support for labels instead of colors (these can be cell types for example) => Automatic coloring.
-            if color is not None:
-                kwargs["c"] = self._sdata.table.obs[color]
-            ax.scatter(self._sdata.table.obs[x], self._sdata.table.obs[y], **kwargs)
-            key = list(image_data.keys())[0]
-            ax.set_title(key)
-            ax.margins(x=0.01)
-            ax.margins(y=0.01)
-
-        if num_images > 1:
-            fig, axes = _get_subplots(num_images, ncols, width, height)
-
-            for i, (ax, (k, v)) in enumerate(zip(np.ravel(axes), region_mapping.items())):
-                if i < num_images:
-                    sub_table = self._sdata.table.obs[self._sdata.table.obs[region_key] == v]
-
-                    if color is not None:
-                        kwargs["c"] = sub_table[color]
-
-                    ax.scatter(sub_table[x], sub_table[y], **kwargs)
-                    ax.set_title(k)
-                    ax.margins(x=0.01)
-                    ax.margins(y=0.01)
-
-        return self._sdata
