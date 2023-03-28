@@ -414,7 +414,6 @@ class PlotAccessor:
 
                 num_images = len(sdata.coordinate_systems)
                 fig, axs = _get_subplots(num_images, ncols, width, height)
-
             elif isinstance(ax, matplotlib.pyplot.Axes):
 
                 axs = [ax]
@@ -440,7 +439,7 @@ class PlotAccessor:
                     x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
 
                 elif cmd == "render_shapes":
-                    
+
                     for k in sdata.shapes.keys():
                         x_dims += [(min(sdata.shapes[k].geometry.x), max(sdata.shapes[k].geometry.x))]
                         y_dims += [(min(sdata.shapes[k].geometry.y), max(sdata.shapes[k].geometry.y))]
@@ -463,6 +462,7 @@ class PlotAccessor:
 
                     for idx, ax in enumerate(axs):
                         key = list(sdata.images.keys())[idx]
+
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_shapes":
