@@ -12,9 +12,9 @@ from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
-
 from spatialdata import transform
 from spatialdata.transformations import get_transformation
+
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
