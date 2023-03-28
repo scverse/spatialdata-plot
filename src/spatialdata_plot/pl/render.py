@@ -9,8 +9,6 @@ import xarray as xr
 from matplotlib.colors import ListedColormap, to_rgb
 from skimage.segmentation import find_boundaries
 from sklearn.decomposition import PCA
-from spatialdata import transform
-from spatialdata.transformations import get_transformation
 
 from ..pl.utils import _normalize
 from ..pp.utils import _get_region_key
@@ -26,13 +24,12 @@ def _render_shapes(
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
-    shape_transformation = get_transformation(sdata.shapes[key])
-    transformed_shapes = transform(sdata.shapes[key], shape_transformation)
+    shape = sdata.shapes[key]
 
     ax.scatter(
-        x=transformed_shapes.geometry.x,
-        y=transformed_shapes.geometry.y,
-        s=transformed_shapes.radius,
+        x=shape.geometry.x,
+        y=shape.geometry.y,
+        s=shape.radius,
         color=params["palette"],
     )
 
@@ -49,12 +46,12 @@ def _render_images(
     n_channels, y_dim, x_dim = sdata.images[key].shape  # (c, y, x)
     img = sdata.images[key].values.copy()
     img = img.astype("float")
-    print(extent)
+
     if params["trans_fun"] is not None:
         trans_fun: Callable[[xr.DataArray], xr.DataArray] = params["trans_fun"]  # type: ignore
         img = trans_fun(img)
 
-    img = _normalize(img)
+    img = _normalize(img, clip=True)
 
     # If channel colors are not specified, use default colors
     colors: Union[matplotlib.colors.ListedColormap, list[matplotlib.colors.ListedColormap]] = params["palette"]

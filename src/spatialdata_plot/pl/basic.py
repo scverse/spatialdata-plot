@@ -13,6 +13,8 @@ from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 
+from spatialdata import transform
+from spatialdata.transformations import get_transformation
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
@@ -418,6 +420,23 @@ class PlotAccessor:
                 ax.set_facecolor(bg_color)
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
+
+            # transform all elements
+            for cmd, _ in render_cmds.items():
+                if cmd == "render_images":
+                    for key in sdata.images.keys():
+                        img_transformation = get_transformation(sdata.images[key])
+                        sdata.images[key] = transform(sdata.images[key], img_transformation)
+
+                elif cmd == "render_shapes":
+                    for key in sdata.shapes.keys():
+                        shape_transformation = get_transformation(sdata.shapes[key])
+                        sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
+
+                elif cmd == "render_labels":
+                    for key in sdata.labels.keys():
+                        label_transformation = get_transformation(sdata.labels[key])
+                        sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
             # get biggest image after transformations to set ax size
             x_dims = []
