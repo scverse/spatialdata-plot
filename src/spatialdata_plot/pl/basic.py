@@ -370,7 +370,9 @@ class PlotAccessor:
             # set up canvas
             if ax is None:
                 num_images = len(sdata.images.keys())
+
                 fig, axs = _get_subplots(num_images, ncols, width, height)
+
             elif isinstance(ax, matplotlib.pyplot.Axes):
                 axs = [ax]
             elif isinstance(ax, list):
@@ -405,6 +407,7 @@ class PlotAccessor:
                 if cmd == "render_images":
                     for idx, ax in enumerate(axs):
                         key = list(sdata.images.keys())[idx]
+
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_channels":
@@ -501,13 +504,14 @@ class PlotAccessor:
                             sdata.table = table
 
                     for idx, ax in enumerate(axs):
+                      
                         key = list(sdata.labels.keys())[idx]
                         _render_labels(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
+                        
                 else:
+                  
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
-        fig.show()
         return axs
 
     def scatter(

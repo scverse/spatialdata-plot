@@ -70,6 +70,7 @@ def _render_images(
     # ax.set_yticks([])
 
 
+
 def _render_labels(
     sdata: sd.SpatialData,
     params: dict[str, Union[str, int, float]],
