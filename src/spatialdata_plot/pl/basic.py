@@ -19,11 +19,7 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import (
-    _render_shapes,
-    _render_images,
-    _render_labels,
-)
+from .render import _render_images, _render_labels, _render_shapes
 from .utils import _get_random_hex_colors, _get_subplots
 
 
@@ -379,7 +375,6 @@ class PlotAccessor:
         ]
 
         if len(plotting_tree.keys()) > 0:
-
             render_cmds = OrderedDict()
 
             for cmd, params in plotting_tree.items():
@@ -411,19 +406,15 @@ class PlotAccessor:
 
             # set up canvas
             if ax is None:
-
                 num_images = len(sdata.coordinate_systems)
                 fig, axs = _get_subplots(num_images, ncols, width, height)
             elif isinstance(ax, matplotlib.pyplot.Axes):
-
                 axs = [ax]
             elif isinstance(ax, list):
-
                 axs = ax
 
             # Set background color
             for _, ax in enumerate(axs):
-
                 ax.set_facecolor(bg_color)
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
@@ -432,20 +423,16 @@ class PlotAccessor:
             x_dims = []
             y_dims = []
             for cmd, _ in render_cmds.items():
-
                 if cmd == "render_images":
-
                     y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
                     x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
 
                 elif cmd == "render_shapes":
-
                     for k in sdata.shapes.keys():
                         x_dims += [(min(sdata.shapes[k].geometry.x), max(sdata.shapes[k].geometry.x))]
                         y_dims += [(min(sdata.shapes[k].geometry.y), max(sdata.shapes[k].geometry.y))]
 
                 elif cmd == "render_labels":
-
                     y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
                     x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
 
@@ -459,20 +446,17 @@ class PlotAccessor:
             # go through tree
             for cmd, params in render_cmds.items():
                 if cmd == "render_images":
-
                     for idx, ax in enumerate(axs):
                         key = list(sdata.images.keys())[idx]
 
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_shapes":
-
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
                         _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_labels":
-
                     if (
                         sdata.table is not None
                         and isinstance(params["color_key"], str)

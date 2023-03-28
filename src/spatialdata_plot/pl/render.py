@@ -10,9 +10,7 @@ from matplotlib.colors import ListedColormap, to_rgb
 from skimage.segmentation import find_boundaries
 from sklearn.decomposition import PCA
 from spatialdata import transform
-from spatialdata.transformations import (
-    get_transformation,
-)
+from spatialdata.transformations import get_transformation
 
 from ..pl.utils import _normalize
 from ..pp.utils import _get_region_key
@@ -25,10 +23,9 @@ def _render_shapes(
     ax: matplotlib.axes.SubplotBase,
     extent: dict[str, list[int]],
 ) -> None:
-
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
-    
+
     shape_transformation = get_transformation(sdata.shapes[key])
     transformed_shapes = transform(sdata.shapes[key], shape_transformation)
 
