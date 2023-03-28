@@ -149,10 +149,10 @@ class PlotAccessor:
         }
 
         return sdata
-    
+
     def render_channels(self, channels: Union[List[str], List[int]], colors: List[str]):
         """Renders selected channels.
-        
+
         Parameters:
         -----------
         self: object
@@ -161,19 +161,15 @@ class PlotAccessor:
             The channels to plot
         colors: List[str]
             The colors for the channels
-        
+
         """
         sdata = self._copy()
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {
-            "channels": channels,
-            "colors": colors
-        }
-        
-        return sdata
+        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {"channels": channels, "colors": colors}
 
+        return sdata
 
     def render_labels(
         self,

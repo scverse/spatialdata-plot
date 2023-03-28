@@ -14,6 +14,12 @@ from ..pl.utils import _normalize
 from ..pp.utils import _get_region_key
 
 
+def _render_channels(
+    sdata: sd.SpatialData, params: dict[str, Union[list, int, float]], key: str, ax: matplotlib.axes.SubplotBase
+) -> None:
+    pass
+
+
 def _render_images(
     sdata: sd.SpatialData,
     params: dict[str, Union[str, int, float]],
