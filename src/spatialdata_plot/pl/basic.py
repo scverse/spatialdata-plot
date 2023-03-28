@@ -19,7 +19,11 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_images, _render_labels
+from .render import (
+    _render_shapes,
+    _render_images,
+    _render_labels,
+)
 from .utils import _get_random_hex_colors, _get_subplots
 
 
@@ -116,11 +120,10 @@ class PlotAccessor:
 
         return sdata
 
-    def render_images(
+    def render_shapes(
         self,
-        palette: Optional[list[str]] = None,
-        trans_fun: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
-    ) -> matplotlib.pyplot.Axes:
+        palette: Optional[list[str]] = ["blue"],
+    ) -> sd.SpatialData:
         """Render images for a scanpy object.
 
         Parameters
@@ -136,8 +139,41 @@ class PlotAccessor:
 
         Returns
         -------
-        matplotlib.pyplot.Axes
-            The axes object containing the rendered images.
+        sd.SpatialData
+            The input sd.SpatialData with a command added to the plotting tree
+
+        """
+        sdata = self._copy()
+        sdata = _verify_plotting_tree_exists(sdata)
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
+            "palette": palette,
+        }
+
+        return sdata
+
+    def render_images(
+        self,
+        palette: Optional[list[str]] = None,
+        trans_fun: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
+    ) -> sd.SpatialData:
+        """Render images for a scanpy object.
+
+        Parameters
+        ----------
+        self : object
+            The scanpy object.
+        palette : list[str], optional (default: None)
+            A list of colors to use for rendering the images. If `None`, a
+            random palette will be generated.
+        fun : callable, optional (default: None)
+            A function to apply to the images before rendering. If `None`, no
+            function will be applied.
+
+        Returns
+        -------
+        sd.SpatialData
+            The input sd.SpatialData with a command added to the plotting tree
 
         """
         sdata = self._copy()
@@ -161,7 +197,7 @@ class PlotAccessor:
         mode: str = "thick",
         palette: Optional[list[str]] = None,
         add_legend: bool = True,
-    ) -> matplotlib.pyplot.Axes:
+    ) -> sd.SpatialData:
         """Plot cell labels for a scanpy object.
 
         Parameters
@@ -191,8 +227,8 @@ class PlotAccessor:
 
         Returns
         -------
-        matplotlib.pyplot.Axes
-            The resulting plot axes.
+        sd.SpatialData
+            The input sd.SpatialData with a command added to the plotting tree
 
         Raises
         ------
@@ -331,10 +367,6 @@ class PlotAccessor:
         # copy the SpatialData object so we don't modify the original
         plotting_tree = self._sdata.plotting_tree
         sdata = self._copy()
-        num_images = len(sdata.images.keys())
-
-        if num_images == 0:
-            raise ValueError("No images found in the SpatialData object.")
 
         # Evaluate execution tree for plotting
 
@@ -351,6 +383,7 @@ class PlotAccessor:
         ]
 
         if len(plotting_tree.keys()) > 0:
+
             render_cmds = OrderedDict()
 
             for cmd, params in plotting_tree.items():
@@ -367,17 +400,35 @@ class PlotAccessor:
             if len(render_cmds.keys()) == 0:
                 raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
+            for cmd, _ in render_cmds.items():
+                if cmd == "render_images" and len(sdata.images.keys()) == 0:
+                    raise ValueError("No images found in the SpatialData object.")
+
+                elif cmd == "render_shapes" and len(sdata.shapes.keys()) == 0:
+                    raise ValueError("No shapes found in the SpatialData object.")
+
+                elif cmd == "render_points" and len(sdata.points.keys()) == 0:
+                    raise ValueError("No points found in the SpatialData object.")
+
+                elif cmd == "render_labels" and len(sdata.labels.keys()) == 0:
+                    raise ValueError("No labels found in the SpatialData object.")
+
             # set up canvas
             if ax is None:
-                num_images = len(sdata.images.keys())
+
+                num_images = len(sdata.coordinate_systems)
                 fig, axs = _get_subplots(num_images, ncols, width, height)
+
             elif isinstance(ax, matplotlib.pyplot.Axes):
+
                 axs = [ax]
             elif isinstance(ax, list):
+
                 axs = ax
 
             # Set background color
             for _, ax in enumerate(axs):
+
                 ax.set_facecolor(bg_color)
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
@@ -385,11 +436,12 @@ class PlotAccessor:
             # get biggest image after transformations to set ax size
             element_shapes = []
             for cmd, _ in render_cmds.items():
+
                 if cmd == "render_images":
                     element_shapes += [(x.shape[1], x.shape[2]) for x in sdata.images.values()]  # drop channel
 
                 elif cmd == "render_shapes":
-                    element_shapes += [x.shape for x in sdata.shapes.values()]
+                    element_shapes += [(g.x, g.y) for k in sdata.shapes.keys() for g in sdata.shapes[k].geometry]
 
                 elif cmd == "render_points":
                     element_shapes += [x.shape for x in sdata.points.values()]
@@ -403,6 +455,7 @@ class PlotAccessor:
             # go through tree
             for cmd, params in render_cmds.items():
                 if cmd == "render_images":
+
                     for idx, ax in enumerate(axs):
                         key = list(sdata.images.keys())[idx]
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
@@ -412,8 +465,10 @@ class PlotAccessor:
                     pass
 
                 elif cmd == "render_shapes":
-                    # self._render_shapes(params, axs)
-                    pass
+
+                    for idx, ax in enumerate(axs):
+                        key = list(sdata.shapes.keys())[idx]
+                        _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_points":
                     # for ax in axs:
@@ -421,6 +476,7 @@ class PlotAccessor:
                     pass
 
                 elif cmd == "render_labels":
+
                     if (
                         sdata.table is not None
                         and isinstance(params["color_key"], str)
@@ -489,7 +545,8 @@ class PlotAccessor:
                             sdata.table.uns[f"{instance_key}_colors"] = _get_random_hex_colors(distinct_cells)
 
                         elif sdata.table is None:
-                            table = AnnData(X=np.zeros((tmp_table.shape[0], 1)), obs=tmp_table)
+                            data = np.zeros((tmp_table.shape[0], 1))
+                            table = AnnData(X=data, obs=tmp_table, dtype=data.dtype)
                             table.uns = {}
                             table.uns["spatialdata_attrs"] = {}
                             table.uns["spatialdata_attrs"]["region"] = list(sdata.labels.keys())
@@ -507,7 +564,6 @@ class PlotAccessor:
                 else:
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
-        fig.show()
         return axs
 
     def scatter(

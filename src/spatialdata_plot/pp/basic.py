@@ -81,7 +81,7 @@ class PreprocessingAccessor:
             - 'coordinate_systems'
             - 'images'
             - 'labels'
-            - 'polygons'
+            - 'shapes'
 
         Returns
         -------
@@ -128,15 +128,15 @@ class PreprocessingAccessor:
         coord_keys = []
         image_keys = []
         label_keys = []
-        polygon_keys = []
+        shape_keys = []
 
         # prepare list of valid keys to sort elements on
         valid_coord_keys = self._sdata.coordinate_systems if hasattr(self._sdata, "coordinate_systems") else None
         valid_image_keys = list(self._sdata.images.keys()) if hasattr(self._sdata, "images") else None
         valid_label_keys = list(self._sdata.labels.keys()) if hasattr(self._sdata, "labels") else None
-        valid_polygon_keys = list(self._sdata.polygons.keys()) if hasattr(self._sdata, "polygons") else None
+        valid_shape_keys = list(self._sdata.shapes.keys()) if hasattr(self._sdata, "shapes") else None
 
-        # for key_dict in [coord_keys, image_keys, label_keys, polygon_keys]:
+        # for key_dict in [coord_keys, image_keys, label_keys, shape_keys]:
         #     key_dict = []
         #     key_dict["implicit"] = []
 
@@ -155,8 +155,8 @@ class PreprocessingAccessor:
                 image_keys.append(e)
             elif (valid_label_keys is not None) and (e in valid_label_keys):
                 label_keys.append(e)
-            elif (valid_polygon_keys is not None) and (e in valid_polygon_keys):
-                polygon_keys.append(e)
+            elif (valid_shape_keys is not None) and (e in valid_shape_keys):
+                shape_keys.append(e)
             else:
                 msg = f"Element '{e}' not found. Valid choices are:"
                 if valid_coord_keys is not None:
@@ -168,9 +168,9 @@ class PreprocessingAccessor:
                 if valid_label_keys is not None:
                     msg += "\n\nlabels\n├ "
                     msg += "\n├ ".join(valid_label_keys)
-                if valid_polygon_keys is not None:
-                    msg += "\n\npolygons\n├ "
-                    msg += "\n├ ".join(valid_polygon_keys)
+                if valid_shape_keys is not None:
+                    msg += "\n\nshapes\n├ "
+                    msg += "\n├ ".join(valid_shape_keys)
                 raise ValueError(msg)
 
         # copy that we hard-modify
@@ -198,14 +198,14 @@ class PreprocessingAccessor:
                         if valid_label_key not in label_keys:
                             del sdata.labels[valid_label_key]
 
-            if valid_polygon_keys is not None:
-                if len(polygon_keys) == 0:
-                    for valid_polygon_key in valid_polygon_keys:
-                        del sdata.polygons[valid_polygon_key]
-                elif len(polygon_keys) > 0:
-                    for valid_polygon_key in valid_polygon_keys:
-                        if valid_polygon_key not in polygon_keys:
-                            del sdata.polygons[valid_polygon_key]
+            if valid_shape_keys is not None:
+                if len(shape_keys) == 0:
+                    for valid_shape_key in valid_shape_keys:
+                        del sdata.shapes[valid_shape_key]
+                elif len(shape_keys) > 0:
+                    for valid_shape_key in valid_shape_keys:
+                        if valid_shape_key not in shape_keys:
+                            del sdata.shapes[valid_shape_key]
 
         # subset table if label info is given
         if len(label_keys) > 0 and sdata.table is not None:
