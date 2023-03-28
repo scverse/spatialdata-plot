@@ -504,12 +504,10 @@ class PlotAccessor:
                             sdata.table = table
 
                     for idx, ax in enumerate(axs):
-                      
                         key = list(sdata.labels.keys())[idx]
                         _render_labels(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-                        
+
                 else:
-                  
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")
 
         return axs
