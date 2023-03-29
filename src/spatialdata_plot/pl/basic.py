@@ -431,7 +431,7 @@ class PlotAccessor:
                 num_images = len(sdata.images.keys())
                 _, axs = _get_subplots(num_images, ncols, width, height)
             elif isinstance(ax, matplotlib.pyplot.Axes):
-                axs = [ax]
+                axs = np.array([ax])
             elif isinstance(ax, list):
                 axs = ax
 
