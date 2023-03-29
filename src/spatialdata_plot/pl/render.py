@@ -35,8 +35,11 @@ def _render_channels(
         img = _normalize(img, pmin, pmax, clip)
 
     cmaps = _get_linear_colormap(colors[:n_channels], background)
-
     colored = np.stack([cmaps[i](img[i]) for i in range(n_channels)], 0).sum(0)
+
+    if clip:
+        colored = np.clip(colored, 0, 1)
+
     ax.imshow(colored)
     ax.set_title(key)
     ax.set_xlabel("spatial1")
