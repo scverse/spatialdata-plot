@@ -41,10 +41,10 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     fig, axes = plt.subplots(nrows, ncols, figsize=(width * ncols, height * nrows))
 
     if not isinstance(axes, Iterable):
-        axes = [axes]
+        axes = np.array([axes])
 
     # get rid of the empty axes
-    # _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
+    _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
     return fig, axes
 
 

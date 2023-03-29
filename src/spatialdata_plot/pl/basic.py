@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Callable, Optional, Union, List
+from typing import Callable, Optional, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -19,7 +19,7 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_images, _render_labels
+from .render import _render_channels, _render_images, _render_labels
 from .utils import _get_random_hex_colors, _get_subplots
 
 
@@ -150,7 +150,16 @@ class PlotAccessor:
 
         return sdata
 
-    def render_channels(self, channels: Union[List[str], List[int]], colors: List[str]):
+    def render_channels(
+        self,
+        channels: Union[list[str], list[int]],
+        colors: list[str],
+        clip: bool = True,
+        normalize: bool = True,
+        background: str = "black",
+        pmin: float = 3.0,
+        pmax: float = 99.8,
+    ) -> sd.SpatialData:
         """Renders selected channels.
 
         Parameters:
@@ -398,21 +407,22 @@ class PlotAccessor:
                 axs = ax
 
             # Set background color
-            for _, ax in enumerate(axs):
+            for _, ax in enumerate(axs.flatten()):
                 ax.set_facecolor(bg_color)
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
 
             # go through tree
             for cmd, params in render_cmds.items():
+                keys = list(sdata.images.keys())
                 if cmd == "render_images":
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.images.keys())[idx]
+                    for key, ax in zip(keys, axs.flatten()):
                         _render_images(sdata=sdata, params=params, key=key, ax=ax)
 
                 elif cmd == "render_channels":
                     # self._render_channels(params, axs)
-                    pass
+                    for key, ax in zip(keys, axs.flatten()):
+                        _render_channels(sdata=sdata, key=key, ax=ax, **params)
 
                 elif cmd == "render_shapes":
                     # self._render_shapes(params, axs)
