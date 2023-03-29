@@ -172,6 +172,27 @@ class PlotAccessor:
             The colors for the channels
 
         """
+        if not isinstance(channels, list):
+            raise TypeError("Parameter 'channels' must be a list.")
+
+        if not isinstance(colors, list):
+            raise TypeError("Parameter 'colors' must be a list.")
+
+        if not isinstance(clip, bool):
+            raise TypeError("Parameter 'clip' must be a bool.")
+
+        if not isinstance(normalize, bool):
+            raise TypeError("Parameter 'normalize' must be a bool.")
+
+        if not isinstance(background, str):
+            raise TypeError("Parameter 'background' must be a str.")
+
+        if not isinstance(pmin, float):
+            raise TypeError("Parameter 'pmin' must be a str.")
+
+        if not isinstance(pmax, float):
+            raise TypeError("Parameter 'pmax' must be a str.")
+
         sdata = self._copy()
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
