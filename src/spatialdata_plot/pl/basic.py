@@ -154,8 +154,8 @@ class PlotAccessor:
         self,
         channels: Union[list[str], list[int]],
         colors: list[str],
-        clip: bool = True,
         normalize: bool = True,
+        clip: bool = True,
         background: str = "black",
         pmin: float = 3.0,
         pmax: float = 99.8,
@@ -165,18 +165,43 @@ class PlotAccessor:
         Parameters:
         -----------
         self: object
-            The sdata object
+            The SpatialData object
         channels: Union[List[str], List[int]]
             The channels to plot
         colors: List[str]
-            The colors for the channels
+            The colors for the channels. Must be at least as long as len(channels).
+        normalize: bool
+            Perform quantile normalisation (using pmin, pmax)
+        clip: bool
+            Clips the merged image to the range (0, 1).
+        background: str
+            Background color (defaults to black).
+        pmin: float
+            Lower percentile for quantile normalisation (defaults to 3.-).
+        pmax: float
+            Upper percentile for quantile normalisation (defaults to 99.8).
 
+        Raises
+        ------
+        TypeError
+            If any of the parameters have an invalid type.
+        ValueError
+            If any of the parameters have an invalid value.
+
+        Returns
+        -------
+        sd.SpatialData
+            A new `SpatialData` object that is a copy of the original
+            `SpatialData` object, with an updated plotting tree.
         """
         if not isinstance(channels, list):
             raise TypeError("Parameter 'channels' must be a list.")
 
         if not isinstance(colors, list):
             raise TypeError("Parameter 'colors' must be a list.")
+
+        if len(channels) > len(colors):
+            raise ValueError("Number of colors must have at least the same length as the number of selected channels.")
 
         if not isinstance(clip, bool):
             raise TypeError("Parameter 'clip' must be a bool.")
@@ -192,6 +217,12 @@ class PlotAccessor:
 
         if not isinstance(pmax, float):
             raise TypeError("Parameter 'pmax' must be a str.")
+
+        if (0.0 < pmin < 100.0) and (0.0 < pmax < 100.0):
+            raise ValueError("Percentiles must be in the range 0 < pmin/pmax < 100.")
+
+        if pmin > pmax:
+            raise ValueError("Percentile parameters must satisfy pmin < pmax.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree_exists(sdata)
