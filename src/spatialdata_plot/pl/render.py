@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Callable, Union
 
 import matplotlib
@@ -16,11 +17,18 @@ from ..pp.utils import _get_region_key
 
 def _render_shapes(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float]],
+    params: dict[str, Union[str, int, float, Iterable[str]]],
     key: str,
     ax: matplotlib.axes.SubplotBase,
     extent: dict[str, list[int]],
 ) -> None:
+    if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
+        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
+
+    else:
+        assert isinstance(params["palette"], Iterable)
+        colors = [to_rgb(c) for c in list(params["palette"])]
+
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
@@ -30,7 +38,7 @@ def _render_shapes(
         x=shape.geometry.x,
         y=shape.geometry.y,
         s=shape.radius,
-        color=params["palette"],
+        color=colors,
     )
 
     ax.set_title(key)
@@ -106,8 +114,8 @@ def _render_labels(
     table = table[table[region_key] == key]
 
     # If palette is not None, table.uns contains the relevant vector
-    if f"{params['cell_key']}_colors" in sdata.table.uns.keys():
-        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['cell_key']}_colors"]]
+    if f"{params['instance_key']}_colors" in sdata.table.uns.keys():
+        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['instance_key']}_colors"]]
         colors = [tuple(list(c) + [1]) for c in colors]
 
     groups = sdata.table.obs[params["color_key"]].unique()
@@ -119,7 +127,7 @@ def _render_labels(
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
     for group in groups:
-        vaid_cell_ids = table[table[params["color_key"]] == group][params["cell_key"]].values
+        vaid_cell_ids = table[table[params["color_key"]] == group][params["instance_key"]].values
 
         # define all out-of-group cells as background
         in_group_mask = segmentation.copy()

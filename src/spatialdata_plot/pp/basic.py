@@ -207,22 +207,22 @@ class PreprocessingAccessor:
                         if valid_shape_key not in shape_keys:
                             del sdata.shapes[valid_shape_key]
 
-        # subset table if label info is given
-        if len(label_keys) > 0 and sdata.table is not None:
+        # subset table if it is present and the region key is a valid column
+        if sdata.table is not None and len(shape_keys + label_keys) > 0:
             assert hasattr(sdata, "table"), "SpatialData object does not have a table."
             assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
             assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
 
             # create mask of used keys
             mask = sdata.table.obs[_get_region_key(sdata)]
-            mask = list(mask.str.contains("|".join(label_keys)))
+            mask = list(mask.str.contains("|".join(shape_keys + label_keys)))
 
             # create copy and delete original so we can reuse slot
-            table = sdata.table.copy()
-            table.uns["spatialdata_attrs"]["region"] = label_keys
+            old_table = sdata.table.copy()
+            new_table = old_table[mask, :].copy()
+            new_table.uns["spatialdata_attrs"]["region"] = list(set(new_table.obs[_get_region_key(sdata)]))
             del sdata.table
-
-            sdata.table = table[mask, :].copy()
+            sdata.table = new_table
 
         else:
             del sdata.table
@@ -297,56 +297,6 @@ class PreprocessingAccessor:
         sdata.plotting_tree[f"{n_steps+1}_get_bb"] = {
             "x": x,
             "y": y,
-        }
-
-        return sdata
-
-    def render_labels(
-        self,
-        border_colour: Union[str, None] = "#000000",
-        border_alpha: float = 1.0,
-        fill_colour: Union[str, None] = None,
-        fill_alpha: float = 1.0,
-        mode: str = "inner",
-        **kwargs: str,
-    ) -> sd.SpatialData:
-        """
-        Add labels to the plot.
-
-        Parameters
-        ----------
-        border_colour : str or None, optional
-            The border colour of the label box. Default is "#000000".
-        border_alpha : float, optional
-            The alpha (transparency) of the border colour. Default is 1.
-        fill_colour : str or None, optional
-            The fill colour of the label box. Default is None.
-        fill_alpha : float, optional
-            The alpha (transparency) of the fill colour. Default is 1.
-        mode : {'inner', 'outer'}, optional
-            The position of the label box relative to the data point.
-            'inner' places the label box inside the data point, while 'outer'
-            places the label box outside the data point. Default is 'inner'.
-        kwargs : dict
-            Additional keyword arguments to pass to the plotting function.
-
-        Returns
-        -------
-        object
-            A copy of the current plot with the labels added.
-        """
-        self._sdata = _verify_plotting_tree_exists(self._sdata)
-
-        # get current number of steps to create a unique key
-        sdata = self._copy()
-        n_steps = self._sdata.plotting_tree.keys()
-        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
-            "border_colour": border_colour,
-            "border_alpha": border_alpha,
-            "fill_colour": fill_colour,
-            "fill_alpha": fill_alpha,
-            "mode": mode,
-            "kwargs": kwargs,
         }
 
         return sdata

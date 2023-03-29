@@ -12,9 +12,9 @@ from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
-
 from spatialdata import transform
 from spatialdata.transformations import get_transformation
+
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
@@ -22,7 +22,13 @@ from spatialdata_plot.pl._categorical_utils import (
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
 from .render import _render_images, _render_labels, _render_shapes
-from .utils import _get_random_hex_colors, _get_subplots
+from .utils import (
+    _get_color_key_dtype,
+    _get_color_key_values,
+    _get_hex_colors_for_continous_values,
+    _get_random_hex_colors,
+    _get_subplots,
+)
 
 
 @register_spatial_data_accessor("pl")
@@ -120,20 +126,24 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        palette: Optional[list[str]] = None,
+        palette: Optional[Union[str, list[str], None]] = None,
+        instance_key: Optional[str] = None,
+        color_key: Optional[str] = None,
+        **scatter_kwargs: Optional[str],
     ) -> sd.SpatialData:
-        """Render images for a scanpy object.
+        """Render the shapes contained in the given sd.SpatialData object
 
         Parameters
         ----------
-        self : object
-            The scanpy object.
+        self : sd.SpatialData
+            The sd.SpatialData object.
         palette : list[str], optional (default: None)
-            A list of colors to use for rendering the images. If `None`, a
-            random palette will be generated.
-        fun : callable, optional (default: None)
-            A function to apply to the images before rendering. If `None`, no
-            function will be applied.
+            A list of colors to use for rendering the images. If `None`, the
+            default colors will be used.
+        instance_key : str
+            The name of the column in the table that identifies individual shapes
+        color_key : str or None, optional (default: None)
+            The name of the column in the table to use for coloring shapes.
 
         Returns
         -------
@@ -141,30 +151,67 @@ class PlotAccessor:
             The input sd.SpatialData with a command added to the plotting tree
 
         """
+        if palette is not None:
+            if isinstance(palette, str):
+                palette = [palette]
+
+            if isinstance(palette, list):
+                if not all(isinstance(p, str) for p in palette):
+                    raise TypeError("The palette argument must be a list of strings or a single string.")
+            else:
+                raise TypeError("The palette argument must be a list of strings or a single string.")
+
+        if instance_key is not None or color_key is not None:
+            if not hasattr(self._sdata, "table"):
+                raise ValueError("SpatialData object does not have a table.")
+
+            if not hasattr(self._sdata.table, "uns"):
+                raise ValueError("Table in SpatialData object does not have 'uns'.")
+
+            if not hasattr(self._sdata.table, "obs"):
+                raise ValueError("Table in SpatialData object does not have 'obs'.")
+
+            if isinstance(color_key, str) and not isinstance(instance_key, str):
+                raise ValueError("When giving a 'color_key', an 'instance_key' must also be given.")
+
+            if color_key is not None and not isinstance(color_key, str):
+                raise TypeError("When giving a 'color_key', it must be of type 'str'.")
+
+            if instance_key is not None and not isinstance(instance_key, str):
+                raise TypeError("When giving a 'instance_key', it must be of type 'str'.")
+
+            if instance_key not in self._sdata.table.obs.columns:
+                raise ValueError(f"Column '{instance_key}' not found in 'obs'.")
+
+            if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.to_df().columns:
+                raise ValueError(f"Column '{instance_key}' not found in data.")
+
         sdata = self._copy()
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
             "palette": palette,
+            "instance_key": instance_key,
+            "color_key": color_key,
         }
 
         return sdata
 
     def render_images(
         self,
-        palette: Optional[list[str]] = None,
+        palette: Optional[Union[str, list[str]]] = None,
         trans_fun: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
     ) -> sd.SpatialData:
-        """Render images for a scanpy object.
+        """Render the images contained in the given sd.SpatialData object
 
         Parameters
         ----------
-        self : object
-            The scanpy object.
+        self : sd.SpatialData
+            The sd.SpatialData object.
         palette : list[str], optional (default: None)
-            A list of colors to use for rendering the images. If `None`, a
-            random palette will be generated.
-        fun : callable, optional (default: None)
+            A list of colors to use for rendering the images. If `None`, the
+            default colors will be used.
+        trans_fun : callable, optional (default: None)
             A function to apply to the images before rendering. If `None`, no
             function will be applied.
 
@@ -186,26 +233,26 @@ class PlotAccessor:
 
     def render_labels(
         self,
-        cell_key: Optional[Union[str, None]] = None,
+        instance_key: Optional[Union[str, None]] = None,
         color_key: Optional[Union[str, None]] = None,
         border_alpha: float = 1.0,
         border_color: Optional[Union[str, None]] = None,
         fill_alpha: float = 0.5,
         fill_color: Optional[Union[str, None]] = None,
         mode: str = "thick",
-        palette: Optional[list[str]] = None,
+        palette: Optional[Union[str, list[str]]] = None,
         add_legend: bool = True,
     ) -> sd.SpatialData:
-        """Plot cell labels for a scanpy object.
+        """Render the labels contained in the given sd.SpatialData object
 
         Parameters
         ----------
         self : object
-            The scanpy object.
-        cell_key : str
-            The name of the column in the table to use for labeling cells.
+            sd.SpatialData
+        instance_key : str
+            The name of the column in the table that identifies individual labels
         color_key : str or None, optional (default: None)
-            The name of the column in the table to use for coloring cells.
+            The name of the column in the table to use for coloring labels.
         border_alpha : float, optional (default: 1.0)
             The alpha value of the label border. Must be between 0 and 1.
         border_color : str or None, optional (default: None)
@@ -217,7 +264,7 @@ class PlotAccessor:
         mode : str, optional (default: 'thick')
             The rendering mode of the labels. Must be one of 'thick', 'inner',
             'outer', or 'subpixel'.
-        palette : list or None, optional (default: None)
+        palette : str, list or None, optional (default: None)
             The color palette to use when coloring cells. If None, a default
             palette will be used.
         add_legend : bool, optional (default: True)
@@ -234,7 +281,7 @@ class PlotAccessor:
             If any of the parameters have an invalid type.
         ValueError
             If any of the parameters have an invalid value.
-            If the provided cell_key or color_key is not a valid table column.
+            If the provided instance_key or color_key is not a valid table column.
             If the provided mode is not one of 'thick', 'inner', 'outer', or
             'subpixel'.
 
@@ -246,12 +293,12 @@ class PlotAccessor:
         alpha, color, and rendering mode of the labels, as well as whether to add a
         legend to the plot.
         """
-        if cell_key is not None:
-            if not isinstance(cell_key, str):
-                raise TypeError("Parameter 'cell_key' must be a string.")
+        if instance_key is not None:
+            if not isinstance(instance_key, str):
+                raise TypeError("Parameter 'instance_key' must be a string.")
 
-            if cell_key not in self._sdata.table.obs.columns:
-                raise ValueError(f"The provided cell_key '{cell_key}' is not a valid table column.")
+            if instance_key not in self._sdata.table.obs.columns:
+                raise ValueError(f"The provided instance_key '{instance_key}' is not a valid table column.")
 
         if color_key is not None:
             if not isinstance(color_key, (str, type(None))):
@@ -294,7 +341,7 @@ class PlotAccessor:
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
-            "cell_key": cell_key,
+            "instance_key": instance_key,
             "color_key": color_key,
             "border_alpha": border_alpha,
             "border_color": border_color,
@@ -425,17 +472,20 @@ class PlotAccessor:
             for cmd, _ in render_cmds.items():
                 if cmd == "render_images":
                     for key in sdata.images.keys():
-                        img_transformation = get_transformation(sdata.images[key])
+                        img_transformation = get_transformation(sdata.images[key], get_all=True)
+                        img_transformation = list(img_transformation.values())[0]
                         sdata.images[key] = transform(sdata.images[key], img_transformation)
 
                 elif cmd == "render_shapes":
                     for key in sdata.shapes.keys():
-                        shape_transformation = get_transformation(sdata.shapes[key])
+                        shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
+                        shape_transformation = list(shape_transformation.values())[0]
                         sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
 
                 elif cmd == "render_labels":
                     for key in sdata.labels.keys():
-                        label_transformation = get_transformation(sdata.labels[key])
+                        label_transformation = get_transformation(sdata.labels[key], get_all=True)
+                        label_transformation = list(label_transformation.values())[0]
                         sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
             # get biggest image after transformations to set ax size
@@ -471,6 +521,33 @@ class PlotAccessor:
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_shapes":
+                    if (
+                        sdata.table is not None
+                        and isinstance(params["instance_key"], str)
+                        and isinstance(params["color_key"], str)
+                    ):
+                        color_key_dtype = _get_color_key_dtype(sdata, params["color_key"])
+
+                        if isinstance(color_key_dtype, pd.core.dtypes.dtypes.CategoricalDtype):
+                            # If we have a table and proper keys, generate categolrical
+                            # colours which are stored in the 'uns' of the table.
+                            add_colors_for_categorical_sample_annotation(
+                                adata=sdata.table,
+                                key=params["instance_key"],
+                                vec=_get_color_key_values(sdata, params["color_key"]),
+                                palette=params["palette"],
+                            )
+
+                        elif isinstance(color_key_dtype, np.dtype):
+                            # if it's not categorical, we assume continous values
+                            colors = _get_hex_colors_for_continous_values(
+                                _get_color_key_values(sdata, params["color_key"])
+                            )
+                            sdata.table.uns[f"{params['color_key']}_colors"] = colors
+
+                        else:
+                            raise ValueError("The dtype of the 'color_key' column must be categorical or numeric.")
+
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
                         _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
@@ -478,16 +555,16 @@ class PlotAccessor:
                 elif cmd == "render_labels":
                     if (
                         sdata.table is not None
+                        and isinstance(params["instance_key"], str)
                         and isinstance(params["color_key"], str)
-                        and isinstance(params["cell_key"], str)
                     ):
                         # If we have a table and proper keys, generate categolrical
                         # colours which are stored in the 'uns' of the table.
 
                         add_colors_for_categorical_sample_annotation(
                             adata=sdata.table,
-                            key=params["cell_key"],
-                            vec=sdata.table.obs[params["color_key"]],
+                            key=params["instance_key"],
+                            vec=_get_color_key_values(sdata, params["color_key"]),
                             palette=params["palette"],
                         )
 
@@ -509,7 +586,7 @@ class PlotAccessor:
 
                             region_key = _get_region_key(sdata)
                             instance_key = _get_instance_key(sdata)
-                            params["cell_key"] = instance_key
+                            params["instance_key"] = instance_key
                             params["color_key"] = instance_key
                             params["add_legend"] = False
                             # TODO(ttreis) log the decision not to display a legend
@@ -525,7 +602,7 @@ class PlotAccessor:
 
                             region_key = "tmp_label_id"
                             instance_key = "tmp_cell_id"
-                            params["cell_key"] = instance_key
+                            params["instance_key"] = instance_key
                             params["color_key"] = instance_key
                             params["add_legend"] = False
                             # TODO(ttreis) log the decision not to display a legend

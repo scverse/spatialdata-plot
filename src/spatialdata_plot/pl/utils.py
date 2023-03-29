@@ -1,9 +1,12 @@
 import random
 from collections.abc import Iterable
-from typing import Union
+from typing import Any, Union
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import spatialdata as sd
 import xarray as xr
 
 
@@ -70,6 +73,29 @@ def _get_random_hex_colors(num_colors: int) -> set[str]:
     return colors
 
 
+def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "viridis") -> list[str]:
+    """Converts a series of continuous numerical values to hex color values using a colormap.
+
+    Parameters
+    ----------
+    values : pd.Series
+        The values to be converted to colors.
+    cmap_name : str, optional
+        The name of the colormap to be used, by default 'viridis'.
+
+    Returns
+    -------
+    pd.Series
+        The converted color values as hex strings.
+    """
+    cmap = plt.get_cmap(cmap_name)
+    norm = plt.Normalize(vmin=values.min(), vmax=values.max())
+    colors = cmap(norm(values))
+    hex_colors = [mpl.colors.to_hex(color) for color in colors]
+
+    return hex_colors
+
+
 def _normalize(
     img: xr.DataArray,
     pmin: float = 3.0,
@@ -108,3 +134,69 @@ def _normalize(
         norm = np.clip(norm, 0, 1)
 
     return norm
+
+
+def _get_color_key_values(
+    sdata: sd.SpatialData,
+    color_key: str,
+) -> pd.Series:
+    """Helper function to extract the values corresponding to the color key.
+
+    The 'color_key' indicates a column, either found in sdata.table.obs or
+    sdata.table.var, that will be used to color the images.
+
+    Parameters
+    ----------
+    sdata: sd.SpatialData
+        A spatial data object.
+    color_key: str
+        The column name of the color key.
+
+    Returns
+    -------
+    pd.Series
+        A series containing the values of the color key.
+    """
+    df = sdata.table.to_df()
+    obs = sdata.table.obs
+    color_key_in_obs = color_key in obs
+    color_key_in_df = color_key in df.columns
+
+    if not (color_key_in_obs or color_key_in_df):
+        raise ValueError(f"Column {color_key} not found in sdata.table.obs or sdata.table.to_df().")
+
+    if color_key_in_obs and color_key_in_df:
+        raise ValueError(
+            f"Column {color_key} found in both sdata.table.obs and sdata.table.to_df(). Needs to be unique."
+        )
+
+    if color_key_in_obs:
+        return obs[color_key]
+    elif color_key_in_df:
+        return df[color_key]
+
+
+def _get_color_key_dtype(
+    sdata: sd.SpatialData,
+    color_key: str,
+) -> Any:
+    """Helper function to extract the data type of the values corresponding to the color key.
+
+    The 'color_key' indicates a column, either found in sdata.table.obs or
+    sdata.table.var, that will be used to color the images.
+
+    Parameters
+    ----------
+    sdata: sd.SpatialData
+        A spatial data object.
+    color_key: str
+        The column name of the color key.
+
+    Returns
+    -------
+    str
+        The data type of the color key.
+    """
+    color_key_values = _get_color_key_values(sdata, color_key)
+
+    return color_key_values.dtype
