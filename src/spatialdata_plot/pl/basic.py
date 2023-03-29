@@ -218,7 +218,7 @@ class PlotAccessor:
         if not isinstance(pmax, float):
             raise TypeError("Parameter 'pmax' must be a str.")
 
-        if (0.0 < pmin < 100.0) and (0.0 < pmax < 100.0):
+        if (pmin < 0.0) or (pmin > 100.0) or (pmax < 0.0) or (pmax > 100.0):
             raise ValueError("Percentiles must be in the range 0 < pmin/pmax < 100.")
 
         if pmin > pmax:
