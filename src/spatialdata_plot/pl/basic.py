@@ -197,7 +197,15 @@ class PlotAccessor:
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {"channels": channels, "colors": colors}
+        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {
+            "channels": channels,
+            "colors": colors,
+            "clip": clip,
+            "normalize": normalize,
+            "background": background,
+            "pmin": pmin,
+            "pmax": pmax,
+        }
 
         return sdata
 
