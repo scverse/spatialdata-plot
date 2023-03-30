@@ -12,7 +12,41 @@ from skimage.segmentation import find_boundaries
 from sklearn.decomposition import PCA
 
 from ..pl.utils import _normalize
-from ..pp.utils import _get_region_key
+from ..pp.utils import _get_linear_colormap, _get_region_key
+
+
+def _render_channels(
+    sdata: sd.SpatialData,
+    channels: list[Union[str, int]],
+    colors: list[str],
+    clip: bool,
+    normalize: bool,
+    background: str,
+    pmin: float,
+    pmax: float,
+    key: str,
+    ax: matplotlib.axes.SubplotBase,
+) -> None:
+    selection = sdata.images[key].sel({"c": channels})
+    n_channels, y_dim, x_dim = selection.shape  # (c, y, x)
+    img = selection.values.copy()
+    img = img.astype("float")
+
+    if normalize:
+        img = _normalize(img, pmin, pmax, clip)
+
+    cmaps = _get_linear_colormap(colors[:n_channels], background)
+    colored = np.stack([cmaps[i](img[i]) for i in range(n_channels)], 0).sum(0)
+
+    if clip:
+        colored = np.clip(colored, 0, 1)
+
+    ax.imshow(colored)
+    ax.set_title(key)
+    ax.set_xlabel("spatial1")
+    ax.set_ylabel("spatial2")
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def _render_shapes(

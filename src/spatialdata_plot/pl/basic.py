@@ -21,7 +21,7 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_images, _render_labels, _render_shapes
+from .render import _render_channels, _render_images, _render_labels, _render_shapes
 from .utils import (
     _get_color_key_dtype,
     _get_color_key_values,
@@ -227,6 +227,96 @@ class PlotAccessor:
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = {
             "palette": palette,
             "trans_fun": trans_fun,
+        }
+
+        return sdata
+
+    def render_channels(
+        self,
+        channels: Union[list[str], list[int]],
+        colors: list[str],
+        normalize: bool = True,
+        clip: bool = True,
+        background: str = "black",
+        pmin: float = 3.0,
+        pmax: float = 99.8,
+    ) -> sd.SpatialData:
+        """Renders selected channels.
+
+        Parameters:
+        -----------
+        self: object
+            The SpatialData object
+        channels: Union[List[str], List[int]]
+            The channels to plot
+        colors: List[str]
+            The colors for the channels. Must be at least as long as len(channels).
+        normalize: bool
+            Perform quantile normalisation (using pmin, pmax)
+        clip: bool
+            Clips the merged image to the range (0, 1).
+        background: str
+            Background color (defaults to black).
+        pmin: float
+            Lower percentile for quantile normalisation (defaults to 3.-).
+        pmax: float
+            Upper percentile for quantile normalisation (defaults to 99.8).
+
+        Raises
+        ------
+        TypeError
+            If any of the parameters have an invalid type.
+        ValueError
+            If any of the parameters have an invalid value.
+
+        Returns
+        -------
+        sd.SpatialData
+            A new `SpatialData` object that is a copy of the original
+            `SpatialData` object, with an updated plotting tree.
+        """
+        if not isinstance(channels, list):
+            raise TypeError("Parameter 'channels' must be a list.")
+
+        if not isinstance(colors, list):
+            raise TypeError("Parameter 'colors' must be a list.")
+
+        if len(channels) > len(colors):
+            raise ValueError("Number of colors must have at least the same length as the number of selected channels.")
+
+        if not isinstance(clip, bool):
+            raise TypeError("Parameter 'clip' must be a bool.")
+
+        if not isinstance(normalize, bool):
+            raise TypeError("Parameter 'normalize' must be a bool.")
+
+        if not isinstance(background, str):
+            raise TypeError("Parameter 'background' must be a str.")
+
+        if not isinstance(pmin, float):
+            raise TypeError("Parameter 'pmin' must be a str.")
+
+        if not isinstance(pmax, float):
+            raise TypeError("Parameter 'pmax' must be a str.")
+
+        if (pmin < 0.0) or (pmin > 100.0) or (pmax < 0.0) or (pmax > 100.0):
+            raise ValueError("Percentiles must be in the range 0 < pmin/pmax < 100.")
+
+        if pmin > pmax:
+            raise ValueError("Percentile parameters must satisfy pmin < pmax.")
+
+        sdata = self._copy()
+        sdata = _verify_plotting_tree_exists(sdata)
+        n_steps = len(sdata.plotting_tree.keys())
+
+        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {
+            "channels": channels,
+            "colors": colors,
+            "clip": clip,
+            "normalize": normalize,
+            "background": background,
+            "pmin": pmin,
+            "pmax": pmax,
         }
 
         return sdata
@@ -458,12 +548,12 @@ class PlotAccessor:
                 num_images = len(sdata.coordinate_systems)
                 fig, axs = _get_subplots(num_images, ncols, width, height)
             elif isinstance(ax, matplotlib.pyplot.Axes):
-                axs = [ax]
+                axs = np.array([ax])
             elif isinstance(ax, list):
                 axs = ax
 
             # Set background color
-            for _, ax in enumerate(axs):
+            for _, ax in enumerate(axs.flatten()):
                 ax.set_facecolor(bg_color)
                 # key = list(sdata.labels.keys())[idx]
                 # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
@@ -514,11 +604,15 @@ class PlotAccessor:
 
             # go through tree
             for cmd, params in render_cmds.items():
-                if cmd == "render_images":
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.images.keys())[idx]
+                keys = list(sdata.images.keys())
 
+                if cmd == "render_images":
+                    for key, ax in zip(keys, axs.flatten()):
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+
+                elif cmd == "render_channels":
+                    for key, ax in zip(keys, axs.flatten()):
+                        _render_channels(sdata=sdata, key=key, ax=ax, **params)
 
                 elif cmd == "render_shapes":
                     if (
