@@ -19,6 +19,32 @@ def test_can_subset_to_one_or_more_images(sdata, keys, request):
     assert list(clipped_sdata.images.keys()) == ([keys] if isinstance(keys, str) else keys)
 
 
+@pytest.mark.parametrize(
+    "sdata, keys",
+    [
+        ("test_sdata_multiple_images", "data1"),
+        ("test_sdata_multiple_images", ["data1"]),
+        ("test_sdata_multiple_images", ["data1", "data2"]),
+    ],
+)
+def test_get_bb_correct_inputs(sdata, keys, request):
+    """Tests whether a subset of images can be selected from the sdata object."""
+    sdata = request.getfixturevalue(sdata)
+
+    sliced_slice = sdata.pp.get_bb(slice(0, 5), slice(0, 5))
+    sliced_list = sdata.pp.get_bb([0, 5], [0, 5])
+    sliced_tuple = sdata.pp.get_bb((0, 5), (0, 5))
+
+    for sliced_object in [sliced_slice, sliced_list, sliced_tuple]:
+        for _k, v in sliced_object.images.items():
+            # test if images have the correct dimensionality
+            assert v.shape[1] == 5
+            assert v.shape[2] == 5
+
+        # check if the plotting tree was appended
+        assert hasattr(sliced_object, "plotting_tree")
+
+
 # @pytest.mark.parametrize(
 #     "sdata, keys, nrows ",
 #     [
