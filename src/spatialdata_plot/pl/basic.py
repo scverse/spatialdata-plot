@@ -21,12 +21,7 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import (
-    _render_images,
-    _render_labels,
-    _render_shapes,
-    _render_channels,
-)
+from .render import _render_channels, _render_images, _render_labels, _render_shapes
 from .utils import (
     _get_color_key_dtype,
     _get_color_key_values,
@@ -609,16 +604,13 @@ class PlotAccessor:
 
             # go through tree
             for cmd, params in render_cmds.items():
-              
                 keys = list(sdata.images.keys())
-                
-                if cmd == "render_images":
 
+                if cmd == "render_images":
                     for key, ax in zip(keys, axs.flatten()):
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_channels":
-
                     for key, ax in zip(keys, axs.flatten()):
                         _render_channels(sdata=sdata, key=key, ax=ax, **params)
 
