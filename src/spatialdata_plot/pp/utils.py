@@ -49,12 +49,12 @@ def _verify_plotting_tree_exists(sdata: sd.SpatialData) -> sd.SpatialData:
 def _get_coordinate_system_mapping(sdata: sd.SpatialData) -> dict[str, list[str]]:
     has_images = hasattr(sdata, "images")
     has_labels = hasattr(sdata, "labels")
-    has_polygons = hasattr(sdata, "polygons")
+    has_shapes = hasattr(sdata, "shapes")
 
     coordsys_keys = sdata.coordinate_systems
     image_keys = sdata.images.keys() if has_images else []
     label_keys = sdata.labels.keys() if has_labels else []
-    polygon_keys = sdata.images.keys() if has_polygons else []
+    shape_keys = sdata.shapes.keys() if has_shapes else []
 
     mapping: dict[str, list[str]] = {}
 
@@ -76,10 +76,10 @@ def _get_coordinate_system_mapping(sdata: sd.SpatialData) -> dict[str, list[str]
             if key in list(transformations.keys()):
                 mapping[key].append(label_key)
 
-        for polygon_key in polygon_keys:
-            transformations = get_transformation(sdata.polygons[polygon_key], get_all=True)
+        for shape_key in shape_keys:
+            transformations = get_transformation(sdata.shapes[shape_key], get_all=True)
 
             if key in list(transformations.keys()):
-                mapping[key].append(polygon_key)
+                mapping[key].append(shape_key)
 
     return mapping
