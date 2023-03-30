@@ -103,11 +103,6 @@ def _render_images(
         elif n_channels == 2:
             colors = ListedColormap(["#d30cb8", "#6df1d8"])
         elif n_channels == 3:
-            # bg = [(1, 1, 1, 1)]
-            # cmap_red = ListedColormap([(1, 0, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            # cmap_green = ListedColormap([(0, 1, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            # cmap_blue = ListedColormap([(0, 0, 1, i) for i in reversed(range(0, 256, 1))] + bg)
-            # colors = [cmap_red, cmap_green, cmap_blue]
             colors = ListedColormap(["red", "blue", "green"])
         else:
             # we do PCA to reduce to 3 channels
@@ -116,6 +111,7 @@ def _render_images(
             pca.fit(flattened_img.T)
             transformed_image = pca.transform(flattened_img.T)
             img = xr.DataArray(transformed_image.T.reshape(3, y_dim, x_dim), dims=("c", "y", "x"))
+            colors = ListedColormap(["red", "blue", "green"])
 
     img = xr.DataArray(img, dims=("c", "y", "x")).transpose("y", "x", "c")  # for plotting
 

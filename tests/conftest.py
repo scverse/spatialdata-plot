@@ -48,13 +48,26 @@ def test_sdata_single_image():
 
 
 @pytest.fixture
-def test_sdata_multiple_images():
+def test_sdata_multiple_images(share_coordinate_system) -> sd.SpatialData:
     """Creates an sdata object with multiple images."""
-    images = {
-        "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-    }
+    if share_coordinate_system = "all":
+        images = {
+            "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+            "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+            "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        }
+    elif share_coordinate_system == "two":
+        images = {
+            "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys1': sd.transformations.Identity()}),
+            "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys2': sd.transformations.Identity()}),
+            "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys1': sd.transformations.Identity()}),
+        }
+    elif share_coordinate_system == "none":
+        images = {
+            "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys1': sd.transformations.Identity()}),
+            "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys2': sd.transformations.Identity()}),
+            "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={'coord_sys3': sd.transformations.Identity()}),
+        }
     sdata = sd.SpatialData(images=images)
     return sdata
 

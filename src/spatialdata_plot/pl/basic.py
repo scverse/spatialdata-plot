@@ -20,8 +20,19 @@ from spatialdata_plot.pl._categorical_utils import (
 )
 
 from ..accessor import register_spatial_data_accessor
-from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_channels, _render_images, _render_labels, _render_shapes
+from ..pp.utils import (
+    _get_instance_key,
+    _get_region_key,
+    _verify_plotting_tree_exists,
+    _get_coordinate_system_mapping,
+
+)
+from .render import (
+    _render_channels,
+    _render_images,
+    _render_labels,
+    _render_shapes,
+)
 from .utils import (
     _get_color_key_dtype,
     _get_color_key_values,
@@ -607,8 +618,16 @@ class PlotAccessor:
                 keys = list(sdata.images.keys())
 
                 if cmd == "render_images":
+
                     for key, ax in zip(keys, axs.flatten()):
                         _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+
+                    # Delete ax title if there are more than one image in the coord system
+                    coordsystem_mapping = _get_coordinate_system_mapping(self._sdata)
+                    for coordsystem, members in coordsystem_mapping.items():
+                        if key in members:
+                            if len(members) > 1:
+                                ax.set_title("")
 
                 elif cmd == "render_channels":
                     for key, ax in zip(keys, axs.flatten()):
