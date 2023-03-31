@@ -33,6 +33,7 @@ def test_get_bb_correct_inputs(sdata, request):
     """Tests whether a subset of images can be selected from the sdata object."""
     sdata = request.getfixturevalue(sdata)
 
+    # use all possible inputs
     sliced_slice = sdata.pp.get_bb(slice(0, 5), slice(0, 5))
     sliced_list = sdata.pp.get_bb([0, 5], [0, 5])
     sliced_tuple = sdata.pp.get_bb((0, 5), (0, 5))
@@ -51,6 +52,24 @@ def test_get_bb_correct_inputs(sdata, request):
 
         # check if the plotting tree was appended
         assert hasattr(sliced_object, "plotting_tree")
+
+
+@pytest.mark.parametrize(
+    "sdata",
+    [
+        "test_sdata_single_image",
+        "test_sdata_multiple_images",
+        "test_sdata_single_image_with_label",
+        "test_sdata_multiple_images_with_table",
+        # "full_sdata" that one is broken
+    ],
+)
+def test_get_bb_wrong_input_types(sdata, request):
+    """Tests whether a subset of images can be selected from the sdata object."""
+    sdata = request.getfixturevalue(sdata)
+
+    with pytest.raises(TypeError, match="Parameter 'x' must be one "):
+        sdata.pp.get_bb(4, 5)
 
 
 # @pytest.mark.parametrize(
