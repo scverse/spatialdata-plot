@@ -107,6 +107,33 @@ def test_get_bb_wrong_input_dims(sdata, request):
         sdata.pp.get_bb((0, 5), (5, 0))
 
 
+@pytest.mark.parametrize(
+    "sdata",
+    [
+        "test_sdata_single_image",
+        "test_sdata_multiple_images",
+        "test_sdata_single_image_with_label",
+        "test_sdata_multiple_images_with_table",
+        # "full_sdata" that one is broken
+    ],
+)
+def test_get_bb_wrong_input_length(sdata, request):
+    """Tests whether a subset of images can be selected from the sdata object."""
+    sdata = request.getfixturevalue(sdata)
+
+    with pytest.raises(ValueError, match="Parameter 'x' must be of length 2."):
+        sdata.pp.get_bb([0, 5, 6], [0, 5])
+
+    with pytest.raises(ValueError, match="Parameter 'x' must be of length 2."):
+        sdata.pp.get_bb((0, 5, 1), (0, 5))
+
+    with pytest.raises(ValueError, match="Parameter 'y' must be of length 2."):
+        sdata.pp.get_bb([0, 5], [0, 5, 5])
+
+    with pytest.raises(ValueError, match="Parameter 'y' must be of length 2."):
+        sdata.pp.get_bb((0, 5), (0, 5, 2))
+
+
 # @pytest.mark.parametrize(
 #     "sdata, keys, nrows ",
 #     [
