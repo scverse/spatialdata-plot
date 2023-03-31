@@ -91,20 +91,38 @@ def test_get_bb_wrong_input_dims(sdata, request):
         sdata.pp.get_bb(slice(5, 0), slice(0, 5))
 
     with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
+        sdata.pp.get_bb(slice(5, 5), slice(0, 5))
+
+    with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
         sdata.pp.get_bb([5, 0], [0, 5])
 
     with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
+        sdata.pp.get_bb([5, 5], [0, 5])
+
+    with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
         sdata.pp.get_bb((5, 0), (0, 5))
+
+    with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
+        sdata.pp.get_bb((5, 5), (0, 5))
 
     # y values
     with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
         sdata.pp.get_bb(slice(0, 5), slice(5, 0))
 
+    with pytest.raises(ValueError, match="The current choice of 'x' would result in an empty slice."):
+        sdata.pp.get_bb(slice(0, 5), slice(5, 5))
+
     with pytest.raises(ValueError, match="The current choice of 'y' would result in an empty slice."):
         sdata.pp.get_bb([0, 5], [5, 0])
 
     with pytest.raises(ValueError, match="The current choice of 'y' would result in an empty slice."):
+        sdata.pp.get_bb([0, 5], [5, 5])
+
+    with pytest.raises(ValueError, match="The current choice of 'y' would result in an empty slice."):
         sdata.pp.get_bb((0, 5), (5, 0))
+
+    with pytest.raises(ValueError, match="The current choice of 'y' would result in an empty slice."):
+        sdata.pp.get_bb((0, 5), (5, 5))
 
 
 @pytest.mark.parametrize(
