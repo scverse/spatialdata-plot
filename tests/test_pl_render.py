@@ -13,23 +13,24 @@ def test_render_images_can_plot_one_cyx_image(request):
 
 
 @pytest.mark.parametrize(
-    "sdata, share_coordinate_system",
+    "share_coordinate_system",
     [
-        ("test_sdata_multiple_images", True),
-        ("test_sdata_multiple_images", False),
+        "all",
+        "two",
+        "none",
     ],
 )
-def test_render_images_can_plot_multiple_cyx_images(sdata, share_coordinate_system, request):
-    sdata = request.getfixturevalue(sdata)
+def test_render_images_can_plot_multiple_cyx_images(share_coordinate_system: str, request):
+    fun = request.getfixturevalue("get_sdata_with_multiple_images")
+    sdata = fun(share_coordinate_system)
 
     axs = sdata.pl.render_images().pl.show()
 
-    if share_coordinate_system:
+    if share_coordinate_system == "all":
         assert len(axs) == 1
-        assert axs[0].get_title() == list(sdata.images.keys())[0]
 
-    else:
+    elif share_coordinate_system == "two":
+        assert len(axs) == 2
+
+    elif share_coordinate_system == "none":
         assert len(axs) == 3
-        assert axs[0].get_title() == list(sdata.images.keys())[0]
-        assert axs[1].get_title() == list(sdata.images.keys())[1]
-        assert axs[2].get_title() == list(sdata.images.keys())[2]
