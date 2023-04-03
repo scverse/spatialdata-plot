@@ -48,6 +48,15 @@ def test_sdata_single_image():
 
 
 @pytest.fixture
+def test_sdata_single_image_with_label():
+    """Creates a simple sdata object."""
+    images = {"data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
+    labels = {"label1": sd.models.Labels2DModel.parse(np.zeros((10, 10)), dims=("y", "x"))}
+    sdata = sd.SpatialData(images=images, labels=labels)
+    return sdata
+
+
+@pytest.fixture
 def test_sdata_multiple_images(share_coordinate_system) -> sd.SpatialData:
     """Creates an sdata object with multiple images."""
     if share_coordinate_system == "all":
