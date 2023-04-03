@@ -617,7 +617,7 @@ class PlotAccessor:
 
                     # Delete ax title if there are more than one image in the coord system
                     coordsystem_mapping = _get_coordinate_system_mapping(self._sdata)
-                    for coordsystem, members in coordsystem_mapping.items():
+                    for _, members in coordsystem_mapping.items():
                         if key in members:
                             if len(members) > 1:
                                 ax.set_title("")
