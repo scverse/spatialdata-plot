@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding: utf-8
 
 # # Load real-world data and verify that functions run on it
 # ### How to use this script
@@ -19,11 +18,7 @@ DATA_DIR = "/Users/tim.treis/Documents/GitHub/spatialdata-sandbox/"
 
 
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import spatialdata as sd
-
-import spatialdata_plot
 
 
 # In[15]:
