@@ -6,20 +6,21 @@
 # - You can use `jupyter nbconvert --to python test_sandbox_data.ipynb` to convert it back
 # - Otherwise run it from the CLI and verify that the plots are okay
 
-# In[12]:
-
-
-get_ipython().run_line_magic("load_ext", "autoreload")
-get_ipython().run_line_magic("autoreload", "2")
-DATA_DIR = "/Users/tim.treis/Documents/GitHub/spatialdata-sandbox/"
-
-
-# In[13]:
+# In[4]:
 
 
 import matplotlib.pyplot as plt
 import spatialdata as sd
 
+import spatialdata_plot
+
+assert spatialdata_plot.__name__ == "spatialdata_plot"  # so mypy doesn't complain
+
+DATA_DIR = "/Users/tim.treis/Documents/GitHub/spatialdata-sandbox/"
+
+
+# ## Load data
+# Adjust paths as neccecary
 
 # In[15]:
 
