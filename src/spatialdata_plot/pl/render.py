@@ -59,9 +59,13 @@ def _render_shapes(
     if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
         colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
 
-    else:
-        assert isinstance(params["palette"], Iterable)
+    elif isinstance(params["palette"], str):
+        colors = [params["palette"]]
+    elif isinstance(params["palette"], Iterable):
         colors = [to_rgb(c) for c in list(params["palette"])]
+    else:
+        # assert isinstance(params["palette"], Iterable)
+        colors = [params["palette"]]
 
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
