@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from typing import Callable, Optional, Union
 
+import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -637,15 +638,33 @@ class PlotAccessor:
             # get biggest image after transformations to set ax size
             x_dims = []
             y_dims = []
+
             for cmd, _ in render_cmds.items():
                 if cmd == "render_images":
                     y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
                     x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
 
                 elif cmd == "render_shapes":
-                    for k in sdata.shapes.keys():
-                        x_dims += [(min(sdata.shapes[k].geometry.x), max(sdata.shapes[k].geometry.x))]
-                        y_dims += [(min(sdata.shapes[k].geometry.y), max(sdata.shapes[k].geometry.y))]
+                    for key in sdata.shapes.keys():
+                        points = []
+                        polygons = []
+
+                        for _, row in sdata.shapes[key].iterrows():
+                            if row["geometry"].type == "Point":
+                                points.append(row)
+                            else:
+                                polygons.append(row)
+
+                        if len(points) > 0:
+                            points_df = gpd.GeoDataFrame(data=points)
+                            x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
+                            y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
+
+                        if len(polygons) > 0:
+                            for p in polygons:
+                                minx, miny, maxx, maxy = p.geometry.bounds
+                                x_dims += [(minx, maxx)]
+                                y_dims += [(miny, maxy)]
 
                 elif cmd == "render_labels":
                     y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
@@ -767,7 +786,6 @@ class PlotAccessor:
                             cell_ids_per_label = {}
                             for key in list(sdata.labels.keys()):
                                 cell_ids_per_label[key] = sdata.labels[key].values.max()
-                            print(cell_ids_per_label)
                             region_key = "tmp_label_id"
                             instance_key = "tmp_cell_id"
                             params["instance_key"] = instance_key
@@ -786,7 +804,6 @@ class PlotAccessor:
                             distinct_cells = max(list(cell_ids_per_label.values()))
 
                         if sdata.table is not None:
-                            # print("Plotting a lot of cells with random colors, might take a while...")
                             sdata.table.uns[f"{instance_key}_colors"] = _get_random_hex_colors(distinct_cells)
 
                         elif sdata.table is None:
