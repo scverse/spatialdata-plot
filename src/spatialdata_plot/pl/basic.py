@@ -21,7 +21,13 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_channels, _render_images, _render_labels, _render_shapes
+from .render import (
+    _render_channels,
+    _render_images,
+    _render_labels,
+    _render_points,
+    _render_shapes,
+)
 from .utils import (
     _get_color_key_dtype,
     _get_color_key_values,
@@ -192,6 +198,55 @@ class PlotAccessor:
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
             "palette": palette,
             "instance_key": instance_key,
+            "color_key": color_key,
+        }
+
+        return sdata
+
+    def render_points(
+        self,
+        palette: Optional[Union[str, list[str], None]] = None,
+        color_key: Optional[str] = None,
+        **scatter_kwargs: Optional[str],
+    ) -> sd.SpatialData:
+        """Render the points contained in the given sd.SpatialData object
+
+        Parameters
+        ----------
+        self : sd.SpatialData
+            The sd.SpatialData object.
+        palette : list[str], optional (default: None)
+            A list of colors to use for rendering the images. If `None`, the
+            default colors will be used.
+        instance_key : str
+            The name of the column in the table that identifies individual shapes
+        color_key : str or None, optional (default: None)
+            The name of the column in the table to use for coloring shapes.
+
+        Returns
+        -------
+        sd.SpatialData
+            The input sd.SpatialData with a command added to the plotting tree
+
+        """
+        if palette is not None:
+            if isinstance(palette, str):
+                palette = [palette]
+
+            if isinstance(palette, list):
+                if not all(isinstance(p, str) for p in palette):
+                    raise TypeError("The palette argument must be a list of strings or a single string.")
+            else:
+                raise TypeError("The palette argument must be a list of strings or a single string.")
+
+        if color_key is not None and not isinstance(color_key, str):
+            raise TypeError("When giving a 'color_key', it must be of type 'str'.")
+
+        sdata = self._copy()
+        sdata = _verify_plotting_tree_exists(sdata)
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
+            "palette": palette,
             "color_key": color_key,
         }
 
@@ -511,6 +566,7 @@ class PlotAccessor:
             "render_images",
             "render_shapes",
             "render_labels",
+            "render_points",
         ]
 
         if len(plotting_tree.keys()) > 0:
@@ -645,6 +701,17 @@ class PlotAccessor:
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
                         _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+
+                elif cmd == "render_points":
+                    for idx, ax in enumerate(axs):
+                        key = list(sdata.points.keys())[idx]
+                        if params["color_key"] is not None:
+                            if params["color_key"] not in sdata.points[key].columns:
+                                raise ValueError(
+                                    f"The column '{params['color_key']}' is not present in the 'metadata' of the points."
+                                )
+
+                        _render_points(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_labels":
                     if (

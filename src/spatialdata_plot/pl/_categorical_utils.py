@@ -450,3 +450,41 @@ def _add_categorical_legend(
                 fontsize=legend_fontsize,
                 path_effects=legend_fontoutline,
             )
+
+
+def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]]) -> list[str]:
+    """
+    Return a list of colors for a categorical observation.
+
+    Parameters
+    ----------
+    adata
+        AnnData object
+    value_to_plot
+        Name of a valid categorical observation
+    categories
+        categories of the categorical observation.
+
+    Returns
+    -------
+    None
+    """
+    length = len(categories)
+
+    # check if default matplotlib palette has enough colors
+    if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= length:
+        cc = rcParams["axes.prop_cycle"]()
+        palette = [next(cc)["color"] for _ in range(length)]
+
+    else:
+        if length <= 20:
+            palette = default_20
+        elif length <= 28:
+            palette = default_28
+        elif length <= len(default_102):  # 103 colors
+            palette = default_102
+        else:
+            palette = ["grey" for _ in range(length)]
+            logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+
+    return palette[:length]
