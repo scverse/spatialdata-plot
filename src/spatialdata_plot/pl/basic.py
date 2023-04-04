@@ -666,10 +666,15 @@ class PlotAccessor:
                         # If any of the previous conditions are not met, generate random
                         # colors for each cell id
 
+                        N_DISTINCT_FOR_RANDOM = 30
+
                         if sdata.table is not None:
                             # annoying case since number of cells in labels can be
                             # different from number of cells in table. So we just use
                             # the index and randomise colours for it
+
+                            # add fake column for limiting the amount of different colors
+                            sdata.table.obs["fake"] = np.random.randint(0, N_DISTINCT_FOR_RANDOM, sdata.table.obs.shape[0])
 
                             # has a table, so it has a region key
                             region_key = _get_region_key(sdata)
@@ -681,7 +686,7 @@ class PlotAccessor:
                             region_key = _get_region_key(sdata)
                             instance_key = _get_instance_key(sdata)
                             params["instance_key"] = instance_key
-                            params["color_key"] = instance_key
+                            params["color_key"] = "fake"
                             params["add_legend"] = False
                             # TODO(ttreis) log the decision not to display a legend
 
@@ -693,7 +698,7 @@ class PlotAccessor:
                             cell_ids_per_label = {}
                             for key in list(sdata.labels.keys()):
                                 cell_ids_per_label[key] = sdata.labels[key].values.max()
-
+                            print(cell_ids_per_label)
                             region_key = "tmp_label_id"
                             instance_key = "tmp_cell_id"
                             params["instance_key"] = instance_key
@@ -708,10 +713,11 @@ class PlotAccessor:
                                 }
                             )
 
+                            tmp_table["fake"] = np.random.randint(0, N_DISTINCT_FOR_RANDOM, sdata.table.obs.shape[0])
                             distinct_cells = max(list(cell_ids_per_label.values()))
 
                         if sdata.table is not None:
-                            print("Plotting a lot of cells with random colors, might take a while...")
+                            # print("Plotting a lot of cells with random colors, might take a while...")
                             sdata.table.uns[f"{instance_key}_colors"] = _get_random_hex_colors(distinct_cells)
 
                         elif sdata.table is None:
