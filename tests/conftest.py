@@ -354,8 +354,6 @@ class PlotTesterMeta(ABCMeta):
         return super().__new__(cls, clsname, superclasses, attributedict)
 
 
-# ideally, we would you metaclass=PlotTesterMeta and all plotting tests just subclass this
-# but for some reason, pytest erases the metaclass info
 class PlotTester(ABC):  # noqa: B024
     @classmethod
     def compare(cls, basename: str, tolerance: Optional[float] = None):
