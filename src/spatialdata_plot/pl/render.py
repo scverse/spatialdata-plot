@@ -58,10 +58,12 @@ def _render_shapes(
 ) -> None:
     if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
         colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
-
-    else:
-        assert isinstance(params["palette"], Iterable)
+    elif isinstance(params["palette"], str):
+        colors = [params["palette"]]
+    elif isinstance(params["palette"], Iterable):
         colors = [to_rgb(c) for c in list(params["palette"])]
+    else:
+        colors = [params["palette"]]
 
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
@@ -73,6 +75,35 @@ def _render_shapes(
         y=shape.geometry.y,
         s=shape.radius,
         color=colors,
+    )
+
+    ax.set_title(key)
+
+
+def _render_points(
+    sdata: sd.SpatialData,
+    params: dict[str, Union[str, int, float, Iterable[str]]],
+    key: str,
+    ax: matplotlib.axes.SubplotBase,
+    extent: dict[str, list[int]],
+) -> None:
+    # if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
+    #     colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
+    # elif isinstance(params["palette"], str):
+    #     colors = [params["palette"]]
+    # elif isinstance(params["palette"], Iterable):
+    #     colors = [to_rgb(c) for c in list(params["palette"])]
+    # else:
+    # [params["palette"]]
+
+    ax.set_xlim(extent["x"][0], extent["x"][1])
+    ax.set_ylim(extent["y"][0], extent["y"][1])
+
+    shape = sdata.points[key].compute()
+
+    ax.scatter(
+        x=shape.x,
+        y=shape.y,
     )
 
     ax.set_title(key)

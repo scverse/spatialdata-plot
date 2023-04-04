@@ -21,7 +21,13 @@ from spatialdata_plot.pl._categorical_utils import (
 
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import _render_channels, _render_images, _render_labels, _render_shapes
+from .render import (
+    _render_channels,
+    _render_images,
+    _render_labels,
+    _render_points,
+    _render_shapes,
+)
 from .utils import (
     _get_color_key_dtype,
     _get_color_key_values,
@@ -190,6 +196,79 @@ class PlotAccessor:
         sdata = _verify_plotting_tree_exists(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
+            "palette": palette,
+            "instance_key": instance_key,
+            "color_key": color_key,
+        }
+
+        return sdata
+
+    def render_points(
+        self,
+        palette: Optional[Union[str, list[str], None]] = None,
+        instance_key: Optional[str] = None,
+        color_key: Optional[str] = None,
+        **scatter_kwargs: Optional[str],
+    ) -> sd.SpatialData:
+        """Render the points contained in the given sd.SpatialData object
+
+        Parameters
+        ----------
+        self : sd.SpatialData
+            The sd.SpatialData object.
+        palette : list[str], optional (default: None)
+            A list of colors to use for rendering the images. If `None`, the
+            default colors will be used.
+        instance_key : str
+            The name of the column in the table that identifies individual shapes
+        color_key : str or None, optional (default: None)
+            The name of the column in the table to use for coloring shapes.
+
+        Returns
+        -------
+        sd.SpatialData
+            The input sd.SpatialData with a command added to the plotting tree
+
+        """
+        if palette is not None:
+            if isinstance(palette, str):
+                palette = [palette]
+
+            if isinstance(palette, list):
+                if not all(isinstance(p, str) for p in palette):
+                    raise TypeError("The palette argument must be a list of strings or a single string.")
+            else:
+                raise TypeError("The palette argument must be a list of strings or a single string.")
+
+        if instance_key is not None or color_key is not None:
+            if not hasattr(self._sdata, "table"):
+                raise ValueError("SpatialData object does not have a table.")
+
+            if not hasattr(self._sdata.table, "uns"):
+                raise ValueError("Table in SpatialData object does not have 'uns'.")
+
+            if not hasattr(self._sdata.table, "obs"):
+                raise ValueError("Table in SpatialData object does not have 'obs'.")
+
+            if isinstance(color_key, str) and not isinstance(instance_key, str):
+                raise ValueError("When giving a 'color_key', an 'instance_key' must also be given.")
+
+            if color_key is not None and not isinstance(color_key, str):
+                raise TypeError("When giving a 'color_key', it must be of type 'str'.")
+
+            if instance_key is not None and not isinstance(instance_key, str):
+                raise TypeError("When giving a 'instance_key', it must be of type 'str'.")
+
+            if instance_key not in self._sdata.table.obs.columns:
+                raise ValueError(f"Column '{instance_key}' not found in 'obs'.")
+
+            if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.to_df().columns:
+                raise ValueError(f"Column '{instance_key}' not found in data.")
+
+        sdata = self._copy()
+        sdata = _verify_plotting_tree_exists(sdata)
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
             "palette": palette,
             "instance_key": instance_key,
             "color_key": color_key,
@@ -511,6 +590,7 @@ class PlotAccessor:
             "render_images",
             "render_shapes",
             "render_labels",
+            "render_points",
         ]
 
         if len(plotting_tree.keys()) > 0:
@@ -645,6 +725,38 @@ class PlotAccessor:
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
                         _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+
+                elif cmd == "render_points":
+                    if (
+                        sdata.table is not None
+                        and isinstance(params["instance_key"], str)
+                        and isinstance(params["color_key"], str)
+                    ):
+                        color_key_dtype = _get_color_key_dtype(sdata, params["color_key"])
+
+                        if isinstance(color_key_dtype, pd.core.dtypes.dtypes.CategoricalDtype):
+                            # If we have a table and proper keys, generate categolrical
+                            # colours which are stored in the 'uns' of the table.
+                            add_colors_for_categorical_sample_annotation(
+                                adata=sdata.table,
+                                key=params["instance_key"],
+                                vec=_get_color_key_values(sdata, params["color_key"]),
+                                palette=params["palette"],
+                            )
+
+                        elif isinstance(color_key_dtype, np.dtype):
+                            # if it's not categorical, we assume continous values
+                            colors = _get_hex_colors_for_continous_values(
+                                _get_color_key_values(sdata, params["color_key"])
+                            )
+                            sdata.table.uns[f"{params['color_key']}_colors"] = colors
+
+                        else:
+                            raise ValueError("The dtype of the 'color_key' column must be categorical or numeric.")
+
+                    for idx, ax in enumerate(axs):
+                        key = list(sdata.points.keys())[idx]
+                        _render_points(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
 
                 elif cmd == "render_labels":
                     if (
