@@ -8,9 +8,11 @@ import pandas as pd
 import spatialdata as sd
 import xarray as xr
 from matplotlib.colors import ListedColormap, to_rgb
+from pandas.api.types import is_categorical_dtype
 from skimage.segmentation import find_boundaries
 from sklearn.decomposition import PCA
 
+from ..pl._categorical_utils import _get_colors_for_categorical_obs
 from ..pl.utils import _normalize
 from ..pp.utils import _get_linear_colormap, _get_region_key
 
@@ -87,24 +89,34 @@ def _render_points(
     ax: matplotlib.axes.SubplotBase,
     extent: dict[str, list[int]],
 ) -> None:
-    # if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
-    #     colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
-    # elif isinstance(params["palette"], str):
-    #     colors = [params["palette"]]
-    # elif isinstance(params["palette"], Iterable):
-    #     colors = [to_rgb(c) for c in list(params["palette"])]
-    # else:
-    # [params["palette"]]
-
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
-    shape = sdata.points[key].compute()
+    if isinstance(params["color_key"], str):
+        colors = sdata.points[key][params["color_key"]].compute()
 
-    ax.scatter(
-        x=shape.x,
-        y=shape.y,
-    )
+        if is_categorical_dtype(colors):
+            category_colors = _get_colors_for_categorical_obs(colors.cat.categories)
+
+            for i, cat in enumerate(colors.cat.categories):
+                ax.scatter(
+                    x=sdata.points[key]["x"].compute()[colors == cat],
+                    y=sdata.points[key]["y"].compute()[colors == cat],
+                    color=category_colors[i],
+                    label=cat,
+                )
+
+        else:
+            ax.scatter(
+                x=sdata.points[key]["x"].compute(),
+                y=sdata.points[key]["y"].compute(),
+                c=colors,
+            )
+    else:
+        ax.scatter(
+            x=sdata.points[key]["x"].compute(),
+            y=sdata.points[key]["y"].compute(),
+        )
 
     ax.set_title(key)
 
