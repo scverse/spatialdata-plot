@@ -674,7 +674,9 @@ class PlotAccessor:
                             # the index and randomise colours for it
 
                             # add fake column for limiting the amount of different colors
-                            sdata.table.obs["fake"] = np.random.randint(0, N_DISTINCT_FOR_RANDOM, sdata.table.obs.shape[0])
+                            sdata.table.obs["fake"] = np.random.randint(
+                                0, N_DISTINCT_FOR_RANDOM, sdata.table.obs.shape[0]
+                            )
 
                             # has a table, so it has a region key
                             region_key = _get_region_key(sdata)

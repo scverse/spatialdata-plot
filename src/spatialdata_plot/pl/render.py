@@ -161,7 +161,6 @@ def _render_labels(
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
     for group in groups:
-
         # Getting cell ids belonging to group and casting them to int for later numpy comparisons
         vaid_cell_ids = table[table[params["color_key"]] == group][params["instance_key"]].values
         vaid_cell_ids = [int(id) for id in vaid_cell_ids]
