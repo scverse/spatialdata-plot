@@ -1,6 +1,6 @@
 import random
 from collections.abc import Iterable
-from typing import Any, Union
+from typing import Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -159,29 +159,3 @@ def _get_color_key_values(
         A series containing the values of the color key.
     """
     return sc.get.obs_df(sdata.table, color_key)
-
-
-def _get_color_key_dtype(
-    sdata: sd.SpatialData,
-    color_key: str,
-) -> Any:
-    """Helper function to extract the data type of the values corresponding to the color key.
-
-    The 'color_key' indicates a column, either found in sdata.table.obs or
-    sdata.table.var, that will be used to color the images.
-
-    Parameters
-    ----------
-    sdata: sd.SpatialData
-        A spatial data object.
-    color_key: str
-        The column name of the color key.
-
-    Returns
-    -------
-    str
-        The data type of the color key.
-    """
-    color_key_values = _get_color_key_values(sdata, color_key)
-
-    return color_key_values.dtype

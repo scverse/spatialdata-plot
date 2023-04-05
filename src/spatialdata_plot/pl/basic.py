@@ -6,12 +6,14 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
+from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
 from spatialdata.models import Image2DModel
@@ -20,7 +22,13 @@ from spatialdata.transformations import get_transformation
 from spatialdata_plot.pl._categorical_utils import (
     add_colors_for_categorical_sample_annotation,
 )
-
+from matplotlib.colors import (
+    ColorConverter,
+    Colormap,
+    ListedColormap,
+    Normalize,
+    TwoSlopeNorm,
+)
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
 from .render import (
@@ -31,7 +39,6 @@ from .render import (
     _render_shapes,
 )
 from .utils import (
-    _get_color_key_dtype,
     _get_color_key_values,
     _get_hex_colors_for_continous_values,
     _get_random_hex_colors,
@@ -444,14 +451,16 @@ class PlotAccessor:
             if not isinstance(instance_key, str):
                 raise TypeError("Parameter 'instance_key' must be a string.")
 
-            if instance_key not in self._sdata.table.obs.columns:
+            if instance_key not in self._sdata.table.obs:
                 raise ValueError(f"The provided instance_key '{instance_key}' is not a valid table column.")
+        else:
+            instance_key = self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
 
         if color_key is not None:
             if not isinstance(color_key, (str, type(None))):
                 raise TypeError("Parameter 'color_key' must be a string.")
 
-            if color_key not in self._sdata.table.obs.columns:
+            if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.var_names:
                 raise ValueError(f"The provided color_key '{color_key}' is not a valid table column.")
 
         if not isinstance(border_alpha, (int, float)):
@@ -735,27 +744,23 @@ class PlotAccessor:
                         and isinstance(params["instance_key"], str)
                         and isinstance(params["color_key"], str)
                     ):
-                        color_key_dtype = _get_color_key_dtype(sdata, params["color_key"])
-
-                        if isinstance(color_key_dtype, pd.core.dtypes.dtypes.CategoricalDtype):
+                        colors = sc.get.obs_df(sdata.table, params["color_key"])
+                        if is_categorical_dtype(colors):
                             # If we have a table and proper keys, generate categolrical
                             # colours which are stored in the 'uns' of the table.
                             add_colors_for_categorical_sample_annotation(
                                 adata=sdata.table,
                                 key=params["instance_key"],
-                                vec=_get_color_key_values(sdata, params["color_key"]),
+                                vec=colors,
                                 palette=params["palette"],
                             )
 
-                        elif isinstance(color_key_dtype, np.dtype):
+                        elif isinstance(colors.values, np.ndarray):
                             # if it's not categorical, we assume continous values
-                            colors = _get_hex_colors_for_continous_values(
-                                _get_color_key_values(sdata, params["color_key"])
-                            )
+                            colors = _get_hex_colors_for_continous_values(colors)
                             sdata.table.uns[f"{params['color_key']}_colors"] = colors
-
                         else:
-                            raise ValueError("The dtype of the 'color_key' column must be categorical or numeric.")
+                            raise ValueError(f"The dtype of 'color_key' {type(colors)} is not supported.")
 
                     for idx, ax in enumerate(axs):
                         key = list(sdata.shapes.keys())[idx]
@@ -778,16 +783,16 @@ class PlotAccessor:
                         and isinstance(params["instance_key"], str)
                         and isinstance(params["color_key"], str)
                     ):
-                        # If we have a table and proper keys, generate categolrical
+                        colors = sc.get.obs_df(sdata.table, params["color_key"])
+                        # If we have a table and proper keys, generate categorical
                         # colours which are stored in the 'uns' of the table.
-
-                        add_colors_for_categorical_sample_annotation(
-                            adata=sdata.table,
-                            key=params["instance_key"],
-                            vec=_get_color_key_values(sdata, params["color_key"]),
-                            palette=params["palette"],
-                        )
-
+                        if is_categorical_dtype(colors):
+                            add_colors_for_categorical_sample_annotation(
+                                adata=sdata.table,
+                                key=params["instance_key"],
+                                vec=_get_color_key_values(sdata, params["color_key"]),
+                                palette=params["palette"],
+                            )
                     else:
                         # If any of the previous conditions are not met, generate random
                         # colors for each cell id

@@ -1,7 +1,7 @@
 import collections.abc as cabc
 import logging
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Mapping
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,13 @@ from matplotlib import rcParams
 from matplotlib.axes import Axes
 from matplotlib.colors import is_color_like, to_hex
 from pandas.api.types import is_categorical_dtype
+from matplotlib.colors import (
+    ColorConverter,
+    Colormap,
+    ListedColormap,
+    Normalize,
+    TwoSlopeNorm,
+)
 
 # Colorblindness adjusted vega_10
 # See https://github.com/scverse/scanpy/issues/387
@@ -488,3 +495,38 @@ def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]]) -> li
             logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
 
     return palette[:length]
+
+
+Palette_t = Optional[Union[str, ListedColormap]]
+
+
+def _get_palette(
+    adata: AnnData,
+    cluster_key: Optional[str],
+    categories: Sequence[Any],
+    palette: Palette_t = None,
+    alpha: float = 1.0,
+) -> Mapping[str, str] | None:
+    if palette is None:
+        try:
+            palette = adata.uns[Key.uns.colors(cluster_key)]  # type: ignore[arg-type]
+            if len(palette) != len(categories):
+                raise ValueError(
+                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
+                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
+                )
+            return {cat: to_hex(to_rgba(col)[:3] + (alpha,), keep_alpha=True) for cat, col in zip(categories, palette)}
+        except KeyError as e:
+            logg.error(f"Unable to fetch palette, reason: {e}. Using `None`.")
+            return None
+
+    len_cat = len(categories)
+    if isinstance(palette, str):
+        cmap = plt.get_cmap(palette)
+        palette = [to_hex(x, keep_alpha=True) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
+    elif isinstance(palette, ListedColormap):
+        palette = [to_hex(x, keep_alpha=True) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
+    else:
+        raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+
+    return dict(zip(categories, palette))
