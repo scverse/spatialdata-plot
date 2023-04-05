@@ -17,7 +17,9 @@ plotting.rst
 :maxdepth: 2
 :caption: Tutorials
 
+notebooks/preprocessing
 notebooks/demo
+
 ```
 
 
