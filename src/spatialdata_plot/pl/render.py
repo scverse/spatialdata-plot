@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -8,9 +8,11 @@ import pandas as pd
 import spatialdata as sd
 import xarray as xr
 from matplotlib.colors import ListedColormap, to_rgb
+from pandas.api.types import is_categorical_dtype
 from skimage.segmentation import find_boundaries
 from sklearn.decomposition import PCA
 
+from ..pl._categorical_utils import _get_colors_for_categorical_obs
 from ..pl.utils import _normalize
 from ..pp.utils import _get_linear_colormap, _get_region_key
 
@@ -51,29 +53,92 @@ def _render_channels(
 
 def _render_shapes(
     sdata: sd.SpatialData,
+    params: dict[str, Optional[Union[str, int, float, Iterable[str]]]],
+    key: str,
+    ax: matplotlib.axes.SubplotBase,
+    extent: dict[str, list[int]],
+) -> None:
+    colors: Optional[Union[str, int, float, Iterable[str]]] = None  # to shut up mypy
+    if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
+        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
+    elif isinstance(params["palette"], str):
+        colors = [params["palette"]]
+    elif isinstance(params["palette"], Iterable):
+        colors = [to_rgb(c) for c in list(params["palette"])]
+    else:
+        colors = params["palette"]
+
+    ax.set_xlim(extent["x"][0], extent["x"][1])
+    ax.set_ylim(extent["y"][0], extent["y"][1])
+
+    points = []
+    polygons = []
+
+    for _, row in sdata.shapes[key].iterrows():
+        if row["geometry"].geom_type == "Point":
+            points.append((row[0], row[1]))  # (point, radius)
+        elif row["geometry"].geom_type == "Polygon":
+            polygons.append(row[0])  # just polygon
+        else:
+            raise NotImplementedError(f"Geometry type {row['geometry'].type} not supported.")
+
+    if len(polygons) > 0:
+        for polygon in polygons:
+            ax.add_patch(
+                mpatches.Polygon(
+                    polygon.exterior.coords,
+                    color=colors,
+                )
+            )
+
+    if len(points) > 0:
+        for point, radius in points:
+            ax.add_patch(
+                mpatches.Circle(
+                    (point.x, point.y),
+                    radius=radius,
+                    color=colors,
+                )
+            )
+
+    ax.set_title(key)
+
+
+def _render_points(
+    sdata: sd.SpatialData,
     params: dict[str, Union[str, int, float, Iterable[str]]],
     key: str,
     ax: matplotlib.axes.SubplotBase,
     extent: dict[str, list[int]],
 ) -> None:
-    if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
-        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
-
-    else:
-        assert isinstance(params["palette"], Iterable)
-        colors = [to_rgb(c) for c in list(params["palette"])]
-
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
-    shape = sdata.shapes[key]
+    if isinstance(params["color_key"], str):
+        colors = sdata.points[key][params["color_key"]].compute()
 
-    ax.scatter(
-        x=shape.geometry.x,
-        y=shape.geometry.y,
-        s=shape.radius,
-        color=colors,
-    )
+        if is_categorical_dtype(colors):
+            category_colors = _get_colors_for_categorical_obs(colors.cat.categories)
+
+            for i, cat in enumerate(colors.cat.categories):
+                ax.scatter(
+                    x=sdata.points[key]["x"].compute()[colors == cat],
+                    y=sdata.points[key]["y"].compute()[colors == cat],
+                    color=category_colors[i],
+                    label=cat,
+                )
+
+        else:
+            ax.scatter(
+                x=sdata.points[key]["x"].compute(),
+                y=sdata.points[key]["y"].compute(),
+                c=colors,
+            )
+    else:
+        ax.scatter(
+            x=sdata.points[key]["x"].compute(),
+            y=sdata.points[key]["y"].compute(),
+        )
 
     ax.set_title(key)
 
@@ -103,11 +168,6 @@ def _render_images(
         elif n_channels == 2:
             colors = ListedColormap(["#d30cb8", "#6df1d8"])
         elif n_channels == 3:
-            # bg = [(1, 1, 1, 1)]
-            # cmap_red = ListedColormap([(1, 0, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            # cmap_green = ListedColormap([(0, 1, 0, i) for i in reversed(range(0, 256, 1))] + bg)
-            # cmap_blue = ListedColormap([(0, 0, 1, i) for i in reversed(range(0, 256, 1))] + bg)
-            # colors = [cmap_red, cmap_green, cmap_blue]
             colors = ListedColormap(["red", "blue", "green"])
         else:
             # we do PCA to reduce to 3 channels
@@ -128,10 +188,6 @@ def _render_images(
     )
 
     ax.set_title(key)
-    # ax.set_xlabel("spatial1")
-    # ax.set_ylabel("spatial2")
-    # ax.set_xticks([])
-    # ax.set_yticks([])
 
 
 def _render_labels(
@@ -161,7 +217,9 @@ def _render_labels(
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
     for group in groups:
+        # Getting cell ids belonging to group and casting them to int for later numpy comparisons
         vaid_cell_ids = table[table[params["color_key"]] == group][params["instance_key"]].values
+        vaid_cell_ids = [int(id) for id in vaid_cell_ids]
 
         # define all out-of-group cells as background
         in_group_mask = segmentation.copy()
@@ -204,7 +262,3 @@ def _render_labels(
         ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
 
     ax.set_title(key)
-    # ax.set_xlabel("spatial1")
-    # ax.set_ylabel("spatial2")
-    # ax.set_xticks([])
-    # ax.set_yticks([])
