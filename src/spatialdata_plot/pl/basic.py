@@ -568,6 +568,7 @@ class PlotAccessor:
             "render_shapes",
             "render_labels",
             "render_points",
+            "render_channels",
         ]
 
         if len(plotting_tree.keys()) > 0:
@@ -617,7 +618,7 @@ class PlotAccessor:
 
             # transform all elements
             for cmd, _ in render_cmds.items():
-                if cmd == "render_images":
+                if cmd == "render_images" or cmd == "render_channels":
                     for key in sdata.images.keys():
                         img_transformation = get_transformation(sdata.images[key], get_all=True)
                         img_transformation = list(img_transformation.values())[0]
@@ -640,7 +641,7 @@ class PlotAccessor:
             y_dims = []
 
             for cmd, _ in render_cmds.items():
-                if cmd == "render_images":
+                if cmd == "render_images" or cmd == "render_channels":
                     y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
                     x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
 
