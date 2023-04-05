@@ -22,6 +22,7 @@ dependencies = [
     "spatialdata@git+https://github.com/scverse/spatialdata",
     "matplotlib",
     "scikit-learn",
+    "scanpy",
 ]
 
 [project.optional-dependencies]
