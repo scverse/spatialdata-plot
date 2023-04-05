@@ -92,12 +92,12 @@ def _render_shapes(
             )
 
     if len(points) > 0:
-        for point, radius in points:
+        for idx, (point, radius) in enumerate(points):
             ax.add_patch(
                 mpatches.Circle(
                     (point.x, point.y),
                     radius=radius,
-                    color=colors,
+                    color=colors[idx],  # type: ignore
                 )
             )
 

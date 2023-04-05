@@ -192,7 +192,7 @@ class PlotAccessor:
                 raise ValueError(f"Column '{instance_key}' not found in 'obs'.")
 
             if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.to_df().columns:
-                raise ValueError(f"Column '{instance_key}' not found in data.")
+                raise ValueError(f"Column '{color_key}' not found in data.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree_exists(sdata)
