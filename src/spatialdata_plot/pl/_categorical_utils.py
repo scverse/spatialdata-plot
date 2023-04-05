@@ -1,7 +1,8 @@
 import collections.abc as cabc
 import logging
 from collections.abc import Sequence
-from typing import Any, Optional, Union, Mapping
+from typing import Any, Optional, Union
+from collections.abc import Mapping
 
 import numpy as np
 import pandas as pd
@@ -11,15 +12,12 @@ from matplotlib import cm, colors
 from matplotlib import pyplot as pl
 from matplotlib import rcParams
 from matplotlib.axes import Axes
-from matplotlib.colors import is_color_like, to_hex
-from pandas.api.types import is_categorical_dtype
 from matplotlib.colors import (
-    ColorConverter,
-    Colormap,
     ListedColormap,
-    Normalize,
-    TwoSlopeNorm,
+    is_color_like,
+    to_hex,
 )
+from pandas.api.types import is_categorical_dtype
 
 # Colorblindness adjusted vega_10
 # See https://github.com/scverse/scanpy/issues/387
@@ -498,8 +496,8 @@ def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]]) -> li
 
 
 Palette_t = Optional[Union[str, ListedColormap]]
-from matplotlib.colors import ListedColormap, to_hex, to_rgba
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, to_hex, to_rgba
 
 
 def _get_palette(

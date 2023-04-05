@@ -1,39 +1,40 @@
 from __future__ import annotations
+
 from collections.abc import Iterable
-from typing import Callable, Optional, Union, Sequence, NamedTuple
-from matplotlib.cm import get_cmap
 from copy import copy
+from functools import partial
+from typing import Callable, NamedTuple, Optional, Union
+from collections.abc import Sequence
+
 import matplotlib
 import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import spatialdata as sd
 import xarray as xr
-from matplotlib.colors import ListedColormap, to_rgb
-from pandas.api.types import is_categorical_dtype
-from skimage.segmentation import find_boundaries
-from sklearn.decomposition import PCA
-import scanpy as sc
-from pandas.api.types import is_categorical_dtype
-from spatialdata._types import ArrayLike
 from anndata import AnnData
-from pandas.api.types import CategoricalDtype
-from matplotlib import colors, patheffects, rcParams
+from matplotlib import colors
+from matplotlib.cm import get_cmap
 from matplotlib.colors import (
-    ColorConverter,
     Colormap,
+    ListedColormap,
     Normalize,
-    TwoSlopeNorm,
+    to_rgb,
 )
+from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from functools import partial
-from ..pl._categorical_utils import _get_colors_for_categorical_obs, _get_palette, _maybe_set_colors
+from sklearn.decomposition import PCA
+from spatialdata._types import ArrayLike
+
+from ..pl._categorical_utils import (
+    _get_colors_for_categorical_obs,
+    _get_palette,
+)
 from ..pl.utils import _normalize
 from ..pp.utils import _get_linear_colormap, _get_region_key
-
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]

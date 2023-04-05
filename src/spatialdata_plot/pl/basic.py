@@ -20,15 +20,10 @@ from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pl._categorical_utils import (
+    _maybe_set_colors,
     add_colors_for_categorical_sample_annotation,
 )
-from matplotlib.colors import (
-    ColorConverter,
-    Colormap,
-    ListedColormap,
-    Normalize,
-    TwoSlopeNorm,
-)
+
 from ..accessor import register_spatial_data_accessor
 from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
 from .render import (
@@ -44,8 +39,6 @@ from .utils import (
     _get_random_hex_colors,
     _get_subplots,
 )
-
-from spatialdata_plot.pl._categorical_utils import _maybe_set_colors
 
 
 @register_spatial_data_accessor("pl")
