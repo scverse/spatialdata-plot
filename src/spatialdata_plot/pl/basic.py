@@ -45,6 +45,8 @@ from .utils import (
     _get_subplots,
 )
 
+from spatialdata_plot.pl._categorical_utils import _maybe_set_colors
+
 
 @register_spatial_data_accessor("pl")
 class PlotAccessor:
@@ -792,6 +794,9 @@ class PlotAccessor:
                                 key=params["instance_key"],
                                 vec=_get_color_key_values(sdata, params["color_key"]),
                                 palette=params["palette"],
+                            )
+                            _maybe_set_colors(
+                                source=sdata.table, target=sdata.table, key=params["color_key"], palette=None
                             )
                     else:
                         # If any of the previous conditions are not met, generate random

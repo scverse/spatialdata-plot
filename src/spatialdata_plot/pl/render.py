@@ -30,7 +30,7 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from functools import partial
-from ..pl._categorical_utils import _get_colors_for_categorical_obs, _get_palette
+from ..pl._categorical_utils import _get_colors_for_categorical_obs, _get_palette, _maybe_set_colors
 from ..pl.utils import _normalize
 from ..pp.utils import _get_linear_colormap, _get_region_key
 
@@ -221,7 +221,9 @@ def _render_images(
 
     ax.set_title(key)
 
+
 import matplotlib.pyplot as plt
+
 
 def _render_labels(
     sdata: sd.SpatialData,
@@ -234,7 +236,6 @@ def _render_labels(
 
     # subset table to only the entires specified by 'key'
     table = sdata.table[sdata.table.obs[region_key] == key]
-
     segmentation = sdata.labels[key].values
 
     norm = Normalize(vmin=None, vmax=None)
@@ -271,7 +272,20 @@ def _render_labels(
 
     #     ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
     # ax.colorbar(pad=0.01, fraction=0.08, aspect=30)
-    plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+    if is_categorical_dtype(color_source_vector):
+        clusters = color_source_vector.categories
+        palette = _get_palette(table, cluster_key=params["color_key"], categories=clusters)
+        for label in clusters:
+            ax.scatter([], [], c=palette[label], label=label)
+        ax.legend(
+            frameon=False,
+            loc="center left",
+            bbox_to_anchor=(1, 0.5),
+            ncol=(1 if len(clusters) <= 14 else 2 if len(clusters) <= 30 else 3),
+            fontsize=None,
+        )
+    else:
+        plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
     ax.set_title(key)
 
 
