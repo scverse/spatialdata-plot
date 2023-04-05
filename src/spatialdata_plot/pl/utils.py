@@ -6,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import spatialdata as sd
 import xarray as xr
 
@@ -157,23 +158,7 @@ def _get_color_key_values(
     pd.Series
         A series containing the values of the color key.
     """
-    df = sdata.table.to_df()
-    obs = sdata.table.obs
-    color_key_in_obs = color_key in obs
-    color_key_in_df = color_key in df.columns
-
-    if not (color_key_in_obs or color_key_in_df):
-        raise ValueError(f"Column {color_key} not found in sdata.table.obs or sdata.table.to_df().")
-
-    if color_key_in_obs and color_key_in_df:
-        raise ValueError(
-            f"Column {color_key} found in both sdata.table.obs and sdata.table.to_df(). Needs to be unique."
-        )
-
-    if color_key_in_obs:
-        return obs[color_key]
-    elif color_key_in_df:
-        return df[color_key]
+    return sc.get.obs_df(sdata.table, color_key)
 
 
 def _get_color_key_dtype(
