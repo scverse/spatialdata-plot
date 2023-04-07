@@ -19,25 +19,24 @@ from spatialdata import transform
 from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
-from spatialdata_plot.pl._categorical_utils import (
-    _maybe_set_colors,
-    add_colors_for_categorical_sample_annotation,
+from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot.pp.utils import (
+    _get_instance_key,
+    _get_region_key,
+    _verify_plotting_tree_exists,
 )
-
-from ..accessor import register_spatial_data_accessor
-from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import (
+from spatialdata_plot.render import (
     _render_channels,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from .utils import (
-    _get_color_key_values,
+from spatialdata_plot.utils import (
     _get_hex_colors_for_continous_values,
     _get_random_hex_colors,
     _get_subplots,
+    _maybe_set_colors,
 )
 
 
@@ -741,12 +740,12 @@ class PlotAccessor:
                     ):
                         colors = sc.get.obs_df(sdata.table, params["color_key"])
                         if is_categorical_dtype(colors):
-                            # If we have a table and proper keys, generate categolrical
+                            # If we have a table and proper keys, generate categorical
                             # colours which are stored in the 'uns' of the table.
-                            add_colors_for_categorical_sample_annotation(
-                                adata=sdata.table,
-                                key=params["instance_key"],
-                                vec=colors,
+                            _maybe_set_colors(
+                                source=sdata.table,
+                                target=sdata.table,
+                                key=params["color_key"],
                                 palette=params["palette"],
                             )
 
@@ -782,14 +781,11 @@ class PlotAccessor:
                         # If we have a table and proper keys, generate categorical
                         # colours which are stored in the 'uns' of the table.
                         if is_categorical_dtype(colors):
-                            add_colors_for_categorical_sample_annotation(
-                                adata=sdata.table,
-                                key=params["instance_key"],
-                                vec=_get_color_key_values(sdata, params["color_key"]),
-                                palette=params["palette"],
-                            )
                             _maybe_set_colors(
-                                source=sdata.table, target=sdata.table, key=params["color_key"], palette=None
+                                source=sdata.table,
+                                target=sdata.table,
+                                key=params["color_key"],
+                                palette=params["palette"],
                             )
                     else:
                         # If any of the previous conditions are not met, generate random

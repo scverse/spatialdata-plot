@@ -1,53 +1,38 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from copy import copy
 from functools import partial
-from typing import Callable, NamedTuple, Optional, Union
-from collections.abc import Sequence
+from typing import Callable, Optional, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import spatialdata as sd
 import xarray as xr
-from anndata import AnnData
 from matplotlib import colors
 from matplotlib.cm import get_cmap
-from matplotlib.colors import (
-    Colormap,
-    ListedColormap,
-    Normalize,
-    to_rgb,
-)
-from pandas.api.types import CategoricalDtype, is_categorical_dtype
-from skimage.color import label2rgb
-from skimage.morphology import erosion, square
-from skimage.segmentation import find_boundaries
-from skimage.util import map_array
+from matplotlib.colors import ListedColormap, Normalize, to_rgb
+from pandas.api.types import is_categorical_dtype
 from sklearn.decomposition import PCA
-from spatialdata._types import ArrayLike
 
-from ..pl._categorical_utils import (
+from spatialdata_plot.pl._categorical_utils import (
     _get_colors_for_categorical_obs,
     _get_palette,
 )
-from ..pl.utils import _normalize
-from ..pp.utils import _get_linear_colormap, _get_region_key
+from spatialdata_plot.pl.utils import (
+    CmapParams,
+    _map_color_seg,
+    _normalize,
+    _set_color_source_vec,
+)
+from spatialdata_plot.pp.utils import _get_linear_colormap, _get_region_key
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
 _SeqStr = Union[str, Sequence[str]]
 to_hex = partial(colors.to_hex, keep_alpha=True)
-
-
-class CmapParams(NamedTuple):
-    """Cmap params."""
-
-    cmap: Colormap
-    img_cmap: Colormap
-    norm: Normalize
 
 
 def _render_channels(
@@ -223,9 +208,6 @@ def _render_images(
     ax.set_title(key)
 
 
-import matplotlib.pyplot as plt
-
-
 def _render_labels(
     sdata: sd.SpatialData,
     params: dict[str, Union[str, int, float]],
@@ -244,7 +226,7 @@ def _render_labels(
     # cmap.set_bad("lightgray" if na_color is None else na_color)
     cmap_params = CmapParams(cmap, cmap, norm)
 
-    color_source_vector, color_vector, categorical = _set_color_source_vec(table, params["color_key"])
+    color_source_vector, color_vector, categorical = _set_color_source_vec(table, params["color_key"])  # type: ignore[arg-type]
     segmentation = _map_color_seg(
         seg=segmentation,
         cell_id=table.obs[params["instance_key"]].values,
@@ -274,7 +256,7 @@ def _render_labels(
     #     ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
     # ax.colorbar(pad=0.01, fraction=0.08, aspect=30)
     if is_categorical_dtype(color_source_vector):
-        clusters = color_source_vector.categories
+        clusters = color_source_vector.categories  # type: ignore[union-attr]
         palette = _get_palette(table, cluster_key=params["color_key"], categories=clusters)
         for label in clusters:
             ax.scatter([], [], c=palette[label], label=label)
@@ -288,88 +270,3 @@ def _render_labels(
     else:
         plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
     ax.set_title(key)
-
-
-def _set_color_source_vec(
-    adata: AnnData,
-    value_to_plot: str | None,
-    use_raw: bool | None = None,
-    alt_var: str | None = None,
-    layer: str | None = None,
-    groups: _SeqStr | None = None,
-    palette: Palette_t = None,
-    na_color: str | tuple[float, ...] | None = None,
-    alpha: float = 1.0,
-) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
-    if value_to_plot is None:
-        color = np.full(adata.n_obs, to_hex(na_color))
-        return color, color, False
-
-    if alt_var is not None and value_to_plot not in adata.obs and value_to_plot not in adata.var_names:
-        value_to_plot = adata.var_names[adata.var[alt_var] == value_to_plot][0]
-    if use_raw and value_to_plot not in adata.obs:
-        color_source_vector = adata.raw.obs_vector(value_to_plot)
-    else:
-        color_source_vector = adata.obs_vector(value_to_plot, layer=layer)
-
-    if not is_categorical_dtype(color_source_vector):
-        return None, color_source_vector, False
-
-    color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-    categories = color_source_vector.categories
-    if groups is not None:
-        color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
-
-    color_map = _get_palette(adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha)
-    if color_map is None:
-        raise ValueError("Unable to create color palette.")
-    # do not rename categories, as colors need not be unique
-    color_vector = color_source_vector.map(color_map)
-    if color_vector.isna().any():
-        color_vector = color_vector.add_categories([to_hex(na_color)])
-        color_vector = color_vector.fillna(to_hex(na_color))
-
-    return color_source_vector, color_vector, True
-
-
-def _map_color_seg(
-    seg: ArrayLike,
-    cell_id: ArrayLike,
-    color_vector: ArrayLike | pd.Series[CategoricalDtype],
-    color_source_vector: pd.Series[CategoricalDtype],
-    cmap_params: CmapParams,
-    seg_erosionpx: int | None = None,
-    seg_boundaries: bool = False,
-    na_color: str | tuple[float, ...] = (0, 0, 0, 0),
-) -> ArrayLike:
-    cell_id = np.array(cell_id)
-
-    if is_categorical_dtype(color_vector):
-        if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
-            cell_id[color_source_vector.isna()] = 0
-        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)  # type: ignore
-        cols = colors.to_rgba_array(color_vector.categories)  # type: ignore
-    else:
-        val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
-        try:
-            cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        except TypeError:
-            assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
-            cols = colors.to_rgba_array(color_vector)
-
-    if seg_erosionpx is not None:
-        val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
-
-    seg_im: ArrayLike = label2rgb(
-        label=val_im,
-        colors=cols,
-        bg_label=0,
-        bg_color=(1, 1, 1),  # transparency doesn't really work
-    )
-
-    if seg_boundaries:
-        seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
-        seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
-        return seg_bound
-    seg_im = np.dstack((seg_im, np.where(val_im > 0, 1, 0)))  # add transparency here
-    return seg_im
