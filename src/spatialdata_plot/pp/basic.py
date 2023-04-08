@@ -12,7 +12,7 @@ from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pp.utils import (
     _get_coordinate_system_mapping,
     _get_region_key,
-    _verify_plotting_tree_exists,
+    _verify_plotting_tree,
 )
 
 # from .colorize import _colorize
@@ -292,7 +292,7 @@ class PreprocessingAccessor:
             images=cropped_images,
             labels=cropped_labels,
         )
-        self._sdata = _verify_plotting_tree_exists(self._sdata)
+        self._sdata = _verify_plotting_tree(self._sdata)
 
         # get current number of steps to create a unique key
         n_steps = len(self._sdata.plotting_tree.keys())

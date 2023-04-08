@@ -4,8 +4,9 @@ from collections.abc import Iterable, Sequence
 from copy import copy
 from functools import partial
 from typing import Callable, Optional, Union
-
+from matplotlib.colors import Colormap
 import matplotlib
+from spatialdata.models import TableModel
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,19 +14,19 @@ import spatialdata as sd
 import xarray as xr
 from matplotlib import colors
 from matplotlib.cm import get_cmap
-from matplotlib.colors import ListedColormap, Normalize, to_rgb
+from matplotlib.colors import ListedColormap, Normalize, to_rgb, TwoSlopeNorm
 from pandas.api.types import is_categorical_dtype
 from sklearn.decomposition import PCA
-
-from spatialdata_plot.pl._categorical_utils import (
-    _get_colors_for_categorical_obs,
-    _get_palette,
-)
+from dataclasses import dataclass
+from spatialdata_plot.pl.basic import LabelsRenderParams, 
 from spatialdata_plot.pl.utils import (
     CmapParams,
+    LegendParams,
     _map_color_seg,
     _normalize,
     _set_color_source_vec,
+    _get_palette,
+    _decorate_axs,
 )
 from spatialdata_plot.pp.utils import _get_linear_colormap, _get_region_key
 
@@ -136,7 +137,7 @@ def _render_points(
         colors = sdata.points[key][params["color_key"]].compute()
 
         if is_categorical_dtype(colors):
-            category_colors = _get_colors_for_categorical_obs(colors.cat.categories)
+            category_colors = _get_palette(categories=colors.cat.categories)
 
             for i, cat in enumerate(colors.cat.categories):
                 ax.scatter(
@@ -210,63 +211,82 @@ def _render_images(
 
 def _render_labels(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float]],
-    key: str,
+    render_params: LabelsRenderParams,
+    legend_params: LegendParams,
     ax: matplotlib.axes.SubplotBase,
     extent: dict[str, list[int]],
 ) -> None:
-    region_key = _get_region_key(sdata)
 
-    # subset table to only the entires specified by 'key'
-    table = sdata.table[sdata.table.obs[region_key] == key]
-    segmentation = sdata.labels[key].values
+    # get instance and region keys
+    instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
+    region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
 
-    norm = Normalize(vmin=None, vmax=None)
-    cmap = copy(get_cmap(None))
-    # cmap.set_bad("lightgray" if na_color is None else na_color)
-    cmap_params = CmapParams(cmap, cmap, norm)
+    # subset table based on region
+    if render_params.region is not None:
+        table = sdata.table[sdata.table.obs[region_key].isin([render_params.region])]
+        region = render_params.region
+    else:
+        region = sdata.table.obs[region_key].unique()[0]  # TODO: handle multiple regions
+        table = sdata.table
 
-    color_source_vector, color_vector, categorical = _set_color_source_vec(table, params["color_key"])  # type: ignore[arg-type]
-    segmentation = _map_color_seg(
-        seg=segmentation,
-        cell_id=table.obs[params["instance_key"]].values,
-        color_vector=color_vector,
-        color_source_vector=color_source_vector,
-        cmap_params=cmap_params,
+    # get isntance id based on subsetted table
+    instance_id = table.obs[instance_key].values
+
+    # get labels
+    segmentation = sdata.labels[region].values
+
+    # get color vector (categorical or continuous)
+    color_source_vector, color_vector, categorical = _set_color_source_vec(
+        adata=table,
+        value_to_plot=render_params.color,
+        alt_var=render_params.alt_var,
+        layer=render_params.layer,
+        groups=render_params.groups,
+        palette=render_params.palette,
+        na_color=render_params.cmap_params.na_color,
+        alpha=render_params.alpha,
     )
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
+    # map color vector to segmentation
+    labels = _map_color_seg(
+        seg=segmentation,
+        cell_id=instance_id,
+        color_vector=color_vector,
+        color_source_vector=color_source_vector,
+        cmap_params=render_params.cmap_params,
+        seg_erosionpx=render_params.contour_px,
+        seg_boundaries=render_params.outline,
+        na_color=render_params.cmap_params.na_color,
+    )
 
-    cax = ax.imshow(
-        segmentation,
+    _cax = ax.imshow(
+        labels,
         rasterized=True,
-        cmap=cmap_params.cmap if not categorical else None,
-        norm=cmap_params.norm if not categorical else None,
-        # alpha=color_params.alpha,
+        cmap=render_params.cmap_params.cmap if not categorical else None,
+        norm=render_params.cmap_params.norm if not categorical else None,
+        alpha=render_params.alpha,
         origin="lower",
         zorder=3,
     )
+    cax = ax.add_image(_cax)
 
-    # if params["add_legend"]:
-    #     patches = []
-    #     for group, color in group_to_color.values:
-    #         patches.append(mpatches.Patch(color=color, label=group))
-
-    #     ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
-    # ax.colorbar(pad=0.01, fraction=0.08, aspect=30)
-    if is_categorical_dtype(color_source_vector):
-        clusters = color_source_vector.categories  # type: ignore[union-attr]
-        palette = _get_palette(table, cluster_key=params["color_key"], categories=clusters)
-        for label in clusters:
-            ax.scatter([], [], c=palette[label], label=label)
-        ax.legend(
-            frameon=False,
-            loc="center left",
-            bbox_to_anchor=(1, 0.5),
-            ncol=(1 if len(clusters) <= 14 else 2 if len(clusters) <= 30 else 3),
-            fontsize=None,
-        )
-    else:
-        plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
-    ax.set_title(key)
+    _ = _decorate_axs(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=table,
+        value_to_plot=render_params.color,
+        color_source_vector=color_source_vector,
+        palette=render_params.palette,
+        alpha=render_params.alpha,
+        na_color=render_params.cmap_params.na_color,
+        legend_fontsize=legend_prams.legend_fontsize,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_loc=legend_params.legend_loc,
+        legend_fontoutline=legend_Params.legend_fontoutline,
+        na_in_legend=legend_params.legend_na,
+        colorbar=legend_params.colorbar,
+        scalebar_dx=scalebar_params.scalebar_dx,
+        scalebar_units=scalebar_params.scalebar_units,
+        scalebar_kwargs=scalebar_params.scalebar_kwargs,
+    )

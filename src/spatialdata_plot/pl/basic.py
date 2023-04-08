@@ -1,5 +1,6 @@
+from __future__ import annotations
 from collections import OrderedDict
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Any, Sequence
 
 import geopandas as gpd
 import matplotlib
@@ -16,28 +17,49 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
-from spatialdata.models import Image2DModel
+from spatialdata.models import Image2DModel, TableModel
 from spatialdata.transformations import get_transformation
-
+from matplotlib.colors import Colormap
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pp.utils import (
     _get_instance_key,
     _get_region_key,
-    _verify_plotting_tree_exists,
+    _verify_plotting_tree,
 )
-from spatialdata_plot.render import (
+from spatialdata_plot.pl.render import (
     _render_channels,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from spatialdata_plot.utils import (
+from spatialdata_plot.pl.utils import (
     _get_hex_colors_for_continous_values,
     _get_random_hex_colors,
     _get_subplots,
     _maybe_set_colors,
+    Palette_t,
+    CmapParams,
+    _prepare_cmap_norm,
 )
+from matplotlib.colors import ListedColormap, Normalize, to_rgb
+from dataclasses import dataclass
+
+
+@dataclass
+class LabelsRenderParams:
+    """Labels render parameters.."""
+
+    region: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    contour_px: int | None = None
+    outline: bool = False
+    alt_var: str | None = None
+    layer: str | None = None
+    cmap_params: CmapParams = None
+    palette: Palette_t = None
+    alpha: float = 1.0
 
 
 @register_spatial_data_accessor("pl")
@@ -196,7 +218,7 @@ class PlotAccessor:
                 raise ValueError(f"Column '{color_key}' not found in data.")
 
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
             "palette": palette,
@@ -246,7 +268,7 @@ class PlotAccessor:
             raise TypeError("When giving a 'color_key', it must be of type 'str'.")
 
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
             "palette": palette,
@@ -280,7 +302,7 @@ class PlotAccessor:
 
         """
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = {
             "palette": palette,
@@ -364,7 +386,7 @@ class PlotAccessor:
             raise ValueError("Percentile parameters must satisfy pmin < pmax.")
 
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
         sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {
@@ -381,15 +403,19 @@ class PlotAccessor:
 
     def render_labels(
         self,
-        instance_key: Optional[Union[str, None]] = None,
-        color_key: Optional[Union[str, None]] = None,
-        border_alpha: float = 1.0,
-        border_color: Optional[Union[str, None]] = None,
-        fill_alpha: float = 0.5,
-        fill_color: Optional[Union[str, None]] = None,
-        mode: str = "thick",
-        palette: Optional[Union[str, list[str]]] = None,
-        add_legend: bool = True,
+        region: str | Sequence[str] | None = None,
+        color: str | None = None,
+        groups: str | Sequence[str] | None = None,
+        contour_px: int | None = None,
+        outline: bool = False,
+        alt_var: str | None = None,
+        layer: str | None = None,
+        palette: Palette_t = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
         """Render the labels contained in the given sd.SpatialData object
 
@@ -399,24 +425,6 @@ class PlotAccessor:
             sd.SpatialData
         instance_key : str
             The name of the column in the table that identifies individual labels
-        color_key : str or None, optional (default: None)
-            The name of the column in the table to use for coloring labels.
-        border_alpha : float, optional (default: 1.0)
-            The alpha value of the label border. Must be between 0 and 1.
-        border_color : str or None, optional (default: None)
-            The color of the border of the labels.
-        fill_alpha : float, optional (default: 0.5)
-            The alpha value of the fill of the labels. Must be between 0 and 1.
-        fill_color : str or None, optional (default: None)
-            The color of the fill of the labels.
-        mode : str, optional (default: 'thick')
-            The rendering mode of the labels. Must be one of 'thick', 'inner',
-            'outer', or 'subpixel'.
-        palette : str, list or None, optional (default: None)
-            The color palette to use when coloring cells. If None, a default
-            palette will be used.
-        add_legend : bool, optional (default: True)
-            Whether to add a legend to the plot.
 
         Returns
         -------
@@ -441,66 +449,30 @@ class PlotAccessor:
         alpha, color, and rendering mode of the labels, as well as whether to add a
         legend to the plot.
         """
-        if instance_key is not None:
-            if not isinstance(instance_key, str):
-                raise TypeError("Parameter 'instance_key' must be a string.")
 
-            if instance_key not in self._sdata.table.obs:
-                raise ValueError(f"The provided instance_key '{instance_key}' is not a valid table column.")
-        else:
-            instance_key = self._sdata.table.uns["spatialdata_attrs"]["instance_key"]
-
-        if color_key is not None:
-            if not isinstance(color_key, (str, type(None))):
-                raise TypeError("Parameter 'color_key' must be a string.")
-
-            if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.var_names:
-                raise ValueError(f"The provided color_key '{color_key}' is not a valid table column.")
-
-        if not isinstance(border_alpha, (int, float)):
-            raise TypeError("Parameter 'border_alpha' must be a float.")
-
-        if not (border_alpha <= 1 and border_alpha >= 0):
-            raise ValueError("Parameter 'border_alpha' must be between 0 and 1.")
-
-        if border_color is not None:
-            if not isinstance(color_key, (str, type(None))):
-                raise TypeError("If specified, parameter 'border_color' must be a string.")
-
-        if not isinstance(fill_alpha, (int, float)):
-            raise TypeError("Parameter 'fill_alpha' must be a float.")
-
-        if not (fill_alpha <= 1 and fill_alpha >= 0):
-            raise ValueError("Parameter 'fill_alpha' must be between 0 and 1.")
-
-        if fill_color is not None:
-            if not isinstance(fill_color, (str, type(None))):
-                raise TypeError("If specified, parameter 'fill_color' must be a string.")
-
-        valid_modes = ["thick", "inner", "outer", "subpixel"]
-        if not isinstance(mode, str):
-            raise TypeError("Parameter 'mode' must be a string.")
-
-        if mode not in valid_modes:
-            raise ValueError("Parameter 'mode' must be one of 'thick', 'inner', 'outer', 'subpixel'.")
-
-        if not isinstance(add_legend, bool):
-            raise TypeError("Parameter 'add_legend' must be a boolean.")
+        if (
+            color is not None
+            and color not in self._sdata.table.obs.columns
+            and color not in self._sdata.table.var_names
+        ):
+            raise ValueError(f"'{color}' is not a valid table column.")
 
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
-            "instance_key": instance_key,
-            "color_key": color_key,
-            "border_alpha": border_alpha,
-            "border_color": border_color,
-            "fill_alpha": fill_alpha,
-            "fill_color": fill_color,
-            "mode": mode,
-            "palette": palette,
-            "add_legend": add_legend,
-        }
+        cmap_params = _prepare_cmap_norm(cmap=cmap, norm=norm, na_color=na_color, **kwargs)
+        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
+            region=region,
+            color=color,
+            groups=groups,
+            contour_px=contour_px,
+            outline=outline,
+            alt_var=alt_var,
+            layer=layer,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
@@ -860,7 +832,7 @@ class PlotAccessor:
 
                     for idx, ax in enumerate(axs):
                         key = list(sdata.labels.keys())[idx]
-                        _render_labels(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+                        _render_labels(sdata=sdata, render_params=params, key=key, ax=ax, extent=extent)
 
                 else:
                     raise NotImplementedError(f"Command '{cmd}' is not supported.")

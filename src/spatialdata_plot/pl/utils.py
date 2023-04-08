@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from functools import partial
-from typing import Any, NamedTuple, Optional, Union
-
+from typing import Any, NamedTuple, Optional, Union, Literal, Type
+from types import MappingProxyType
+from copy import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -11,8 +12,8 @@ import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
 from matplotlib import colors
-from matplotlib.colors import ListedColormap, Normalize, to_rgba
-from matpltolib.cm import Colormap
+from matplotlib.colors import Colormap, ListedColormap, Normalize, to_rgba, TwoSlopeNorm
+from matplotlib.cm import get_cmap
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from skimage.color import label2rgb
@@ -20,20 +21,58 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata._types import ArrayLike
+from spatialdata._logging import logger as logging
+from matplotlib import rcParams
+from scanpy.plotting.palettes import default_20, default_28, default_102
+from dataclasses import dataclass
+from matplotlib_scalebar.scalebar import ScaleBar
+from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec
+from matplotlib import colors, patheffects, rcParams
+from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.collections import Collection, PatchCollection
+from scanpy._settings import settings as sc_settings
+from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
 _SeqStr = Union[str, Sequence[str]]
+_FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
+_FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
 
 
-class CmapParams(NamedTuple):
+@dataclass
+class CmapParams:
     """Cmap params."""
 
     cmap: Colormap
-    img_cmap: Colormap
     norm: Normalize
+    na_color: str | tuple[float, ...] = (0, 0, 0, 0)
+
+
+def _prepare_cmap_norm(
+    cmap: Colormap | str | None = None,
+    norm: _Normalize | None = None,
+    na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+    vmin: float | None = None,
+    vmax: float | None = None,
+    vcenter: float | None = None,
+) -> dataclass:
+
+    cmap = copy(get_cmap(cmap))
+    cmap.set_bad("lightgray" if na_color is None else na_color)
+
+    if isinstance(norm, Normalize):
+        pass
+    elif vcenter is None:
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    else:
+        norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
+
+    return CmapParams(cmap, norm, na_color)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> Union[plt.Figure, plt.Axes]:
@@ -163,6 +202,46 @@ def _normalize(
     return norm
 
 
+def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]], palette: Palette_t = None) -> list[str]:
+    """
+    Return a list of colors for a categorical observation.
+
+    Parameters
+    ----------
+    adata
+        AnnData object
+    value_to_plot
+        Name of a valid categorical observation
+    categories
+        categories of the categorical observation.
+
+    Returns
+    -------
+    None
+    """
+    length = len(categories)
+
+    # check if default matplotlib palette has enough colors
+    if palette is None:
+        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= length:
+            cc = rcParams["axes.prop_cycle"]()
+            palette = [next(cc)["color"] for _ in range(length)]
+        else:
+            if length <= 20:
+                palette = default_20
+            elif length <= 28:
+                palette = default_28
+            elif length <= len(default_102):  # 103 colors
+                palette = default_102
+            else:
+                palette = ["grey" for _ in range(length)]
+                logging.info(
+                    "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
+                )
+
+    return palette[:length]
+
+
 def _set_color_source_vec(
     adata: AnnData,
     value_to_plot: str | None,
@@ -193,7 +272,9 @@ def _set_color_source_vec(
     if groups is not None:
         color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
 
-    color_map = _get_palette(adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha)
+    color_map = _get_palette(
+        adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
+    )
     if color_map is None:
         raise ValueError("Unable to create color palette.")
     # do not rename categories, as colors need not be unique
@@ -249,31 +330,45 @@ def _map_color_seg(
 
 
 def _get_palette(
-    adata: AnnData,
-    cluster_key: Optional[str],
     categories: Sequence[Any],
+    adata: AnnData | None = None,
+    cluster_key: Optional[str] | None = None,
     palette: Palette_t = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
-    if palette is None:
-        try:
-            palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
-            if len(palette) != len(categories):
-                raise ValueError(
-                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
-                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
-                )
-            return {cat: to_hex(to_rgba(col)[:3] + (alpha,), keep_alpha=True) for cat, col in zip(categories, palette)}
-        except KeyError as e:
-            print(e)
-            return None
+    if adata is not None:
+        if palette is None:
+            try:
+                palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
+                if len(palette) != len(categories):
+                    raise ValueError(
+                        f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
+                        + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
+                    )
+                return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
+            except KeyError as e:
+                print(e)
+                return None
 
     len_cat = len(categories)
+
+    if palette is None:
+        if len_cat <= 20:
+            palette = default_20
+        elif len_cat <= 28:
+            palette = default_28
+        elif len_cat <= len(default_102):  # 103 colors
+            palette = default_102
+        else:
+            palette = ["grey" for _ in range(length)]
+            logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+        return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
+
     if isinstance(palette, str):
         cmap = plt.get_cmap(palette)
-        palette = [to_hex(x, keep_alpha=True) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
+        palette = [to_hex(x) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
     elif isinstance(palette, ListedColormap):
-        palette = [to_hex(x, keep_alpha=True) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
+        palette = [to_hex(x) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
 
@@ -302,3 +397,163 @@ def _maybe_set_colors(
         if isinstance(palette, ListedColormap):  # `scanpy` requires it
             palette = cycler(color=palette.colors)
         add_colors_for_categorical_sample_annotation(target, key=key, force_update_colors=True, palette=palette)
+
+
+def _get_scalebar(
+    scalebar_dx: float | Sequence[float] | None = None,
+    scalebar_units: str | Sequence[str] | None = None,
+    len_lib: int | None = None,
+) -> tuple[Sequence[float] | None, Sequence[str] | None]:
+    if scalebar_dx is not None:
+        _scalebar_dx = _get_list(scalebar_dx, _type=float, ref_len=len_lib, name="scalebar_dx")
+        scalebar_units = "um" if scalebar_units is None else scalebar_units
+        _scalebar_units = _get_list(scalebar_units, _type=str, ref_len=len_lib, name="scalebar_units")
+    else:
+        _scalebar_dx = None
+        _scalebar_units = None
+
+    return _scalebar_dx, _scalebar_units
+
+
+@dataclass
+class LegendParams:
+    """Legend params."""
+
+    legend_fontsize: int | float | _FontSize | None = None
+    legend_fontweight: int | _FontWeight = "bold"
+    legend_loc: str | None = "right margin"
+    legend_fontoutline: int | None = None
+    na_in_legend: bool = True
+    colorbar: bool = True
+
+
+@dataclass
+class FigParams:
+    """Figure params."""
+
+    fig: Figure
+    ax: Axes
+    iter_panels: tuple[Sequence[Any], Sequence[Any]]
+    axs: Sequence[Axes] | None = None
+    title: str | Sequence[str] | None = None
+    ax_labels: Sequence[str] | None = None
+    frameon: bool | None = None
+
+
+@dataclass
+class ScalebarParams:
+    """Scalebar params."""
+
+    scalebar_dx: Sequence[float] | None = (None,)
+    scalebar_units: Sequence[str] | None = None
+    scalebar_kwargs: Mapping[str, Any] = MappingProxyType({})
+
+
+def _decorate_axs(
+    ax: Axes,
+    cax: PatchCollection,
+    fig_params: FigParams,
+    adata: AnnData,
+    value_to_plot: str,
+    color_source_vector: pd.Series[CategoricalDtype],
+    palette: Palette_t = None,
+    alpha: float = 1.0,
+    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
+    legend_fontsize: int | float | _FontSize | None = None,
+    legend_fontweight: int | _FontWeight = "bold",
+    legend_loc: str | None = "right margin",
+    legend_fontoutline: int | None = None,
+    na_in_legend: bool = True,
+    colorbar: bool = True,
+    scalebar_dx: Sequence[float] | None = None,
+    scalebar_units: Sequence[str] | None = None,
+    scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
+) -> Axes:
+
+    ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_xlabel(fig_params.ax_labels[0])
+    ax.set_ylabel(fig_params.ax_labels[1])
+    ax.autoscale_view()  # needed when plotting points but no image
+
+    if value_to_plot is not None:
+        # if only dots were plotted without an associated value
+        # there is not need to plot a legend or a colorbar
+
+        if legend_fontoutline is not None:
+            path_effect = [patheffects.withStroke(linewidth=legend_fontoutline, foreground="w")]
+        else:
+            path_effect = []
+
+        # Adding legends
+        if is_categorical_dtype(color_source_vector):
+            clusters = color_source_vector.categories
+            palette = _get_palette(
+                adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
+            )
+            _add_categorical_legend(
+                ax,
+                color_source_vector,
+                palette=palette,
+                legend_loc=legend_loc,
+                legend_fontweight=legend_fontweight,
+                legend_fontsize=legend_fontsize,
+                legend_fontoutline=path_effect,
+                na_color=[na_color],
+                na_in_legend=na_in_legend,
+                multi_panel=fig_params.axs is not None,
+            )
+        elif colorbar:
+            # TODO: na_in_legend should have some effect here
+            plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+
+    # if img is not None:
+    #     ax.imshow(img, cmap=img_cmap, alpha=img_alpha)
+    # else:
+    #     ax.set_aspect("equal")
+    #     ax.invert_yaxis()
+
+    if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
+        scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
+        ax.add_artist(scalebar)
+
+    return ax
+
+
+def _get_list(
+    var: Any,
+    _type: Type[Any] | tuple[Type[Any], ...],
+    ref_len: int | None = None,
+    name: str | None = None,
+) -> list[Any]:
+    """
+    Get a list from a variable.
+
+    Parameters
+    ----------
+    var
+        Variable to convert to a list.
+    _type
+        Type of the elements in the list.
+    ref_len
+        Reference length of the list.
+    name
+        Name of the variable.
+
+    Returns
+    -------
+    List
+    """
+    if isinstance(var, _type):
+        return [var] if ref_len is None else ([var] * ref_len)
+    if isinstance(var, list):
+        if ref_len is not None and ref_len != len(var):
+            raise ValueError(
+                f"Variable: `{name}` has length: {len(var)}, which is not equal to reference length: {ref_len}."
+            )
+        for v in var:
+            if not isinstance(v, _type):
+                raise ValueError(f"Variable: `{name}` has invalid type: {type(v)}, expected: {_type}.")
+        return var
+
+    raise ValueError(f"Can't make a list from variable: `{var}`")
