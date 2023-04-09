@@ -22,8 +22,6 @@ notebooks/demo
 
 ```
 
-
-
 ```{toctree}
 :hidden: true
 :maxdepth: 2
@@ -34,5 +32,3 @@ template_usage.md
 contributing.md
 references.md
 ```
-
-

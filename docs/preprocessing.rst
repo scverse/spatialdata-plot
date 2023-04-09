@@ -1,10 +1,8 @@
 .. highlight:: shell
 
 ======================
-Preprocessing (`.pp`) 
+Preprocessing (`.pp`)
 ======================
 
 .. automodule:: spatialdata_plot.pp.basic
    :members:
-
-
