@@ -42,6 +42,138 @@ _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", 
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
+from numpy.random import default_rng
+
+
+@dataclass
+class FigParams:
+    """Figure params."""
+
+    fig: Figure
+    ax: Axes
+    axs: Sequence[Axes] | None = None
+    num_panels: Sequence[str] = None
+    title: str | Sequence[str] | None = None
+    ax_labels: Sequence[str] | None = None
+    frameon: bool | None = None
+
+
+@dataclass
+class ScalebarParams:
+    """Scalebar params."""
+
+    scalebar_dx: Sequence[float] | None = (None,)
+    scalebar_units: Sequence[str] | None = None
+
+
+def _prepare_params_plot(
+    # this param is inferred when `pl.show`` is called
+    num_panels: int,
+    # this args are passed at `pl.show``
+    figsize: tuple[float, float] | None = None,
+    dpi: int | None = None,
+    fig: Figure | None = None,
+    ax: Axes | Sequence[Axes] | None = None,
+    wspace: float | None = None,
+    hspace: float = 0.25,
+    ncols: int = 4,
+    frameon: bool | None = None,
+    # this is passed at `render_*`
+    cmap: Colormap | str | None = None,
+    norm: _Normalize | None = None,
+    na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+    vmin: float | None = None,
+    vmax: float | None = None,
+    vcenter: float | None = None,
+    # this args will be inferred from coordinate system
+    scalebar_dx: float | Sequence[float] | None = None,
+    scalebar_units: str | Sequence[str] | None = None,
+) -> tuple[FigParams, ScalebarParams]:
+
+    # len(list(itertools.product(*iter_panels)))
+
+    # handle axes and size
+    wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
+    figsize = rcParams["figure.figsize"] if figsize is None else figsize
+    dpi = rcParams["figure.dpi"] if dpi is None else dpi
+    if num_panels > 1 and ax is None:
+        fig, grid = _panel_grid(
+            num_panels=num_panels, hspace=hspace, wspace=wspace, ncols=ncols, dpi=dpi, figsize=figsize
+        )
+        axs: Union[Sequence[Axes], None] = [plt.subplot(grid[c]) for c in range(num_panels)]
+    elif num_panels > 1 and ax is not None:
+        if len(ax) != num_panels:
+            raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
+        if fig is None:
+            raise ValueError(
+                f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
+            )
+        axs = ax
+    else:
+        axs = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
+
+    # set scalebar
+    if scalebar_dx is not None:
+        scalebar_dx, scalebar_units = _get_scalebar(scalebar_dx, scalebar_units, num_panels)
+
+    fig_params = FigParams(
+        fig=fig,
+        ax=ax,
+        axs=axs,
+        num_panels=num_panels,
+        frameon=frameon,
+    )
+    scalebar_params = ScalebarParams(scalebar_dx=scalebar_dx, scalebar_units=scalebar_units)
+
+    return fig_params, scalebar_params
+
+
+def _panel_grid(
+    num_panels: int,
+    hspace: float,
+    wspace: float,
+    ncols: int,
+    figsize: tuple[float, float],
+    dpi: int | None = None,
+) -> tuple[Figure, GridSpec]:
+    n_panels_x = min(ncols, num_panels)
+    n_panels_y = np.ceil(num_panels / n_panels_x).astype(int)
+
+    fig = plt.figure(
+        figsize=(figsize[0] * n_panels_x * (1 + wspace), figsize[1] * n_panels_y),
+        dpi=dpi,
+    )
+    left = 0.2 / n_panels_x
+    bottom = 0.13 / n_panels_y
+    gs = GridSpec(
+        nrows=n_panels_y,
+        ncols=n_panels_x,
+        left=left,
+        right=1 - (n_panels_x - 1) * left - 0.01 / n_panels_x,
+        bottom=bottom,
+        top=1 - (n_panels_y - 1) * bottom - 0.1 / n_panels_y,
+        hspace=hspace,
+        wspace=wspace,
+    )
+    return fig, gs
+
+
+def _get_scalebar(
+    scalebar_dx: float | Sequence[float] | None = None,
+    scalebar_units: str | Sequence[str] | None = None,
+    len_lib: int | None = None,
+) -> tuple[Sequence[float] | None, Sequence[str] | None]:
+    if scalebar_dx is not None:
+        _scalebar_dx = _get_list(scalebar_dx, _type=float, ref_len=len_lib, name="scalebar_dx")
+        scalebar_units = "um" if scalebar_units is None else scalebar_units
+        _scalebar_units = _get_list(scalebar_units, _type=str, ref_len=len_lib, name="scalebar_units")
+    else:
+        _scalebar_dx = None
+        _scalebar_units = None
+
+    return _scalebar_dx, _scalebar_units
 
 
 @dataclass
@@ -73,6 +205,38 @@ def _prepare_cmap_norm(
         norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
     return CmapParams(cmap, norm, na_color)
+
+
+@dataclass
+class OutlineParams:
+    """Cmap params."""
+
+    outline: bool
+    gap_size: float
+    gap_color: str
+    bg_size: float
+    bg_color: str
+
+
+def _set_outline(
+    size: float,
+    outline: bool = False,
+    outline_width: tuple[float, float] = (0.3, 0.05),
+    outline_color: tuple[str, str] = ("black", "white"),
+    **kwargs: Any,
+) -> OutlineParams:
+    bg_width, gap_width = outline_width
+    point = np.sqrt(size)
+    gap_size = (point + (point * gap_width) * 2) ** 2
+    bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
+    # the default black and white colors can be changes using the contour_config parameter
+    bg_color, gap_color = outline_color
+
+    if outline:
+        kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
+        kwargs.pop("alpha", None)  # remove alpha from kwargs if present
+
+    return OutlineParams(outline, gap_size, gap_color, bg_size, bg_color)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> Union[plt.Figure, plt.Axes]:
@@ -296,6 +460,7 @@ def _map_color_seg(
     seg_boundaries: bool = False,
     na_color: str | tuple[float, ...] = (0, 0, 0, 0),
 ) -> ArrayLike:
+
     cell_id = np.array(cell_id)
 
     if is_categorical_dtype(color_vector):
@@ -313,6 +478,11 @@ def _map_color_seg(
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
+    # check if no color is assigned, compute random colors
+    unique_cols = np.unique(cols)
+    if len(unique_cols) == 1 and unique_cols == 0:
+        RNG = default_rng(42)
+        cols = RNG.random((len(cols), 3))
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
@@ -399,22 +569,6 @@ def _maybe_set_colors(
         add_colors_for_categorical_sample_annotation(target, key=key, force_update_colors=True, palette=palette)
 
 
-def _get_scalebar(
-    scalebar_dx: float | Sequence[float] | None = None,
-    scalebar_units: str | Sequence[str] | None = None,
-    len_lib: int | None = None,
-) -> tuple[Sequence[float] | None, Sequence[str] | None]:
-    if scalebar_dx is not None:
-        _scalebar_dx = _get_list(scalebar_dx, _type=float, ref_len=len_lib, name="scalebar_dx")
-        scalebar_units = "um" if scalebar_units is None else scalebar_units
-        _scalebar_units = _get_list(scalebar_units, _type=str, ref_len=len_lib, name="scalebar_units")
-    else:
-        _scalebar_dx = None
-        _scalebar_units = None
-
-    return _scalebar_dx, _scalebar_units
-
-
 @dataclass
 class LegendParams:
     """Legend params."""
@@ -425,28 +579,6 @@ class LegendParams:
     legend_fontoutline: int | None = None
     na_in_legend: bool = True
     colorbar: bool = True
-
-
-@dataclass
-class FigParams:
-    """Figure params."""
-
-    fig: Figure
-    ax: Axes
-    iter_panels: tuple[Sequence[Any], Sequence[Any]]
-    axs: Sequence[Axes] | None = None
-    title: str | Sequence[str] | None = None
-    ax_labels: Sequence[str] | None = None
-    frameon: bool | None = None
-
-
-@dataclass
-class ScalebarParams:
-    """Scalebar params."""
-
-    scalebar_dx: Sequence[float] | None = (None,)
-    scalebar_units: Sequence[str] | None = None
-    scalebar_kwargs: Mapping[str, Any] = MappingProxyType({})
 
 
 def _decorate_axs(
@@ -472,8 +604,8 @@ def _decorate_axs(
 
     ax.set_yticks([])
     ax.set_xticks([])
-    ax.set_xlabel(fig_params.ax_labels[0])
-    ax.set_ylabel(fig_params.ax_labels[1])
+    # ax.set_xlabel(fig_params.ax_labels[0])
+    # ax.set_ylabel(fig_params.ax_labels[1])
     ax.autoscale_view()  # needed when plotting points but no image
 
     if value_to_plot is not None:

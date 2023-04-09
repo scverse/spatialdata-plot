@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from copy import copy
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Any
 from matplotlib.colors import Colormap
 import matplotlib
 from spatialdata.models import TableModel
@@ -11,17 +11,23 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import spatialdata as sd
+from scanpy._settings import settings as sc_settings
 import xarray as xr
 from matplotlib import colors
 from matplotlib.cm import get_cmap
-from matplotlib.colors import ListedColormap, Normalize, to_rgb, TwoSlopeNorm
+from matplotlib.colors import ListedColormap, Normalize, to_rgb, TwoSlopeNorm, ColorConverter
+from matplotlib.collections import Collection, PatchCollection
+from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
+from geopandas import GeoDataFrame
 from sklearn.decomposition import PCA
 from dataclasses import dataclass
-from spatialdata_plot.pl.basic import LabelsRenderParams, 
 from spatialdata_plot.pl.utils import (
     CmapParams,
     LegendParams,
+    FigParams,
+    ScalebarParams,
+    OutlineParams,
     _map_color_seg,
     _normalize,
     _set_color_source_vec,
@@ -36,91 +42,140 @@ _SeqStr = Union[str, Sequence[str]]
 to_hex = partial(colors.to_hex, keep_alpha=True)
 
 
-def _render_channels(
-    sdata: sd.SpatialData,
-    channels: list[Union[str, int]],
-    colors: list[str],
-    clip: bool,
-    normalize: bool,
-    background: str,
-    pmin: float,
-    pmax: float,
-    key: str,
-    ax: matplotlib.axes.SubplotBase,
-) -> None:
-    selection = sdata.images[key].sel({"c": channels})
-    n_channels, y_dim, x_dim = selection.shape  # (c, y, x)
-    img = selection.values.copy()
-    img = img.astype("float")
+@dataclass
+class ShapesRenderParams:
+    """Labels render parameters.."""
 
-    if normalize:
-        img = _normalize(img, pmin, pmax, clip)
-
-    cmaps = _get_linear_colormap(colors[:n_channels], background)
-    colored = np.stack([cmaps[i](img[i]) for i in range(n_channels)], 0).sum(0)
-
-    if clip:
-        colored = np.clip(colored, 0, 1)
-
-    ax.imshow(colored)
-    ax.set_title(key)
-    ax.set_xlabel("spatial1")
-    ax.set_ylabel("spatial2")
-    ax.set_xticks([])
-    ax.set_yticks([])
+    cmap_params: CmapParams
+    outline_params: OutlineParams
+    region: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    contour_px: int | None = None
+    alt_var: str | None = None
+    layer: str | None = None
+    palette: Palette_t = None
+    alpha: float = 1.0
+    size: float = 1.0
 
 
 def _render_shapes(
     sdata: sd.SpatialData,
-    params: dict[str, Optional[Union[str, int, float, Iterable[str]]]],
-    key: str,
-    ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    render_params: ShapesRenderParams,
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
+    # ax: matplotlib.axes.SubplotBase,
+    # extent: dict[str, list[int]],
 ) -> None:
-    colors: Optional[Union[str, int, float, Iterable[str]]] = None  # to shut up mypy
-    if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
-        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
-    elif isinstance(params["palette"], str):
-        colors = [params["palette"]]
-    elif isinstance(params["palette"], Iterable):
-        colors = [to_rgb(c) for c in list(params["palette"])]
+    # get instance and region keys
+    # instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
+    region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
+
+    # subset table based on region
+    if render_params.region is not None:
+        table = sdata.table[sdata.table.obs[region_key].isin([render_params.region])]
+        region = render_params.region
     else:
-        colors = params["palette"]
+        region = sdata.table.obs[region_key].unique()[0]  # TODO: handle multiple regions
+        table = sdata.table
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
+    # get instance id based on subsetted table
+    # instance_id = table.obs[instance_key].values
+    # TODO: use it for subsetting shapes
 
-    points = []
-    polygons = []
+    # get labels
+    shapes = sdata.shapes[region]
 
-    for _, row in sdata.shapes[key].iterrows():
-        if row["geometry"].geom_type == "Point":
-            points.append((row[0], row[1]))  # (point, radius)
-        elif row["geometry"].geom_type == "Polygon":
-            polygons.append(row[0])  # just polygon
+    # get color vector (categorical or continuous)
+    color_source_vector, color_vector, _ = _set_color_source_vec(
+        adata=table,
+        value_to_plot=render_params.color,
+        alt_var=render_params.alt_var,
+        layer=render_params.layer,
+        groups=render_params.groups,
+        palette=render_params.palette,
+        na_color=render_params.cmap_params.na_color,
+        alpha=render_params.alpha,
+    )
+
+    def _get_collection_shape(
+        shapes: GeoDataFrame,
+        c: Any,
+        s: float,
+        norm: Any,
+        **kwargs: Any,
+    ) -> PatchCollection:
+        """Get collection of shapes."""
+        if shapes["geometry"][0].geom_type == "Polygon":
+            patches = [Polygon(p.exterior.coords, closed=False) for p in shapes["geometry"]]
+        elif shapes["geometry"][0].geom_type == "Point":
+            patches = [Circle(circ, radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
+
+        collection = PatchCollection(patches, snap=False, **kwargs)
+        print(c)
+        if isinstance(c, np.ndarray) and np.issubdtype(c.dtype, np.number):
+            collection.set_array(np.ma.masked_invalid(c))
+            collection.set_norm(norm)
         else:
-            raise NotImplementedError(f"Geometry type {row['geometry'].type} not supported.")
+            alpha = ColorConverter().to_rgba_array(c)[..., -1]
+            collection.set_facecolor(c)
+            collection.set_alpha(alpha)
+        return collection
 
-    if len(polygons) > 0:
-        for polygon in polygons:
-            ax.add_patch(
-                mpatches.Polygon(
-                    polygon.exterior.coords,
-                    color=colors,
-                )
-            )
-
-    if len(points) > 0:
-        for idx, (point, radius) in enumerate(points):
-            ax.add_patch(
-                mpatches.Circle(
-                    (point.x, point.y),
-                    radius=radius,
-                    color=colors[idx],  # type: ignore
-                )
-            )
-
-    ax.set_title(key)
+    norm = copy(render_params.cmap_params.norm)
+    ax = fig_params.ax
+    if render_params.outline_params.outline:
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.outline_params.bg_size,
+            c=render_params.outline_params.bg_color,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            # **kwargs,
+        )
+        ax.add_collection(_cax)
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.outline_params.gap_size,
+            c=render_params.outline_params.gap_color,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            # **kwargs,
+        )
+        ax.add_collection(_cax)
+    _cax = _get_collection_shape(
+        shapes=shapes,
+        s=render_params.size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        # **kwargs,
+    )
+    cax = ax.add_collection(_cax)
+    _ = _decorate_axs(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=table,
+        value_to_plot=render_params.color,
+        color_source_vector=color_source_vector,
+        palette=render_params.palette,
+        alpha=render_params.alpha,
+        na_color=render_params.cmap_params.na_color,
+        legend_fontsize=legend_params.legend_fontsize,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_loc=legend_params.legend_loc,
+        legend_fontoutline=legend_params.legend_fontoutline,
+        na_in_legend=legend_params.na_in_legend,
+        colorbar=legend_params.colorbar,
+        scalebar_dx=scalebar_params.scalebar_dx,
+        scalebar_units=scalebar_params.scalebar_units,
+        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+    )
 
 
 def _render_points(
@@ -162,59 +217,88 @@ def _render_points(
     ax.set_title(key)
 
 
+@dataclass
+class ImageRenderParams:
+    """Labels render parameters.."""
+
+    image: str | None = None
+    channel: Sequence[str] | None = None
+    cmap_params: CmapParams = None
+    palette: Palette_t = None
+    alpha: float = 1.0
+
+
 def _render_images(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float]],
-    key: str,
-    ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    render_params: ImageRenderParams,
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
+    # ax: matplotlib.axes.SubplotBase,
+    # extent: dict[str, list[int]],
 ) -> None:
-    n_channels, y_dim, x_dim = sdata.images[key].shape  # (c, y, x)
-    img = sdata.images[key].values.copy()
-    img = img.astype("float")
+    if render_params.image is not None:
+        img = sdata.images[render_params.image]
+    else:
+        image_key = list(sdata.images.keys())[0]  # TODO: handle multiple images
+        img = sdata.images[image_key]
 
-    if params["trans_fun"] is not None:
-        trans_fun: Callable[[xr.DataArray], xr.DataArray] = params["trans_fun"]  # type: ignore
-        img = trans_fun(img)
+    if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
+        raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
     img = _normalize(img, clip=True)
 
     # If channel colors are not specified, use default colors
-    colors: Union[matplotlib.colors.ListedColormap, list[matplotlib.colors.ListedColormap]] = params["palette"]
-    if params["palette"] is None:
-        if n_channels == 1:
-            colors = ListedColormap(["gray"])
-        elif n_channels == 2:
-            colors = ListedColormap(["#d30cb8", "#6df1d8"])
-        elif n_channels == 3:
-            colors = ListedColormap(["red", "blue", "green"])
-        else:
-            # we do PCA to reduce to 3 channels
-            flattened_img = np.reshape(img, (n_channels, -1))
-            pca = PCA(n_components=3)
-            pca.fit(flattened_img.T)
-            transformed_image = pca.transform(flattened_img.T)
-            img = xr.DataArray(transformed_image.T.reshape(3, y_dim, x_dim), dims=("c", "y", "x"))
+    # colors = render_params.palette
+    # if colors is None and render_params.channels is not None and len(render_params.channels) > 3:
+    #     flattened_img = np.reshape(img, (n_channels, -1))
+    #     pca = PCA(n_components=3)
+    #     transformed_image = pca.fit_transform(flattened_img.T)
+    #     img = xr.DataArray(transformed_image.T.reshape(3, y_dim, x_dim), dims=("c", "y", "x"))
 
-    img = xr.DataArray(img, dims=("c", "y", "x")).transpose("y", "x", "c")  # for plotting
+    if render_params.channel is not None:
+        img = img.sel(c=[render_params.channel])
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
+    img = img.transpose("y", "x", "c")  # for plotting
+
+    ax = fig_params.ax
+
+    # ax.set_xlim(extent["x"][0], extent["x"][1])
+    # ax.set_ylim(extent["y"][0], extent["y"][1])
+
     ax.imshow(
-        img.transpose("y", "x", "c").data,
-        cmap=colors,
-        interpolation="nearest",
+        img.data,
+        cmap=render_params.cmap_params.cmap,
+        alpha=render_params.alpha,
     )
 
-    ax.set_title(key)
+    # ax.set_title(key)
+
+
+@dataclass
+class LabelsRenderParams:
+    """Labels render parameters.."""
+
+    region: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    contour_px: int | None = None
+    outline: bool = False
+    alt_var: str | None = None
+    layer: str | None = None
+    cmap_params: CmapParams = None
+    palette: Palette_t = None
+    alpha: float = 1.0
 
 
 def _render_labels(
     sdata: sd.SpatialData,
     render_params: LabelsRenderParams,
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
     legend_params: LegendParams,
-    ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    # ax: matplotlib.axes.SubplotBase,
+    # extent: dict[str, list[int]],
 ) -> None:
 
     # get instance and region keys
@@ -259,6 +343,7 @@ def _render_labels(
         na_color=render_params.cmap_params.na_color,
     )
 
+    ax = fig_params.ax
     _cax = ax.imshow(
         labels,
         rasterized=True,
@@ -280,13 +365,13 @@ def _render_labels(
         palette=render_params.palette,
         alpha=render_params.alpha,
         na_color=render_params.cmap_params.na_color,
-        legend_fontsize=legend_prams.legend_fontsize,
+        legend_fontsize=legend_params.legend_fontsize,
         legend_fontweight=legend_params.legend_fontweight,
         legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_Params.legend_fontoutline,
-        na_in_legend=legend_params.legend_na,
+        legend_fontoutline=legend_params.legend_fontoutline,
+        na_in_legend=legend_params.na_in_legend,
         colorbar=legend_params.colorbar,
         scalebar_dx=scalebar_params.scalebar_dx,
         scalebar_units=scalebar_params.scalebar_units,
-        scalebar_kwargs=scalebar_params.scalebar_kwargs,
+        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
     )
