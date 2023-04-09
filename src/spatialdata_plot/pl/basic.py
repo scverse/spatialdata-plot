@@ -1,61 +1,49 @@
 from __future__ import annotations
+
 from collections import OrderedDict
-from typing import Callable, Optional, Union, Any, Sequence
+from typing import Any, Optional, Union
+from collections.abc import Sequence
 
 import geopandas as gpd
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import scanpy as sc
 import spatialdata as sd
-import xarray as xr
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
+from matplotlib.axes import Axes
+from matplotlib.colors import Colormap, Normalize
+from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
-from spatialdata.models import Image2DModel, TableModel
+from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
-from matplotlib.colors import Colormap
-from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpec
-from matplotlib import colors, patheffects, rcParams
-from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
+
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot.pp.utils import (
-    _get_instance_key,
-    _get_region_key,
-    _verify_plotting_tree,
-)
 from spatialdata_plot.pl.render import (
+    ImageRenderParams,
+    LabelsRenderParams,
+    ShapesRenderParams,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
-    LabelsRenderParams,
-    ImageRenderParams,
-    ShapesRenderParams,
 )
 from spatialdata_plot.pl.utils import (
-    _get_hex_colors_for_continous_values,
-    _get_random_hex_colors,
-    _get_subplots,
-    _maybe_set_colors,
-    Palette_t,
-    CmapParams,
     LegendParams,
+    Palette_t,
+    _FontSize,
+    _FontWeight,
+    _maybe_set_colors,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _FontSize,
-    _FontWeight,
 )
-from matplotlib.colors import ListedColormap, Normalize, to_rgb
-from dataclasses import dataclass
+from spatialdata_plot.pp.utils import (
+    _verify_plotting_tree,
+)
 
 
 @register_spatial_data_accessor("pl")
@@ -575,7 +563,7 @@ class PlotAccessor:
 
             # go through tree
             for cmd, params in render_cmds.items():
-                keys = list(sdata.images.keys())
+                list(sdata.images.keys())
 
                 if cmd == "render_images":
                     _render_images(

@@ -1,40 +1,38 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from functools import partial
-from typing import Any, NamedTuple, Optional, Union, Literal, Type
-from types import MappingProxyType
 from copy import copy
+from dataclasses import dataclass
+from functools import partial
+from types import MappingProxyType
+from typing import Any, Literal, Optional, Type, Union
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
-from matplotlib import colors
-from matplotlib.colors import Colormap, ListedColormap, Normalize, to_rgba, TwoSlopeNorm
+from matplotlib import colors, patheffects
+from matplotlib import pyplot as plt
+from matplotlib import rcParams
+from matplotlib.axes import Axes
 from matplotlib.cm import get_cmap
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import Colormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
+from matplotlib.figure import Figure
+from matplotlib.gridspec import GridSpec
+from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
+from scanpy.plotting._tools.scatterplots import _add_categorical_legend
+from scanpy.plotting.palettes import default_20, default_28, default_102
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
+from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata._logging import logger as logging
-from matplotlib import rcParams
-from scanpy.plotting.palettes import default_20, default_28, default_102
-from dataclasses import dataclass
-from matplotlib_scalebar.scalebar import ScaleBar
-from matplotlib.figure import Figure
-from matplotlib.gridspec import GridSpec
-from matplotlib import colors, patheffects, rcParams
-from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.collections import Collection, PatchCollection
-from scanpy._settings import settings as sc_settings
-from scanpy.plotting._tools.scatterplots import _add_categorical_legend
-from spatialdata._logging import logger as logging
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -90,7 +88,6 @@ def _prepare_params_plot(
     scalebar_dx: float | Sequence[float] | None = None,
     scalebar_units: str | Sequence[str] | None = None,
 ) -> tuple[FigParams, ScalebarParams]:
-
     # len(list(itertools.product(*iter_panels)))
 
     # handle axes and size
@@ -194,7 +191,6 @@ def _prepare_cmap_norm(
     vmax: float | None = None,
     vcenter: float | None = None,
 ) -> dataclass:
-
     cmap = copy(get_cmap(cmap))
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
@@ -461,7 +457,6 @@ def _map_color_seg(
     seg_boundaries: bool = False,
     na_color: str | tuple[float, ...] = (0, 0, 0, 0),
 ) -> ArrayLike:
-
     cell_id = np.array(cell_id)
 
     if is_categorical_dtype(color_vector):
@@ -602,7 +597,6 @@ def _decorate_axs(
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
-
     ax.set_yticks([])
     ax.set_xticks([])
     # ax.set_xlabel(fig_params.ax_labels[0])
@@ -655,7 +649,7 @@ def _decorate_axs(
 
 def _get_list(
     var: Any,
-    _type: Type[Any] | tuple[Type[Any], ...],
+    _type: type[Any] | tuple[type[Any], ...],
     ref_len: int | None = None,
     name: str | None = None,
 ) -> list[Any]:

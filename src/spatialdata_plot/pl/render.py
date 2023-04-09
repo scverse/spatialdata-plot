@@ -2,39 +2,38 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from copy import copy
+from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Optional, Union, Any
-from matplotlib.colors import Colormap
+from typing import Any, Optional, Union
+
 import matplotlib
-from spatialdata.models import TableModel
-import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
 import numpy as np
 import spatialdata as sd
-from scanpy._settings import settings as sc_settings
-import xarray as xr
+from geopandas import GeoDataFrame
 from matplotlib import colors
-from matplotlib.cm import get_cmap
-from matplotlib.colors import ListedColormap, Normalize, to_rgb, TwoSlopeNorm, ColorConverter
-from matplotlib.collections import Collection, PatchCollection
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import (
+    ColorConverter,
+    ListedColormap,
+    Normalize,
+)
 from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
-from geopandas import GeoDataFrame
-from sklearn.decomposition import PCA
-from dataclasses import dataclass
+from scanpy._settings import settings as sc_settings
+from spatialdata.models import TableModel
+
 from spatialdata_plot.pl.utils import (
     CmapParams,
-    LegendParams,
     FigParams,
-    ScalebarParams,
+    LegendParams,
     OutlineParams,
+    ScalebarParams,
+    _decorate_axs,
+    _get_palette,
     _map_color_seg,
     _normalize,
     _set_color_source_vec,
-    _get_palette,
-    _decorate_axs,
 )
-from spatialdata_plot.pp.utils import _get_linear_colormap, _get_region_key
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -300,7 +299,6 @@ def _render_labels(
     # ax: matplotlib.axes.SubplotBase,
     # extent: dict[str, list[int]],
 ) -> None:
-
     # get instance and region keys
     instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
     region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
