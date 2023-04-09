@@ -611,15 +611,8 @@ class PlotAccessor:
                     )
 
                 elif cmd == "render_points":
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.points.keys())[idx]
-                        if params["color_key"] is not None:
-                            if params["color_key"] not in sdata.points[key].columns:
-                                raise ValueError(
-                                    f"The column '{params['color_key']}' is not present in the 'metadata' of the points."
-                                )
-
-                        _render_points(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
+                    key = list(sdata.points.keys())[0]  # TODO: remove, hack
+                    _render_points(sdata=sdata, params=params, key=key, ax=fig_params.ax, extent=extent)
 
                 elif cmd == "render_labels":
                     if (

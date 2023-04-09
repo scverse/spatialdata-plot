@@ -113,7 +113,6 @@ def _render_shapes(
             patches = [Circle(circ, radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
         collection = PatchCollection(patches, snap=False, **kwargs)
-        print(c)
         if isinstance(c, np.ndarray) and np.issubdtype(c.dtype, np.number):
             collection.set_array(np.ma.masked_invalid(c))
             collection.set_norm(norm)
@@ -153,6 +152,7 @@ def _render_shapes(
         rasterized=sc_settings._vector_friendly,
         cmap=render_params.cmap_params.cmap,
         norm=norm,
+        alpha=render_params.alpha,
         # **kwargs,
     )
     cax = ax.add_collection(_cax)

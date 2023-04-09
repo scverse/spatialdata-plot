@@ -34,6 +34,7 @@ from matplotlib.axes import Axes
 from matplotlib.collections import Collection, PatchCollection
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
+from spatialdata._logging import logger as logging
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -517,7 +518,7 @@ def _get_palette(
                     )
                 return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
             except KeyError as e:
-                print(e)
+                logging.warning(e)
                 return None
 
     len_cat = len(categories)
