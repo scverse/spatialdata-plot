@@ -18,6 +18,14 @@ from ..pp.utils import _get_region_key, _verify_plotting_tree_exists
 
 @register_spatial_data_accessor("pp")
 class PreprocessingAccessor:
+    """
+    Preprocessing functions for SpatialData objects.
+
+    Parameters
+    ----------
+    sdata :
+        A spatial data object.
+    """
 
     @property
     def sdata(self) -> sd.SpatialData:
@@ -29,20 +37,6 @@ class PreprocessingAccessor:
         self._sdata = sdata
 
     def __init__(self, sdata: sd.SpatialData) -> None:
-        """
-        Preprocessing functions for SpatialData objects.
-
-        Parameters
-        ----------
-        sdata :
-            A spatial data object.
-
-        Attributes
-        ----------
-        sdata :
-            A spatial data object.
-        """
-
         self._sdata = sdata
 
     def _copy(
