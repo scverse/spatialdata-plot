@@ -40,27 +40,7 @@ from .utils import (
 
 @register_spatial_data_accessor("pl")
 class PlotAccessor:
-    """
-    A class to provide plotting functions for `SpatialData` objects.
 
-    Parameters
-    ----------
-    sdata :
-        The `SpatialData` object to provide plotting functions for.
-
-    Attributes
-    ----------
-    sdata :
-        The `SpatialData` object to provide plotting functions for.
-
-    Notes
-    -----
-    This class provides a number of methods that can be used to generate
-    plots of the data stored in a `SpatialData` object. These methods are
-    accessed via the `SpatialData.pl` accessor.
-
-
-    """
 
     @property
     def sdata(self) -> sd.SpatialData:
@@ -72,6 +52,27 @@ class PlotAccessor:
         self._sdata = sdata
 
     def __init__(self, sdata: sd.SpatialData) -> None:
+        """
+        A class to provide plotting functions for `SpatialData` objects.
+
+        Parameters
+        ----------
+        sdata :
+            The `SpatialData` object to provide plotting functions for.
+
+        Attributes
+        ----------
+        sdata :
+            The `SpatialData` object to provide plotting functions for.
+
+        Notes
+        -----
+        This class provides a number of methods that can be used to generate
+        plots of the data stored in a `SpatialData` object. These methods are
+        accessed via the `SpatialData.pl` accessor.
+
+
+        """
         self._sdata = sdata
 
     def _copy(
