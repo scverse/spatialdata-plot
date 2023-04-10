@@ -21,4 +21,3 @@ help:
 
 clean:
 	rm -r "$(BUILDDIR)"
-	rm -r "generated"

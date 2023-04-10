@@ -45,12 +45,7 @@ class PlotAccessor:
 
     Parameters
     ----------
-    sdata : sd.SpatialData
-        The `SpatialData` object to provide plotting functions for.
-
-    Attributes
-    ----------
-    sdata : sd.SpatialData
+    sdata :
         The `SpatialData` object to provide plotting functions for.
 
     Notes
@@ -86,23 +81,23 @@ class PlotAccessor:
 
         Parameters
         ----------
-        images : Union[None, dict], optional
+        images :
             A dictionary containing image data to replace the images in the
             original `SpatialData` object, or `None` to keep the original
             images. Defaults to `None`.
-        labels : Union[None, dict], optional
+        labels :
             A dictionary containing label data to replace the labels in the
             original `SpatialData` object, or `None` to keep the original
             labels. Defaults to `None`.
-        points : Union[None, dict], optional
+        points :
             A dictionary containing point data to replace the points in the
             original `SpatialData` object, or `None` to keep the original
             points. Defaults to `None`.
-        shapes : Union[None, dict], optional
+        shapes :
             A dictionary containing shape data to replace the shapes in the
             original `SpatialData` object, or `None` to keep the original
             shapes. Defaults to `None`.
-        table : Union[dict, AnnData], optional
+        table :
             A dictionary or `AnnData` object containing table data to replace
             the table in the original `SpatialData` object, or `None` to keep
             the original table. Defaults to `None`.
@@ -142,14 +137,14 @@ class PlotAccessor:
 
         Parameters
         ----------
-        self : sd.SpatialData
+        self :
             The sd.SpatialData object.
-        palette : list[str], optional (default: None)
+        palette :
             A list of colors to use for rendering the images. If `None`, the
             default colors will be used.
-        instance_key : str
+        instance_key :
             The name of the column in the table that identifies individual shapes
-        color_key : str or None, optional (default: None)
+        color_key :
             The name of the column in the table to use for coloring shapes.
 
         Returns
@@ -214,14 +209,14 @@ class PlotAccessor:
 
         Parameters
         ----------
-        self : sd.SpatialData
+        self :
             The sd.SpatialData object.
-        palette : list[str], optional (default: None)
+        palette :
             A list of colors to use for rendering the images. If `None`, the
             default colors will be used.
-        instance_key : str
+        instance_key :
             The name of the column in the table that identifies individual shapes
-        color_key : str or None, optional (default: None)
+        color_key :
             The name of the column in the table to use for coloring shapes.
 
         Returns
@@ -262,12 +257,12 @@ class PlotAccessor:
 
         Parameters
         ----------
-        self : sd.SpatialData
+        self :
             The sd.SpatialData object.
-        palette : list[str], optional (default: None)
+        palette :
             A list of colors to use for rendering the images. If `None`, the
             default colors will be used.
-        trans_fun : callable, optional (default: None)
+        trans_fun :
             A function to apply to the images before rendering. If `None`, no
             function will be applied.
 
@@ -299,23 +294,23 @@ class PlotAccessor:
     ) -> sd.SpatialData:
         """Renders selected channels.
 
-        Parameters:
-        -----------
-        self: object
+        Parameters
+        ----------
+        self :
             The SpatialData object
-        channels: Union[List[str], List[int]]
+        channels :
             The channels to plot
-        colors: List[str]
+        colors :
             The colors for the channels. Must be at least as long as len(channels).
-        normalize: bool
+        normalize :
             Perform quantile normalisation (using pmin, pmax)
-        clip: bool
+        clip :
             Clips the merged image to the range (0, 1).
-        background: str
+        background :
             Background color (defaults to black).
-        pmin: float
+        pmin :
             Lower percentile for quantile normalisation (defaults to 3.-).
-        pmax: float
+        pmax :
             Upper percentile for quantile normalisation (defaults to 99.8).
 
         Raises
@@ -393,27 +388,27 @@ class PlotAccessor:
 
         Parameters
         ----------
-        self : object
+        self :
             sd.SpatialData
-        instance_key : str
+        instance_key :
             The name of the column in the table that identifies individual labels
-        color_key : str or None, optional (default: None)
+        color_key :
             The name of the column in the table to use for coloring labels.
-        border_alpha : float, optional (default: 1.0)
+        border_alpha :
             The alpha value of the label border. Must be between 0 and 1.
-        border_color : str or None, optional (default: None)
+        border_color :
             The color of the border of the labels.
-        fill_alpha : float, optional (default: 0.5)
+        fill_alpha :
             The alpha value of the fill of the labels. Must be between 0 and 1.
-        fill_color : str or None, optional (default: None)
+        fill_color :
             The color of the fill of the labels.
-        mode : str, optional (default: 'thick')
+        mode :
             The rendering mode of the labels. Must be one of 'thick', 'inner',
             'outer', or 'subpixel'.
-        palette : str, list or None, optional (default: None)
+        palette :
             The color palette to use when coloring cells. If None, a default
             palette will be used.
-        add_legend : bool, optional (default: True)
+        add_legend :
             Whether to add a legend to the plot.
 
         Returns
@@ -513,14 +508,14 @@ class PlotAccessor:
 
         Parameters
         ----------
-        ax : matplotlib.axes.Axes, optional
+        ax :
             Matplotlib axes object to plot on. If None, a new figure is created.
             Works only if there is one image in the SpatialData object.
-        ncols : int, optional
+        ncols :
             Number of columns in the figure. Default is 4.
-        width : int, optional
+        width :
             Width of each subplot. Default is 4.
-        height : int, optional
+        height :
             Height of each subplot. Default is 3.
 
         Returns
