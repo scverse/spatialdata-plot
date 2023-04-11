@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any, Optional, Union
 from collections.abc import Sequence
+from typing import Any, Optional, Union
 
 import geopandas as gpd
 import numpy as np
@@ -41,9 +41,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_params_plot,
     _set_outline,
 )
-from spatialdata_plot.pp.utils import (
-    _verify_plotting_tree,
-)
+from spatialdata_plot.pp.utils import _verify_plotting_tree
 
 
 @register_spatial_data_accessor("pl")
@@ -200,7 +198,7 @@ class PlotAccessor:
     def render_points(
         self,
         palette: Optional[Union[str, list[str], None]] = None,
-        color_key: Optional[str] = None,
+        color: Optional[str] = None,
         **scatter_kwargs: Optional[str],
     ) -> sd.SpatialData:
         """Render the points contained in the given sd.SpatialData object
@@ -214,7 +212,7 @@ class PlotAccessor:
             default colors will be used.
         instance_key : str
             The name of the column in the table that identifies individual shapes
-        color_key : str or None, optional (default: None)
+        color : str or None, optional (default: None)
             The name of the column in the table to use for coloring shapes.
 
         Returns
@@ -233,7 +231,7 @@ class PlotAccessor:
             else:
                 raise TypeError("The palette argument must be a list of strings or a single string.")
 
-        if color_key is not None and not isinstance(color_key, str):
+        if color is not None and not isinstance(color, str):
             raise TypeError("When giving a 'color_key', it must be of type 'str'.")
 
         sdata = self._copy()
@@ -241,7 +239,7 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
             "palette": palette,
-            "color_key": color_key,
+            "color": color,
         }
 
         return sdata
@@ -367,6 +365,7 @@ class PlotAccessor:
 
     def show(
         self,
+        coordinate_system: str | Sequence[str] | None = None,
         legend_fontsize: int | float | _FontSize | None = None,
         legend_fontweight: int | _FontWeight = "bold",
         legend_loc: str | None = "right margin",
@@ -406,6 +405,9 @@ class PlotAccessor:
         plotting_tree = self._sdata.plotting_tree
         sdata = self._copy()
 
+        if isinstance(coordinate_system, str):
+            coordinate_system = [coordinate_system]
+
         # Evaluate execution tree for plotting
         valid_commands = [
             "get_elements",
@@ -436,7 +438,9 @@ class PlotAccessor:
 
             # set up canvas
             fig_params, scalebar_params = _prepare_params_plot(
-                num_panels=1,  # len(render_cmds),
+                num_panels=len(sdata.coordinate_systems)
+                if coordinate_system is None
+                else len(coordinate_system),  # len(render_cmds),
                 figsize=figsize,
                 dpi=dpi,
                 fig=fig,
@@ -528,7 +532,7 @@ class PlotAccessor:
                     for key in sdata.shapes.keys():
                         points = []
                         polygons = []
-
+                        # TODO: improve getting extent of polygons
                         for _, row in sdata.shapes[key].iterrows():
                             if row["geometry"].geom_type == "Point":
                                 points.append(row)

@@ -12,11 +12,7 @@ import spatialdata as sd
 from geopandas import GeoDataFrame
 from matplotlib import colors
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import (
-    ColorConverter,
-    ListedColormap,
-    Normalize,
-)
+from matplotlib.colors import ColorConverter, ListedColormap, Normalize
 from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
@@ -187,17 +183,17 @@ def _render_points(
     ax.set_xlim(extent["x"][0], extent["x"][1])
     ax.set_ylim(extent["y"][0], extent["y"][1])
 
-    if isinstance(params["color_key"], str):
-        colors = sdata.points[key][params["color_key"]].compute()
+    if isinstance(params["color"], str):
+        colors = sdata.points[key][params["color"]].compute()
 
         if is_categorical_dtype(colors):
             category_colors = _get_palette(categories=colors.cat.categories)
 
-            for i, cat in enumerate(colors.cat.categories):
+            for cat in colors.cat.categories:
                 ax.scatter(
                     x=sdata.points[key]["x"].compute()[colors == cat],
                     y=sdata.points[key]["y"].compute()[colors == cat],
-                    color=category_colors[i],
+                    color=category_colors[cat],
                     label=cat,
                 )
 
