@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Optional, Type, Union
+from typing import Any, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,9 +15,7 @@ import pandas as pd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
-from matplotlib import colors, patheffects
-from matplotlib import pyplot as plt
-from matplotlib import rcParams
+from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
 from matplotlib.cm import get_cmap
 from matplotlib.collections import PatchCollection
@@ -25,6 +25,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
+from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from skimage.color import label2rgb
@@ -41,7 +42,6 @@ _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", 
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
-from numpy.random import default_rng
 
 
 @dataclass
@@ -50,8 +50,8 @@ class FigParams:
 
     fig: Figure
     ax: Axes
+    num_panels: int
     axs: Sequence[Axes] | None = None
-    num_panels: Sequence[str] = None
     title: str | Sequence[str] | None = None
     ax_labels: Sequence[str] | None = None
     frameon: bool | None = None
@@ -61,7 +61,7 @@ class FigParams:
 class ScalebarParams:
     """Scalebar params."""
 
-    scalebar_dx: Sequence[float] | None = (None,)
+    scalebar_dx: Sequence[float] | None = None
     scalebar_units: Sequence[str] | None = None
 
 
@@ -106,6 +106,7 @@ def _prepare_params_plot(
             raise ValueError(
                 f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
             )
+        assert isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
         axs = ax
     else:
         axs = None
@@ -180,17 +181,17 @@ class CmapParams:
 
     cmap: Colormap
     norm: Normalize
-    na_color: str | tuple[float, ...] = (0, 0, 0, 0)
+    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0)
 
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: _Normalize | None = None,
-    na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
     vcenter: float | None = None,
-) -> dataclass:
+) -> CmapParams:
     cmap = copy(get_cmap(cmap))
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
@@ -400,7 +401,7 @@ def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]], palet
                     "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
                 )
 
-    return palette[:length]
+    return palette[:length]  # type: ignore[return-value]
 
 
 def _set_color_source_vec(
@@ -526,7 +527,7 @@ def _get_palette(
         elif len_cat <= len(default_102):  # 103 colors
             palette = default_102
         else:
-            palette = ["grey" for _ in range(length)]
+            palette = ["grey" for _ in range(len_cat)]
             logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
         return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
 
@@ -544,17 +545,9 @@ def _get_palette(
 def _maybe_set_colors(
     source: AnnData, target: AnnData, key: str, palette: str | ListedColormap | Cycler | Sequence[Any] | None = None
 ) -> None:
-    color_key = f"{key}_colors"
     from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 
-    # this is insane, basically the version copied here was from napari
-    # in napari is modified because we have to do some tricks to plot the categorical values
-    # hence it requires the argument vec. But here we don't, so am re importing the original one
-    # from scanpy here.
-    # this is a testament to how broken the categorical color handling is in the scanpy ecosystem and
-    # to the fact that, because I've never fixed it, an embarassing amount of intellectual debt has
-    # been accumulated.
-
+    color_key = f"{key}_colors"
     try:
         if palette is not None:
             raise KeyError("Unable to copy the palette when there was other explicitly specified.")
@@ -582,7 +575,7 @@ def _decorate_axs(
     cax: PatchCollection,
     fig_params: FigParams,
     adata: AnnData,
-    value_to_plot: str,
+    value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
     palette: Palette_t = None,
     alpha: float = 1.0,
@@ -684,3 +677,64 @@ def _get_list(
         return var
 
     raise ValueError(f"Can't make a list from variable: `{var}`")
+
+
+def save_fig(fig: Figure, path: str | Path, make_dir: bool = True, ext: str = "png", **kwargs: Any) -> None:
+    """
+    Save a figure.
+
+    Parameters
+    ----------
+    fig
+        Figure to save.
+    path
+        Path where to save the figure. If path is relative, save it under :attr:`scanpy.settings.figdir`.
+    make_dir
+        Whether to try making the directory if it does not exist.
+    ext
+        Extension to use if none is provided.
+    kwargs
+        Keyword arguments for :func:`matplotlib.figure.Figure.savefig`.
+
+    Returns
+    -------
+    None
+        Just saves the plot.
+    """
+    if os.path.splitext(path)[1] == "":
+        path = f"{path}.{ext}"
+
+    path = Path(path)
+
+    if not path.is_absolute():
+        path = Path(settings.figdir) / path
+
+    if make_dir:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logging.debug(f"Unable to create directory `{path.parent}`. Reason: `{e}`")
+
+    logging.debug(f"Saving figure to `{path!r}`")
+
+    kwargs.setdefault("bbox_inches", "tight")
+    kwargs.setdefault("transparent", True)
+
+    fig.savefig(path, **kwargs)
+
+
+def _get_cs_element_map(
+    element: str | Sequence[str] | None,
+    element_map: Mapping[str, Any],
+) -> Mapping[str, str]:
+    """Get the mapping between the coordinate system and the class."""
+    # from spatialdata.models import Image2DModel, Image3DModel, Labels2DModel, Labels3DModel, PointsModel, ShapesModel
+    element = list(element_map.keys())[0] if element is None else element
+    element = [element] if isinstance(element, str) else element
+    d = {}
+    for e in element:
+        cs = list(element_map[e].attrs["transform"].keys())[0]
+        d[cs] = e
+        # model = get_model(element_map["blobs_labels"])
+        # if model in [Image2DModel, Image3DModel, Labels2DModel, Labels3DModel]
+    return d

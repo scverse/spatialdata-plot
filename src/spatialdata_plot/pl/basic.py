@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import geopandas as gpd
@@ -25,6 +26,7 @@ from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
     ImageRenderParams,
     LabelsRenderParams,
+    PointsRenderParams,
     ShapesRenderParams,
     _render_images,
     _render_labels,
@@ -40,6 +42,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
 
@@ -139,7 +142,7 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        region: str | Sequence[str] | None = None,
+        element: str | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
@@ -155,7 +158,8 @@ class PlotAccessor:
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the shapes contained in the given sd.SpatialData object
+        """
+        Render the shapes contained in the given sd.SpatialData object
 
         Parameters
         ----------
@@ -173,16 +177,19 @@ class PlotAccessor:
         -------
         sd.SpatialData
             The input sd.SpatialData with a command added to the plotting tree
-
         """
-
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(cmap=cmap, norm=norm, na_color=na_color, **kwargs)
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
         outline_params = _set_outline(size, outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
-            region=region,
+            element=element,
             color=color,
             groups=groups,
             outline_params=outline_params,
@@ -197,9 +204,16 @@ class PlotAccessor:
 
     def render_points(
         self,
-        palette: Optional[Union[str, list[str], None]] = None,
-        color: Optional[str] = None,
-        **scatter_kwargs: Optional[str],
+        element: str | None = None,
+        color: str | None = None,
+        groups: str | Sequence[str] | None = None,
+        size: float = 1.0,
+        palette: Palette_t = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
         """Render the points contained in the given sd.SpatialData object
 
@@ -221,32 +235,29 @@ class PlotAccessor:
             The input sd.SpatialData with a command added to the plotting tree
 
         """
-        if palette is not None:
-            if isinstance(palette, str):
-                palette = [palette]
-
-            if isinstance(palette, list):
-                if not all(isinstance(p, str) for p in palette):
-                    raise TypeError("The palette argument must be a list of strings or a single string.")
-            else:
-                raise TypeError("The palette argument must be a list of strings or a single string.")
-
-        if color is not None and not isinstance(color, str):
-            raise TypeError("When giving a 'color_key', it must be of type 'str'.")
-
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
-            "palette": palette,
-            "color": color,
-        }
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
+        sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
+            element=element,
+            color=color,
+            groups=groups,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
     def render_images(
         self,
-        image: str | None = None,
+        element: str | None = None,
         channel: str | None = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
@@ -277,9 +288,14 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(cmap=cmap, norm=norm, na_color=na_color, **kwargs)
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
-            image=image,
+            element=element,
             channel=channel,
             cmap_params=cmap_params,
             palette=palette,
@@ -290,7 +306,7 @@ class PlotAccessor:
 
     def render_labels(
         self,
-        region: str | Sequence[str] | None = None,
+        element: str | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         contour_px: int | None = None,
@@ -336,7 +352,6 @@ class PlotAccessor:
         alpha, color, and rendering mode of the labels, as well as whether to add a
         legend to the plot.
         """
-
         if (
             color is not None
             and color not in self._sdata.table.obs.columns
@@ -347,9 +362,14 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(cmap=cmap, norm=norm, na_color=na_color, **kwargs)
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
-            region=region,
+            element=element,
             color=color,
             groups=groups,
             contour_px=contour_px,
@@ -380,8 +400,11 @@ class PlotAccessor:
         dpi: int | None = None,
         fig: Figure | None = None,
         ax: Axes | Sequence[Axes] | None = None,
+        return_ax: bool = False,
+        save: Optional[Union[str, Path]] = None,
     ) -> sd.SpatialData:
-        """Plot the images in the SpatialData object.
+        """
+        Plot the images in the SpatialData object.
 
         Parameters
         ----------
@@ -400,11 +423,17 @@ class PlotAccessor:
         sd.SpatialData
             A SpatialData object.
         """
-
         # copy the SpatialData object so we don't modify the original
-        plotting_tree = self._sdata.plotting_tree
+        try:
+            plotting_tree = self._sdata.plotting_tree
+        except AttributeError as e:
+            raise TypeError(
+                "Please specify what to plot using the 'render_*' functions before calling 'show()`."
+            ) from e
         sdata = self._copy()
 
+        # handle coordinate system
+        coordinate_system = sdata.coordinate_systems if coordinate_system is None else coordinate_system
         if isinstance(coordinate_system, str):
             coordinate_system = [coordinate_system]
 
@@ -419,174 +448,168 @@ class PlotAccessor:
             "render_channels",
         ]
 
-        if len(plotting_tree.keys()) > 0:
-            render_cmds = OrderedDict()
+        # prepare rendering params
+        render_cmds = OrderedDict()
+        for cmd, params in plotting_tree.items():
+            # strip prefix from cmd and verify it's valid
+            cmd = "_".join(cmd.split("_")[1:])
 
-            for cmd, params in plotting_tree.items():
-                # strip prefix from cmd and verify it's valid
-                cmd = "_".join(cmd.split("_")[1:])
+            if cmd not in valid_commands:
+                raise ValueError(f"Command {cmd} is not valid.")
 
-                if cmd not in valid_commands:
-                    raise ValueError(f"Command {cmd} is not valid.")
+            elif "render" in cmd:
+                # verify that rendering commands have been called before
+                render_cmds[cmd] = params
 
-                elif "render" in cmd:
-                    # verify that rendering commands have been called before
-                    render_cmds[cmd] = params
+        if len(render_cmds.keys()) == 0:
+            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
-            if len(render_cmds.keys()) == 0:
-                raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+        # check that coordinate system and elements to be rendered match
+        for cmd, params in render_cmds.items():
+            if params.element is not None and len(params.element) != len(coordinate_system):
+                raise ValueError(
+                    f"Number of coordinate systems ({len(coordinate_system)}) does not match number of elements "
+                    f"({len(params.element)}) in command {cmd}."
+                )
 
-            # set up canvas
-            fig_params, scalebar_params = _prepare_params_plot(
-                num_panels=len(sdata.coordinate_systems)
-                if coordinate_system is None
-                else len(coordinate_system),  # len(render_cmds),
-                figsize=figsize,
-                dpi=dpi,
-                fig=fig,
-                ax=ax,
-                wspace=wspace,
-                hspace=hspace,
-                ncols=ncols,
-                frameon=frameon,
-            )
-            legend_params = LegendParams(
-                legend_fontsize=legend_fontsize,
-                legend_fontweight=legend_fontweight,
-                legend_loc=legend_loc,
-                legend_fontoutline=legend_fontoutline,
-                na_in_legend=na_in_legend,
-                colorbar=colorbar,
-            )
+        # set up canvas
+        fig_params, scalebar_params = _prepare_params_plot(
+            num_panels=len(coordinate_system),
+            figsize=figsize,
+            dpi=dpi,
+            fig=fig,
+            ax=ax,
+            wspace=wspace,
+            hspace=hspace,
+            ncols=ncols,
+            frameon=frameon,
+        )
+        legend_params = LegendParams(
+            legend_fontsize=legend_fontsize,
+            legend_fontweight=legend_fontweight,
+            legend_loc=legend_loc,
+            legend_fontoutline=legend_fontoutline,
+            na_in_legend=na_in_legend,
+            colorbar=colorbar,
+        )
 
-            # Set background color
-            # for _, ax in enumerate(axs.flatten()):
-            #     ax.set_facecolor(bg_color)
-            # key = list(sdata.labels.keys())[idx]
-            # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
+        # transform all elements
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images" or cmd == "render_channels":
+                for key in sdata.images.keys():
+                    img_transformation = get_transformation(sdata.images[key], get_all=True)
+                    img_transformation = list(img_transformation.values())[0]
 
-            # transform all elements
-            for cmd, _ in render_cmds.items():
-                if cmd == "render_images" or cmd == "render_channels":
-                    for key in sdata.images.keys():
-                        img_transformation = get_transformation(sdata.images[key], get_all=True)
-                        img_transformation = list(img_transformation.values())[0]
+                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
+                        shifts: dict[str, int] = {}
+                        for idx, axis in enumerate(img_transformation.axes):
+                            shifts[axis] = int(img_transformation.translation[idx])
 
-                        if isinstance(img_transformation, sd.transformations.transformations.Translation):
-                            shifts: dict[str, int] = {}
-                            for idx, axis in enumerate(img_transformation.axes):
-                                shifts[axis] = int(img_transformation.translation[idx])
+                        img = sdata.images[key].values.copy()
+                        shifted_channels = []
 
-                            img = sdata.images[key].values.copy()
-                            shifted_channels = []
+                        # split channels, shift axes individually, them recombine
+                        if len(sdata.images[key].shape) == 3:
+                            for c in range(sdata.images[key].shape[0]):
+                                channel = img[c, :, :]
 
-                            # split channels, shift axes individually, them recombine
-                            if len(sdata.images[key].shape) == 3:
-                                for c in range(sdata.images[key].shape[0]):
-                                    channel = img[c, :, :]
+                                # iterates over [x, y]
+                                for axis, shift in shifts.items():
+                                    pad_x, pad_y = (0, 0), (0, 0)
+                                    if axis == "x" and shift > 0:
+                                        pad_x = (abs(shift), 0)
+                                    elif axis == "x" and shift < 0:
+                                        pad_x = (0, abs(shift))
 
-                                    # iterates over [x, y]
-                                    for axis, shift in shifts.items():
-                                        pad_x, pad_y = (0, 0), (0, 0)
-                                        if axis == "x" and shift > 0:
-                                            pad_x = (abs(shift), 0)
-                                        elif axis == "x" and shift < 0:
-                                            pad_x = (0, abs(shift))
+                                    if axis == "y" and shift > 0:
+                                        pad_y = (abs(shift), 0)
+                                    elif axis == "y" and shift < 0:
+                                        pad_y = (0, abs(shift))
 
-                                        if axis == "y" and shift > 0:
-                                            pad_y = (abs(shift), 0)
-                                        elif axis == "y" and shift < 0:
-                                            pad_y = (0, abs(shift))
+                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
 
-                                        channel = np.pad(channel, (pad_y, pad_x), mode="constant")
+                                shifted_channels.append(channel)
 
-                                    shifted_channels.append(channel)
+                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
 
-                            sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
+                    else:
+                        sdata.images[key] = transform(sdata.images[key], img_transformation)
 
+            elif cmd == "render_shapes":
+                for key in sdata.shapes.keys():
+                    shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
+                    shape_transformation = list(shape_transformation.values())[0]
+                    sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
+
+            elif cmd == "render_labels":
+                for key in sdata.labels.keys():
+                    label_transformation = get_transformation(sdata.labels[key], get_all=True)
+                    label_transformation = list(label_transformation.values())[0]
+                    sdata.labels[key] = transform(sdata.labels[key], label_transformation)
+
+        # get biggest image after transformations to set ax size
+        x_dims = []
+        y_dims = []
+
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images" or cmd == "render_channels":
+                y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
+                x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
+
+            elif cmd == "render_shapes":
+                for key in sdata.shapes.keys():
+                    points = []
+                    polygons = []
+                    # TODO: improve getting extent of polygons
+                    for _, row in sdata.shapes[key].iterrows():
+                        if row["geometry"].geom_type == "Point":
+                            points.append(row)
+                        elif row["geometry"].geom_type == "Polygon":
+                            polygons.append(row)
                         else:
-                            sdata.images[key] = transform(sdata.images[key], img_transformation)
+                            raise NotImplementedError(
+                                "Only shapes of type 'Point' and 'Polygon' are supported right now."
+                            )
 
-                elif cmd == "render_shapes":
-                    for key in sdata.shapes.keys():
-                        shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
-                        shape_transformation = list(shape_transformation.values())[0]
-                        sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
+                    if len(points) > 0:
+                        points_df = gpd.GeoDataFrame(data=points)
+                        x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
+                        y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
 
-                elif cmd == "render_labels":
-                    for key in sdata.labels.keys():
-                        label_transformation = get_transformation(sdata.labels[key], get_all=True)
-                        label_transformation = list(label_transformation.values())[0]
-                        sdata.labels[key] = transform(sdata.labels[key], label_transformation)
+                    if len(polygons) > 0:
+                        for p in polygons:
+                            minx, miny, maxx, maxy = p.geometry.bounds
+                            x_dims += [(minx, maxx)]
+                            y_dims += [(miny, maxy)]
 
-            # get biggest image after transformations to set ax size
-            x_dims = []
-            y_dims = []
+            elif cmd == "render_labels":
+                y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
+                x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
 
-            for cmd, _ in render_cmds.items():
-                if cmd == "render_images" or cmd == "render_channels":
-                    y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
-                    x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
+        [max(values) for values in zip(*x_dims)]
+        [min(values) for values in zip(*x_dims)]
+        [max(values) for values in zip(*y_dims)]
+        [min(values) for values in zip(*y_dims)]
 
-                elif cmd == "render_shapes":
-                    for key in sdata.shapes.keys():
-                        points = []
-                        polygons = []
-                        # TODO: improve getting extent of polygons
-                        for _, row in sdata.shapes[key].iterrows():
-                            if row["geometry"].geom_type == "Point":
-                                points.append(row)
-                            elif row["geometry"].geom_type == "Polygon":
-                                polygons.append(row)
-                            else:
-                                raise NotImplementedError(
-                                    "Only shapes of type 'Point' and 'Polygon' are supported right now."
-                                )
+        # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
 
-                        if len(points) > 0:
-                            points_df = gpd.GeoDataFrame(data=points)
-                            x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
-                            y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
-
-                        if len(polygons) > 0:
-                            for p in polygons:
-                                minx, miny, maxx, maxy = p.geometry.bounds
-                                x_dims += [(minx, maxx)]
-                                y_dims += [(miny, maxy)]
-
-                elif cmd == "render_labels":
-                    y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
-                    x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
-
-            max_x = [max(values) for values in zip(*x_dims)]
-            min_x = [min(values) for values in zip(*x_dims)]
-            max_y = [max(values) for values in zip(*y_dims)]
-            min_y = [min(values) for values in zip(*y_dims)]
-
-            extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
-
-            # go through tree
+        # go through tree
+        for i, cs in enumerate(coordinate_system):
+            ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             for cmd, params in render_cmds.items():
-                list(sdata.images.keys())
-
                 if cmd == "render_images":
                     _render_images(
                         sdata=sdata,
                         render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
-
                 elif cmd == "render_shapes":
-                    if (
-                        sdata.table is not None
-                        # and isinstance(params["instance_key"], str)
-                        and isinstance(params.color, str)
-                    ):
+                    if sdata.table is not None and isinstance(params.color, str):
                         colors = sc.get.obs_df(sdata.table, params.color)
-                        # If we have a table and proper keys, generate categorical
-                        # colours which are stored in the 'uns' of the table.
                         if is_categorical_dtype(colors):
                             _maybe_set_colors(
                                 source=sdata.table,
@@ -597,14 +620,23 @@ class PlotAccessor:
                     _render_shapes(
                         sdata=sdata,
                         render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
 
                 elif cmd == "render_points":
-                    key = list(sdata.points.keys())[0]  # TODO: remove, hack
-                    _render_points(sdata=sdata, params=params, key=key, ax=fig_params.ax, extent=extent)
+                    _render_points(
+                        sdata=sdata,
+                        render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                    )
 
                 elif cmd == "render_labels":
                     if (
@@ -613,8 +645,6 @@ class PlotAccessor:
                         and isinstance(params.color, str)
                     ):
                         colors = sc.get.obs_df(sdata.table, params.color)
-                        # If we have a table and proper keys, generate categorical
-                        # colours which are stored in the 'uns' of the table.
                         if is_categorical_dtype(colors):
                             _maybe_set_colors(
                                 source=sdata.table,
@@ -625,9 +655,15 @@ class PlotAccessor:
                     _render_labels(
                         sdata=sdata,
                         render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
 
-        # return axs
+        if fig_params.fig is not None and save is not None:
+            save_fig(fig_params.fig, path=save)
+
+        if return_ax:
+            return fig_params.ax if fig_params.axs is None else fig_params.axs

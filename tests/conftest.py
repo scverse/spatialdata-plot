@@ -138,7 +138,7 @@ def shapes() -> SpatialData:
 
 
 @pytest.fixture()
-def points() -> SpatialData:
+def element() -> SpatialData:
     return SpatialData(points=_get_points())
 
 
