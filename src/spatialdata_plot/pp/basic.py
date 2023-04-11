@@ -25,12 +25,7 @@ class PreprocessingAccessor:
 
     Parameters
     ----------
-    sdata : sd.SpatialData
-        A spatial data object.
-
-    Attributes
-    ----------
-    sdata : sd.SpatialData
+    sdata :
         A spatial data object.
     """
 
@@ -76,7 +71,7 @@ class PreprocessingAccessor:
 
         Parameters
         ----------
-        elements : Union[str, List[str]]
+        elements :
             A string or a list of strings specifying the elements to keep.
             Valid element types are:
 
@@ -240,9 +235,9 @@ class PreprocessingAccessor:
 
         Parameters
         ----------
-        x : Union[slice, list, tuple]
+        x :
             x range of the bounding box. Stepsize will be ignored if slice
-        y : Union[slice, list, tuple]
+        y :
             y range of the bounding box. Stepsize will be ignored if slice
 
         Returns
