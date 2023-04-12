@@ -42,6 +42,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _get_extent,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -589,49 +590,76 @@ class PlotAccessor:
                     label_transformation = list(label_transformation.values())[0]
                     sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
-        # get biggest image after transformations to set ax size
-        x_dims = []
-        y_dims = []
-
+        # Get extent of data to be plotted
+        want_images_extent: bool = False
+        want_labels_extent: bool = False
+        want_points_extent: bool = False
+        want_shapes_extent: bool = False
+        
         for cmd, _ in render_cmds.items():
-            if cmd == "render_images" or cmd == "render_channels":
-                y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
-                x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
-
-            elif cmd == "render_shapes":
-                for key in sdata.shapes.keys():
-                    points = []
-                    polygons = []
-                    # TODO: improve getting extent of polygons
-                    for _, row in sdata.shapes[key].iterrows():
-                        if row["geometry"].geom_type == "Point":
-                            points.append(row)
-                        elif row["geometry"].geom_type == "Polygon":
-                            polygons.append(row)
-                        else:
-                            raise NotImplementedError(
-                                "Only shapes of type 'Point' and 'Polygon' are supported right now."
-                            )
-
-                    if len(points) > 0:
-                        points_df = gpd.GeoDataFrame(data=points)
-                        x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
-                        y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
-
-                    if len(polygons) > 0:
-                        for p in polygons:
-                            minx, miny, maxx, maxy = p.geometry.bounds
-                            x_dims += [(minx, maxx)]
-                            y_dims += [(miny, maxy)]
-
+            if cmd == "render_images":
+                want_images_extent = True
             elif cmd == "render_labels":
-                y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
-                x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
+                want_labels_extent = True
+            elif cmd == "render_points":
+                want_points_extent = True
+            elif cmd == "render_shapes":
+                want_shapes_extent = True
+                
+        extent = _get_extent(
+            sdata=sdata,
+            coordinate_systems=coordinate_system,
+            images=want_images_extent,
+            labels=want_labels_extent,
+            points=want_points_extent,
+            shapes=want_shapes_extent,
+        )
+        
+        print(extent)
 
-        [max(values) for values in zip(*x_dims)]
-        [min(values) for values in zip(*x_dims)]
-        [max(values) for values in zip(*y_dims)]
-        [min(values) for values in zip(*y_dims)]
+        # get biggest image after transformations to set ax size
+        # x_dims = []
+        # y_dims = []
+
+        # for cmd, _ in render_cmds.items():
+        #     if cmd == "render_images" or cmd == "render_channels":
+        #         y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
+        #         x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
+
+        #     elif cmd == "render_shapes":
+        #         for key in sdata.shapes.keys():
+        #             points = []
+        #             polygons = []
+        #             # TODO: improve getting extent of polygons
+        #             for _, row in sdata.shapes[key].iterrows():
+        #                 if row["geometry"].geom_type == "Point":
+        #                     points.append(row)
+        #                 elif row["geometry"].geom_type == "Polygon":
+        #                     polygons.append(row)
+        #                 else:
+        #                     raise NotImplementedError(
+        #                         "Only shapes of type 'Point' and 'Polygon' are supported right now."
+        #                     )
+
+        #             if len(points) > 0:
+        #                 points_df = gpd.GeoDataFrame(data=points)
+        #                 x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
+        #                 y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
+
+        #             if len(polygons) > 0:
+        #                 for p in polygons:
+        #                     minx, miny, maxx, maxy = p.geometry.bounds
+        #                     x_dims += [(minx, maxx)]
+        #                     y_dims += [(miny, maxy)]
+
+        #     elif cmd == "render_labels":
+        #         y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
+        #         x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
+
+        # [max(values) for values in zip(*x_dims)]
+        # [min(values) for values in zip(*x_dims)]
+        # [max(values) for values in zip(*y_dims)]
+        # [min(values) for values in zip(*y_dims)]
 
         # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
 

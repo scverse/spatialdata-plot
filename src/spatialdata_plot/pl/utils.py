@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,6 +32,7 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
+import spatialdata as sd
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 
@@ -127,6 +128,39 @@ def _prepare_params_plot(
     scalebar_params = ScalebarParams(scalebar_dx=scalebar_dx, scalebar_units=scalebar_units)
 
     return fig_params, scalebar_params
+
+
+def _get_extent(
+    sdata: sd.SpatialData,
+    coordinate_systems: Union[str, List[str]] = "all",
+    images: bool = True,
+    labels: bool = True,
+    points: bool = True,
+    shapes: bool = True,
+) -> dict[str, tuple(int, int, int, int)]:
+    """Takes a SpatialData object and returns the extent of the contained elements
+
+    Parameters
+    ----------
+    sdata
+        The sd.SpatialData object to retrieve the extent from
+    images
+        Flag indicating whether to consider images when calculating the extent
+    labels
+        Flag indicating whether to consider labels when calculating the extent
+    points
+        Flag indicating whether to consider points when calculating the extent
+    shapes
+        Flag indicating whether to consider shaoes when calculating the extent
+
+    Returns
+    -------
+    A dict of tuples with the shape (xmin, xmax, ymin, ymax). The keys of the
+        dict are the coordinate_system keys.
+
+    """
+    
+    return "a"
 
 
 def _panel_grid(
@@ -242,11 +276,11 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
 
     Parameters
     ----------
-    num_images : int
+    num_images
         Number of images to plot. Must be greater than 1.
-    ncols : int, optional
+    ncols
         Number of columns in the subplot grid, by default 4
-    width : int, optional
+    width
         Width of each subplot, by default 4
 
     Returns
@@ -283,7 +317,7 @@ def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]
 
     Parameters
     ----------
-    num_colors : int
+    num_colors
         Number of colors to generate.
 
     Returns
@@ -306,9 +340,9 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
 
     Parameters
     ----------
-    values : pd.Series
+    values
         The values to be converted to colors.
-    cmap_name : str, optional
+    cmap_name
         The name of the colormap to be used, by default 'viridis'.
 
     Returns
@@ -338,15 +372,15 @@ def _normalize(
 
     Parameters
     ----------
-    dataarray: xr.DataArray
+    dataarray
         A xarray DataArray with an image field.
-    pmin: float
+    pmin
         Lower quantile (min value) used to perform qunatile normalization.
-    pmax: float
+    pmax
         Upper quantile (max value) used to perform qunatile normalization.
-    eps: float
+    eps
         Epsilon float added to prevent 0 division.
-    clip: bool
+    clip
         Ensures that normed image array contains no values greater than 1.
 
     Returns
