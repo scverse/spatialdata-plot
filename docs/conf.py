@@ -92,6 +92,7 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "spatialdata": ("https://scverse-spatialdata.readthedocs.io/en/latest/", None),
+    "skimage": ("https://scikit-image.org/docs/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and
