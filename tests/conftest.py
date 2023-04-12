@@ -390,6 +390,7 @@ def _decorate(fn: Callable, clsname: str, name: Optional[str] = None) -> Callabl
 
     return save_and_compare
 
+
 @pytest.fixture
 def get_sdata_with_multiple_images(request) -> sd.SpatialData:
     """Yields a sdata object with multiple images which may or may not share a coordinate system."""
