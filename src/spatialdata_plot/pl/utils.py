@@ -12,6 +12,7 @@ from typing import Any, List, Literal, Optional, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
@@ -32,7 +33,6 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-import spatialdata as sd
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 
@@ -132,7 +132,7 @@ def _prepare_params_plot(
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: Union[str, List[str]] = "all",
+    coordinate_systems: Union[str, list[str]] = "all",
     images: bool = True,
     labels: bool = True,
     points: bool = True,
@@ -159,7 +159,7 @@ def _get_extent(
         dict are the coordinate_system keys.
 
     """
-    
+
     return "a"
 
 

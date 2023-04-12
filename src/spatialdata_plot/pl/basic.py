@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import geopandas as gpd
 import numpy as np
 import scanpy as sc
 import spatialdata as sd
@@ -38,11 +37,11 @@ from spatialdata_plot.pl.utils import (
     Palette_t,
     _FontSize,
     _FontWeight,
+    _get_extent,
     _maybe_set_colors,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _get_extent,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -595,7 +594,7 @@ class PlotAccessor:
         want_labels_extent: bool = False
         want_points_extent: bool = False
         want_shapes_extent: bool = False
-        
+
         for cmd, _ in render_cmds.items():
             if cmd == "render_images":
                 want_images_extent = True
@@ -605,7 +604,7 @@ class PlotAccessor:
                 want_points_extent = True
             elif cmd == "render_shapes":
                 want_shapes_extent = True
-                
+
         extent = _get_extent(
             sdata=sdata,
             coordinate_systems=coordinate_system,
@@ -614,7 +613,7 @@ class PlotAccessor:
             points=want_points_extent,
             shapes=want_shapes_extent,
         )
-        
+
         print(extent)
 
         # get biggest image after transformations to set ax size
