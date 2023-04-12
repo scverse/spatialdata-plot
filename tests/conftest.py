@@ -1,5 +1,9 @@
-from typing import Optional, Union
+from abc import ABC, ABCMeta
+from functools import wraps
+from pathlib import Path
+from typing import Callable, Optional, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -7,11 +11,13 @@ import pytest
 import spatialdata as sd
 from anndata import AnnData
 from geopandas import GeoDataFrame
+from matplotlib.testing.compare import compare_images
 from multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
+from spatialdata.datasets import blobs
 from spatialdata.models import (
     Image2DModel,
     Image3DModel,
@@ -25,6 +31,13 @@ from xarray import DataArray
 
 import spatialdata_plot  # noqa: F401
 
+HERE: Path = Path(__file__).parent
+
+EXPECTED = HERE / "_images"
+ACTUAL = HERE / "figures"
+TOL = 60
+DPI = 40
+
 RNG = default_rng()
 
 
@@ -37,6 +50,11 @@ def full_sdata() -> SpatialData:
         points=_get_points(),
         table=_get_table(region="sample1"),
     )
+
+
+@pytest.fixture()
+def sdata_blobs() -> SpatialData:
+    return blobs()
 
 
 @pytest.fixture
@@ -150,17 +168,6 @@ def table_single_annotation() -> SpatialData:
 @pytest.fixture()
 def table_multiple_annotations() -> SpatialData:
     return SpatialData(table=_get_table(region=["sample1", "sample2"]))
-
-
-# @pytest.fixture()
-# def empty_points() -> SpatialData:
-#     geo_df = GeoDataFrame(
-#         geometry=[],
-#     )
-#     from spatialdata.transformations import Identity
-#     set_transform(geo_df, Identity())
-#
-#     return SpatialData(points={"empty": geo_df})
 
 
 @pytest.fixture()
@@ -337,3 +344,48 @@ def _get_table(
         return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
         return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+
+
+class PlotTesterMeta(ABCMeta):
+    def __new__(cls, clsname, superclasses, attributedict):
+        for key, value in attributedict.items():
+            if callable(value):
+                attributedict[key] = _decorate(value, clsname, name=key)
+        return super().__new__(cls, clsname, superclasses, attributedict)
+
+
+class PlotTester(ABC):  # noqa: B024
+    @classmethod
+    def compare(cls, basename: str, tolerance: Optional[float] = None):
+        ACTUAL.mkdir(parents=True, exist_ok=True)
+        out_path = ACTUAL / f"{basename}.png"
+
+        plt.savefig(out_path, dpi=DPI)
+        plt.close()
+
+        if tolerance is None:
+            # see https://github.com/scverse/squidpy/pull/302
+            tolerance = 2 * TOL if "Napari" in str(basename) else TOL
+
+        res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
+
+        assert res is None, res
+
+
+def _decorate(fn: Callable, clsname: str, name: Optional[str] = None) -> Callable:
+    @wraps(fn)
+    def save_and_compare(self, *args, **kwargs):
+        fn(self, *args, **kwargs)
+        self.compare(fig_name)
+
+    if not callable(fn):
+        raise TypeError(f"Expected a `callable` for class `{clsname}`, found `{type(fn).__name__}`.")
+
+    name = fn.__name__ if name is None else name
+
+    if not name.startswith("test_plot_") or not clsname.startswith("Test"):
+        return fn
+
+    fig_name = f"{clsname[4:]}_{name[10:]}"
+
+    return save_and_compare
