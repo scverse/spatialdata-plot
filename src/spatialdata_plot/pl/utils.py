@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
