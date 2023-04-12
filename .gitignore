@@ -29,5 +29,10 @@ __pycache__/
 
 format.sh
 
+
 # test
 tests/figures/
+
+# jupyter checkpoints
+.ipynb_checkpoints
+

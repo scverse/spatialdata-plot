@@ -90,6 +90,9 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "spatialdata": ("https://scverse-spatialdata.readthedocs.io/en/latest/", None),
+    "skimage": ("https://scikit-image.org/docs/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -118,7 +121,9 @@ pygments_style = "default"
 nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    ("py:class", "spatialdata._core.spatialdata.SpatialData"),
+    ("py:class", "xarray.core.dataarray.DataArray"),
+    ("py:class", "matplotlib.axes._axes.Axes"),
 ]
 
 

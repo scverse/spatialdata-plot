@@ -38,7 +38,7 @@ def _get_instance_key(sdata: sd.SpatialData) -> str:
     return instance_key
 
 
-def _verify_plotting_tree_exists(sdata: sd.SpatialData) -> sd.SpatialData:
+def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:
     """Verify that the plotting tree exists, and if not, create it."""
     if not hasattr(sdata, "plotting_tree"):
         sdata.plotting_tree = OrderedDict()

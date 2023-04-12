@@ -8,10 +8,12 @@ from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 
-from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
-
-from ..accessor import register_spatial_data_accessor
-from ..pp.utils import _get_region_key, _verify_plotting_tree_exists
+from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot.pp.utils import (
+    _get_coordinate_system_mapping,
+    _get_region_key,
+    _verify_plotting_tree,
+)
 
 # from .colorize import _colorize
 
@@ -23,12 +25,7 @@ class PreprocessingAccessor:
 
     Parameters
     ----------
-    sdata : sd.SpatialData
-        A spatial data object.
-
-    Attributes
-    ----------
-    sdata : sd.SpatialData
+    sdata :
         A spatial data object.
     """
 
@@ -74,7 +71,7 @@ class PreprocessingAccessor:
 
         Parameters
         ----------
-        elements : Union[str, List[str]]
+        elements :
             A string or a list of strings specifying the elements to keep.
             Valid element types are:
 
@@ -238,9 +235,9 @@ class PreprocessingAccessor:
 
         Parameters
         ----------
-        x : Union[slice, list, tuple]
+        x :
             x range of the bounding box. Stepsize will be ignored if slice
-        y : Union[slice, list, tuple]
+        y :
             y range of the bounding box. Stepsize will be ignored if slice
 
         Returns
@@ -290,7 +287,7 @@ class PreprocessingAccessor:
             images=cropped_images,
             labels=cropped_labels,
         )
-        self._sdata = _verify_plotting_tree_exists(self._sdata)
+        self._sdata = _verify_plotting_tree(self._sdata)
 
         # get current number of steps to create a unique key
         n_steps = len(self._sdata.plotting_tree.keys())
