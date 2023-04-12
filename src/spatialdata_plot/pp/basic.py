@@ -126,35 +126,59 @@ class PreprocessingAccessor:
         image_keys = []
         label_keys = []
         shape_keys = []
+        point_keys = []
 
         # prepare list of valid keys to sort elements on
         valid_coord_keys = self._sdata.coordinate_systems if hasattr(self._sdata, "coordinate_systems") else None
         valid_image_keys = list(self._sdata.images.keys()) if hasattr(self._sdata, "images") else None
         valid_label_keys = list(self._sdata.labels.keys()) if hasattr(self._sdata, "labels") else None
         valid_shape_keys = list(self._sdata.shapes.keys()) if hasattr(self._sdata, "shapes") else None
-
-        # for key_dict in [coord_keys, image_keys, label_keys, shape_keys]:
-        #     key_dict = []
-        #     key_dict["implicit"] = []
+        valid_point_keys = list(self._sdata.points.keys()) if hasattr(self._sdata, "points") else None
 
         # first, extract coordinate system keys becasuse they generate implicit keys
         mapping = _get_coordinate_system_mapping(self._sdata)
         implicit_keys = []
         for e in elements:
-            if (valid_coord_keys is not None) and (e in valid_coord_keys):
-                coord_keys.append(e)
-                implicit_keys += mapping[e]
+            for valid_coord_key in valid_coord_keys:
+                if (valid_coord_keys is not None) and (e == valid_coord_key):
+                    coord_keys.append(e)
+                    implicit_keys += mapping[e]
 
         for e in elements + implicit_keys:
-            if (valid_coord_keys is not None) and (e in valid_coord_keys):
-                coord_keys.append(e)
-            elif (valid_image_keys is not None) and (e in valid_image_keys):
-                image_keys.append(e)
-            elif (valid_label_keys is not None) and (e in valid_label_keys):
-                label_keys.append(e)
-            elif (valid_shape_keys is not None) and (e in valid_shape_keys):
-                shape_keys.append(e)
-            else:
+            
+            found = False
+            
+            if valid_coord_keys is not None:
+                for valid_coord_key in valid_coord_keys:
+                    if e == valid_coord_key:
+                        coord_keys.append(e)
+                        found = True
+            
+            if valid_image_keys is not None:
+                for valid_image_key in valid_image_keys:
+                    if e == valid_image_key:
+                        image_keys.append(e)
+                        found = True
+            
+            if valid_label_keys is not None:
+                for valid_label_key in valid_label_keys:
+                    if e == valid_label_key:
+                        label_keys.append(e)
+                        found = True
+            
+            if valid_shape_keys is not None:
+                for valid_shape_key in valid_shape_keys:
+                    if e == valid_shape_key:
+                        shape_keys.append(e)
+                        found = True
+            
+            if valid_point_keys is not None:
+                for valid_point_key in valid_point_keys:
+                    if e == valid_point_key:
+                        point_keys.append(e)
+                        found = True
+                    
+            if not found:
                 msg = f"Element '{e}' not found. Valid choices are:"
                 if valid_coord_keys is not None:
                     msg += "\n\ncoordinate_systems\n├ "
@@ -174,7 +198,7 @@ class PreprocessingAccessor:
         sdata = self._copy()
 
         if (valid_coord_keys is not None) and (len(coord_keys) > 0):
-            sdata = sdata.filter_by_coordinate_system(coord_keys)
+            sdata = sdata.filter_by_coordinate_system(coord_keys, filter_table=False)
 
         elif len(coord_keys) == 0:
             if valid_image_keys is not None:
@@ -203,6 +227,15 @@ class PreprocessingAccessor:
                     for valid_shape_key in valid_shape_keys:
                         if valid_shape_key not in shape_keys:
                             del sdata.shapes[valid_shape_key]
+
+            if valid_point_keys is not None:
+                if len(point_keys) == 0:
+                    for valid_shape_key in valid_point_keys:
+                        del sdata.points[valid_point_key]
+                elif len(point_keys) > 0:
+                    for valid_point_key in valid_point_keys:
+                        if valid_point_key not in point_keys:
+                            del sdata.points[valid_point_key]
 
         # subset table if it is present and the region key is a valid column
         if sdata.table is not None and len(shape_keys + label_keys) > 0:
