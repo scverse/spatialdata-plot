@@ -1,12 +1,13 @@
+import matplotlib
 import scanpy as sc
 from spatialdata import SpatialData
-import matplotlib
+
 import spatialdata_plot  # noqa: F401
 from tests.conftest import PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=40, color_map="viridis")
-matplotlib.use("agg") # same as GitHub action runner
+matplotlib.use("agg")  # same as GitHub action runner
 
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
