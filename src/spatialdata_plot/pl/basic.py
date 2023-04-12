@@ -154,24 +154,46 @@ class PlotAccessor:
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
-        Render the shapes contained in the given sd.SpatialData object
+        Render shapes elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        instance_key :
-            The name of the column in the table that identifies individual shapes
-        color_key :
-            The name of the column in the table to use for coloring shapes.
+        element
+            The name of the shapes element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        size
+            Value to scale circles, if present.
+        outline
+            If `True`, a thin border around points/shapes is plotted.
+        outline_width
+            Width of the border.
+        outline_color
+            Color of the border.
+        alt_var
+            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
+        layer
+            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
+        None
         """
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -210,25 +232,37 @@ class PlotAccessor:
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the points contained in the given sd.SpatialData object
+        """
+        Render points elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        instance_key :
-            The name of the column in the table that identifies individual shapes
-        color : str or None, optional (default: None)
-            The name of the column in the table to use for coloring shapes.
+        element
+            The name of the points element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        size
+            Value to scale points.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
+        None
         """
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -261,24 +295,30 @@ class PlotAccessor:
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the images contained in the given sd.SpatialData object
+        """
+        Render image elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        trans_fun :
-            A function to apply to the images before rendering. If `None`, no
-            function will be applied.
+        element
+            The name of the image element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        channel
+            To select which channel to plot (all by default).
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
+        None
         """
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -315,37 +355,44 @@ class PlotAccessor:
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the labels contained in the given sd.SpatialData object
+        """
+        Render labels elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            sd.SpatialData
-        instance_key :
-            The name of the column in the table that identifies individual labels
+        element
+            The name of the labels element to render. If `None`, the first
+            labels element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        contour_px
+            Draw contour of specified width for each segment. If `None`, fills
+            entire segment, see :func:`skimage.morphology.erosion`.
+        outline
+            Whether to plot boundaries around segmentation masks.
+        alt_var
+            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
+        layer
+            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the labels.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
-        Raises
-        ------
-        TypeError
-            If any of the parameters have an invalid type.
-        ValueError
-            If any of the parameters have an invalid value.
-            If the provided instance_key or color_key is not a valid table column.
-            If the provided mode is not one of 'thick', 'inner', 'outer', or
-            'subpixel'.
-
-        Notes
-        -----
-        This function plots cell labels for a spatialdata object. The cell labels are
-        based on a column in the table, and can optionally be colored based on another
-        column in the table. The resulting plot can be customized by specifying the
-        alpha, color, and rendering mode of the labels, as well as whether to add a
-        legend to the plot.
+        None
         """
         if (
             color is not None
