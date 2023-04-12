@@ -1,42 +1,50 @@
+from __future__ import annotations
+
 from collections import OrderedDict
-from typing import Callable, Optional, Union
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Optional, Union
 
 import geopandas as gpd
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import scanpy as sc
 import spatialdata as sd
-import xarray as xr
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
+from matplotlib.axes import Axes
+from matplotlib.colors import Colormap, Normalize
+from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
+from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
 from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
-from spatialdata_plot.pl._categorical_utils import (
-    add_colors_for_categorical_sample_annotation,
-)
-
-from ..accessor import register_spatial_data_accessor
-from ..pp.utils import _get_instance_key, _get_region_key, _verify_plotting_tree_exists
-from .render import (
-    _render_channels,
+from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot.pl.render import (
+    ImageRenderParams,
+    LabelsRenderParams,
+    PointsRenderParams,
+    ShapesRenderParams,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from .utils import (
-    _get_color_key_dtype,
-    _get_color_key_values,
-    _get_hex_colors_for_continous_values,
-    _get_random_hex_colors,
-    _get_subplots,
+from spatialdata_plot.pl.utils import (
+    LegendParams,
+    Palette_t,
+    _FontSize,
+    _FontWeight,
+    _maybe_set_colors,
+    _prepare_cmap_norm,
+    _prepare_params_plot,
+    _set_outline,
+    save_fig,
 )
+from spatialdata_plot.pp.utils import _verify_plotting_tree
 
 
 @register_spatial_data_accessor("pl")
@@ -129,383 +137,316 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        palette: Optional[Union[str, list[str], None]] = None,
-        instance_key: Optional[str] = None,
-        color_key: Optional[str] = None,
-        **scatter_kwargs: Optional[str],
+        element: str | None = None,
+        color: str | None = None,
+        groups: str | Sequence[str] | None = None,
+        size: float = 1.0,
+        outline: bool = False,
+        outline_width: tuple[float, float] = (0.3, 0.05),
+        outline_color: tuple[str, str] = ("black", "white"),
+        alt_var: str | None = None,
+        layer: str | None = None,
+        palette: Palette_t = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the shapes contained in the given sd.SpatialData object
+        """
+        Render shapes elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        instance_key :
-            The name of the column in the table that identifies individual shapes
-        color_key :
-            The name of the column in the table to use for coloring shapes.
+        element
+            The name of the shapes element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        size
+            Value to scale circles, if present.
+        outline
+            If `True`, a thin border around points/shapes is plotted.
+        outline_width
+            Width of the border.
+        outline_color
+            Color of the border.
+        alt_var
+            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
+        layer
+            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
+        None
         """
-        if palette is not None:
-            if isinstance(palette, str):
-                palette = [palette]
-
-            if isinstance(palette, list):
-                if not all(isinstance(p, str) for p in palette):
-                    raise TypeError("The palette argument must be a list of strings or a single string.")
-            else:
-                raise TypeError("The palette argument must be a list of strings or a single string.")
-
-        if instance_key is not None or color_key is not None:
-            if not hasattr(self._sdata, "table"):
-                raise ValueError("SpatialData object does not have a table.")
-
-            if not hasattr(self._sdata.table, "uns"):
-                raise ValueError("Table in SpatialData object does not have 'uns'.")
-
-            if not hasattr(self._sdata.table, "obs"):
-                raise ValueError("Table in SpatialData object does not have 'obs'.")
-
-            if isinstance(color_key, str) and not isinstance(instance_key, str):
-                raise ValueError("When giving a 'color_key', an 'instance_key' must also be given.")
-
-            if color_key is not None and not isinstance(color_key, str):
-                raise TypeError("When giving a 'color_key', it must be of type 'str'.")
-
-            if instance_key is not None and not isinstance(instance_key, str):
-                raise TypeError("When giving a 'instance_key', it must be of type 'str'.")
-
-            if instance_key not in self._sdata.table.obs.columns:
-                raise ValueError(f"Column '{instance_key}' not found in 'obs'.")
-
-            if color_key not in self._sdata.table.obs.columns and color_key not in self._sdata.table.to_df().columns:
-                raise ValueError(f"Column '{color_key}' not found in data.")
-
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = {
-            "palette": palette,
-            "instance_key": instance_key,
-            "color_key": color_key,
-        }
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
+        outline_params = _set_outline(size, outline, outline_width, outline_color)
+        sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
+            element=element,
+            color=color,
+            groups=groups,
+            outline_params=outline_params,
+            alt_var=alt_var,
+            layer=layer,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
     def render_points(
         self,
-        palette: Optional[Union[str, list[str], None]] = None,
-        color_key: Optional[str] = None,
-        **scatter_kwargs: Optional[str],
+        element: str | None = None,
+        color: str | None = None,
+        groups: str | Sequence[str] | None = None,
+        size: float = 1.0,
+        palette: Palette_t = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the points contained in the given sd.SpatialData object
+        """
+        Render points elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        instance_key :
-            The name of the column in the table that identifies individual shapes
-        color_key :
-            The name of the column in the table to use for coloring shapes.
+        element
+            The name of the points element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        size
+            Value to scale points.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
+        None
         """
-        if palette is not None:
-            if isinstance(palette, str):
-                palette = [palette]
-
-            if isinstance(palette, list):
-                if not all(isinstance(p, str) for p in palette):
-                    raise TypeError("The palette argument must be a list of strings or a single string.")
-            else:
-                raise TypeError("The palette argument must be a list of strings or a single string.")
-
-        if color_key is not None and not isinstance(color_key, str):
-            raise TypeError("When giving a 'color_key', it must be of type 'str'.")
-
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_points"] = {
-            "palette": palette,
-            "color_key": color_key,
-        }
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
+        sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
+            element=element,
+            color=color,
+            groups=groups,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
     def render_images(
         self,
-        palette: Optional[Union[str, list[str]]] = None,
-        trans_fun: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
+        element: str | None = None,
+        channel: str | None = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        palette: Palette_t = None,
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the images contained in the given sd.SpatialData object
+        """
+        Render image elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            The sd.SpatialData object.
-        palette :
-            A list of colors to use for rendering the images. If `None`, the
-            default colors will be used.
-        trans_fun :
-            A function to apply to the images before rendering. If `None`, no
-            function will be applied.
+        element
+            The name of the image element to render. If `None`, the first
+            shapes element in the `SpatialData` object will be used.
+        channel
+            To select which channel to plot (all by default).
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the shapes.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
+        None
         """
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_images"] = {
-            "palette": palette,
-            "trans_fun": trans_fun,
-        }
-
-        return sdata
-
-    def render_channels(
-        self,
-        channels: Union[list[str], list[int]],
-        colors: list[str],
-        normalize: bool = True,
-        clip: bool = True,
-        background: str = "black",
-        pmin: float = 3.0,
-        pmax: float = 99.8,
-    ) -> sd.SpatialData:
-        """Renders selected channels.
-
-        Parameters
-        ----------
-        self :
-            The SpatialData object
-        channels :
-            The channels to plot
-        colors :
-            The colors for the channels. Must be at least as long as len(channels).
-        normalize :
-            Perform quantile normalisation (using pmin, pmax)
-        clip :
-            Clips the merged image to the range (0, 1).
-        background :
-            Background color (defaults to black).
-        pmin :
-            Lower percentile for quantile normalisation (defaults to 3.-).
-        pmax :
-            Upper percentile for quantile normalisation (defaults to 99.8).
-
-        Raises
-        ------
-        TypeError
-            If any of the parameters have an invalid type.
-        ValueError
-            If any of the parameters have an invalid value.
-
-        Returns
-        -------
-        sd.SpatialData
-            A new `SpatialData` object that is a copy of the original
-            `SpatialData` object, with an updated plotting tree.
-        """
-        if not isinstance(channels, list):
-            raise TypeError("Parameter 'channels' must be a list.")
-
-        if not isinstance(colors, list):
-            raise TypeError("Parameter 'colors' must be a list.")
-
-        if len(channels) > len(colors):
-            raise ValueError("Number of colors must have at least the same length as the number of selected channels.")
-
-        if not isinstance(clip, bool):
-            raise TypeError("Parameter 'clip' must be a bool.")
-
-        if not isinstance(normalize, bool):
-            raise TypeError("Parameter 'normalize' must be a bool.")
-
-        if not isinstance(background, str):
-            raise TypeError("Parameter 'background' must be a str.")
-
-        if not isinstance(pmin, float):
-            raise TypeError("Parameter 'pmin' must be a str.")
-
-        if not isinstance(pmax, float):
-            raise TypeError("Parameter 'pmax' must be a str.")
-
-        if (pmin < 0.0) or (pmin > 100.0) or (pmax < 0.0) or (pmax > 100.0):
-            raise ValueError("Percentiles must be in the range 0 < pmin/pmax < 100.")
-
-        if pmin > pmax:
-            raise ValueError("Percentile parameters must satisfy pmin < pmax.")
-
-        sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
-        n_steps = len(sdata.plotting_tree.keys())
-
-        sdata.plotting_tree[f"{n_steps+1}_render_channels"] = {
-            "channels": channels,
-            "colors": colors,
-            "clip": clip,
-            "normalize": normalize,
-            "background": background,
-            "pmin": pmin,
-            "pmax": pmax,
-        }
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
+        sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
+            element=element,
+            channel=channel,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
     def render_labels(
         self,
-        instance_key: Optional[Union[str, None]] = None,
-        color_key: Optional[Union[str, None]] = None,
-        border_alpha: float = 1.0,
-        border_color: Optional[Union[str, None]] = None,
-        fill_alpha: float = 0.5,
-        fill_color: Optional[Union[str, None]] = None,
-        mode: str = "thick",
-        palette: Optional[Union[str, list[str]]] = None,
-        add_legend: bool = True,
+        element: str | None = None,
+        color: str | None = None,
+        groups: str | Sequence[str] | None = None,
+        contour_px: int | None = None,
+        outline: bool = False,
+        alt_var: str | None = None,
+        layer: str | None = None,
+        palette: Palette_t = None,
+        cmap: Colormap | str | None = None,
+        norm: Optional[Normalize] = None,
+        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        alpha: float = 1.0,
+        **kwargs: Any,
     ) -> sd.SpatialData:
-        """Render the labels contained in the given sd.SpatialData object
+        """
+        Render labels elements in SpatialData.
 
         Parameters
         ----------
-        self :
-            sd.SpatialData
-        instance_key :
-            The name of the column in the table that identifies individual labels
-        color_key :
-            The name of the column in the table to use for coloring labels.
-        border_alpha :
-            The alpha value of the label border. Must be between 0 and 1.
-        border_color :
-            The color of the border of the labels.
-        fill_alpha :
-            The alpha value of the fill of the labels. Must be between 0 and 1.
-        fill_color :
-            The color of the fill of the labels.
-        mode :
-            The rendering mode of the labels. Must be one of 'thick', 'inner',
-            'outer', or 'subpixel'.
-        palette :
-            The color palette to use when coloring cells. If None, a default
-            palette will be used.
-        add_legend :
-            Whether to add a legend to the plot.
+        element
+            The name of the labels element to render. If `None`, the first
+            labels element in the `SpatialData` object will be used.
+        color
+            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        groups
+            For discrete annotation in ``color``, select which values
+            to plot (other values are set to NAs).
+        contour_px
+            Draw contour of specified width for each segment. If `None`, fills
+            entire segment, see :func:`skimage.morphology.erosion`.
+        outline
+            Whether to plot boundaries around segmentation masks.
+        alt_var
+            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
+        layer
+            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
+        palette
+            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        cmap
+            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
+        norm
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
+        na_color
+            Color to be used for NAs values, if present.
+        alpha
+            Alpha value for the labels.
+        kwargs
+            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------
-        sd.SpatialData
-            The input sd.SpatialData with a command added to the plotting tree
-
-        Raises
-        ------
-        TypeError
-            If any of the parameters have an invalid type.
-        ValueError
-            If any of the parameters have an invalid value.
-            If the provided instance_key or color_key is not a valid table column.
-            If the provided mode is not one of 'thick', 'inner', 'outer', or
-            'subpixel'.
-
-        Notes
-        -----
-        This function plots cell labels for a spatialdata object. The cell labels are
-        based on a column in the table, and can optionally be colored based on another
-        column in the table. The resulting plot can be customized by specifying the
-        alpha, color, and rendering mode of the labels, as well as whether to add a
-        legend to the plot.
+        None
         """
-        if instance_key is not None:
-            if not isinstance(instance_key, str):
-                raise TypeError("Parameter 'instance_key' must be a string.")
-
-            if instance_key not in self._sdata.table.obs.columns:
-                raise ValueError(f"The provided instance_key '{instance_key}' is not a valid table column.")
-
-        if color_key is not None:
-            if not isinstance(color_key, (str, type(None))):
-                raise TypeError("Parameter 'color_key' must be a string.")
-
-            if color_key not in self._sdata.table.obs.columns:
-                raise ValueError(f"The provided color_key '{color_key}' is not a valid table column.")
-
-        if not isinstance(border_alpha, (int, float)):
-            raise TypeError("Parameter 'border_alpha' must be a float.")
-
-        if not (border_alpha <= 1 and border_alpha >= 0):
-            raise ValueError("Parameter 'border_alpha' must be between 0 and 1.")
-
-        if border_color is not None:
-            if not isinstance(color_key, (str, type(None))):
-                raise TypeError("If specified, parameter 'border_color' must be a string.")
-
-        if not isinstance(fill_alpha, (int, float)):
-            raise TypeError("Parameter 'fill_alpha' must be a float.")
-
-        if not (fill_alpha <= 1 and fill_alpha >= 0):
-            raise ValueError("Parameter 'fill_alpha' must be between 0 and 1.")
-
-        if fill_color is not None:
-            if not isinstance(fill_color, (str, type(None))):
-                raise TypeError("If specified, parameter 'fill_color' must be a string.")
-
-        valid_modes = ["thick", "inner", "outer", "subpixel"]
-        if not isinstance(mode, str):
-            raise TypeError("Parameter 'mode' must be a string.")
-
-        if mode not in valid_modes:
-            raise ValueError("Parameter 'mode' must be one of 'thick', 'inner', 'outer', 'subpixel'.")
-
-        if not isinstance(add_legend, bool):
-            raise TypeError("Parameter 'add_legend' must be a boolean.")
+        if (
+            color is not None
+            and color not in self._sdata.table.obs.columns
+            and color not in self._sdata.table.var_names
+        ):
+            raise ValueError(f"'{color}' is not a valid table column.")
 
         sdata = self._copy()
-        sdata = _verify_plotting_tree_exists(sdata)
+        sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = {
-            "instance_key": instance_key,
-            "color_key": color_key,
-            "border_alpha": border_alpha,
-            "border_color": border_color,
-            "fill_alpha": fill_alpha,
-            "fill_color": fill_color,
-            "mode": mode,
-            "palette": palette,
-            "add_legend": add_legend,
-        }
+        cmap_params = _prepare_cmap_norm(
+            cmap=cmap,
+            norm=norm,
+            na_color=na_color,  # type: ignore[arg-type]
+            **kwargs,
+        )
+        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
+            element=element,
+            color=color,
+            groups=groups,
+            contour_px=contour_px,
+            outline=outline,
+            alt_var=alt_var,
+            layer=layer,
+            cmap_params=cmap_params,
+            palette=palette,
+            alpha=alpha,
+        )
 
         return sdata
 
     def show(
         self,
-        ax: Union[plt.Axes, None] = None,
+        coordinate_system: str | Sequence[str] | None = None,
+        legend_fontsize: int | float | _FontSize | None = None,
+        legend_fontweight: int | _FontWeight = "bold",
+        legend_loc: str | None = "right margin",
+        legend_fontoutline: int | None = None,
+        na_in_legend: bool = True,
+        colorbar: bool = True,
+        wspace: float | None = None,
+        hspace: float = 0.25,
         ncols: int = 4,
-        width: int = 4,
-        height: int = 3,
-        bg_color: str = "black",
-        **kwargs: str,
+        frameon: bool | None = None,
+        figsize: tuple[float, float] | None = None,
+        dpi: int | None = None,
+        fig: Figure | None = None,
+        ax: Axes | Sequence[Axes] | None = None,
+        return_ax: bool = False,
+        save: Optional[Union[str, Path]] = None,
     ) -> sd.SpatialData:
-        """Plot the images in the SpatialData object.
+        """
+        Plot the images in the SpatialData object.
 
         Parameters
         ----------
@@ -524,39 +465,21 @@ class PlotAccessor:
         sd.SpatialData
             A SpatialData object.
         """
-        if not isinstance(ax, (matplotlib.pyplot.Axes, type(None))):
-            raise TypeError("If provided, Parameter 'ax' must be of type 'matplotlib.pyplot.Axes.")
-
-        if not isinstance(ncols, int):
-            raise TypeError("Parameter 'ncols' must be an integer.")
-
-        if not ncols >= 1:
-            raise ValueError("Parameter 'ncols' must be at least 1.")
-
-        if not isinstance(width, int):
-            raise ValueError("Parameter 'width' must be an integer.")
-
-        if not width > 0:
-            raise ValueError("Parameter 'width' must be greater than 0.")
-
-        if not isinstance(height, int):
-            raise TypeError("Parameter 'height' must be an integer.")
-
-        if not height > 0:
-            raise ValueError("Parameter 'height' must be greater than 0.")
-
-        if not isinstance(bg_color, str):
-            raise TypeError("If specified, parameter 'bg_color' must be a string.")
-
-        if not hasattr(self._sdata, "plotting_tree") or len(self._sdata.plotting_tree.keys()) == 0:
-            raise ValueError("No operations have been performed yet.")
-
         # copy the SpatialData object so we don't modify the original
-        plotting_tree = self._sdata.plotting_tree
+        try:
+            plotting_tree = self._sdata.plotting_tree
+        except AttributeError as e:
+            raise TypeError(
+                "Please specify what to plot using the 'render_*' functions before calling 'show()`."
+            ) from e
         sdata = self._copy()
 
-        # Evaluate execution tree for plotting
+        # handle coordinate system
+        coordinate_system = sdata.coordinate_systems if coordinate_system is None else coordinate_system
+        if isinstance(coordinate_system, str):
+            coordinate_system = [coordinate_system]
 
+        # Evaluate execution tree for plotting
         valid_commands = [
             "get_elements",
             "get_bb",
@@ -567,298 +490,222 @@ class PlotAccessor:
             "render_channels",
         ]
 
-        if len(plotting_tree.keys()) > 0:
-            render_cmds = OrderedDict()
+        # prepare rendering params
+        render_cmds = OrderedDict()
+        for cmd, params in plotting_tree.items():
+            # strip prefix from cmd and verify it's valid
+            cmd = "_".join(cmd.split("_")[1:])
 
-            for cmd, params in plotting_tree.items():
-                # strip prefix from cmd and verify it's valid
-                cmd = "_".join(cmd.split("_")[1:])
+            if cmd not in valid_commands:
+                raise ValueError(f"Command {cmd} is not valid.")
 
-                if cmd not in valid_commands:
-                    raise ValueError(f"Command {cmd} is not valid.")
+            elif "render" in cmd:
+                # verify that rendering commands have been called before
+                render_cmds[cmd] = params
 
-                elif "render" in cmd:
-                    # verify that rendering commands have been called before
-                    render_cmds[cmd] = params
+        if len(render_cmds.keys()) == 0:
+            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
-            if len(render_cmds.keys()) == 0:
-                raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+        # check that coordinate system and elements to be rendered match
+        for cmd, params in render_cmds.items():
+            if params.element is not None and len(params.element) != len(coordinate_system):
+                raise ValueError(
+                    f"Number of coordinate systems ({len(coordinate_system)}) does not match number of elements "
+                    f"({len(params.element)}) in command {cmd}."
+                )
 
-            for cmd, _ in render_cmds.items():
-                if cmd == "render_images" and len(sdata.images.keys()) == 0:
-                    raise ValueError("No images found in the SpatialData object.")
+        # set up canvas
+        fig_params, scalebar_params = _prepare_params_plot(
+            num_panels=len(coordinate_system),
+            figsize=figsize,
+            dpi=dpi,
+            fig=fig,
+            ax=ax,
+            wspace=wspace,
+            hspace=hspace,
+            ncols=ncols,
+            frameon=frameon,
+        )
+        legend_params = LegendParams(
+            legend_fontsize=legend_fontsize,
+            legend_fontweight=legend_fontweight,
+            legend_loc=legend_loc,
+            legend_fontoutline=legend_fontoutline,
+            na_in_legend=na_in_legend,
+            colorbar=colorbar,
+        )
 
-                elif cmd == "render_shapes" and len(sdata.shapes.keys()) == 0:
-                    raise ValueError("No shapes found in the SpatialData object.")
+        # transform all elements
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images" or cmd == "render_channels":
+                for key in sdata.images.keys():
+                    img_transformation = get_transformation(sdata.images[key], get_all=True)
+                    img_transformation = list(img_transformation.values())[0]
 
-                elif cmd == "render_points" and len(sdata.points.keys()) == 0:
-                    raise ValueError("No points found in the SpatialData object.")
+                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
+                        shifts: dict[str, int] = {}
+                        for idx, axis in enumerate(img_transformation.axes):
+                            shifts[axis] = int(img_transformation.translation[idx])
 
-                elif cmd == "render_labels" and len(sdata.labels.keys()) == 0:
-                    raise ValueError("No labels found in the SpatialData object.")
+                        img = sdata.images[key].values.copy()
+                        shifted_channels = []
 
-            # set up canvas
-            if ax is None:
-                num_images = len(sdata.coordinate_systems)
-                fig, axs = _get_subplots(num_images, ncols, width, height)
-            elif isinstance(ax, matplotlib.pyplot.Axes):
-                axs = np.array([ax])
-            elif isinstance(ax, list):
-                axs = ax
+                        # split channels, shift axes individually, them recombine
+                        if len(sdata.images[key].shape) == 3:
+                            for c in range(sdata.images[key].shape[0]):
+                                channel = img[c, :, :]
 
-            # Set background color
-            for _, ax in enumerate(axs.flatten()):
-                ax.set_facecolor(bg_color)
-                # key = list(sdata.labels.keys())[idx]
-                # ax.imshow(sdata.labels[key].values, cmap=ListedColormap([bg_color]))
+                                # iterates over [x, y]
+                                for axis, shift in shifts.items():
+                                    pad_x, pad_y = (0, 0), (0, 0)
+                                    if axis == "x" and shift > 0:
+                                        pad_x = (abs(shift), 0)
+                                    elif axis == "x" and shift < 0:
+                                        pad_x = (0, abs(shift))
 
-            # transform all elements
-            for cmd, _ in render_cmds.items():
-                if cmd == "render_images" or cmd == "render_channels":
-                    for key in sdata.images.keys():
-                        img_transformation = get_transformation(sdata.images[key], get_all=True)
-                        img_transformation = list(img_transformation.values())[0]
+                                    if axis == "y" and shift > 0:
+                                        pad_y = (abs(shift), 0)
+                                    elif axis == "y" and shift < 0:
+                                        pad_y = (0, abs(shift))
 
-                        if isinstance(img_transformation, sd.transformations.transformations.Translation):
-                            shifts: dict[str, int] = {}
-                            for idx, axis in enumerate(img_transformation.axes):
-                                shifts[axis] = int(img_transformation.translation[idx])
+                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
 
-                            img = sdata.images[key].values.copy()
-                            shifted_channels = []
+                                shifted_channels.append(channel)
 
-                            # split channels, shift axes individually, them recombine
-                            if len(sdata.images[key].shape) == 3:
-                                for c in range(sdata.images[key].shape[0]):
-                                    channel = img[c, :, :]
-
-                                    # iterates over [x, y]
-                                    for axis, shift in shifts.items():
-                                        pad_x, pad_y = (0, 0), (0, 0)
-                                        if axis == "x" and shift > 0:
-                                            pad_x = (abs(shift), 0)
-                                        elif axis == "x" and shift < 0:
-                                            pad_x = (0, abs(shift))
-
-                                        if axis == "y" and shift > 0:
-                                            pad_y = (abs(shift), 0)
-                                        elif axis == "y" and shift < 0:
-                                            pad_y = (0, abs(shift))
-
-                                        channel = np.pad(channel, (pad_y, pad_x), mode="constant")
-
-                                    shifted_channels.append(channel)
-
-                            sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
-
-                        else:
-                            sdata.images[key] = transform(sdata.images[key], img_transformation)
-
-                elif cmd == "render_shapes":
-                    for key in sdata.shapes.keys():
-                        shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
-                        shape_transformation = list(shape_transformation.values())[0]
-                        sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
-
-                elif cmd == "render_labels":
-                    for key in sdata.labels.keys():
-                        label_transformation = get_transformation(sdata.labels[key], get_all=True)
-                        label_transformation = list(label_transformation.values())[0]
-                        sdata.labels[key] = transform(sdata.labels[key], label_transformation)
-
-            # get biggest image after transformations to set ax size
-            x_dims = []
-            y_dims = []
-
-            for cmd, _ in render_cmds.items():
-                if cmd == "render_images" or cmd == "render_channels":
-                    y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
-                    x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
-
-                elif cmd == "render_shapes":
-                    for key in sdata.shapes.keys():
-                        points = []
-                        polygons = []
-
-                        for _, row in sdata.shapes[key].iterrows():
-                            if row["geometry"].geom_type == "Point":
-                                points.append(row)
-                            elif row["geometry"].geom_type == "Polygon":
-                                polygons.append(row)
-                            else:
-                                raise NotImplementedError(
-                                    "Only shapes of type 'Point' and 'Polygon' are supported right now."
-                                )
-
-                        if len(points) > 0:
-                            points_df = gpd.GeoDataFrame(data=points)
-                            x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
-                            y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
-
-                        if len(polygons) > 0:
-                            for p in polygons:
-                                minx, miny, maxx, maxy = p.geometry.bounds
-                                x_dims += [(minx, maxx)]
-                                y_dims += [(miny, maxy)]
-
-                elif cmd == "render_labels":
-                    y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
-                    x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
-
-            max_x = [max(values) for values in zip(*x_dims)]
-            min_x = [min(values) for values in zip(*x_dims)]
-            max_y = [max(values) for values in zip(*y_dims)]
-            min_y = [min(values) for values in zip(*y_dims)]
-
-            extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
-
-            # go through tree
-            for cmd, params in render_cmds.items():
-                keys = list(sdata.images.keys())
-
-                if cmd == "render_images":
-                    for key, ax in zip(keys, axs.flatten()):
-                        _render_images(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
-                elif cmd == "render_channels":
-                    for key, ax in zip(keys, axs.flatten()):
-                        _render_channels(sdata=sdata, key=key, ax=ax, **params)
-
-                elif cmd == "render_shapes":
-                    if (
-                        sdata.table is not None
-                        and isinstance(params["instance_key"], str)
-                        and isinstance(params["color_key"], str)
-                    ):
-                        color_key_dtype = _get_color_key_dtype(sdata, params["color_key"])
-
-                        if isinstance(color_key_dtype, pd.core.dtypes.dtypes.CategoricalDtype):
-                            # If we have a table and proper keys, generate categolrical
-                            # colours which are stored in the 'uns' of the table.
-                            add_colors_for_categorical_sample_annotation(
-                                adata=sdata.table,
-                                key=params["instance_key"],
-                                vec=_get_color_key_values(sdata, params["color_key"]),
-                                palette=params["palette"],
-                            )
-
-                        elif isinstance(color_key_dtype, np.dtype):
-                            # if it's not categorical, we assume continous values
-                            colors = _get_hex_colors_for_continous_values(
-                                _get_color_key_values(sdata, params["color_key"])
-                            )
-                            sdata.table.uns[f"{params['color_key']}_colors"] = colors
-
-                        else:
-                            raise ValueError("The dtype of the 'color_key' column must be categorical or numeric.")
-
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.shapes.keys())[idx]
-                        _render_shapes(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
-                elif cmd == "render_points":
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.points.keys())[idx]
-                        if params["color_key"] is not None:
-                            if params["color_key"] not in sdata.points[key].columns:
-                                raise ValueError(
-                                    f"The column '{params['color_key']}' is not present in the 'metadata' of the points."
-                                )
-
-                        _render_points(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
-                elif cmd == "render_labels":
-                    if (
-                        sdata.table is not None
-                        and isinstance(params["instance_key"], str)
-                        and isinstance(params["color_key"], str)
-                    ):
-                        # If we have a table and proper keys, generate categolrical
-                        # colours which are stored in the 'uns' of the table.
-
-                        add_colors_for_categorical_sample_annotation(
-                            adata=sdata.table,
-                            key=params["instance_key"],
-                            vec=_get_color_key_values(sdata, params["color_key"]),
-                            palette=params["palette"],
-                        )
+                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
 
                     else:
-                        # If any of the previous conditions are not met, generate random
-                        # colors for each cell id
+                        sdata.images[key] = transform(sdata.images[key], img_transformation)
 
-                        N_DISTINCT_FOR_RANDOM = 30
+            elif cmd == "render_shapes":
+                for key in sdata.shapes.keys():
+                    shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
+                    shape_transformation = list(shape_transformation.values())[0]
+                    sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
 
-                        if sdata.table is not None:
-                            # annoying case since number of cells in labels can be
-                            # different from number of cells in table. So we just use
-                            # the index and randomise colours for it
+            elif cmd == "render_labels":
+                for key in sdata.labels.keys():
+                    label_transformation = get_transformation(sdata.labels[key], get_all=True)
+                    label_transformation = list(label_transformation.values())[0]
+                    sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
-                            # add fake column for limiting the amount of different colors
-                            sdata.table.obs["fake"] = np.random.randint(
-                                0, N_DISTINCT_FOR_RANDOM, sdata.table.obs.shape[0]
+        # get biggest image after transformations to set ax size
+        x_dims = []
+        y_dims = []
+
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images" or cmd == "render_channels":
+                y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
+                x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
+
+            elif cmd == "render_shapes":
+                for key in sdata.shapes.keys():
+                    points = []
+                    polygons = []
+                    # TODO: improve getting extent of polygons
+                    for _, row in sdata.shapes[key].iterrows():
+                        if row["geometry"].geom_type == "Point":
+                            points.append(row)
+                        elif row["geometry"].geom_type == "Polygon":
+                            polygons.append(row)
+                        else:
+                            raise NotImplementedError(
+                                "Only shapes of type 'Point' and 'Polygon' are supported right now."
                             )
 
-                            # has a table, so it has a region key
-                            region_key = _get_region_key(sdata)
+                    if len(points) > 0:
+                        points_df = gpd.GeoDataFrame(data=points)
+                        x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
+                        y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
 
-                            cell_ids_per_label = {}
-                            for key in list(sdata.labels.keys()):
-                                cell_ids_per_label[key] = len(sdata.table.obs.query(f"{region_key} == '{key}'"))
+                    if len(polygons) > 0:
+                        for p in polygons:
+                            minx, miny, maxx, maxy = p.geometry.bounds
+                            x_dims += [(minx, maxx)]
+                            y_dims += [(miny, maxy)]
 
-                            region_key = _get_region_key(sdata)
-                            instance_key = _get_instance_key(sdata)
-                            params["instance_key"] = instance_key
-                            params["color_key"] = "fake"
-                            params["add_legend"] = False
-                            # TODO(ttreis) log the decision not to display a legend
+            elif cmd == "render_labels":
+                y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
+                x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
 
-                            distinct_cells = len(sdata.table.obs[params["color_key"]].unique())
+        [max(values) for values in zip(*x_dims)]
+        [min(values) for values in zip(*x_dims)]
+        [max(values) for values in zip(*y_dims)]
+        [min(values) for values in zip(*y_dims)]
 
-                        elif sdata.table is None:
-                            # No table, create one
+        # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
 
-                            cell_ids_per_label = {}
-                            for key in list(sdata.labels.keys()):
-                                cell_ids_per_label[key] = sdata.labels[key].values.max()
-                            region_key = "tmp_label_id"
-                            instance_key = "tmp_cell_id"
-                            params["instance_key"] = instance_key
-                            params["color_key"] = instance_key
-                            params["add_legend"] = False
-                            # TODO(ttreis) log the decision not to display a legend
-
-                            tmp_table = pd.DataFrame(
-                                {
-                                    region_key: [k for k, v in cell_ids_per_label.items() for _ in range(v)],
-                                    instance_key: [i for _, v in cell_ids_per_label.items() for i in range(v)],
-                                }
+        # go through tree
+        for i, cs in enumerate(coordinate_system):
+            ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
+            for cmd, params in render_cmds.items():
+                if cmd == "render_images":
+                    _render_images(
+                        sdata=sdata,
+                        render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                    )
+                elif cmd == "render_shapes":
+                    if sdata.table is not None and isinstance(params.color, str):
+                        colors = sc.get.obs_df(sdata.table, params.color)
+                        if is_categorical_dtype(colors):
+                            _maybe_set_colors(
+                                source=sdata.table,
+                                target=sdata.table,
+                                key=params.color,
+                                palette=params.palette,
                             )
+                    _render_shapes(
+                        sdata=sdata,
+                        render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                    )
 
-                            tmp_table["fake"] = np.random.randint(0, N_DISTINCT_FOR_RANDOM, len(tmp_table))
-                            distinct_cells = max(list(cell_ids_per_label.values()))
+                elif cmd == "render_points":
+                    _render_points(
+                        sdata=sdata,
+                        render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                    )
 
-                        if sdata.table is not None:
-                            sdata.table.uns[f"{instance_key}_colors"] = _get_random_hex_colors(distinct_cells)
+                elif cmd == "render_labels":
+                    if (
+                        sdata.table is not None
+                        # and isinstance(params["instance_key"], str)
+                        and isinstance(params.color, str)
+                    ):
+                        colors = sc.get.obs_df(sdata.table, params.color)
+                        if is_categorical_dtype(colors):
+                            _maybe_set_colors(
+                                source=sdata.table,
+                                target=sdata.table,
+                                key=params.color,
+                                palette=params.palette,
+                            )
+                    _render_labels(
+                        sdata=sdata,
+                        render_params=params,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                    )
 
-                        elif sdata.table is None:
-                            data = np.zeros((tmp_table.shape[0], 1))
-                            table = AnnData(X=data, obs=tmp_table, dtype=data.dtype)
-                            table.uns = {}
-                            table.uns["spatialdata_attrs"] = {}
-                            table.uns["spatialdata_attrs"]["region"] = list(sdata.labels.keys())
-                            table.uns["spatialdata_attrs"]["instance_key"] = instance_key
-                            table.uns["spatialdata_attrs"]["region_key"] = region_key
-                            table.uns[f"{instance_key}_colors"] = _get_random_hex_colors(distinct_cells)
+        if fig_params.fig is not None and save is not None:
+            save_fig(fig_params.fig, path=save)
 
-                            del sdata.table
-                            sdata.table = table
-
-                    for idx, ax in enumerate(axs):
-                        key = list(sdata.labels.keys())[idx]
-                        _render_labels(sdata=sdata, params=params, key=key, ax=ax, extent=extent)
-
-                else:
-                    raise NotImplementedError(f"Command '{cmd}' is not supported.")
-
-        return axs
+        if return_ax:
+            return fig_params.ax if fig_params.axs is None else fig_params.axs

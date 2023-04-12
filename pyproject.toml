@@ -23,6 +23,7 @@ dependencies = [
     "matplotlib",
     "scikit-learn",
     "scanpy",
+    "matplotlib_scalebar"
 ]
 
 [project.optional-dependencies]
