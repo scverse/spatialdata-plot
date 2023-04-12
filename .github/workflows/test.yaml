@@ -55,8 +55,14 @@ jobs:
                   DISPLAY: :42
               run: |
                   pytest -v --cov --color=yes --cov-report=xml
+            - name: Archive visual testing results
+              uses: actions/upload-artifact@v3
+              with:
+                  name: plotting-results
+                  path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v3.1.1
               with:
                   name: coverage
                   verbose: true
+            
