@@ -16,10 +16,8 @@ sc.set_figure_params(dpi=40, color_map="viridis")
 
 
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
-    def test_tol_plot_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels().pl.show()
-
-        self.compare("Labels_labels", tolerance=30)
+    def test_plot_labels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels(color="channel_2_mean").pl.show()
 
 
 class TestImages(PlotTester, metaclass=PlotTesterMeta):
