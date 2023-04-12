@@ -36,6 +36,8 @@ from skimage.util import map_array
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 
+from ..pp.utils import _get_coordinate_system_mapping
+
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
 _SeqStr = Union[str, Sequence[str]]
@@ -132,12 +134,12 @@ def _prepare_params_plot(
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: Union[str, list[str]] = "all",
+    coordinate_systems: Union[str, Sequence[str]] = "all",
     images: bool = True,
     labels: bool = True,
     points: bool = True,
     shapes: bool = True,
-) -> dict[str, tuple(int, int, int, int)]:
+) -> dict[str, tuple[int, int, int, int]]:
     """Takes a SpatialData object and returns the extent of the contained elements
 
     Parameters
@@ -159,8 +161,55 @@ def _get_extent(
         dict are the coordinate_system keys.
 
     """
+    extent: dict[str, tuple[int, int, int, int]] = {}
+    cs_mapping = _get_coordinate_system_mapping(sdata)
 
-    return "a"
+    print(f"{images=} {labels=} {points=} {shapes=}")
+
+    for cs_name, element_ids in cs_mapping.items():
+        x_dims = []
+        y_dims = []
+
+        # Using two for-loops in the following code to avoid partial matches
+        # since "aa" in ["aaa", "bbb"] would return true
+
+        if images:
+            for images_key in sdata.images.keys():
+                for element_id in element_ids:
+                    if images_key == element_id:
+                        tmp = sdata.images[element_id]
+                        y_dims += [(0, tmp.shape[1])]  # img is cyx, so we skip 0
+                        x_dims += [(0, tmp.shape[2])]
+                        print(y_dims)
+                        del tmp
+
+        if labels:
+            for labels_key in sdata.labels.keys():
+                for element_id in element_ids:
+                    if labels_key == element_id:
+                        tmp = sdata.labels[element_id]
+                        y_dims += [(0, tmp.shape[0])]
+                        x_dims += [(0, tmp.shape[1])]
+                        del tmp
+
+        if points:
+            for points_key in sdata.points.keys():
+                for element_id in element_ids:
+                    if points_key == element_id:
+                        tmp = sdata.points[element_id]
+                        print(tmp)
+                        y_dims += [(tmp.y.min().compute(), tmp.y.max().compute())]
+                        x_dims += [(tmp.x.min().compute(), tmp.x.max().compute())]
+                        del tmp
+
+        print(x_dims, y_dims)
+        xmax = max(list(sum(x_dims, ())))
+        xmin = min(list(sum(x_dims, ())))
+        ymax = max(list(sum(y_dims, ())))
+        ymin = min(list(sum(y_dims, ())))
+        extent[cs_name] = (xmin, xmax, ymin, ymax)
+
+    return extent
 
 
 def _panel_grid(

@@ -655,11 +655,6 @@ class PlotAccessor:
         #         y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
         #         x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
 
-        # [max(values) for values in zip(*x_dims)]
-        # [min(values) for values in zip(*x_dims)]
-        # [max(values) for values in zip(*y_dims)]
-        # [min(values) for values in zip(*y_dims)]
-
         # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
 
         # go through tree
