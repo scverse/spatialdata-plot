@@ -508,7 +508,7 @@ class PlotAccessor:
 
         # check that coordinate system and elements to be rendered match
         for cmd, params in render_cmds.items():
-            if params.element is not None and len(params.element) != len(coordinate_system):
+            if params.element is not None and len([params.element]) != len(coordinate_system):
                 raise ValueError(
                     f"Number of coordinate systems ({len(coordinate_system)}) does not match number of elements "
                     f"({len(params.element)}) in command {cmd}."

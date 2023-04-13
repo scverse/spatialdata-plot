@@ -106,9 +106,9 @@ def _render_shapes(
         **kwargs: Any,
     ) -> PatchCollection:
         """Get collection of shapes."""
-        if shapes["geometry"][0].geom_type == "Polygon":
+        if shapes["geometry"].iloc[0].geom_type == "Polygon":
             patches = [Polygon(p.exterior.coords, closed=False) for p in shapes["geometry"]]
-        elif shapes["geometry"][0].geom_type == "Point":
+        elif shapes["geometry"].iloc[0].geom_type == "Point":
             patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
         collection = PatchCollection(patches, snap=False, **kwargs)
