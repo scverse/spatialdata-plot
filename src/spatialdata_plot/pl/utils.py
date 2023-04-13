@@ -165,6 +165,30 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
 
     print(f"{images=} {labels=} {points=} {shapes=}")
+    print(cs_mapping)
+
+    cs_contents = pd.DataFrame(columns=["cs", "has_images", "has_labels", "has_points", "has_shapes"])
+    for cs_name, element_ids in cs_mapping.items():
+        # determine if coordinate system has the respective elements
+        cs_has_images = True if any([e in sdata.images.keys() for e in element_ids]) else False
+        cs_has_labels = True if any([e in sdata.labels.keys() for e in element_ids]) else False
+        cs_has_points = True if any([e in sdata.points.keys() for e in element_ids]) else False
+        cs_has_shapes = True if any([e in sdata.shapes.keys() for e in element_ids]) else False
+
+        cs_contents = pd.concat(
+            [
+                cs_contents,
+                pd.DataFrame(
+                    {
+                        "cs": cs_name,
+                        "has_images": [cs_has_images],
+                        "has_labels": [cs_has_labels],
+                        "has_points": [cs_has_points],
+                        "has_shapes": [cs_has_shapes],
+                    }
+                ),
+            ]
+        )
 
     for cs_name, element_ids in cs_mapping.items():
         x_dims = []
@@ -173,9 +197,10 @@ def _get_extent(
         # Using two for-loops in the following code to avoid partial matches
         # since "aa" in ["aaa", "bbb"] would return true
 
-        if images:
+        if images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
             for images_key in sdata.images.keys():
                 for element_id in element_ids:
+                    print(element_id, images_key)
                     if images_key == element_id:
                         tmp = sdata.images[element_id]
                         y_dims += [(0, tmp.shape[1])]  # img is cyx, so we skip 0
@@ -183,7 +208,7 @@ def _get_extent(
                         print(y_dims)
                         del tmp
 
-        if labels:
+        if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels.keys():
                 for element_id in element_ids:
                     if labels_key == element_id:
@@ -192,22 +217,31 @@ def _get_extent(
                         x_dims += [(0, tmp.shape[1])]
                         del tmp
 
-        if points:
+        if points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
             for points_key in sdata.points.keys():
                 for element_id in element_ids:
                     if points_key == element_id:
                         tmp = sdata.points[element_id]
-                        print(tmp)
                         y_dims += [(tmp.y.min().compute(), tmp.y.max().compute())]
                         x_dims += [(tmp.x.min().compute(), tmp.x.max().compute())]
                         del tmp
 
-        print(x_dims, y_dims)
-        xmax = max(list(sum(x_dims, ())))
-        xmin = min(list(sum(x_dims, ())))
-        ymax = max(list(sum(y_dims, ())))
-        ymin = min(list(sum(y_dims, ())))
-        extent[cs_name] = (xmin, xmax, ymin, ymax)
+        if shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
+            for shapes_key in sdata.shapes.keys():
+                for element_id in element_ids:
+                    if shapes_key == element_id:
+                        tmp = sdata.shapes[element_id]
+                        minx, miny, maxx, maxy = tmp.total_bounds
+                        y_dims += [(miny, maxy)]
+                        x_dims += [(minx, maxx)]
+                        del tmp
+
+        if len(x_dims) > 0 and len(y_dims) > 0:
+            xmax = max(list(sum(x_dims, ())))
+            xmin = min(list(sum(x_dims, ())))
+            ymax = max(list(sum(y_dims, ())))
+            ymin = min(list(sum(y_dims, ())))
+            extent[cs_name] = (xmin, xmax, ymin, ymax)
 
     return extent
 
