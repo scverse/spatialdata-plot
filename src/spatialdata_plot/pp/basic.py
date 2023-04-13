@@ -229,7 +229,7 @@ class PreprocessingAccessor:
 
             if valid_point_keys is not None:
                 if len(point_keys) == 0:
-                    for valid_shape_key in valid_point_keys:
+                    for valid_point_key in valid_point_keys:
                         del sdata.points[valid_point_key]
                 elif len(point_keys) > 0:
                     for valid_point_key in valid_point_keys:
