@@ -20,7 +20,6 @@ from matplotlib.colors import ColorConverter, ListedColormap, Normalize
 from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
-from spatialdata.models import TableModel
 
 from spatialdata_plot.pl.utils import (
     CmapParams,
@@ -34,6 +33,7 @@ from spatialdata_plot.pl.utils import (
     _normalize,
     _set_color_source_vec,
 )
+from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -82,9 +82,10 @@ def _render_shapes(
     if sdata.table is None:
         table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(shapes))))
     else:
-        # instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
-        region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
-        table = sdata.table[sdata.table.obs[region_key].isin([shapes_key])]
+        print("how", shapes_key)
+        print(_get_region_key(sdata))
+        print(sdata.table.to_df())
+        table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
@@ -97,6 +98,7 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.alpha,
     )
+    print(f"{color_vector=}")
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
@@ -116,6 +118,7 @@ def _render_shapes(
             collection.set_array(np.ma.masked_invalid(c))
             collection.set_norm(norm)
         else:
+            print(f"{c=}")
             alpha = ColorConverter().to_rgba_array(c)[..., -1]
             collection.set_facecolor(c)
             collection.set_alpha(alpha)
@@ -133,6 +136,7 @@ def _render_shapes(
             # **kwargs,
         )
         ax.add_collection(_cax)
+
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.outline_params.gap_size,
@@ -143,6 +147,7 @@ def _render_shapes(
             # **kwargs,
         )
         ax.add_collection(_cax)
+
     _cax = _get_collection_shape(
         shapes=shapes,
         s=render_params.size,
@@ -154,6 +159,7 @@ def _render_shapes(
         # **kwargs,
     )
     cax = ax.add_collection(_cax)
+
     _ = _decorate_axs(
         ax=ax,
         cax=cax,
@@ -369,8 +375,8 @@ def _render_labels(
         instance_id = np.unique(labels)
         table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
     else:
-        instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
-        region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
+        instance_key = _get_instance_key(sdata)
+        region_key = _get_region_key(sdata)
 
         table = sdata.table[sdata.table.obs[region_key].isin([labels_key])]
 

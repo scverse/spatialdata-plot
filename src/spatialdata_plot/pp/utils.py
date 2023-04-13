@@ -3,6 +3,7 @@ from collections import OrderedDict
 import matplotlib
 import spatialdata as sd
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+from spatialdata.models import TableModel
 from spatialdata.transformations import get_transformation
 
 
@@ -20,20 +21,14 @@ def _get_listed_colormap(color_dict: dict[str, str]) -> matplotlib.colors.Listed
 
 def _get_region_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's region key."""
-    if not hasattr(sdata, "table"):
-        raise ValueError("SpatialData object does not have a table.")
-
-    region_key = str(sdata.table.uns["spatialdata_attrs"]["region_key"])
+    region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
 
     return region_key
 
 
 def _get_instance_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's instance key."""
-    if not hasattr(sdata, "table"):
-        raise ValueError("SpatialData object does not have a table.")
-
-    instance_key = str(sdata.table.uns["spatialdata_attrs"]["instance_key"])
+    instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
 
     return instance_key
 
