@@ -37,6 +37,7 @@ from spatialdata_plot.pl.utils import (
     Palette_t,
     _FontSize,
     _FontWeight,
+    _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
     _prepare_cmap_norm,
@@ -427,7 +428,7 @@ class PlotAccessor:
 
     def show(
         self,
-        coordinate_system: str | Sequence[str] | None = None,
+        coordinate_systems: str | Sequence[str] | None = None,
         legend_fontsize: int | float | _FontSize | None = None,
         legend_fontweight: int | _FontWeight = "bold",
         legend_loc: str | None = "right margin",
@@ -474,11 +475,6 @@ class PlotAccessor:
             ) from e
         sdata = self._copy()
 
-        # handle coordinate system
-        coordinate_system = sdata.coordinate_systems if coordinate_system is None else coordinate_system
-        if isinstance(coordinate_system, str):
-            coordinate_system = [coordinate_system]
-
         # Evaluate execution tree for plotting
         valid_commands = [
             "get_elements",
@@ -487,7 +483,6 @@ class PlotAccessor:
             "render_shapes",
             "render_labels",
             "render_points",
-            "render_channels",
         ]
 
         # prepare rendering params
@@ -506,17 +501,55 @@ class PlotAccessor:
         if len(render_cmds.keys()) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
+        # Get extent of data to be plotted
+        want_images_extent: bool = False
+        want_labels_extent: bool = False
+        want_points_extent: bool = False
+        want_shapes_extent: bool = False
+
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images":
+                want_images_extent = True
+            elif cmd == "render_labels":
+                want_labels_extent = True
+            elif cmd == "render_points":
+                want_points_extent = True
+            elif cmd == "render_shapes":
+                want_shapes_extent = True
+
+        extent = _get_extent(
+            sdata=sdata,
+            images=want_images_extent,
+            labels=want_labels_extent,
+            points=want_points_extent,
+            shapes=want_shapes_extent,
+        )
+
+        # handle coordinate system
+        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        if isinstance(coordinate_systems, str):
+            coordinate_systems = [coordinate_systems]
+
+        # Use extent to filter out coordinate system without the relevant elements
+        valid_cs = []
+        for cs in coordinate_systems:
+            if cs in extent.keys():
+                valid_cs.append(cs)
+            else:
+                print(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+        coordinate_systems = valid_cs
+
         # check that coordinate system and elements to be rendered match
         for cmd, params in render_cmds.items():
-            if params.element is not None and len([params.element]) != len(coordinate_system):
+            if params.element is not None and len([params.element]) != len(coordinate_systems):
                 raise ValueError(
-                    f"Number of coordinate systems ({len(coordinate_system)}) does not match number of elements "
+                    f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
                     f"({len(params.element)}) in command {cmd}."
                 )
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
-            num_panels=len(coordinate_system),
+            num_panels=len(coordinate_systems),
             figsize=figsize,
             dpi=dpi,
             fig=fig,
@@ -589,79 +622,12 @@ class PlotAccessor:
                     label_transformation = list(label_transformation.values())[0]
                     sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
-        # Get extent of data to be plotted
-        want_images_extent: bool = False
-        want_labels_extent: bool = False
-        want_points_extent: bool = False
-        want_shapes_extent: bool = False
-
-        for cmd, _ in render_cmds.items():
-            if cmd == "render_images":
-                want_images_extent = True
-            elif cmd == "render_labels":
-                want_labels_extent = True
-            elif cmd == "render_points":
-                want_points_extent = True
-            elif cmd == "render_shapes":
-                want_shapes_extent = True
-
-        extent = _get_extent(
-            sdata=sdata,
-            coordinate_systems=coordinate_system,
-            images=want_images_extent,
-            labels=want_labels_extent,
-            points=want_points_extent,
-            shapes=want_shapes_extent,
-        )
-
-        print(extent)
-
-        # get biggest image after transformations to set ax size
-        # x_dims = []
-        # y_dims = []
-
-        # for cmd, _ in render_cmds.items():
-        #     if cmd == "render_images" or cmd == "render_channels":
-        #         y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
-        #         x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
-
-        #     elif cmd == "render_shapes":
-        #         for key in sdata.shapes.keys():
-        #             points = []
-        #             polygons = []
-        #             # TODO: improve getting extent of polygons
-        #             for _, row in sdata.shapes[key].iterrows():
-        #                 if row["geometry"].geom_type == "Point":
-        #                     points.append(row)
-        #                 elif row["geometry"].geom_type == "Polygon":
-        #                     polygons.append(row)
-        #                 else:
-        #                     raise NotImplementedError(
-        #                         "Only shapes of type 'Point' and 'Polygon' are supported right now."
-        #                     )
-
-        #             if len(points) > 0:
-        #                 points_df = gpd.GeoDataFrame(data=points)
-        #                 x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
-        #                 y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
-
-        #             if len(polygons) > 0:
-        #                 for p in polygons:
-        #                     minx, miny, maxx, maxy = p.geometry.bounds
-        #                     x_dims += [(minx, maxx)]
-        #                     y_dims += [(miny, maxy)]
-
-        #     elif cmd == "render_labels":
-        #         y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
-        #         x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
-
-        # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
-
         # go through tree
-        for i, cs in enumerate(coordinate_system):
+        cs_contents = _get_cs_contents(sdata)
+        for i, cs in enumerate(coordinate_systems):
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             for cmd, params in render_cmds.items():
-                if cmd == "render_images":
+                if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:
                     _render_images(
                         sdata=sdata,
                         render_params=params,
@@ -671,7 +637,7 @@ class PlotAccessor:
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
-                elif cmd == "render_shapes":
+                elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     if sdata.table is not None and isinstance(params.color, str):
                         colors = sc.get.obs_df(sdata.table, params.color)
                         if is_categorical_dtype(colors):
@@ -691,7 +657,7 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
-                elif cmd == "render_points":
+                elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:
                     _render_points(
                         sdata=sdata,
                         render_params=params,
@@ -702,7 +668,7 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
-                elif cmd == "render_labels":
+                elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:
                     if (
                         sdata.table is not None
                         # and isinstance(params["instance_key"], str)
@@ -725,6 +691,18 @@ class PlotAccessor:
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
+
+                ax.set_title(cs)
+                if any(
+                    [
+                        cs_contents.query(f"cs == '{cs}'")["has_images"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_labels"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_points"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
+                    ]
+                ):
+                    ax.set_xlim(extent[cs][0], extent[cs][1])
+                    ax.set_ylim(extent[cs][2], extent[cs][3])
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)

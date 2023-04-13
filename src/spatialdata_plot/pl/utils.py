@@ -132,6 +132,42 @@ def _prepare_params_plot(
     return fig_params, scalebar_params
 
 
+def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
+    """Checks which coordinate systems contain which elements."""
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    content_flags = ["has_images", "has_labels", "has_points", "has_shapes"]
+    cs_contents = pd.DataFrame(columns=["cs"] + content_flags)
+
+    for cs_name, element_ids in cs_mapping.items():
+        # determine if coordinate system has the respective elements
+        cs_has_images = True if any([e in sdata.images.keys() for e in element_ids]) else False
+        cs_has_labels = True if any([e in sdata.labels.keys() for e in element_ids]) else False
+        cs_has_points = True if any([e in sdata.points.keys() for e in element_ids]) else False
+        cs_has_shapes = True if any([e in sdata.shapes.keys() for e in element_ids]) else False
+
+        cs_contents = pd.concat(
+            [
+                cs_contents,
+                pd.DataFrame(
+                    {
+                        "cs": cs_name,
+                        "has_images": [cs_has_images],
+                        "has_labels": [cs_has_labels],
+                        "has_points": [cs_has_points],
+                        "has_shapes": [cs_has_shapes],
+                    }
+                ),
+            ]
+        )
+
+        cs_contents["has_images"] = cs_contents["has_images"].astype("bool")
+        cs_contents["has_labels"] = cs_contents["has_labels"].astype("bool")
+        cs_contents["has_points"] = cs_contents["has_points"].astype("bool")
+        cs_contents["has_shapes"] = cs_contents["has_shapes"].astype("bool")
+
+    return cs_contents
+
+
 def _get_extent(
     sdata: sd.SpatialData,
     coordinate_systems: Union[str, Sequence[str]] = "all",
@@ -163,32 +199,7 @@ def _get_extent(
     """
     extent: dict[str, tuple[int, int, int, int]] = {}
     cs_mapping = _get_coordinate_system_mapping(sdata)
-
-    print(f"{images=} {labels=} {points=} {shapes=}")
-    print(cs_mapping)
-
-    cs_contents = pd.DataFrame(columns=["cs", "has_images", "has_labels", "has_points", "has_shapes"])
-    for cs_name, element_ids in cs_mapping.items():
-        # determine if coordinate system has the respective elements
-        cs_has_images = True if any([e in sdata.images.keys() for e in element_ids]) else False
-        cs_has_labels = True if any([e in sdata.labels.keys() for e in element_ids]) else False
-        cs_has_points = True if any([e in sdata.points.keys() for e in element_ids]) else False
-        cs_has_shapes = True if any([e in sdata.shapes.keys() for e in element_ids]) else False
-
-        cs_contents = pd.concat(
-            [
-                cs_contents,
-                pd.DataFrame(
-                    {
-                        "cs": cs_name,
-                        "has_images": [cs_has_images],
-                        "has_labels": [cs_has_labels],
-                        "has_points": [cs_has_points],
-                        "has_shapes": [cs_has_shapes],
-                    }
-                ),
-            ]
-        )
+    cs_contents = _get_cs_contents(sdata)
 
     for cs_name, element_ids in cs_mapping.items():
         x_dims = []
@@ -200,12 +211,10 @@ def _get_extent(
         if images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
             for images_key in sdata.images.keys():
                 for element_id in element_ids:
-                    print(element_id, images_key)
                     if images_key == element_id:
                         tmp = sdata.images[element_id]
                         y_dims += [(0, tmp.shape[1])]  # img is cyx, so we skip 0
                         x_dims += [(0, tmp.shape[2])]
-                        print(y_dims)
                         del tmp
 
         if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:

@@ -221,7 +221,9 @@ def _render_points(
         points = points[coords].compute()
 
     # we construct an anndata to hack the plotting functions
-    adata = AnnData(X=points[["x", "y"]].values, obs=points[coords].reset_index())
+    adata = AnnData(
+        X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
+    )
     if render_params.color is not None:
         cols = sc.get.obs_df(adata, render_params.color)
         # maybe set color based on type
@@ -242,7 +244,6 @@ def _render_points(
     )
 
     norm = copy(render_params.cmap_params.norm)
-
     _cax = ax.scatter(
         adata[:, 0].X.flatten(),
         adata[:, 1].X.flatten(),
