@@ -145,39 +145,38 @@ class PreprocessingAccessor:
                     implicit_keys += mapping[e]
 
         for e in elements + implicit_keys:
-            
             found = False
-            
+
             if valid_coord_keys is not None:
                 for valid_coord_key in valid_coord_keys:
                     if e == valid_coord_key:
                         coord_keys.append(e)
                         found = True
-            
+
             if valid_image_keys is not None:
                 for valid_image_key in valid_image_keys:
                     if e == valid_image_key:
                         image_keys.append(e)
                         found = True
-            
+
             if valid_label_keys is not None:
                 for valid_label_key in valid_label_keys:
                     if e == valid_label_key:
                         label_keys.append(e)
                         found = True
-            
+
             if valid_shape_keys is not None:
                 for valid_shape_key in valid_shape_keys:
                     if e == valid_shape_key:
                         shape_keys.append(e)
                         found = True
-            
+
             if valid_point_keys is not None:
                 for valid_point_key in valid_point_keys:
                     if e == valid_point_key:
                         point_keys.append(e)
                         found = True
-                    
+
             if not found:
                 msg = f"Element '{e}' not found. Valid choices are:"
                 if valid_coord_keys is not None:
