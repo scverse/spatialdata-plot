@@ -29,6 +29,7 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
+from shapely.geometry import Point
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -239,10 +240,30 @@ def _get_extent(
             for shapes_key in sdata.shapes.keys():
                 for element_id in element_ids:
                     if shapes_key == element_id:
+
+                        def get_point_bb(
+                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 1
+                        ) -> Point:
+                            x, y = point.coords[0]
+                            if method == "topleft":
+                                return Point(x - radius - buffer, y - radius - buffer)
+                            else:
+                                return Point(x + radius + buffer, y + radius + buffer)
+
                         tmp = sdata.shapes[element_id]
-                        minx, miny, maxx, maxy = tmp.total_bounds
-                        y_dims += [(miny, maxy)]
-                        x_dims += [(minx, maxx)]
+                        tmp["point_topleft"] = tmp.apply(
+                            lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
+                            axis=1,
+                        )
+                        tmp["point_bottomright"] = tmp.apply(
+                            lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
+                            axis=1,
+                        )
+                        xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp["point_topleft"].total_bounds
+                        xmin_br, ymin_br, xmax_br, ymax_br = tmp["point_bottomright"].total_bounds
+                        y_dims += [(min(ymin_tl, ymin_br), max(ymax_tl, ymax_br))]
+                        x_dims += [(min(xmin_tl, xmin_br), max(xmax_tl, xmax_br))]
+
                         del tmp
 
         if len(x_dims) > 0 and len(y_dims) > 0:
@@ -322,7 +343,7 @@ def _prepare_cmap_norm(
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if isinstance(norm, Normalize):
-        pass
+        pass  # TODO
     elif vcenter is None:
         norm = Normalize(vmin=vmin, vmax=vmax)
     else:
@@ -565,6 +586,7 @@ def _set_color_source_vec(
     )
     if color_map is None:
         raise ValueError("Unable to create color palette.")
+
     # do not rename categories, as colors need not be unique
     color_vector = color_source_vector.map(color_map)
     if color_vector.isna().any():
@@ -591,8 +613,10 @@ def _map_color_seg(
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)  # type: ignore
         cols = colors.to_rgba_array(color_vector.categories)  # type: ignore
+
     else:
         val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
+
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
         except TypeError:
@@ -601,6 +625,7 @@ def _map_color_seg(
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
+
     # check if no color is assigned, compute random colors
     unique_cols = np.unique(cols)
     if len(unique_cols) == 1 and unique_cols == 0:
@@ -619,6 +644,7 @@ def _map_color_seg(
         seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
         return seg_bound
     seg_im = np.dstack((seg_im, np.where(val_im > 0, 1, 0)))  # add transparency here
+
     return seg_im
 
 
@@ -716,11 +742,11 @@ def _decorate_axs(
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
-    ax.set_yticks([])
-    ax.set_xticks([])
+    # ax.set_yticks([])
+    # ax.set_xticks([])
     # ax.set_xlabel(fig_params.ax_labels[0])
     # ax.set_ylabel(fig_params.ax_labels[1])
-    ax.autoscale_view()  # needed when plotting points but no image
+    # ax.autoscale_view()  # needed when plotting points but no image
 
     if value_to_plot is not None:
         # if only dots were plotted without an associated value

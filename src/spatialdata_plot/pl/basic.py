@@ -702,7 +702,7 @@ class PlotAccessor:
                     ]
                 ):
                     ax.set_xlim(extent[cs][0], extent[cs][1])
-                    ax.set_ylim(extent[cs][3], extent[cs][2])  # "wrong" way round, but intentional
+                    ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)

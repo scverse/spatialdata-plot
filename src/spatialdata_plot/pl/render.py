@@ -8,6 +8,7 @@ from typing import Any, Optional, Union
 
 import dask.dataframe as dd
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -66,8 +67,6 @@ def _render_shapes(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    # get instance and region keys
-
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=False if sdata.table is None else True,
@@ -82,9 +81,6 @@ def _render_shapes(
     if sdata.table is None:
         table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(shapes))))
     else:
-        print("how", shapes_key)
-        print(_get_region_key(sdata))
-        print(sdata.table.to_df())
         table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
     # get color vector (categorical or continuous)
@@ -98,7 +94,18 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.alpha,
     )
-    print(f"{color_vector=}")
+
+    # If no colors were extracted, assign default color to all shape colors
+    if all(
+        [
+            len(np.unique(color_source_vector)) == 1,  # type: ignore
+            np.unique(color_source_vector) == "#00000000",  # type: ignore
+            len(np.unique(color_vector)) == 1,
+            np.unique(color_vector) == "#00000000",
+        ]
+    ):
+        default_color = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
+        color_vector = np.full(table.n_obs, to_hex(default_color))
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
@@ -113,15 +120,18 @@ def _render_shapes(
         elif shapes["geometry"].iloc[0].geom_type == "Point":
             patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
-        collection = PatchCollection(patches, snap=False, **kwargs)
+        collection = PatchCollection(patches, snap=False, zorder=4, **kwargs)
+
         if isinstance(c, np.ndarray) and np.issubdtype(c.dtype, np.number):
             collection.set_array(np.ma.masked_invalid(c))
             collection.set_norm(norm)
+
         else:
-            print(f"{c=}")
+            # Assign color to drawn shapes, either Polygons or Circles
             alpha = ColorConverter().to_rgba_array(c)[..., -1]
             collection.set_facecolor(c)
             collection.set_alpha(alpha)
+
         return collection
 
     norm = copy(render_params.cmap_params.norm)
@@ -358,8 +368,6 @@ def _render_labels(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    # get instance and region keys
-
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=False if sdata.table is None else True,
