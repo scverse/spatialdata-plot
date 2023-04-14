@@ -356,7 +356,8 @@ class LabelsRenderParams:
     alt_var: str | None = None
     layer: str | None = None
     palette: Palette_t = None
-    alpha: float = 1.0
+    outline_alpha: float = 1.0
+    fill_alpha: float = 0.3
 
 
 def _render_labels(
@@ -400,7 +401,7 @@ def _render_labels(
         groups=render_params.groups,
         palette=render_params.palette,
         na_color=render_params.cmap_params.na_color,
-        alpha=render_params.alpha,
+        alpha=render_params.fill_alpha,
     )
 
     # map color vector to segmentation
@@ -420,7 +421,7 @@ def _render_labels(
         rasterized=True,
         cmap=render_params.cmap_params.cmap if not categorical else None,
         norm=render_params.cmap_params.norm if not categorical else None,
-        alpha=render_params.alpha,
+        alpha=render_params.fill_alpha,
         origin="lower",
         zorder=3,
     )
@@ -434,7 +435,7 @@ def _render_labels(
         value_to_plot=render_params.color,
         color_source_vector=color_source_vector,
         palette=render_params.palette,
-        alpha=render_params.alpha,
+        alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
         legend_fontsize=legend_params.legend_fontsize,
         legend_fontweight=legend_params.legend_fontweight,

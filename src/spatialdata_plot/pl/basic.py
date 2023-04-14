@@ -353,7 +353,8 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        alpha: float = 1.0,
+        outline_alpha: float = 1.0,
+        fill_alpha: float = 0.3,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -421,7 +422,8 @@ class PlotAccessor:
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
-            alpha=alpha,
+            outline_alpha=outline_alpha,
+            fill_alpha=fill_alpha,
         )
 
         return sdata
