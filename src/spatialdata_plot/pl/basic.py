@@ -501,6 +501,60 @@ class PlotAccessor:
         if len(render_cmds.keys()) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
+        # transform all elements
+        for cmd, _ in render_cmds.items():
+            if cmd == "render_images" or cmd == "render_channels":
+                for key in sdata.images.keys():
+                    img_transformation = get_transformation(sdata.images[key], get_all=True)
+                    img_transformation = list(img_transformation.values())[0]
+
+                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
+                        shifts: dict[str, int] = {}
+                        for idx, axis in enumerate(img_transformation.axes):
+                            shifts[axis] = int(img_transformation.translation[idx])
+
+                        img = sdata.images[key].values.copy()
+                        shifted_channels = []
+
+                        # split channels, shift axes individually, them recombine
+                        if len(sdata.images[key].shape) == 3:
+                            for c in range(sdata.images[key].shape[0]):
+                                channel = img[c, :, :]
+
+                                # iterates over [x, y]
+                                for axis, shift in shifts.items():
+                                    pad_x, pad_y = (0, 0), (0, 0)
+                                    if axis == "x" and shift > 0:
+                                        pad_x = (abs(shift), 0)
+                                    elif axis == "x" and shift < 0:
+                                        pad_x = (0, abs(shift))
+
+                                    if axis == "y" and shift > 0:
+                                        pad_y = (abs(shift), 0)
+                                    elif axis == "y" and shift < 0:
+                                        pad_y = (0, abs(shift))
+
+                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
+
+                                shifted_channels.append(channel)
+
+                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
+
+                    else:
+                        sdata.images[key] = transform(sdata.images[key], img_transformation)
+
+            elif cmd == "render_shapes":
+                for key in sdata.shapes.keys():
+                    shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
+                    shape_transformation = list(shape_transformation.values())[0]
+                    sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
+
+            elif cmd == "render_labels":
+                for key in sdata.labels.keys():
+                    label_transformation = get_transformation(sdata.labels[key], get_all=True)
+                    label_transformation = list(label_transformation.values())[0]
+                    sdata.labels[key] = transform(sdata.labels[key], label_transformation)
+
         # Get extent of data to be plotted
         want_images_extent: bool = False
         want_labels_extent: bool = False
@@ -567,60 +621,6 @@ class PlotAccessor:
             na_in_legend=na_in_legend,
             colorbar=colorbar,
         )
-
-        # transform all elements
-        for cmd, _ in render_cmds.items():
-            if cmd == "render_images" or cmd == "render_channels":
-                for key in sdata.images.keys():
-                    img_transformation = get_transformation(sdata.images[key], get_all=True)
-                    img_transformation = list(img_transformation.values())[0]
-
-                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
-                        shifts: dict[str, int] = {}
-                        for idx, axis in enumerate(img_transformation.axes):
-                            shifts[axis] = int(img_transformation.translation[idx])
-
-                        img = sdata.images[key].values.copy()
-                        shifted_channels = []
-
-                        # split channels, shift axes individually, them recombine
-                        if len(sdata.images[key].shape) == 3:
-                            for c in range(sdata.images[key].shape[0]):
-                                channel = img[c, :, :]
-
-                                # iterates over [x, y]
-                                for axis, shift in shifts.items():
-                                    pad_x, pad_y = (0, 0), (0, 0)
-                                    if axis == "x" and shift > 0:
-                                        pad_x = (abs(shift), 0)
-                                    elif axis == "x" and shift < 0:
-                                        pad_x = (0, abs(shift))
-
-                                    if axis == "y" and shift > 0:
-                                        pad_y = (abs(shift), 0)
-                                    elif axis == "y" and shift < 0:
-                                        pad_y = (0, abs(shift))
-
-                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
-
-                                shifted_channels.append(channel)
-
-                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
-
-                    else:
-                        sdata.images[key] = transform(sdata.images[key], img_transformation)
-
-            elif cmd == "render_shapes":
-                for key in sdata.shapes.keys():
-                    shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
-                    shape_transformation = list(shape_transformation.values())[0]
-                    sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
-
-            elif cmd == "render_labels":
-                for key in sdata.labels.keys():
-                    label_transformation = get_transformation(sdata.labels[key], get_all=True)
-                    label_transformation = list(label_transformation.values())[0]
-                    sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
         # go through tree
         cs_contents = _get_cs_contents(sdata)
