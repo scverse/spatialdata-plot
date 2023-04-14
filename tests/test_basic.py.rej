@@ -1,0 +1,10 @@
+diff a/tests/test_basic.py b/tests/test_basic.py	(rejected hunks)
+@@ -4,7 +4,7 @@ import spatialdata_plot
+ 
+ 
+ def test_package_has_version():
+-    spatialdata_plot.__version__
++    assert spatialdata_plot.__version__ is not None
+ 
+ 
+ @pytest.mark.skip(reason="This decorator should be removed when test passes.")
