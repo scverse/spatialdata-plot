@@ -25,7 +25,7 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.random import default_rng
-from pandas.api.types import CategoricalDtype, is_categorical_dtype
+from pandas.apis import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
@@ -254,10 +254,10 @@ def _get_extent(
 
                         # Split by Point and Polygon:
                         tmp_points = sdata.shapes[element_id][
-                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Point")
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
                         ]
                         tmp_polygons = sdata.shapes[element_id][
-                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Polygon")
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.geom_type == "Polygon")
                         ]
 
                         if not tmp_points.empty:
