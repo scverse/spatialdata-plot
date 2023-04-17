@@ -406,7 +406,7 @@ def _render_labels(
         alpha=render_params.fill_alpha,
     )
 
-    if (render_params.fill_alpha != render_params.outline_alpha) and not (render_params.contour_px is None):
+    if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
         # First get the labels infill and plot them
         labels_infill = _map_color_seg(
             seg=labels,
