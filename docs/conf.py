@@ -21,7 +21,7 @@ project_name = info["Name"]
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}."
 version = info["Version"]
-repository_url = f"https://github.com/scverse/{project_name}"
+# repository_url = f"https://github.com/scverse/{project_name}"
 
 # The full version, including alpha/beta/rc tags
 release = info["Version"]
@@ -54,10 +54,12 @@ extensions = [
     "sphinx_autodoc_typehints",
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
+    "sphinx_design",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
 autosummary_generate = True
+autodoc_process_signature = True
 autodoc_member_order = "groupwise"
 default_role = "literal"
 napoleon_google_docstring = False
@@ -65,7 +67,7 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
 napoleon_use_param = True
-myst_heading_anchors = 6  # create anchors for h1-h6
+myst_heading_anchors = 3  # create anchors for h1-h3
 myst_enable_extensions = [
     "amsmath",
     "colon_fence",
@@ -87,18 +89,33 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "matplotlib": ("https://matplotlib.org/stable/", None),
-    "spatialdata": ("https://scverse-spatialdata.readthedocs.io/en/latest/", None),
-    "skimage": ("https://scikit-image.org/docs/stable/", None),
+    "geopandas": ("https://geopandas.org/en/stable/", None),
+    "xarray": ("https://docs.xarray.dev/en/stable/", None),
+    "datatree": ("https://datatree.readthedocs.io/en/latest/", None),
+    "dask": ("https://docs.dask.org/en/latest/", None),
 }
+
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    "**.ipynb_checkpoints",
+    "tutorials/notebooks/index.md",
+    "tutorials/notebooks/README.md",
+    "tutorials/notebooks/references.md",
+    "tutorials/notebooks/notebooks/paper_reproducibility/*",
+]
+# Ignore warnings.
+nitpicky = False  # TODO: solve upstream.
+# nitpick_ignore = [
+#     ("py:class", "spatial_image.SpatialImage"),
+#     ("py:class", "multiscale_spatial_image.multiscale_spatial_image.MultiscaleSpatialImage"),
+# ]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -107,23 +124,22 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # a list of builtin themes.
 #
 html_theme = "sphinx_book_theme"
+# html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_title = project_name
+html_logo = "_static/img/spatialdata_horizontal.png"
 
-html_theme_options = {
-    "repository_url": repository_url,
-    "use_repository_button": True,
-    "path_to_docs": "docs/",
-}
+# html_theme_options = {
+# "repository_url": repository_url,
+# "use_repository_button": True,
+# }
 
 pygments_style = "default"
 
 nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
-    ("py:class", "spatialdata._core.spatialdata.SpatialData"),
-    ("py:class", "xarray.core.dataarray.DataArray"),
-    ("py:class", "matplotlib.axes._axes.Axes"),
+    ("py:class", "igraph.Graph"),
 ]
 
 
@@ -140,3 +156,4 @@ def setup(app):
         },
         True,
     )
+    app.add_css_file("css/custom.css")
