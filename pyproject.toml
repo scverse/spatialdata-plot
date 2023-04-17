@@ -20,24 +20,11 @@ requires-python = ">=3.9"
 license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
-    "anndata>=0.9.1",
-    "numpy",
-    "xarray",
-    "zarr",
-#    "ome_zarr",
-    "ome_zarr@git+https://github.com/ome/ome-zarr-py.git",
-    "spatial_image>=0.3.0",
-    "multiscale_spatial_image>=0.11.2",
-    "xarray-schema",
-    "pygeos",
-    "geopandas",
-    "shapely>=2.0.1",
-    "rich",
-    "pyarrow",
-    "typing_extensions>=4.0.0",
-    "dask-image",
-    "networkx",
-    "xarray-spatial>=0.3.5",
+    "spatialdata@git+https://github.com/scverse/spatialdata",
+    "matplotlib",
+    "scikit-learn",
+    "scanpy",
+    "matplotlib_scalebar" 
 ]
 
 [project.optional-dependencies]
