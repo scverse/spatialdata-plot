@@ -14,23 +14,18 @@ def _get_linear_colormap(colors: list[str], background: str) -> list[matplotlib.
 def _get_listed_colormap(color_dict: dict[str, str]) -> matplotlib.colors.ListedColormap:
     sorted_labels = sorted(color_dict.keys())
     colors = [color_dict[k] for k in sorted_labels]
-    cmap = ListedColormap(["black"] + colors, N=len(colors) + 1)
 
-    return cmap
+    return ListedColormap(["black"] + colors, N=len(colors) + 1)
 
 
 def _get_region_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's region key."""
-    region_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
-
-    return region_key
+    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
 
 
 def _get_instance_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's instance key."""
-    instance_key = str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
-
-    return instance_key
+    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
 
 
 def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:

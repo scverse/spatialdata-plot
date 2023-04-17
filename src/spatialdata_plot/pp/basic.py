@@ -49,7 +49,7 @@ class PreprocessingAccessor:
         shapes: Union[None, dict[str, GeoDataFrame]] = None,
         table: Union[None, AnnData] = None,
     ) -> sd.SpatialData:
-        """Copies the references from the original to the new SpatialData object."""
+        """Copy the references from the original to the new SpatialData object."""
         sdata = sd.SpatialData(
             images=self._sdata.images if images is None else images,
             labels=self._sdata.labels if labels is None else labels,
