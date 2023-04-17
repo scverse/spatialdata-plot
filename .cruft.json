@@ -1,23 +1,23 @@
 {
-  "template": "https://github.com/scverse/cookiecutter-scverse",
-  "commit": "c21b82bf134f3a0f13db7482d4fb04ca1f562d59",
-  "checkout": "main",
-  "context": {
-    "cookiecutter": {
-      "project_name": "spatialdata-plot",
-      "package_name": "spatialdata_plot",
-      "project_description": "A very interesting piece of code",
-      "author_full_name": "scverse",
-      "author_email": "scverse",
-      "github_user": "scverse",
-      "project_repo": "https://github.com/scverse/spatialdata-plot",
-      "license": "BSD 3-Clause License",
-      "_copy_without_render": [
-        ".github/workflows/**.yaml",
-        "docs/_templates/autosummary/**.rst"
-      ],
-      "_template": "https://github.com/scverse/cookiecutter-scverse"
-    }
-  },
-  "directory": null
+    "template": "https://github.com/scverse/cookiecutter-scverse",
+    "commit": "c21b82bf134f3a0f13db7482d4fb04ca1f562d59",
+    "checkout": "main",
+    "context": {
+        "cookiecutter": {
+            "project_name": "spatialdata-plot",
+            "package_name": "spatialdata_plot",
+            "project_description": "A very interesting piece of code",
+            "author_full_name": "scverse",
+            "author_email": "scverse",
+            "github_user": "scverse",
+            "project_repo": "https://github.com/scverse/spatialdata-plot",
+            "license": "BSD 3-Clause License",
+            "_copy_without_render": [
+                ".github/workflows/**.yaml",
+                "docs/_templates/autosummary/**.rst"
+            ],
+            "_template": "https://github.com/scverse/cookiecutter-scverse"
+        }
+    },
+    "directory": null
 }

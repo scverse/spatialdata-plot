@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import geopandas as gpd
 import numpy as np
 import scanpy as sc
 import spatialdata as sd
@@ -19,6 +18,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
+from spatialdata._logging import logger as logg
 from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
@@ -38,6 +38,8 @@ from spatialdata_plot.pl.utils import (
     Palette_t,
     _FontSize,
     _FontWeight,
+    _get_cs_contents,
+    _get_extent,
     _maybe_set_colors,
     _prepare_cmap_norm,
     _prepare_params_plot,
@@ -149,7 +151,7 @@ class PlotAccessor:
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
-        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: str | tuple[float, ...] | None = "lightgrey",
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -344,7 +346,7 @@ class PlotAccessor:
         element: str | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
-        contour_px: int | None = None,
+        contour_px: int = 3,
         outline: bool = False,
         alt_var: str | None = None,
         layer: str | None = None,
@@ -352,7 +354,8 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        alpha: float = 1.0,
+        outline_alpha: float = 1.0,
+        fill_alpha: float = 0.3,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -420,14 +423,15 @@ class PlotAccessor:
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
-            alpha=alpha,
+            outline_alpha=outline_alpha,
+            fill_alpha=fill_alpha,
         )
 
         return sdata
 
     def show(
         self,
-        coordinate_system: str | Sequence[str] | None = None,
+        coordinate_systems: str | Sequence[str] | None = None,
         legend_fontsize: int | float | _FontSize | None = None,
         legend_fontweight: int | _FontWeight = "bold",
         legend_loc: str | None = "right margin",
@@ -474,11 +478,6 @@ class PlotAccessor:
             ) from e
         sdata = self._copy()
 
-        # handle coordinate system
-        coordinate_system = sdata.coordinate_systems if coordinate_system is None else coordinate_system
-        if isinstance(coordinate_system, str):
-            coordinate_system = [coordinate_system]
-
         # Evaluate execution tree for plotting
         valid_commands = [
             "get_elements",
@@ -487,7 +486,6 @@ class PlotAccessor:
             "render_shapes",
             "render_labels",
             "render_points",
-            "render_channels",
         ]
 
         # prepare rendering params
@@ -499,46 +497,17 @@ class PlotAccessor:
             if cmd not in valid_commands:
                 raise ValueError(f"Command {cmd} is not valid.")
 
-            elif "render" in cmd:
+            if "render" in cmd:
                 # verify that rendering commands have been called before
                 render_cmds[cmd] = params
 
         if len(render_cmds.keys()) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
-        # check that coordinate system and elements to be rendered match
-        for cmd, params in render_cmds.items():
-            if params.element is not None and len([params.element]) != len(coordinate_system):
-                raise ValueError(
-                    f"Number of coordinate systems ({len(coordinate_system)}) does not match number of elements "
-                    f"({len(params.element)}) in command {cmd}."
-                )
-
-        # set up canvas
-        fig_params, scalebar_params = _prepare_params_plot(
-            num_panels=len(coordinate_system),
-            figsize=figsize,
-            dpi=dpi,
-            fig=fig,
-            ax=ax,
-            wspace=wspace,
-            hspace=hspace,
-            ncols=ncols,
-            frameon=frameon,
-        )
-        legend_params = LegendParams(
-            legend_fontsize=legend_fontsize,
-            legend_fontweight=legend_fontweight,
-            legend_loc=legend_loc,
-            legend_fontoutline=legend_fontoutline,
-            na_in_legend=na_in_legend,
-            colorbar=colorbar,
-        )
-
         # transform all elements
         for cmd, _ in render_cmds.items():
             if cmd == "render_images" or cmd == "render_channels":
-                for key in sdata.images.keys():
+                for key in sdata.images:
                     img_transformation = get_transformation(sdata.images[key], get_all=True)
                     img_transformation = list(img_transformation.values())[0]
 
@@ -578,68 +547,74 @@ class PlotAccessor:
                         sdata.images[key] = transform(sdata.images[key], img_transformation)
 
             elif cmd == "render_shapes":
-                for key in sdata.shapes.keys():
+                for key in sdata.shapes:
                     shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
                     shape_transformation = list(shape_transformation.values())[0]
                     sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
 
             elif cmd == "render_labels":
-                for key in sdata.labels.keys():
+                for key in sdata.labels:
                     label_transformation = get_transformation(sdata.labels[key], get_all=True)
                     label_transformation = list(label_transformation.values())[0]
                     sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
-        # get biggest image after transformations to set ax size
-        x_dims = []
-        y_dims = []
+        extent = _get_extent(
+            sdata=sdata,
+            images="render_images" in render_cmds,
+            labels="render_labels" in render_cmds,
+            points="render_points" in render_cmds,
+            shapes="render_shapes" in render_cmds,
+        )
 
-        for cmd, _ in render_cmds.items():
-            if cmd == "render_images" or cmd == "render_channels":
-                y_dims += [(0, x.shape[1]) for x in sdata.images.values()]
-                x_dims += [(0, x.shape[2]) for x in sdata.images.values()]
+        # handle coordinate system
+        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        if isinstance(coordinate_systems, str):
+            coordinate_systems = [coordinate_systems]
 
-            elif cmd == "render_shapes":
-                for key in sdata.shapes.keys():
-                    points = []
-                    polygons = []
-                    # TODO: improve getting extent of polygons
-                    for _, row in sdata.shapes[key].iterrows():
-                        if row["geometry"].geom_type == "Point":
-                            points.append(row)
-                        elif row["geometry"].geom_type == "Polygon":
-                            polygons.append(row)
-                        else:
-                            raise NotImplementedError(
-                                "Only shapes of type 'Point' and 'Polygon' are supported right now."
-                            )
+        # Use extent to filter out coordinate system without the relevant elements
+        valid_cs = []
+        for cs in coordinate_systems:
+            if cs in extent:
+                valid_cs.append(cs)
+            else:
+                logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+        coordinate_systems = valid_cs
 
-                    if len(points) > 0:
-                        points_df = gpd.GeoDataFrame(data=points)
-                        x_dims += [(min(points_df.geometry.x), max(points_df.geometry.x))]
-                        y_dims += [(min(points_df.geometry.y), max(points_df.geometry.y))]
+        # check that coordinate system and elements to be rendered match
+        for cmd, params in render_cmds.items():
+            if params.element is not None and len([params.element]) != len(coordinate_systems):
+                raise ValueError(
+                    f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
+                    f"({len(params.element)}) in command {cmd}."
+                )
 
-                    if len(polygons) > 0:
-                        for p in polygons:
-                            minx, miny, maxx, maxy = p.geometry.bounds
-                            x_dims += [(minx, maxx)]
-                            y_dims += [(miny, maxy)]
-
-            elif cmd == "render_labels":
-                y_dims += [(0, x.shape[0]) for x in sdata.labels.values()]
-                x_dims += [(0, x.shape[1]) for x in sdata.labels.values()]
-
-        [max(values) for values in zip(*x_dims)]
-        [min(values) for values in zip(*x_dims)]
-        [max(values) for values in zip(*y_dims)]
-        [min(values) for values in zip(*y_dims)]
-
-        # extent = {"x": [min_x[0], max_x[1]], "y": [max_y[1], min_y[0]]}
+        # set up canvas
+        fig_params, scalebar_params = _prepare_params_plot(
+            num_panels=len(coordinate_systems),
+            figsize=figsize,
+            dpi=dpi,
+            fig=fig,
+            ax=ax,
+            wspace=wspace,
+            hspace=hspace,
+            ncols=ncols,
+            frameon=frameon,
+        )
+        legend_params = LegendParams(
+            legend_fontsize=legend_fontsize,
+            legend_fontweight=legend_fontweight,
+            legend_loc=legend_loc,
+            legend_fontoutline=legend_fontoutline,
+            na_in_legend=na_in_legend,
+            colorbar=colorbar,
+        )
 
         # go through tree
-        for i, cs in enumerate(coordinate_system):
+        cs_contents = _get_cs_contents(sdata)
+        for i, cs in enumerate(coordinate_systems):
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             for cmd, params in render_cmds.items():
-                if cmd == "render_images":
+                if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:
                     _render_images(
                         sdata=sdata,
                         render_params=params,
@@ -649,7 +624,7 @@ class PlotAccessor:
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
                     )
-                elif cmd == "render_shapes":
+                elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     if sdata.table is not None and isinstance(params.color, str):
                         colors = sc.get.obs_df(sdata.table, params.color)
                         if is_categorical_dtype(colors):
@@ -669,7 +644,7 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
-                elif cmd == "render_points":
+                elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:
                     _render_points(
                         sdata=sdata,
                         render_params=params,
@@ -680,7 +655,7 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
-                elif cmd == "render_labels":
+                elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:
                     if (
                         sdata.table is not None
                         # and isinstance(params["instance_key"], str)
@@ -704,8 +679,19 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
+                ax.set_title(cs)
+                if any(
+                    [
+                        cs_contents.query(f"cs == '{cs}'")["has_images"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_labels"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_points"][0],
+                        cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
+                    ]
+                ):
+                    ax.set_xlim(extent[cs][0], extent[cs][1])
+                    ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
+
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
 
-        if return_ax:
-            return fig_params.ax if fig_params.axs is None else fig_params.axs
+        return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff

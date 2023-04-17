@@ -9,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import spatialdata as sd
+import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
@@ -28,8 +29,6 @@ from spatialdata.models import (
     TableModel,
 )
 from xarray import DataArray
-
-import spatialdata_plot  # noqa: F401
 
 HERE: Path = Path(__file__).parent
 
@@ -337,13 +336,15 @@ def _get_table(
     adata = AnnData(RNG.normal(size=(100, 10)), obs=pd.DataFrame(RNG.normal(size=(100, 3)), columns=["a", "b", "c"]))
     adata.obs[instance_key] = np.arange(adata.n_obs)
     if isinstance(region, str):
-        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, instance_key=instance_key)
     elif isinstance(region, list):
         adata.obs[region_key] = RNG.choice(region, size=adata.n_obs)
         adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
-        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
-        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+
+    return table
 
 
 class PlotTesterMeta(ABCMeta):
@@ -389,3 +390,82 @@ def _decorate(fn: Callable, clsname: str, name: Optional[str] = None) -> Callabl
     fig_name = f"{clsname[4:]}_{name[10:]}"
 
     return save_and_compare
+
+
+@pytest.fixture
+def get_sdata_with_multiple_images(request) -> sd.SpatialData:
+    """Yields a sdata object with multiple images which may or may not share a coordinate system."""
+
+    def _get_sdata_with_multiple_images(share_coordinate_system: str = "all"):
+        if share_coordinate_system == "all":
+            images = {
+                "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+                "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+                "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+            }
+
+        elif share_coordinate_system == "two":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+            }
+
+        elif share_coordinate_system == "none":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys3": sd.transformations.Identity()},
+                ),
+            }
+
+        elif share_coordinate_system == "similar_name":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys11": sd.transformations.Identity()},
+                ),
+            }
+
+        else:
+            raise ValueError("Invalid share_coordinate_system value.")
+
+        sdata = sd.SpatialData(images=images)
+
+        return sdata
+
+    return _get_sdata_with_multiple_images

@@ -3,6 +3,7 @@ from collections import OrderedDict
 import matplotlib
 import spatialdata as sd
 from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+from spatialdata.models import TableModel
 from spatialdata.transformations import get_transformation
 
 
@@ -13,29 +14,18 @@ def _get_linear_colormap(colors: list[str], background: str) -> list[matplotlib.
 def _get_listed_colormap(color_dict: dict[str, str]) -> matplotlib.colors.ListedColormap:
     sorted_labels = sorted(color_dict.keys())
     colors = [color_dict[k] for k in sorted_labels]
-    cmap = ListedColormap(["black"] + colors, N=len(colors) + 1)
 
-    return cmap
+    return ListedColormap(["black"] + colors, N=len(colors) + 1)
 
 
 def _get_region_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's region key."""
-    if not hasattr(sdata, "table"):
-        raise ValueError("SpatialData object does not have a table.")
-
-    region_key = str(sdata.table.uns["spatialdata_attrs"]["region_key"])
-
-    return region_key
+    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
 
 
 def _get_instance_key(sdata: sd.SpatialData) -> str:
     """Quick access to the data's instance key."""
-    if not hasattr(sdata, "table"):
-        raise ValueError("SpatialData object does not have a table.")
-
-    instance_key = str(sdata.table.uns["spatialdata_attrs"]["instance_key"])
-
-    return instance_key
+    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
 
 
 def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:
@@ -47,14 +37,11 @@ def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:
 
 
 def _get_coordinate_system_mapping(sdata: sd.SpatialData) -> dict[str, list[str]]:
-    has_images = hasattr(sdata, "images")
-    has_labels = hasattr(sdata, "labels")
-    has_shapes = hasattr(sdata, "shapes")
-
     coordsys_keys = sdata.coordinate_systems
-    image_keys = sdata.images.keys() if has_images else []
-    label_keys = sdata.labels.keys() if has_labels else []
-    shape_keys = sdata.shapes.keys() if has_shapes else []
+    image_keys = [] if sdata.images is None else sdata.images.keys()
+    label_keys = [] if sdata.labels is None else sdata.labels.keys()
+    shape_keys = [] if sdata.shapes is None else sdata.shapes.keys()
+    point_keys = [] if sdata.points is None else sdata.points.keys()
 
     mapping: dict[str, list[str]] = {}
 
@@ -81,5 +68,11 @@ def _get_coordinate_system_mapping(sdata: sd.SpatialData) -> dict[str, list[str]
 
             if key in list(transformations.keys()):
                 mapping[key].append(shape_key)
+
+        for point_key in point_keys:
+            transformations = get_transformation(sdata.points[point_key], get_all=True)
+
+            if key in list(transformations.keys()):
+                mapping[key].append(point_key)
 
     return mapping

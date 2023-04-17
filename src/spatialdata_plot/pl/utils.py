@@ -12,6 +12,7 @@ from typing import Any, Literal, Optional, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
@@ -28,12 +29,15 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
+from shapely.geometry import Point
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
+
+from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -129,6 +133,165 @@ def _prepare_params_plot(
     return fig_params, scalebar_params
 
 
+def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
+    """Check which coordinate systems contain which elements and return that info."""
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    content_flags = ["has_images", "has_labels", "has_points", "has_shapes"]
+    cs_contents = pd.DataFrame(columns=["cs"] + content_flags)
+
+    for cs_name, element_ids in cs_mapping.items():
+        # determine if coordinate system has the respective elements
+        cs_has_images = bool(any([(e in sdata.images) for e in element_ids]))
+        cs_has_labels = bool(any([(e in sdata.labels) for e in element_ids]))
+        cs_has_points = bool(any([(e in sdata.points) for e in element_ids]))
+        cs_has_shapes = bool(any([(e in sdata.shapes) for e in element_ids]))
+
+        cs_contents = pd.concat(
+            [
+                cs_contents,
+                pd.DataFrame(
+                    {
+                        "cs": cs_name,
+                        "has_images": [cs_has_images],
+                        "has_labels": [cs_has_labels],
+                        "has_points": [cs_has_points],
+                        "has_shapes": [cs_has_shapes],
+                    }
+                ),
+            ]
+        )
+
+        cs_contents["has_images"] = cs_contents["has_images"].astype("bool")
+        cs_contents["has_labels"] = cs_contents["has_labels"].astype("bool")
+        cs_contents["has_points"] = cs_contents["has_points"].astype("bool")
+        cs_contents["has_shapes"] = cs_contents["has_shapes"].astype("bool")
+
+    return cs_contents
+
+
+def _get_extent(
+    sdata: sd.SpatialData,
+    coordinate_systems: Union[str, Sequence[str]] = "all",
+    images: bool = True,
+    labels: bool = True,
+    points: bool = True,
+    shapes: bool = True,
+) -> dict[str, tuple[int, int, int, int]]:
+    """Return the extent of the elements contained in the SpatialData object.
+
+    Parameters
+    ----------
+    sdata
+        The sd.SpatialData object to retrieve the extent from
+    images
+        Flag indicating whether to consider images when calculating the extent
+    labels
+        Flag indicating whether to consider labels when calculating the extent
+    points
+        Flag indicating whether to consider points when calculating the extent
+    shapes
+        Flag indicating whether to consider shaoes when calculating the extent
+
+    Returns
+    -------
+    A dict of tuples with the shape (xmin, xmax, ymin, ymax). The keys of the
+        dict are the coordinate_system keys.
+
+    """
+    extent: dict[str, tuple[int, int, int, int]] = {}
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    cs_contents = _get_cs_contents(sdata)
+
+    for cs_name, element_ids in cs_mapping.items():
+        x_dims = []
+        y_dims = []
+
+        # Using two for-loops in the following code to avoid partial matches
+        # since "aa" in ["aaa", "bbb"] would return true
+
+        if images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
+            for images_key in sdata.images:
+                for element_id in element_ids:
+                    if images_key == element_id:
+                        tmp = sdata.images[element_id]
+                        y_dims += [(0, tmp.shape[1])]  # img is cyx, so we skip 0
+                        x_dims += [(0, tmp.shape[2])]
+                        del tmp
+
+        if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
+            for labels_key in sdata.labels:
+                for element_id in element_ids:
+                    if labels_key == element_id:
+                        tmp = sdata.labels[element_id]
+                        y_dims += [(0, tmp.shape[0])]
+                        x_dims += [(0, tmp.shape[1])]
+                        del tmp
+
+        if points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
+            for points_key in sdata.points:
+                for element_id in element_ids:
+                    if points_key == element_id:
+                        tmp = sdata.points[element_id]
+                        y_dims += [(tmp.y.min().compute(), tmp.y.max().compute())]
+                        x_dims += [(tmp.x.min().compute(), tmp.x.max().compute())]
+                        del tmp
+
+        if shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
+            for shapes_key in sdata.shapes:
+                for element_id in element_ids:
+                    if shapes_key == element_id:
+
+                        def get_point_bb(
+                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 1
+                        ) -> Point:
+                            x, y = point.coords[0]
+                            if method == "topleft":
+                                point_bb = Point(x - radius - buffer, y - radius - buffer)
+                            else:
+                                point_bb = Point(x + radius + buffer, y + radius + buffer)
+
+                            return point_bb
+
+                        # Split by Point and Polygon:
+                        tmp_points = sdata.shapes[element_id][
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Point")
+                        ]
+                        tmp_polygons = sdata.shapes[element_id][
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Polygon")
+                        ]
+
+                        if not tmp_points.empty:
+                            tmp_points["point_topleft"] = tmp_points.apply(
+                                lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
+                                axis=1,
+                            )
+                            tmp_points["point_bottomright"] = tmp_points.apply(
+                                lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
+                                axis=1,
+                            )
+                            xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp_points["point_topleft"].total_bounds
+                            xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
+                            y_dims += [(min(ymin_tl, ymin_br), max(ymax_tl, ymax_br))]
+                            x_dims += [(min(xmin_tl, xmin_br), max(xmax_tl, xmax_br))]
+
+                        if not tmp_polygons.empty:
+                            xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
+                            y_dims += [(ymin, ymax)]
+                            x_dims += [(xmin, xmax)]
+
+                        del tmp_points
+                        del tmp_polygons
+
+        if len(x_dims) > 0 and len(y_dims) > 0:
+            xmax = max(list(sum(x_dims, ())))
+            xmin = min(list(sum(x_dims, ())))
+            ymax = max(list(sum(y_dims, ())))
+            ymin = min(list(sum(y_dims, ())))
+            extent[cs_name] = (xmin, xmax, ymin, ymax)
+
+    return extent
+
+
 def _panel_grid(
     num_panels: int,
     hspace: float,
@@ -196,7 +359,7 @@ def _prepare_cmap_norm(
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if isinstance(norm, Normalize):
-        pass
+        pass  # TODO
     elif vcenter is None:
         norm = Normalize(vmin=vmin, vmax=vmax)
     else:
@@ -238,15 +401,15 @@ def _set_outline(
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> Union[plt.Figure, plt.Axes]:
-    """Helper function to set up axes for plotting.
+    """Set up the axs objects.
 
     Parameters
     ----------
-    num_images : int
+    num_images
         Number of images to plot. Must be greater than 1.
-    ncols : int, optional
+    ncols
         Number of columns in the subplot grid, by default 4
-    width : int, optional
+    width
         Width of each subplot, by default 4
 
     Returns
@@ -279,11 +442,11 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
 
 
 def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]:
-    """Helper function to get random colors.
+    """Return a list of random hex-color.
 
     Parameters
     ----------
-    num_colors : int
+    num_colors
         Number of colors to generate.
 
     Returns
@@ -302,13 +465,13 @@ def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]
 
 
 def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "viridis") -> list[str]:
-    """Converts a series of continuous numerical values to hex color values using a colormap.
+    """Convert a series of continuous numerical values to hex color values using a colormap.
 
     Parameters
     ----------
-    values : pd.Series
+    values
         The values to be converted to colors.
-    cmap_name : str, optional
+    cmap_name
         The name of the colormap to be used, by default 'viridis'.
 
     Returns
@@ -319,9 +482,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
     cmap = plt.get_cmap(cmap_name)
     norm = plt.Normalize(vmin=values.min(), vmax=values.max())
     colors = cmap(norm(values))
-    hex_colors = [colors.to_hex(color) for color in colors]
 
-    return hex_colors
+    return [colors.to_hex(color) for color in colors]
 
 
 def _normalize(
@@ -332,21 +494,21 @@ def _normalize(
     clip: bool = False,
     name: str = "normed",
 ) -> xr.DataArray:
-    """Performs a min max normalisation.
+    """Perform a min max normalisation on the xr.DataArray.
 
     This function was adapted from the csbdeep package.
 
     Parameters
     ----------
-    dataarray: xr.DataArray
+    dataarray
         A xarray DataArray with an image field.
-    pmin: float
+    pmin
         Lower quantile (min value) used to perform qunatile normalization.
-    pmax: float
+    pmax
         Upper quantile (max value) used to perform qunatile normalization.
-    eps: float
+    eps
         Epsilon float added to prevent 0 division.
-    clip: bool
+    clip
         Ensures that normed image array contains no values greater than 1.
 
     Returns
@@ -439,6 +601,7 @@ def _set_color_source_vec(
     )
     if color_map is None:
         raise ValueError("Unable to create color palette.")
+
     # do not rename categories, as colors need not be unique
     color_vector = color_source_vector.map(color_map)
     if color_vector.isna().any():
@@ -463,10 +626,12 @@ def _map_color_seg(
     if is_categorical_dtype(color_vector):
         if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
-        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)  # type: ignore
-        cols = colors.to_rgba_array(color_vector.categories)  # type: ignore
+        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
+        cols = colors.to_rgba_array(color_vector.categories)
+
     else:
         val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
+
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
         except TypeError:
@@ -475,6 +640,7 @@ def _map_color_seg(
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
+
     # check if no color is assigned, compute random colors
     unique_cols = np.unique(cols)
     if len(unique_cols) == 1 and unique_cols == 0:
@@ -492,8 +658,8 @@ def _map_color_seg(
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
         return seg_bound
-    seg_im = np.dstack((seg_im, np.where(val_im > 0, 1, 0)))  # add transparency here
-    return seg_im
+
+    return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
 
 def _get_palette(
@@ -503,19 +669,18 @@ def _get_palette(
     palette: Palette_t = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
-    if adata is not None:
-        if palette is None:
-            try:
-                palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
-                if len(palette) != len(categories):
-                    raise ValueError(
-                        f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
-                        + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
-                    )
-                return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
-            except KeyError as e:
-                logging.warning(e)
-                return None
+    if adata is not None and palette is None:
+        try:
+            palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
+            if len(palette) != len(categories):
+                raise ValueError(
+                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
+                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
+                )
+            return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
+        except KeyError as e:
+            logging.warning(e)
+            return None
 
     len_cat = len(categories)
 
@@ -590,11 +755,11 @@ def _decorate_axs(
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
-    ax.set_yticks([])
-    ax.set_xticks([])
+    # ax.set_yticks([])
+    # ax.set_xticks([])
     # ax.set_xlabel(fig_params.ax_labels[0])
     # ax.set_ylabel(fig_params.ax_labels[1])
-    ax.autoscale_view()  # needed when plotting points but no image
+    # ax.autoscale_view()  # needed when plotting points but no image
 
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
