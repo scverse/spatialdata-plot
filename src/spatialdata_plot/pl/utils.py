@@ -646,12 +646,6 @@ def _map_color_seg(
         RNG = default_rng(42)
         cols = RNG.random((len(cols), 3))
 
-    # add alpha value to all colors ([0.1, 0.2, 0.3] -> [0.1, 0.2, 0.3, alpha])
-    target_alpha = 0.5
-    arr = np.array(cols)
-    new_col = np.full((arr.shape[0], 1), target_alpha)
-    cols = np.concatenate((arr, new_col), axis=1)
-
     seg_im: ArrayLike = label2rgb(
         label=val_im,
         colors=cols,

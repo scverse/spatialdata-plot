@@ -42,16 +42,11 @@ def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:
 
 
 def _get_coordinate_system_mapping(sdata: sd.SpatialData) -> dict[str, list[str]]:
-    has_images = True if sdata.images is not None else False
-    has_labels = True if sdata.labels is not None else False
-    has_shapes = True if sdata.shapes is not None else False
-    has_points = True if sdata.points is not None else False
-
     coordsys_keys = sdata.coordinate_systems
-    image_keys = sdata.images.keys() if has_images else []
-    label_keys = sdata.labels.keys() if has_labels else []
-    shape_keys = sdata.shapes.keys() if has_shapes else []
-    point_keys = sdata.points.keys() if has_points else []
+    image_keys = [] if sdata.images is None else sdata.images.keys()
+    label_keys = [] if sdata.labels is None else sdata.labels.keys()
+    shape_keys = [] if sdata.shapes is None else sdata.shapes.keys()
+    point_keys = [] if sdata.points is None else sdata.points.keys()
 
     mapping: dict[str, list[str]] = {}
 

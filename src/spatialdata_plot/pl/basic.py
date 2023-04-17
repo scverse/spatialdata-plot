@@ -557,28 +557,12 @@ class PlotAccessor:
                     label_transformation = list(label_transformation.values())[0]
                     sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
-        # Get extent of data to be plotted
-        want_images_extent: bool = False
-        want_labels_extent: bool = False
-        want_points_extent: bool = False
-        want_shapes_extent: bool = False
-
-        for cmd, _ in render_cmds.items():
-            if cmd == "render_images":
-                want_images_extent = True
-            elif cmd == "render_labels":
-                want_labels_extent = True
-            elif cmd == "render_points":
-                want_points_extent = True
-            elif cmd == "render_shapes":
-                want_shapes_extent = True
-
         extent = _get_extent(
             sdata=sdata,
-            images=want_images_extent,
-            labels=want_labels_extent,
-            points=want_points_extent,
-            shapes=want_shapes_extent,
+            images=True if "render_images" in render_cmds.keys() else False,
+            labels=True if "render_labels" in render_cmds.keys() else False,
+            points=True if "render_points" in render_cmds.keys() else False,
+            shapes=True if "render_shapes" in render_cmds.keys() else False,
         )
 
         # handle coordinate system
