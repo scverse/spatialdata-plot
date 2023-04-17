@@ -24,7 +24,8 @@ dependencies = [
     "matplotlib",
     "scikit-learn",
     "scanpy",
-    "matplotlib_scalebar" 
+    "matplotlib_scalebar",
+    "myst-nb",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +36,6 @@ docs = [
     "sphinx>=4.5",
     "sphinx-book-theme>=1.0.0",
     "sphinx_rtd_theme",
-    "myst-nb",
     "sphinxcontrib-bibtex>=1.0.0",
     "sphinx-autodoc-typehints",
     "sphinx-design",
