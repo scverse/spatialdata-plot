@@ -250,21 +250,35 @@ def _get_extent(
                             else:
                                 return Point(x + radius + buffer, y + radius + buffer)
 
-                        tmp = sdata.shapes[element_id]
-                        tmp["point_topleft"] = tmp.apply(
-                            lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
-                            axis=1,
-                        )
-                        tmp["point_bottomright"] = tmp.apply(
-                            lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
-                            axis=1,
-                        )
-                        xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp["point_topleft"].total_bounds
-                        xmin_br, ymin_br, xmax_br, ymax_br = tmp["point_bottomright"].total_bounds
-                        y_dims += [(min(ymin_tl, ymin_br), max(ymax_tl, ymax_br))]
-                        x_dims += [(min(xmin_tl, xmin_br), max(xmax_tl, xmax_br))]
+                        # Split by Point and Polygon:
+                        tmp_points = sdata.shapes[element_id][
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Point")
+                        ]
+                        tmp_polygons = sdata.shapes[element_id][
+                            sdata.shapes[element_id]["geometry"].apply(lambda geom: geom.type == "Polygon")
+                        ]
 
-                        del tmp
+                        if not tmp_points.empty:
+                            tmp_points["point_topleft"] = tmp_points.apply(
+                                lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
+                                axis=1,
+                            )
+                            tmp_points["point_bottomright"] = tmp_points.apply(
+                                lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
+                                axis=1,
+                            )
+                            xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp_points["point_topleft"].total_bounds
+                            xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
+                            y_dims += [(min(ymin_tl, ymin_br), max(ymax_tl, ymax_br))]
+                            x_dims += [(min(xmin_tl, xmin_br), max(xmax_tl, xmax_br))]
+
+                        if not tmp_polygons.empty:
+                            xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
+                            y_dims += [(ymin, ymax)]
+                            x_dims += [(xmin, xmax)]
+
+                        del tmp_points
+                        del tmp_polygons
 
         if len(x_dims) > 0 and len(y_dims) > 0:
             xmax = max(list(sum(x_dims, ())))

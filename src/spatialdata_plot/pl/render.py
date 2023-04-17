@@ -8,7 +8,6 @@ from typing import Any, Optional, Union
 
 import dask.dataframe as dd
 import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -96,16 +95,16 @@ def _render_shapes(
     )
 
     # If no colors were extracted, assign default color to all shape colors
-    if all(
-        [
-            len(np.unique(color_source_vector)) == 1,  # type: ignore
-            np.unique(color_source_vector) == "#00000000",  # type: ignore
-            len(np.unique(color_vector)) == 1,
-            np.unique(color_vector) == "#00000000",
-        ]
-    ):
-        default_color = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
-        color_vector = np.full(table.n_obs, to_hex(default_color))
+    # if all(
+    #     [
+    #         len(np.unique(color_source_vector)) == 1,  # type: ignore
+    #         np.unique(color_source_vector) == "#00000000",  # type: ignore
+    #         len(np.unique(color_vector)) == 1,
+    #         np.unique(color_vector) == "#00000000",
+    #     ]
+    # ):
+    #     default_color = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
+    #     color_vector = np.full(table.n_obs, to_hex(default_color))
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
@@ -157,6 +156,9 @@ def _render_shapes(
             # **kwargs,
         )
         ax.add_collection(_cax)
+
+    if len(color_vector) == 0:
+        color_vector = [(0.83, 0.83, 0.83, 1.0)]
 
     _cax = _get_collection_shape(
         shapes=shapes,
@@ -404,28 +406,76 @@ def _render_labels(
         alpha=render_params.fill_alpha,
     )
 
-    # map color vector to segmentation
-    labels = _map_color_seg(
-        seg=labels,
-        cell_id=instance_id,
-        color_vector=color_vector,
-        color_source_vector=color_source_vector,
-        cmap_params=render_params.cmap_params,
-        seg_erosionpx=render_params.contour_px,
-        seg_boundaries=render_params.outline,
-        na_color=render_params.cmap_params.na_color,
-    )
+    if (render_params.fill_alpha != render_params.outline_alpha) and not (render_params.contour_px is None):
+        # First get the labels infill and plot them
+        labels_infill = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=None,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-    _cax = ax.imshow(
-        labels,
-        rasterized=True,
-        cmap=render_params.cmap_params.cmap if not categorical else None,
-        norm=render_params.cmap_params.norm if not categorical else None,
-        alpha=render_params.fill_alpha,
-        origin="lower",
-        zorder=3,
-    )
-    cax = ax.add_image(_cax)
+        _cax = ax.imshow(
+            labels_infill,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.fill_alpha,
+            origin="lower",
+            zorder=3,
+        )
+        cax = ax.add_image(_cax)
+
+        # Then overlay the contour
+        labels_contour = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
+
+        _cax = ax.imshow(
+            labels_contour,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.outline_alpha,
+            origin="lower",
+            zorder=4,
+        )
+        cax = ax.add_image(_cax)
+
+    else:
+        # Default: no alpha, contour = infill
+        labels = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
+
+        _cax = ax.imshow(
+            labels,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.fill_alpha,
+            origin="lower",
+            zorder=4,
+        )
+        cax = ax.add_image(_cax)
 
     _ = _decorate_axs(
         ax=ax,

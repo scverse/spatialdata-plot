@@ -150,7 +150,7 @@ class PlotAccessor:
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
-        na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: str | tuple[float, ...] | None = "lightgrey",
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -345,7 +345,7 @@ class PlotAccessor:
         element: str | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
-        contour_px: int | None = None,
+        contour_px: int = 3,
         outline: bool = False,
         alt_var: str | None = None,
         layer: str | None = None,
