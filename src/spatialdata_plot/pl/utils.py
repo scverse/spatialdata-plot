@@ -134,7 +134,7 @@ def _prepare_params_plot(
 
 
 def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
-    """Checks which coordinate systems contain which elements."""
+    """Check which coordinate systems contain which elements and return that info."""
     cs_mapping = _get_coordinate_system_mapping(sdata)
     content_flags = ["has_images", "has_labels", "has_points", "has_shapes"]
     cs_contents = pd.DataFrame(columns=["cs"] + content_flags)
@@ -177,7 +177,7 @@ def _get_extent(
     points: bool = True,
     shapes: bool = True,
 ) -> dict[str, tuple[int, int, int, int]]:
-    """Takes a SpatialData object and returns the extent of the contained elements.
+    """Return the extent of the elements contained in the SpatialData object.
 
     Parameters
     ----------
@@ -246,9 +246,11 @@ def _get_extent(
                         ) -> Point:
                             x, y = point.coords[0]
                             if method == "topleft":
-                                return Point(x - radius - buffer, y - radius - buffer)
+                                point_bb = Point(x - radius - buffer, y - radius - buffer)
                             else:
-                                return Point(x + radius + buffer, y + radius + buffer)
+                                point_bb = Point(x + radius + buffer, y + radius + buffer)
+
+                            return point_bb
 
                         # Split by Point and Polygon:
                         tmp_points = sdata.shapes[element_id][
@@ -399,7 +401,7 @@ def _set_outline(
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> Union[plt.Figure, plt.Axes]:
-    """Helper function to set up axes for plotting.
+    """Set up the axs objects.
 
     Parameters
     ----------
@@ -440,7 +442,7 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
 
 
 def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]:
-    """Helper function to get random colors.
+    """Return a list of random hex-color.
 
     Parameters
     ----------
@@ -463,7 +465,7 @@ def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]
 
 
 def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "viridis") -> list[str]:
-    """Converts a series of continuous numerical values to hex color values using a colormap.
+    """Convert a series of continuous numerical values to hex color values using a colormap.
 
     Parameters
     ----------
@@ -480,9 +482,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
     cmap = plt.get_cmap(cmap_name)
     norm = plt.Normalize(vmin=values.min(), vmax=values.max())
     colors = cmap(norm(values))
-    hex_colors = [colors.to_hex(color) for color in colors]
 
-    return hex_colors
+    return [colors.to_hex(color) for color in colors]
 
 
 def _normalize(
@@ -493,7 +494,7 @@ def _normalize(
     clip: bool = False,
     name: str = "normed",
 ) -> xr.DataArray:
-    """Performs a min max normalisation.
+    """Perform a min max normalisation on the xr.DataArray.
 
     This function was adapted from the csbdeep package.
 
@@ -625,8 +626,8 @@ def _map_color_seg(
     if is_categorical_dtype(color_vector):
         if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
-        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)  # type: ignore
-        cols = colors.to_rgba_array(color_vector.categories)  # type: ignore
+        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
+        cols = colors.to_rgba_array(color_vector.categories)
 
     else:
         val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
@@ -657,9 +658,8 @@ def _map_color_seg(
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
         return seg_bound
-    seg_im = np.dstack((seg_im, np.where(val_im > 0, 1, 0)))  # add transparency here
 
-    return seg_im
+    return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
 
 def _get_palette(

@@ -167,7 +167,8 @@ target-version = "py39"
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
     "docs/*" = ["D","B","E","A"]
     # "src/spatialdata/transformations/transformations.py" = ["D101","D102", "D106", "B024", "T201", "RET504"]
-    "tests/conftest.py"= ["E402"]
+    "tests/conftest.py"= ["E402", "RET504"]
+    "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
 [tool.ruff.pydocstyle]
 convention = "numpy"
 [tool.ruff.pyupgrade]

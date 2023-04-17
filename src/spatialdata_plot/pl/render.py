@@ -94,18 +94,6 @@ def _render_shapes(
         alpha=render_params.alpha,
     )
 
-    # If no colors were extracted, assign default color to all shape colors
-    # if all(
-    #     [
-    #         len(np.unique(color_source_vector)) == 1,  # type: ignore
-    #         np.unique(color_source_vector) == "#00000000",  # type: ignore
-    #         len(np.unique(color_vector)) == 1,
-    #         np.unique(color_vector) == "#00000000",
-    #     ]
-    # ):
-    #     default_color = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
-    #     color_vector = np.full(table.n_obs, to_hex(default_color))
-
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,

@@ -18,6 +18,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
+from spatialdata._logging import logger as logg
 from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
@@ -496,7 +497,7 @@ class PlotAccessor:
             if cmd not in valid_commands:
                 raise ValueError(f"Command {cmd} is not valid.")
 
-            elif "render" in cmd:
+            if "render" in cmd:
                 # verify that rendering commands have been called before
                 render_cmds[cmd] = params
 
@@ -576,7 +577,7 @@ class PlotAccessor:
             if cs in extent:
                 valid_cs.append(cs)
             else:
-                print(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+                logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
         coordinate_systems = valid_cs
 
         # check that coordinate system and elements to be rendered match
@@ -693,5 +694,4 @@ class PlotAccessor:
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
 
-        if return_ax:
-            return fig_params.ax if fig_params.axs is None else fig_params.axs
+        return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
