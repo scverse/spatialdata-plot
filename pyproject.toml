@@ -25,7 +25,6 @@ dependencies = [
     "scikit-learn",
     "scanpy",
     "matplotlib_scalebar",
-    "myst-nb",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +40,6 @@ docs = [
     "sphinx-design",
     # For notebooks
     "ipython>=8.6.0",
-    "sphinx-copybutton",
 ]
 test = [
     "pytest",
@@ -51,6 +49,8 @@ torch = [
     "torch"
 ]
 extra  = [
+    "myst-nb",
+    "sphinx-copybutton",
 ]
 
 [tool.coverage.run]
