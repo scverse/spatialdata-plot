@@ -305,9 +305,8 @@ class PreprocessingAccessor:
             # y is clean
             y = slice(y[0], y[1])
 
-        elif isinstance(y, slice):
-            if y.stop <= y.start:
-                raise ValueError("The current choice of 'x' would result in an empty slice.")
+        elif isinstance(y, slice) and y.stop <= y.start:
+            raise ValueError("The current choice of 'x' would result in an empty slice.")
 
         selection = {"x": x, "y": y}  # makes use of xarray sel method
 

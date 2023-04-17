@@ -506,7 +506,7 @@ class PlotAccessor:
         # transform all elements
         for cmd, _ in render_cmds.items():
             if cmd == "render_images" or cmd == "render_channels":
-                for key in sdata.images.keys():
+                for key in sdata.images:
                     img_transformation = get_transformation(sdata.images[key], get_all=True)
                     img_transformation = list(img_transformation.values())[0]
 
@@ -546,23 +546,23 @@ class PlotAccessor:
                         sdata.images[key] = transform(sdata.images[key], img_transformation)
 
             elif cmd == "render_shapes":
-                for key in sdata.shapes.keys():
+                for key in sdata.shapes:
                     shape_transformation = get_transformation(sdata.shapes[key], get_all=True)
                     shape_transformation = list(shape_transformation.values())[0]
                     sdata.shapes[key] = transform(sdata.shapes[key], shape_transformation)
 
             elif cmd == "render_labels":
-                for key in sdata.labels.keys():
+                for key in sdata.labels:
                     label_transformation = get_transformation(sdata.labels[key], get_all=True)
                     label_transformation = list(label_transformation.values())[0]
                     sdata.labels[key] = transform(sdata.labels[key], label_transformation)
 
         extent = _get_extent(
             sdata=sdata,
-            images=True if "render_images" in render_cmds.keys() else False,
-            labels=True if "render_labels" in render_cmds.keys() else False,
-            points=True if "render_points" in render_cmds.keys() else False,
-            shapes=True if "render_shapes" in render_cmds.keys() else False,
+            images="render_images" in render_cmds,
+            labels="render_labels" in render_cmds,
+            points="render_points" in render_cmds,
+            shapes="render_shapes" in render_cmds,
         )
 
         # handle coordinate system
@@ -573,7 +573,7 @@ class PlotAccessor:
         # Use extent to filter out coordinate system without the relevant elements
         valid_cs = []
         for cs in coordinate_systems:
-            if cs in extent.keys():
+            if cs in extent:
                 valid_cs.append(cs)
             else:
                 print(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")

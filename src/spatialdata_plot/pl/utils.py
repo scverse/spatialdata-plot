@@ -37,7 +37,7 @@ from skimage.util import map_array
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 
-from ..pp.utils import _get_coordinate_system_mapping
+from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -141,10 +141,10 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
     for cs_name, element_ids in cs_mapping.items():
         # determine if coordinate system has the respective elements
-        cs_has_images = True if any([e in sdata.images.keys() for e in element_ids]) else False
-        cs_has_labels = True if any([e in sdata.labels.keys() for e in element_ids]) else False
-        cs_has_points = True if any([e in sdata.points.keys() for e in element_ids]) else False
-        cs_has_shapes = True if any([e in sdata.shapes.keys() for e in element_ids]) else False
+        cs_has_images = bool(any([(e in sdata.images) for e in element_ids]))
+        cs_has_labels = bool(any([(e in sdata.labels) for e in element_ids]))
+        cs_has_points = bool(any([(e in sdata.points) for e in element_ids]))
+        cs_has_shapes = bool(any([(e in sdata.shapes) for e in element_ids]))
 
         cs_contents = pd.concat(
             [
@@ -177,7 +177,7 @@ def _get_extent(
     points: bool = True,
     shapes: bool = True,
 ) -> dict[str, tuple[int, int, int, int]]:
-    """Takes a SpatialData object and returns the extent of the contained elements
+    """Takes a SpatialData object and returns the extent of the contained elements.
 
     Parameters
     ----------
@@ -210,7 +210,7 @@ def _get_extent(
         # since "aa" in ["aaa", "bbb"] would return true
 
         if images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
-            for images_key in sdata.images.keys():
+            for images_key in sdata.images:
                 for element_id in element_ids:
                     if images_key == element_id:
                         tmp = sdata.images[element_id]
@@ -219,7 +219,7 @@ def _get_extent(
                         del tmp
 
         if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
-            for labels_key in sdata.labels.keys():
+            for labels_key in sdata.labels:
                 for element_id in element_ids:
                     if labels_key == element_id:
                         tmp = sdata.labels[element_id]
@@ -228,7 +228,7 @@ def _get_extent(
                         del tmp
 
         if points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-            for points_key in sdata.points.keys():
+            for points_key in sdata.points:
                 for element_id in element_ids:
                     if points_key == element_id:
                         tmp = sdata.points[element_id]
@@ -237,7 +237,7 @@ def _get_extent(
                         del tmp
 
         if shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
-            for shapes_key in sdata.shapes.keys():
+            for shapes_key in sdata.shapes:
                 for element_id in element_ids:
                     if shapes_key == element_id:
 
@@ -669,19 +669,18 @@ def _get_palette(
     palette: Palette_t = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
-    if adata is not None:
-        if palette is None:
-            try:
-                palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
-                if len(palette) != len(categories):
-                    raise ValueError(
-                        f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
-                        + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
-                    )
-                return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
-            except KeyError as e:
-                logging.warning(e)
-                return None
+    if adata is not None and palette is None:
+        try:
+            palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
+            if len(palette) != len(categories):
+                raise ValueError(
+                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
+                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
+                )
+            return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
+        except KeyError as e:
+            logging.warning(e)
+            return None
 
     len_cat = len(categories)
 

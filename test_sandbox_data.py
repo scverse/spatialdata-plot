@@ -11,9 +11,8 @@
 
 import matplotlib.pyplot as plt
 import spatialdata as sd
-from spatialdata.datasets import blobs
-
 import spatialdata_plot
+from spatialdata.datasets import blobs
 
 assert spatialdata_plot.__name__ == "spatialdata_plot"  # so mypy doesn't complain
 

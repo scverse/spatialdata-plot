@@ -68,7 +68,7 @@ def _render_shapes(
 ) -> None:
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=False if sdata.table is None else True,
+        filter_table=sdata.table is not None,
     )
     if render_params.element is not None:
         shapes = sdata_filt.shapes[render_params.element]
@@ -221,7 +221,7 @@ def _render_points(
     # make colors a list
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=False if sdata.table is None else True,
+        filter_table=sdata.table is not None,
     )
     if render_params.element is not None:
         points = sdata_filt.points[render_params.element]
@@ -320,7 +320,7 @@ def _render_images(
 ) -> None:
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=False if sdata.table is None else True,
+        filter_table=sdata.table is not None,
     )
     if render_params.element is not None:
         img = sdata_filt.images[render_params.element]
@@ -373,7 +373,7 @@ def _render_labels(
 ) -> None:
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=False if sdata.table is None else True,
+        filter_table=sdata.table is not None,
     )
     if render_params.element is not None:
         labels = sdata_filt.labels[render_params.element].values
