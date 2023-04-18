@@ -1,264 +1,487 @@
-from collections.abc import Iterable
-from typing import Callable, Optional, Union
+from __future__ import annotations
 
+from collections.abc import Sequence
+from copy import copy
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Optional, Union
+
+import dask.dataframe as dd
 import matplotlib
-import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import spatialdata as sd
-import xarray as xr
-from matplotlib.colors import ListedColormap, to_rgb
+from anndata import AnnData
+from geopandas import GeoDataFrame
+from matplotlib import colors
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import ColorConverter, ListedColormap, Normalize
+from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
-from skimage.segmentation import find_boundaries
-from sklearn.decomposition import PCA
+from scanpy._settings import settings as sc_settings
 
-from ..pl._categorical_utils import _get_colors_for_categorical_obs
-from ..pl.utils import _normalize
-from ..pp.utils import _get_linear_colormap, _get_region_key
+from spatialdata_plot.pl.utils import (
+    CmapParams,
+    FigParams,
+    LegendParams,
+    OutlineParams,
+    ScalebarParams,
+    _decorate_axs,
+    _map_color_seg,
+    _maybe_set_colors,
+    _normalize,
+    _set_color_source_vec,
+)
+from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
+
+Palette_t = Optional[Union[str, ListedColormap]]
+_Normalize = Union[Normalize, Sequence[Normalize]]
+to_hex = partial(colors.to_hex, keep_alpha=True)
 
 
-def _render_channels(
-    sdata: sd.SpatialData,
-    channels: list[Union[str, int]],
-    colors: list[str],
-    clip: bool,
-    normalize: bool,
-    background: str,
-    pmin: float,
-    pmax: float,
-    key: str,
-    ax: matplotlib.axes.SubplotBase,
-) -> None:
-    selection = sdata.images[key].sel({"c": channels})
-    n_channels, y_dim, x_dim = selection.shape  # (c, y, x)
-    img = selection.values.copy()
-    img = img.astype("float")
+@dataclass
+class ShapesRenderParams:
+    """Labels render parameters.."""
 
-    if normalize:
-        img = _normalize(img, pmin, pmax, clip)
-
-    cmaps = _get_linear_colormap(colors[:n_channels], background)
-    colored = np.stack([cmaps[i](img[i]) for i in range(n_channels)], 0).sum(0)
-
-    if clip:
-        colored = np.clip(colored, 0, 1)
-
-    ax.imshow(colored)
-    ax.set_title(key)
-    ax.set_xlabel("spatial1")
-    ax.set_ylabel("spatial2")
-    ax.set_xticks([])
-    ax.set_yticks([])
+    cmap_params: CmapParams
+    outline_params: OutlineParams
+    element: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    contour_px: int | None = None
+    alt_var: str | None = None
+    layer: str | None = None
+    palette: Palette_t = None
+    alpha: float = 1.0
+    size: float = 1.0
 
 
 def _render_shapes(
     sdata: sd.SpatialData,
-    params: dict[str, Optional[Union[str, int, float, Iterable[str]]]],
-    key: str,
+    render_params: ShapesRenderParams,
+    coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
 ) -> None:
-    colors: Optional[Union[str, int, float, Iterable[str]]] = None  # to shut up mypy
-    if sdata.table is not None and isinstance(params["instance_key"], str) and isinstance(params["color_key"], str):
-        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['color_key']}_colors"]]
-    elif isinstance(params["palette"], str):
-        colors = [params["palette"]]
-    elif isinstance(params["palette"], Iterable):
-        colors = [to_rgb(c) for c in list(params["palette"])]
+    sdata_filt = sdata.filter_by_coordinate_system(
+        coordinate_system=coordinate_system,
+        filter_table=sdata.table is not None,
+    )
+    if render_params.element is not None:
+        shapes = sdata_filt.shapes[render_params.element]
+        shapes_key = render_params.element
     else:
-        colors = params["palette"]
+        shapes_key = list(sdata_filt.shapes.keys())[0]
+        shapes = sdata_filt.shapes[shapes_key]
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
+    if sdata.table is None:
+        table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(shapes))))
+    else:
+        table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
-    points = []
-    polygons = []
+    # get color vector (categorical or continuous)
+    color_source_vector, color_vector, _ = _set_color_source_vec(
+        adata=table,
+        value_to_plot=render_params.color,
+        alt_var=render_params.alt_var,
+        layer=render_params.layer,
+        groups=render_params.groups,
+        palette=render_params.palette,
+        na_color=render_params.cmap_params.na_color,
+        alpha=render_params.alpha,
+    )
 
-    for _, row in sdata.shapes[key].iterrows():
-        if row["geometry"].geom_type == "Point":
-            points.append((row[0], row[1]))  # (point, radius)
-        elif row["geometry"].geom_type == "Polygon":
-            polygons.append(row[0])  # just polygon
+    def _get_collection_shape(
+        shapes: GeoDataFrame,
+        c: Any,
+        s: float,
+        norm: Any,
+        **kwargs: Any,
+    ) -> PatchCollection:
+        """Get collection of shapes."""
+        if shapes["geometry"].iloc[0].geom_type == "Polygon":
+            patches = [Polygon(p.exterior.coords, closed=False) for p in shapes["geometry"]]
+        elif shapes["geometry"].iloc[0].geom_type == "Point":
+            patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
+
+        collection = PatchCollection(patches, snap=False, zorder=4, **kwargs)
+
+        if isinstance(c, np.ndarray) and np.issubdtype(c.dtype, np.number):
+            collection.set_array(np.ma.masked_invalid(c))
+            collection.set_norm(norm)
+
         else:
-            raise NotImplementedError(f"Geometry type {row['geometry'].type} not supported.")
+            # Assign color to drawn shapes, either Polygons or Circles
+            alpha = ColorConverter().to_rgba_array(c)[..., -1]
+            collection.set_facecolor(c)
+            collection.set_alpha(alpha)
 
-    if len(polygons) > 0:
-        for polygon in polygons:
-            ax.add_patch(
-                mpatches.Polygon(
-                    polygon.exterior.coords,
-                    color=colors,
-                )
-            )
+        return collection
 
-    if len(points) > 0:
-        for point, radius in points:
-            ax.add_patch(
-                mpatches.Circle(
-                    (point.x, point.y),
-                    radius=radius,
-                    color=colors,
-                )
-            )
+    norm = copy(render_params.cmap_params.norm)
+    if render_params.outline_params.outline:
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.outline_params.bg_size,
+            c=render_params.outline_params.bg_color,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            # **kwargs,
+        )
+        ax.add_collection(_cax)
 
-    ax.set_title(key)
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.outline_params.gap_size,
+            c=render_params.outline_params.gap_color,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            # **kwargs,
+        )
+        ax.add_collection(_cax)
+
+    if len(color_vector) == 0:
+        color_vector = [(0.83, 0.83, 0.83, 1.0)]
+
+    _cax = _get_collection_shape(
+        shapes=shapes,
+        s=render_params.size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        alpha=render_params.alpha,
+        # **kwargs,
+    )
+    cax = ax.add_collection(_cax)
+
+    _ = _decorate_axs(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=table,
+        value_to_plot=render_params.color,
+        color_source_vector=color_source_vector,
+        palette=render_params.palette,
+        alpha=render_params.alpha,
+        na_color=render_params.cmap_params.na_color,
+        legend_fontsize=legend_params.legend_fontsize,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_loc=legend_params.legend_loc,
+        legend_fontoutline=legend_params.legend_fontoutline,
+        na_in_legend=legend_params.na_in_legend,
+        colorbar=legend_params.colorbar,
+        scalebar_dx=scalebar_params.scalebar_dx,
+        scalebar_units=scalebar_params.scalebar_units,
+        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+    )
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+
+
+@dataclass
+class PointsRenderParams:
+    """Points render parameters.."""
+
+    cmap_params: CmapParams
+    element: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    palette: Palette_t = None
+    alpha: float = 1.0
+    size: float = 1.0
 
 
 def _render_points(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float, Iterable[str]]],
-    key: str,
+    render_params: PointsRenderParams,
+    coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
 ) -> None:
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
-
-    if isinstance(params["color_key"], str):
-        colors = sdata.points[key][params["color_key"]].compute()
-
-        if is_categorical_dtype(colors):
-            category_colors = _get_colors_for_categorical_obs(colors.cat.categories)
-
-            for i, cat in enumerate(colors.cat.categories):
-                ax.scatter(
-                    x=sdata.points[key]["x"].compute()[colors == cat],
-                    y=sdata.points[key]["y"].compute()[colors == cat],
-                    color=category_colors[i],
-                    label=cat,
-                )
-
-        else:
-            ax.scatter(
-                x=sdata.points[key]["x"].compute(),
-                y=sdata.points[key]["y"].compute(),
-                c=colors,
-            )
+    # make colors a list
+    sdata_filt = sdata.filter_by_coordinate_system(
+        coordinate_system=coordinate_system,
+        filter_table=sdata.table is not None,
+    )
+    if render_params.element is not None:
+        points = sdata_filt.points[render_params.element]
     else:
-        ax.scatter(
-            x=sdata.points[key]["x"].compute(),
-            y=sdata.points[key]["y"].compute(),
-        )
+        points_key = list(sdata_filt.points.keys())[0]
+        points = sdata_filt.points[points_key]
 
-    ax.set_title(key)
+    coords = ["x", "y"]
+    if render_params.color is not None:
+        color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
+        coords.extend(color)
+
+    # get points
+    if isinstance(points, dd.DataFrame):
+        points = points[coords].compute()
+
+    # we construct an anndata to hack the plotting functions
+    adata = AnnData(
+        X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
+    )
+    if render_params.color is not None:
+        cols = sc.get.obs_df(adata, render_params.color)
+        # maybe set color based on type
+        if is_categorical_dtype(cols):
+            _maybe_set_colors(
+                source=adata,
+                target=adata,
+                key=render_params.color,
+                palette=render_params.palette,
+            )
+    color_source_vector, color_vector, _ = _set_color_source_vec(
+        adata=adata,
+        value_to_plot=render_params.color,
+        groups=render_params.groups,
+        palette=render_params.palette,
+        na_color=render_params.cmap_params.na_color,
+        alpha=render_params.alpha,
+    )
+
+    norm = copy(render_params.cmap_params.norm)
+    _cax = ax.scatter(
+        adata[:, 0].X.flatten(),
+        adata[:, 1].X.flatten(),
+        s=render_params.size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        alpha=render_params.alpha,
+        # **kwargs,
+    )
+    cax = ax.add_collection(_cax)
+    _ = _decorate_axs(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=adata,
+        value_to_plot=render_params.color,
+        color_source_vector=color_source_vector,
+        palette=render_params.palette,
+        alpha=render_params.alpha,
+        na_color=render_params.cmap_params.na_color,
+        legend_fontsize=legend_params.legend_fontsize,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_loc=legend_params.legend_loc,
+        legend_fontoutline=legend_params.legend_fontoutline,
+        na_in_legend=legend_params.na_in_legend,
+        colorbar=legend_params.colorbar,
+        scalebar_dx=scalebar_params.scalebar_dx,
+        scalebar_units=scalebar_params.scalebar_units,
+        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+    )
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+
+
+@dataclass
+class ImageRenderParams:
+    """Labels render parameters.."""
+
+    cmap_params: CmapParams
+    element: str | None = None
+    channel: Sequence[str] | None = None
+    palette: Palette_t = None
+    alpha: float = 1.0
 
 
 def _render_images(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float]],
-    key: str,
+    render_params: ImageRenderParams,
+    coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
 ) -> None:
-    n_channels, y_dim, x_dim = sdata.images[key].shape  # (c, y, x)
-    img = sdata.images[key].values.copy()
-    img = img.astype("float")
+    sdata_filt = sdata.filter_by_coordinate_system(
+        coordinate_system=coordinate_system,
+        filter_table=sdata.table is not None,
+    )
+    if render_params.element is not None:
+        img = sdata_filt.images[render_params.element]
+    else:
+        img_key = list(sdata_filt.images.keys())[0]
+        img = sdata_filt.images[img_key]
 
-    if params["trans_fun"] is not None:
-        trans_fun: Callable[[xr.DataArray], xr.DataArray] = params["trans_fun"]  # type: ignore
-        img = trans_fun(img)
+    if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
+        raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
     img = _normalize(img, clip=True)
 
-    # If channel colors are not specified, use default colors
-    colors: Union[matplotlib.colors.ListedColormap, list[matplotlib.colors.ListedColormap]] = params["palette"]
-    if params["palette"] is None:
-        if n_channels == 1:
-            colors = ListedColormap(["gray"])
-        elif n_channels == 2:
-            colors = ListedColormap(["#d30cb8", "#6df1d8"])
-        elif n_channels == 3:
-            colors = ListedColormap(["red", "blue", "green"])
-        else:
-            # we do PCA to reduce to 3 channels
-            flattened_img = np.reshape(img, (n_channels, -1))
-            pca = PCA(n_components=3)
-            pca.fit(flattened_img.T)
-            transformed_image = pca.transform(flattened_img.T)
-            img = xr.DataArray(transformed_image.T.reshape(3, y_dim, x_dim), dims=("c", "y", "x"))
+    if render_params.channel is not None:
+        img = img.sel(c=[render_params.channel])
 
-    img = xr.DataArray(img, dims=("c", "y", "x")).transpose("y", "x", "c")  # for plotting
+    img = img.transpose("y", "x", "c")  # for plotting
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
     ax.imshow(
-        img.transpose("y", "x", "c").data,
-        cmap=colors,
-        interpolation="nearest",
+        img.data,
+        cmap=render_params.cmap_params.cmap,
+        alpha=render_params.alpha,
     )
 
-    ax.set_title(key)
+
+@dataclass
+class LabelsRenderParams:
+    """Labels render parameters.."""
+
+    cmap_params: CmapParams
+    element: str | None = None
+    color: str | None = None
+    groups: str | Sequence[str] | None = None
+    contour_px: int | None = None
+    outline: bool = False
+    alt_var: str | None = None
+    layer: str | None = None
+    palette: Palette_t = None
+    outline_alpha: float = 1.0
+    fill_alpha: float = 0.3
 
 
 def _render_labels(
     sdata: sd.SpatialData,
-    params: dict[str, Union[str, int, float]],
-    key: str,
+    render_params: LabelsRenderParams,
+    coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
-    extent: dict[str, list[int]],
+    fig_params: FigParams,
+    scalebar_params: ScalebarParams,
+    legend_params: LegendParams,
 ) -> None:
-    region_key = _get_region_key(sdata)
+    sdata_filt = sdata.filter_by_coordinate_system(
+        coordinate_system=coordinate_system,
+        filter_table=sdata.table is not None,
+    )
+    if render_params.element is not None:
+        labels = sdata_filt.labels[render_params.element].values
+        labels_key = render_params.element
+    else:
+        labels_key = list(sdata_filt.labels.keys())[0]
+        labels = sdata_filt.labels[labels_key].values
 
-    # subset table to only the entires specified by 'key'
-    table = sdata.table.obs
-    table = table[table[region_key] == key]
+    if sdata.table is None:
+        instance_id = np.unique(labels)
+        table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
+    else:
+        instance_key = _get_instance_key(sdata)
+        region_key = _get_region_key(sdata)
 
-    # If palette is not None, table.uns contains the relevant vector
-    if f"{params['instance_key']}_colors" in sdata.table.uns.keys():
-        colors = [to_rgb(c) for c in sdata.table.uns[f"{params['instance_key']}_colors"]]
-        colors = [tuple(list(c) + [1]) for c in colors]
+        table = sdata.table[sdata.table.obs[region_key].isin([labels_key])]
 
-    groups = sdata.table.obs[params["color_key"]].unique()
-    group_to_color = pd.DataFrame({params["color_key"]: groups, "color": colors})
+        # get isntance id based on subsetted table
+        instance_id = table.obs[instance_key].values
 
-    segmentation = sdata.labels[key].values
+    # get color vector (categorical or continuous)
+    color_source_vector, color_vector, categorical = _set_color_source_vec(
+        adata=table,
+        value_to_plot=render_params.color,
+        alt_var=render_params.alt_var,
+        layer=render_params.layer,
+        groups=render_params.groups,
+        palette=render_params.palette,
+        na_color=render_params.cmap_params.na_color,
+        alpha=render_params.fill_alpha,
+    )
 
-    ax.set_xlim(extent["x"][0], extent["x"][1])
-    ax.set_ylim(extent["y"][0], extent["y"][1])
+    if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
+        # First get the labels infill and plot them
+        labels_infill = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=None,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-    for group in groups:
-        # Getting cell ids belonging to group and casting them to int for later numpy comparisons
-        vaid_cell_ids = table[table[params["color_key"]] == group][params["instance_key"]].values
-        vaid_cell_ids = [int(id) for id in vaid_cell_ids]
+        _cax = ax.imshow(
+            labels_infill,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.fill_alpha,
+            origin="lower",
+            zorder=3,
+        )
+        cax = ax.add_image(_cax)
 
-        # define all out-of-group cells as background
-        in_group_mask = segmentation.copy()
-        in_group_mask[~np.isin(segmentation, vaid_cell_ids)] = 0
+        # Then overlay the contour
+        labels_contour = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-        # get correct color for the group
-        group_color = list(group_to_color[group_to_color[params["color_key"]] == group].color.values[0])
+        _cax = ax.imshow(
+            labels_contour,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.outline_alpha,
+            origin="lower",
+            zorder=4,
+        )
+        cax = ax.add_image(_cax)
 
-        if params["fill_alpha"] != 0:
-            infill_mask = in_group_mask > 0
+    else:
+        # Default: no alpha, contour = infill
+        labels = _map_color_seg(
+            seg=labels,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-            fill_color = group_color.copy()
-            fill_color[-1] = params["fill_alpha"]
-            colors = [[0, 0, 0, 0], fill_color]  # add transparent for bg
+        _cax = ax.imshow(
+            labels,
+            rasterized=True,
+            cmap=render_params.cmap_params.cmap if not categorical else None,
+            norm=render_params.cmap_params.norm if not categorical else None,
+            alpha=render_params.fill_alpha,
+            origin="lower",
+            zorder=4,
+        )
+        cax = ax.add_image(_cax)
 
-            ax.imshow(
-                infill_mask,
-                cmap=ListedColormap(colors),
-                interpolation="nearest",
-            )
-
-        if params["border_alpha"] != 0:
-            border_mask = find_boundaries(in_group_mask, mode=params["mode"])
-            border_mask = np.ma.masked_array(in_group_mask, ~border_mask)
-
-            border_color = group_color.copy()
-            border_color[-1] = params["border_alpha"]
-
-            ax.imshow(
-                border_mask,
-                cmap=ListedColormap([border_color]),
-                interpolation="nearest",
-            )
-
-    if params["add_legend"]:
-        patches = []
-        for group, color in group_to_color.values:
-            patches.append(mpatches.Patch(color=color, label=group))
-
-        ax.legend(handles=patches, bbox_to_anchor=(0.9, 0.9), loc="upper left", frameon=False)
-
-    ax.set_title(key)
+    _ = _decorate_axs(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=table,
+        value_to_plot=render_params.color,
+        color_source_vector=color_source_vector,
+        palette=render_params.palette,
+        alpha=render_params.fill_alpha,
+        na_color=render_params.cmap_params.na_color,
+        legend_fontsize=legend_params.legend_fontsize,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_loc=legend_params.legend_loc,
+        legend_fontoutline=legend_params.legend_fontoutline,
+        na_in_legend=legend_params.na_in_legend,
+        colorbar=legend_params.colorbar,
+        scalebar_dx=scalebar_params.scalebar_dx,
+        scalebar_units=scalebar_params.scalebar_units,
+        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+    )

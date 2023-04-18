@@ -5,14 +5,9 @@ default_stages:
     - commit
     - push
 minimum_pre_commit_version: 2.16.0
+ci:
+    skip: []
 repos:
-    - repo: https://github.com/nbQA-dev/nbQA
-      rev: 1.7.0
-      hooks:
-          - id: nbqa-pyupgrade
-            args: [--py38-plus]
-          - id: nbqa-black
-          - id: nbqa-isort
     - repo: https://github.com/psf/black
       rev: 23.3.0
       hooks:
@@ -25,73 +20,14 @@ repos:
       rev: 1.13.0
       hooks:
           - id: blacken-docs
-    - repo: https://github.com/PyCQA/isort
-      rev: 5.12.0
-      hooks:
-          - id: isort
     - repo: https://github.com/pre-commit/mirrors-mypy
-      rev: v1.1.1
+      rev: v1.2.0
       hooks:
           - id: mypy
             additional_dependencies: [numpy, types-requests]
-            exclude: tests/|docs/|temp/
-    - repo: https://github.com/asottile/yesqa
-      rev: v1.4.0
+            exclude: tests/|docs/
+    - repo: https://github.com/charliermarsh/ruff-pre-commit
+      rev: v0.0.261
       hooks:
-          - id: yesqa
-            additional_dependencies:
-                - flake8-tidy-imports
-                - flake8-docstrings
-                - flake8-rst-docstrings
-                - flake8-comprehensions
-                - flake8-bugbear
-                - flake8-blind-except
-    - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v4.4.0
-      hooks:
-          - id: detect-private-key
-          - id: check-ast
-          - id: end-of-file-fixer
-          - id: mixed-line-ending
-            args: [--fix=lf]
-          - id: trailing-whitespace
-          - id: check-case-conflict
-          - id: check-docstring-first
-    - repo: https://github.com/PyCQA/autoflake
-      rev: v2.0.2
-      hooks:
-          - id: autoflake
-            args:
-                - --in-place
-                - --remove-all-unused-imports
-                - --remove-unused-variable
-                - --ignore-init-module-imports
-    - repo: https://github.com/PyCQA/flake8
-      rev: 6.0.0
-      hooks:
-          - id: flake8
-            additional_dependencies:
-                - flake8-tidy-imports
-                - flake8-docstrings
-                - flake8-rst-docstrings
-                - flake8-comprehensions
-                - flake8-bugbear
-                - flake8-blind-except
-    - repo: https://github.com/asottile/pyupgrade
-      rev: v3.3.1
-      hooks:
-          - id: pyupgrade
-            args: [--py3-plus, --py39-plus, --keep-runtime-typing]
-    - repo: https://github.com/pre-commit/pygrep-hooks
-      rev: v1.10.0
-      hooks:
-          - id: python-no-eval
-          - id: python-use-type-annotations
-          - id: python-check-blanket-noqa
-          - id: rst-backticks
-          - id: rst-directive-colons
-          - id: rst-inline-touching-normal
-    - repo: https://github.com/PyCQA/doc8
-      rev: v1.1.1
-      hooks:
-          - id: doc8
+          - id: ruff
+            args: [--fix, --exit-non-zero-on-fix]

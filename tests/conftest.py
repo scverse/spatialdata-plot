@@ -1,17 +1,24 @@
-from typing import Optional, Union
+from abc import ABC, ABCMeta
+from functools import wraps
+from pathlib import Path
+from typing import Callable, Optional, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 import spatialdata as sd
+import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from geopandas import GeoDataFrame
+from matplotlib.testing.compare import compare_images
 from multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
+from spatialdata.datasets import blobs
 from spatialdata.models import (
     Image2DModel,
     Image3DModel,
@@ -23,7 +30,12 @@ from spatialdata.models import (
 )
 from xarray import DataArray
 
-import spatialdata_plot  # noqa: F401
+HERE: Path = Path(__file__).parent
+
+EXPECTED = HERE / "_images"
+ACTUAL = HERE / "figures"
+TOL = 60
+DPI = 40
 
 RNG = default_rng()
 
@@ -37,6 +49,11 @@ def full_sdata() -> SpatialData:
         points=_get_points(),
         table=_get_table(region="sample1"),
     )
+
+
+@pytest.fixture()
+def sdata_blobs() -> SpatialData:
+    return blobs()
 
 
 @pytest.fixture
@@ -138,7 +155,7 @@ def shapes() -> SpatialData:
 
 
 @pytest.fixture()
-def points() -> SpatialData:
+def element() -> SpatialData:
     return SpatialData(points=_get_points())
 
 
@@ -150,17 +167,6 @@ def table_single_annotation() -> SpatialData:
 @pytest.fixture()
 def table_multiple_annotations() -> SpatialData:
     return SpatialData(table=_get_table(region=["sample1", "sample2"]))
-
-
-# @pytest.fixture()
-# def empty_points() -> SpatialData:
-#     geo_df = GeoDataFrame(
-#         geometry=[],
-#     )
-#     from spatialdata.transformations import Identity
-#     set_transform(geo_df, Identity())
-#
-#     return SpatialData(points={"empty": geo_df})
 
 
 @pytest.fixture()
@@ -330,10 +336,136 @@ def _get_table(
     adata = AnnData(RNG.normal(size=(100, 10)), obs=pd.DataFrame(RNG.normal(size=(100, 3)), columns=["a", "b", "c"]))
     adata.obs[instance_key] = np.arange(adata.n_obs)
     if isinstance(region, str):
-        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, instance_key=instance_key)
     elif isinstance(region, list):
         adata.obs[region_key] = RNG.choice(region, size=adata.n_obs)
         adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
-        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
-        return TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
+
+    return table
+
+
+class PlotTesterMeta(ABCMeta):
+    def __new__(cls, clsname, superclasses, attributedict):
+        for key, value in attributedict.items():
+            if callable(value):
+                attributedict[key] = _decorate(value, clsname, name=key)
+        return super().__new__(cls, clsname, superclasses, attributedict)
+
+
+class PlotTester(ABC):  # noqa: B024
+    @classmethod
+    def compare(cls, basename: str, tolerance: Optional[float] = None):
+        ACTUAL.mkdir(parents=True, exist_ok=True)
+        out_path = ACTUAL / f"{basename}.png"
+
+        plt.savefig(out_path, dpi=DPI)
+        plt.close()
+
+        if tolerance is None:
+            # see https://github.com/scverse/squidpy/pull/302
+            tolerance = 2 * TOL if "Napari" in str(basename) else TOL
+
+        res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
+
+        assert res is None, res
+
+
+def _decorate(fn: Callable, clsname: str, name: Optional[str] = None) -> Callable:
+    @wraps(fn)
+    def save_and_compare(self, *args, **kwargs):
+        fn(self, *args, **kwargs)
+        self.compare(fig_name)
+
+    if not callable(fn):
+        raise TypeError(f"Expected a `callable` for class `{clsname}`, found `{type(fn).__name__}`.")
+
+    name = fn.__name__ if name is None else name
+
+    if not name.startswith("test_plot_") or not clsname.startswith("Test"):
+        return fn
+
+    fig_name = f"{clsname[4:]}_{name[10:]}"
+
+    return save_and_compare
+
+
+@pytest.fixture
+def get_sdata_with_multiple_images(request) -> sd.SpatialData:
+    """Yields a sdata object with multiple images which may or may not share a coordinate system."""
+
+    def _get_sdata_with_multiple_images(share_coordinate_system: str = "all"):
+        if share_coordinate_system == "all":
+            images = {
+                "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+                "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+                "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+            }
+
+        elif share_coordinate_system == "two":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+            }
+
+        elif share_coordinate_system == "none":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys3": sd.transformations.Identity()},
+                ),
+            }
+
+        elif share_coordinate_system == "similar_name":
+            images = {
+                "data1": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys1": sd.transformations.Identity()},
+                ),
+                "data2": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys2": sd.transformations.Identity()},
+                ),
+                "data3": sd.models.Image2DModel.parse(
+                    np.zeros((1, 10, 10)),
+                    dims=("c", "y", "x"),
+                    transformations={"coord_sys11": sd.transformations.Identity()},
+                ),
+            }
+
+        else:
+            raise ValueError("Invalid share_coordinate_system value.")
+
+        sdata = sd.SpatialData(images=images)
+
+        return sdata
+
+    return _get_sdata_with_multiple_images

@@ -28,3 +28,10 @@ __pycache__/
 /.vscode/
 
 format.sh
+
+
+# test
+tests/figures/
+
+# jupyter checkpoints
+.ipynb_checkpoints
