@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Any, Literal, Optional, Union
 
 import matplotlib.pyplot as plt
+import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
 import spatialdata as sd
@@ -36,6 +37,9 @@ from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
+from spatialdata.models import (
+    Image2DModel,
+)
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
@@ -903,3 +907,14 @@ def _get_cs_element_map(
         # model = get_model(element_map["blobs_labels"])
         # if model in [Image2DModel, Image3DModel, Labels2DModel, Labels3DModel]
     return d
+
+
+def _multiscale_to_image(sdata: sd.SpatialData) -> sd.SpatialData:
+    if sdata.images is None:
+        raise ValueError("No images found in the SpatialData object.")
+
+    for k, v in sdata.images.items():
+        if isinstance(v, msi.multiscale_spatial_image.MultiscaleSpatialImage):
+            sdata.images[k] = Image2DModel.parse(v["scale0"].ds.to_array().squeeze(axis=0))
+
+    return sdata
