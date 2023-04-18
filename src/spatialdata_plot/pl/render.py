@@ -30,7 +30,6 @@ from spatialdata_plot.pl.utils import (
     _decorate_axs,
     _map_color_seg,
     _maybe_set_colors,
-    _normalize,
     _set_color_source_vec,
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
@@ -292,7 +291,7 @@ class ImageRenderParams:
 
     cmap_params: CmapParams
     element: str | None = None
-    channel: Sequence[str] | None = None
+    channel: list[str] | list[int] | int | str | None = None
     palette: Palette_t = None
     alpha: float = 1.0
 
@@ -319,7 +318,7 @@ def _render_images(
     if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
         raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
-    img = _normalize(img, clip=True)
+    # img = _normalize(img, clip=True)
 
     if render_params.channel is not None:
         img = img.sel(c=[render_params.channel])
