@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import spatialdata as sd
+import xarray as xr
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib import colors
@@ -28,11 +29,13 @@ from spatialdata_plot.pl.utils import (
     OutlineParams,
     ScalebarParams,
     _decorate_axs,
+    _get_colors_for_categorical_obs,
     _map_color_seg,
     _maybe_set_colors,
+    _normalize,
     _set_color_source_vec,
 )
-from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
+from spatialdata_plot.pp.utils import _get_instance_key, _get_linear_colormap, _get_region_key
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
@@ -318,10 +321,32 @@ def _render_images(
     if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
         raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
-    # img = _normalize(img, clip=True)
-
     if render_params.channel is not None:
-        img = img.sel(c=[render_params.channel])
+        channels = [render_params.channel] if isinstance(render_params.channel, (str, int)) else render_params.channel
+        img = img.sel(c=channels)
+        num_channels = img.sizes["c"]
+
+        if render_params.palette is not None:
+            if num_channels > len(render_params.palette):
+                raise ValueError("If palette is provided, it must match the number of channels.")
+
+            color = render_params.palette
+
+        else:
+            color = _get_colors_for_categorical_obs(img.coords["c"].values.tolist())
+
+        cmaps = _get_linear_colormap([str(c) for c in color[:num_channels]], "k")
+        img = _normalize(img, clip=True)
+        colored = np.stack([cmaps[i](img.values[i]) for i in range(num_channels)], 0).sum(0)
+        img = xr.DataArray(
+            data=colored,
+            coords=[
+                img.coords["x"],
+                img.coords["y"],
+                ["R", "G", "B", "A"],
+            ],
+            dims=["x", "y", "c"],
+        )
 
     img = img.transpose("y", "x", "c")  # for plotting
 
