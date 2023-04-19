@@ -342,11 +342,11 @@ def _render_images(
         img = xr.DataArray(
             data=colored,
             coords=[
-                img.coords["x"],
                 img.coords["y"],
+                img.coords["x"],
                 ["R", "G", "B", "A"],
             ],
-            dims=["x", "y", "c"],
+            dims=["y", "x", "c"],
         )
 
     img = img.transpose("y", "x", "c")  # for plotting
