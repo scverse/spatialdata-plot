@@ -41,6 +41,7 @@ from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
+    _multiscale_to_image,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
@@ -504,6 +505,9 @@ class PlotAccessor:
 
         if len(render_cmds.keys()) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+
+        # Simplicstic solution: If the images are multiscale, just use the first
+        sdata = _multiscale_to_image(sdata)
 
         # transform all elements
         for cmd, _ in render_cmds.items():

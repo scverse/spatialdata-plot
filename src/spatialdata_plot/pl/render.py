@@ -372,7 +372,7 @@ class LabelsRenderParams:
     layer: str | None = None
     palette: Palette_t = None
     outline_alpha: float = 1.0
-    fill_alpha: float = 0.3
+    fill_alpha: float = 0.4
 
 
 def _render_labels(
