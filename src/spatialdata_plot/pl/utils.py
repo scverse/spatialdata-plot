@@ -20,7 +20,7 @@ from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
 from matplotlib.cm import get_cmap
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import Colormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
+from matplotlib.colors import Colormap, LinearSegmentedColormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
@@ -903,3 +903,14 @@ def _get_cs_element_map(
         # model = get_model(element_map["blobs_labels"])
         # if model in [Image2DModel, Image3DModel, Labels2DModel, Labels3DModel]
     return d
+
+
+def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
+    return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
+
+
+def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
+    sorted_labels = sorted(color_dict.keys())
+    colors = [color_dict[k] for k in sorted_labels]
+
+    return ListedColormap(["black"] + colors, N=len(colors) + 1)

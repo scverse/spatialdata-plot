@@ -30,12 +30,13 @@ from spatialdata_plot.pl.utils import (
     ScalebarParams,
     _decorate_axs,
     _get_colors_for_categorical_obs,
+    _get_linear_colormap,
     _map_color_seg,
     _maybe_set_colors,
     _normalize,
     _set_color_source_vec,
 )
-from spatialdata_plot.pp.utils import _get_instance_key, _get_linear_colormap, _get_region_key
+from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
 Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
