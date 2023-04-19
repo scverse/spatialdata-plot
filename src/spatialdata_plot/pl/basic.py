@@ -290,7 +290,7 @@ class PlotAccessor:
     def render_images(
         self,
         element: str | None = None,
-        channel: str | None = None,
+        channel: list[str] | list[int] | int | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -326,6 +326,7 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
+
         cmap_params = _prepare_cmap_norm(
             cmap=cmap,
             norm=norm,
