@@ -908,7 +908,7 @@ def _get_cs_element_map(
         # if model in [Image2DModel, Image3DModel, Labels2DModel, Labels3DModel]
     return d
 
-  
+
 def _multiscale_to_image(sdata: sd.SpatialData) -> sd.SpatialData:
     if sdata.images is None:
         raise ValueError("No images found in the SpatialData object.")
@@ -918,8 +918,8 @@ def _multiscale_to_image(sdata: sd.SpatialData) -> sd.SpatialData:
             sdata.images[k] = Image2DModel.parse(v["scale0"].ds.to_array().squeeze(axis=0))
 
     return sdata
-  
-  
+
+
 def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
@@ -929,4 +929,3 @@ def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
     colors = [color_dict[k] for k in sorted_labels]
 
     return ListedColormap(["black"] + colors, N=len(colors) + 1)
-
