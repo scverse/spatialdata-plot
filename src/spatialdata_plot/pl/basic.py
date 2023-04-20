@@ -45,6 +45,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _translate_image,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -509,47 +510,39 @@ class PlotAccessor:
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
 
+        img_transformations = {}
         # transform all elements
         for cmd, _ in render_cmds.items():
             if cmd == "render_images" or cmd == "render_channels":
+                
+                translations = {}
+                
                 for key in sdata.images:
-                    img_transformation = get_transformation(sdata.images[key], get_all=True)
-                    img_transformation = list(img_transformation.values())[0]
+                    
+                    img_transformations[key] = {}
+                    all_transformations = get_transformation(sdata.images[key], get_all=True)
+                    
+                    for cs, transformation in all_transformations.items():
+                        
+                        img_transformations[key][cs] = transformation
+                        
+                        translations[key] = []
+                        if isinstance(transformation, sd.transformations.transformations.Translation):
 
-                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
-                        shifts: dict[str, int] = {}
-                        for idx, axis in enumerate(img_transformation.axes):
-                            shifts[axis] = int(img_transformation.translation[idx])
+                            sdata.images[key] = _translate_image(image=sdata.images[key], translation=transformation)
+                            
+                        elif isinstance(transformation, sd.transformations.transformations.Sequence):
+                            
+                            # we have more than one transformation, let's find the translation(s)
+                            for t in list(transformation.transformations):
+                                
+                                if isinstance(t, sd.transformations.transformations.Translation):
 
-                        img = sdata.images[key].values.copy()
-                        shifted_channels = []
+                                    sdata.images[key] = _translate_image(image=sdata.images[key], translation=t)
 
-                        # split channels, shift axes individually, them recombine
-                        if len(sdata.images[key].shape) == 3:
-                            for c in range(sdata.images[key].shape[0]):
-                                channel = img[c, :, :]
-
-                                # iterates over [x, y]
-                                for axis, shift in shifts.items():
-                                    pad_x, pad_y = (0, 0), (0, 0)
-                                    if axis == "x" and shift > 0:
-                                        pad_x = (abs(shift), 0)
-                                    elif axis == "x" and shift < 0:
-                                        pad_x = (0, abs(shift))
-
-                                    if axis == "y" and shift > 0:
-                                        pad_y = (abs(shift), 0)
-                                    elif axis == "y" and shift < 0:
-                                        pad_y = (0, abs(shift))
-
-                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
-
-                                shifted_channels.append(channel)
-
-                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
-
-                    else:
-                        sdata.images[key] = transform(sdata.images[key], img_transformation)
+                                else:
+                                    
+                                    sdata.images[key] = transform(sdata.images[key], t)
 
             elif cmd == "render_shapes":
                 for key in sdata.shapes:
@@ -569,6 +562,7 @@ class PlotAccessor:
             labels="render_labels" in render_cmds,
             points="render_points" in render_cmds,
             shapes="render_shapes" in render_cmds,
+            img_transformations=img_transformations if len(img_transformations) > 0 else None,
         )
 
         # handle coordinate system
