@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import numpy as np
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
@@ -19,7 +18,6 @@ from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
 from spatialdata._logging import logger as logg
-from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
@@ -514,34 +512,26 @@ class PlotAccessor:
         # transform all elements
         for cmd, _ in render_cmds.items():
             if cmd == "render_images" or cmd == "render_channels":
-                
                 translations = {}
-                
+
                 for key in sdata.images:
-                    
                     img_transformations[key] = {}
                     all_transformations = get_transformation(sdata.images[key], get_all=True)
-                    
+
                     for cs, transformation in all_transformations.items():
-                        
                         img_transformations[key][cs] = transformation
-                        
+
                         translations[key] = []
                         if isinstance(transformation, sd.transformations.transformations.Translation):
-
                             sdata.images[key] = _translate_image(image=sdata.images[key], translation=transformation)
-                            
+
                         elif isinstance(transformation, sd.transformations.transformations.Sequence):
-                            
                             # we have more than one transformation, let's find the translation(s)
                             for t in list(transformation.transformations):
-                                
                                 if isinstance(t, sd.transformations.transformations.Translation):
-
                                     sdata.images[key] = _translate_image(image=sdata.images[key], translation=t)
 
                                 else:
-                                    
                                     sdata.images[key] = transform(sdata.images[key], t)
 
             elif cmd == "render_shapes":
