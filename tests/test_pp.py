@@ -4,15 +4,15 @@ import pytest
 @pytest.mark.parametrize(
     "sdata, keys",
     [
-        ("test_sdata_multiple_images", "data1"),
-        ("test_sdata_multiple_images", ["data1"]),
-        ("test_sdata_multiple_images", ["data1", "data2"]),
+        ("get_sdata_with_multiple_images", "data1"),
+        ("get_sdata_with_multiple_images", ["data1"]),
+        ("get_sdata_with_multiple_images", ["data1", "data2"]),
     ],
 )
 def test_can_subset_to_one_or_more_images(sdata, keys, request):
     """Tests whether a subset of images can be selected from the sdata object."""
 
-    sdata = request.getfixturevalue(sdata)
+    sdata = request.getfixturevalue(sdata)(share_coordinate_system="all")
 
     clipped_sdata = sdata.pp.get_elements(keys)
 
