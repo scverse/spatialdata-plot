@@ -39,6 +39,7 @@ DPI = 40
 
 RNG = default_rng()
 
+
 @pytest.fixture
 def get_sdata_with_multiple_images(request) -> sd.SpatialData:
     """Yields a sdata object with multiple images which may or may not share a coordinate system."""
@@ -98,6 +99,7 @@ def get_sdata_with_multiple_images(request) -> sd.SpatialData:
 
     return _get_sdata_with_multiple_images
 
+
 @pytest.fixture()
 def full_sdata() -> SpatialData:
     return SpatialData(
@@ -117,7 +119,11 @@ def sdata_blobs() -> SpatialData:
 @pytest.fixture
 def test_sdata_single_image():
     """Creates a simple sdata object."""
-    images = {"data1_image": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()})}
+    images = {
+        "data1_image": sd.models.Image2DModel.parse(
+            np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
+        )
+    }
     sdata = sd.SpatialData(images=images)
     return sdata
 

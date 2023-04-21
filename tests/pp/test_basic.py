@@ -26,7 +26,6 @@ def test_typerror_when_key_is_invalid(sdata, keys, request):
     ],
 )
 def test_valuerror_when_key_is_of_correct_type_but_not_in_sdata(sdata, keys, request):
-    
     sdata = request.getfixturevalue(sdata)(share_coordinate_system="all")
 
     with pytest.raises(ValueError):
