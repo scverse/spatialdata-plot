@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
+import spatial_image
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
@@ -180,6 +181,7 @@ def _get_extent(
     labels: bool = True,
     points: bool = True,
     shapes: bool = True,
+    img_transformations: Optional[dict[str, dict[str, sd.transformations.transformations.BaseTransformation]]] = None,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of the elements contained in the SpatialData object.
 
@@ -195,6 +197,8 @@ def _get_extent(
         Flag indicating whether to consider points when calculating the extent
     shapes
         Flag indicating whether to consider shaoes when calculating the extent
+    img_transformations
+        List of transformations already applied to the images
 
     Returns
     -------
@@ -218,8 +222,43 @@ def _get_extent(
                 for element_id in element_ids:
                     if images_key == element_id:
                         tmp = sdata.images[element_id]
-                        y_dims += [(0, tmp.shape[1])]  # img is cyx, so we skip 0
-                        x_dims += [(0, tmp.shape[2])]
+
+                        # calculate original image extent
+                        if img_transformations is not None:
+                            shifts: dict[str, float] = {}
+                            shifts["c"] = tmp.shape[0]
+                            shifts["y"] = tmp.shape[1]
+                            shifts["x"] = tmp.shape[2]
+
+                            if isinstance(
+                                img_transformations[images_key][cs_name], sd.transformations.transformations.Sequence
+                            ):
+                                transformations = list(img_transformations[images_key][cs_name].transformations)
+
+                            else:
+                                transformations = [img_transformations[images_key][cs_name]]
+
+                            # First reverse all scaling
+                            for transformation in transformations:
+                                if isinstance(transformation, sd.transformations.transformations.Scale):
+                                    for idx, ax in enumerate(transformation.axes):
+                                        shifts["c"] /= transformation.scale[idx] if ax == "c" else 1
+                                        shifts["x"] /= transformation.scale[idx] if ax == "x" else 1
+                                        shifts["y"] /= transformation.scale[idx] if ax == "y" else 1
+
+                            # Then the shift
+                            for transformation in transformations:
+                                if isinstance(transformation, sd.transformations.transformations.Translation):
+                                    for idx, ax in enumerate(transformation.axes):
+                                        shifts["c"] -= transformation.translation[idx] if ax == "c" else 0
+                                        shifts["x"] -= transformation.translation[idx] if ax == "x" else 0
+                                        shifts["y"] -= transformation.translation[idx] if ax == "y" else 0
+
+                                for ax in ["c", "x", "y"]:
+                                    shifts[ax] = int(shifts[ax])
+
+                        y_dims += [(tmp.shape[1] - shifts["y"], tmp.shape[1])]  # img is cyx, so we skip 0
+                        x_dims += [(tmp.shape[2] - shifts["x"], tmp.shape[2])]
                         del tmp
 
         if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
@@ -929,3 +968,44 @@ def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
     colors = [color_dict[k] for k in sorted_labels]
 
     return ListedColormap(["black"] + colors, N=len(colors) + 1)
+
+
+def _translate_image(
+    image: spatial_image.SpatialImage,
+    translation: sd.transformations.transformations.Translation,
+) -> spatial_image.SpatialImage:
+    shifts: dict[str, int] = {}
+
+    for idx, axis in enumerate(translation.axes):
+        shifts[axis] = int(translation.translation[idx])
+
+    img = image.values.copy()
+    shifted_channels = []
+
+    # split channels, shift axes individually, them recombine
+    if len(image.shape) == 3:
+        for c in range(image.shape[0]):
+            channel = img[c, :, :]
+
+            # iterates over [x, y]
+            for axis, shift in shifts.items():
+                pad_x, pad_y = (0, 0), (0, 0)
+                if axis == "x" and shift > 0:
+                    pad_x = (abs(shift), 0)
+                elif axis == "x" and shift < 0:
+                    pad_x = (0, abs(shift))
+
+                if axis == "y" and shift > 0:
+                    pad_y = (abs(shift), 0)
+                elif axis == "y" and shift < 0:
+                    pad_y = (0, abs(shift))
+
+                channel = np.pad(channel, (pad_y, pad_x), mode="constant")
+
+            shifted_channels.append(channel)
+
+    return Image2DModel.parse(
+        np.array(shifted_channels),
+        dims=["c", "y", "x"],
+        transformations=image.attrs["transform"],
+    )

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import sys
 from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import numpy as np
+import matplotlib.pyplot as plt
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
@@ -19,7 +20,6 @@ from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata import transform
 from spatialdata._logging import logger as logg
-from spatialdata.models import Image2DModel
 from spatialdata.transformations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
@@ -45,6 +45,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _translate_image,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -509,47 +510,28 @@ class PlotAccessor:
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
 
+        img_transformations: dict[str, dict[str, sd.transformations.transformations.BaseTransformation]] = {}
         # transform all elements
         for cmd, _ in render_cmds.items():
             if cmd == "render_images" or cmd == "render_channels":
                 for key in sdata.images:
-                    img_transformation = get_transformation(sdata.images[key], get_all=True)
-                    img_transformation = list(img_transformation.values())[0]
+                    img_transformations[key] = {}
+                    all_transformations = get_transformation(sdata.images[key], get_all=True)
 
-                    if isinstance(img_transformation, sd.transformations.transformations.Translation):
-                        shifts: dict[str, int] = {}
-                        for idx, axis in enumerate(img_transformation.axes):
-                            shifts[axis] = int(img_transformation.translation[idx])
+                    for cs, transformation in all_transformations.items():
+                        img_transformations[key][cs] = transformation
 
-                        img = sdata.images[key].values.copy()
-                        shifted_channels = []
+                        if isinstance(transformation, sd.transformations.transformations.Translation):
+                            sdata.images[key] = _translate_image(image=sdata.images[key], translation=transformation)
 
-                        # split channels, shift axes individually, them recombine
-                        if len(sdata.images[key].shape) == 3:
-                            for c in range(sdata.images[key].shape[0]):
-                                channel = img[c, :, :]
+                        elif isinstance(transformation, sd.transformations.transformations.Sequence):
+                            # we have more than one transformation, let's find the translation(s)
+                            for t in list(transformation.transformations):
+                                if isinstance(t, sd.transformations.transformations.Translation):
+                                    sdata.images[key] = _translate_image(image=sdata.images[key], translation=t)
 
-                                # iterates over [x, y]
-                                for axis, shift in shifts.items():
-                                    pad_x, pad_y = (0, 0), (0, 0)
-                                    if axis == "x" and shift > 0:
-                                        pad_x = (abs(shift), 0)
-                                    elif axis == "x" and shift < 0:
-                                        pad_x = (0, abs(shift))
-
-                                    if axis == "y" and shift > 0:
-                                        pad_y = (abs(shift), 0)
-                                    elif axis == "y" and shift < 0:
-                                        pad_y = (0, abs(shift))
-
-                                    channel = np.pad(channel, (pad_y, pad_x), mode="constant")
-
-                                shifted_channels.append(channel)
-
-                        sdata.images[key] = Image2DModel.parse(np.array(shifted_channels), dims=["c", "y", "x"])
-
-                    else:
-                        sdata.images[key] = transform(sdata.images[key], img_transformation)
+                                else:
+                                    sdata.images[key] = transform(sdata.images[key], t)
 
             elif cmd == "render_shapes":
                 for key in sdata.shapes:
@@ -569,6 +551,7 @@ class PlotAccessor:
             labels="render_labels" in render_cmds,
             points="render_points" in render_cmds,
             shapes="render_shapes" in render_cmds,
+            img_transformations=img_transformations if len(img_transformations) > 0 else None,
         )
 
         # handle coordinate system
@@ -698,5 +681,10 @@ class PlotAccessor:
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
+
+        # Manually show plot if we're not in interactive mode
+        # https://stackoverflow.com/a/64523765
+        if hasattr(sys, "ps1"):
+            plt.show()
 
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
