@@ -60,6 +60,6 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
 [changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
-[link-api]: https://spatialdata-plot.readthedocs.io/latest/api.html
+[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest
 [link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
 [link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
