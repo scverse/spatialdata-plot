@@ -19,6 +19,8 @@ The `spatialdata-plot` package extends `spatialdata` with a declarative plotting
 Please refer to the [documentation][link-docs]. In particular, the
 
 -   [API documentation][link-api].
+-   [Design doc][link-design-doc].
+-   [Example notebooks][link-notebooks].
 
 ## Installation
 
@@ -59,3 +61,5 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 [changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
 [link-api]: https://spatialdata-plot.readthedocs.io/latest/api.html
+[link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
+[link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
