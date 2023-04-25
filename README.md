@@ -10,7 +10,9 @@
 [badge-codecov]: https://codecov.io/gh/scverse/spatialdata-plot/branch/main/graph/badge.svg?token=C45F3ATSVI
 [link-codecov]: https://app.codecov.io/gh/scverse/spatialdata-plot
 
-A very interesting piece of code
+The `spatialdata-plot` package extends `spatialdata` with a declarative plotting API that enables to quickly visualize `spatialdata` objects and their respective elements (i.e. `images`, `labels`, `points` and `shapes`).
+
+<img src='https://raw.githubusercontent.com/scverse/spatialdata-plot/main/docs/spatialdata-plot.png'/>
 
 ## Getting started
 
