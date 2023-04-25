@@ -59,7 +59,11 @@ def sdata_blobs() -> SpatialData:
 @pytest.fixture
 def test_sdata_single_image():
     """Creates a simple sdata object."""
-    images = {"data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
+    images = {
+        "data1_image": sd.models.Image2DModel.parse(
+            np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
+        )
+    }
     sdata = sd.SpatialData(images=images)
     return sdata
 
@@ -77,9 +81,15 @@ def test_sdata_single_image_with_label():
 def test_sdata_multiple_images():
     """Creates an sdata object with multiple images."""
     images = {
-        "data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data2": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
-        "data3": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x")),
+        "data1_image": sd.models.Image2DModel.parse(
+            np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
+        ),
+        "data2_image": sd.models.Image2DModel.parse(
+            np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
+        ),
+        "data3_image": sd.models.Image2DModel.parse(
+            np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
+        ),
     }
     sdata = sd.SpatialData(images=images)
     return sdata

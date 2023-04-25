@@ -1,21 +1,8 @@
 from collections import OrderedDict
 
-import matplotlib
 import spatialdata as sd
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 from spatialdata.models import TableModel
 from spatialdata.transformations import get_transformation
-
-
-def _get_linear_colormap(colors: list[str], background: str) -> list[matplotlib.colors.LinearSegmentedColormap]:
-    return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
-
-
-def _get_listed_colormap(color_dict: dict[str, str]) -> matplotlib.colors.ListedColormap:
-    sorted_labels = sorted(color_dict.keys())
-    colors = [color_dict[k] for k in sorted_labels]
-
-    return ListedColormap(["black"] + colors, N=len(colors) + 1)
 
 
 def _get_region_key(sdata: sd.SpatialData) -> str:

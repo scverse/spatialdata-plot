@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import spatialdata as sd
+import xarray as xr
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib import colors
@@ -28,6 +29,8 @@ from spatialdata_plot.pl.utils import (
     OutlineParams,
     ScalebarParams,
     _decorate_axs,
+    _get_colors_for_categorical_obs,
+    _get_linear_colormap,
     _map_color_seg,
     _maybe_set_colors,
     _normalize,
@@ -292,7 +295,7 @@ class ImageRenderParams:
 
     cmap_params: CmapParams
     element: str | None = None
-    channel: Sequence[str] | None = None
+    channel: list[str] | list[int] | int | str | None = None
     palette: Palette_t = None
     alpha: float = 1.0
 
@@ -319,10 +322,32 @@ def _render_images(
     if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
         raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
-    img = _normalize(img, clip=True)
-
     if render_params.channel is not None:
-        img = img.sel(c=[render_params.channel])
+        channels = [render_params.channel] if isinstance(render_params.channel, (str, int)) else render_params.channel
+        img = img.sel(c=channels)
+        num_channels = img.sizes["c"]
+
+        if render_params.palette is not None:
+            if num_channels > len(render_params.palette):
+                raise ValueError("If palette is provided, it must match the number of channels.")
+
+            color = render_params.palette
+
+        else:
+            color = _get_colors_for_categorical_obs(img.coords["c"].values.tolist())
+
+        cmaps = _get_linear_colormap([str(c) for c in color[:num_channels]], "k")
+        img = _normalize(img, clip=True)
+        colored = np.stack([cmaps[i](img.values[i]) for i in range(num_channels)], 0).sum(0)
+        img = xr.DataArray(
+            data=colored,
+            coords=[
+                img.coords["y"],
+                img.coords["x"],
+                ["R", "G", "B", "A"],
+            ],
+            dims=["y", "x", "c"],
+        )
 
     img = img.transpose("y", "x", "c")  # for plotting
 
@@ -347,7 +372,7 @@ class LabelsRenderParams:
     layer: str | None = None
     palette: Palette_t = None
     outline_alpha: float = 1.0
-    fill_alpha: float = 0.3
+    fill_alpha: float = 0.4
 
 
 def _render_labels(
