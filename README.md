@@ -12,15 +12,20 @@
 
 The `spatialdata-plot` package extends `spatialdata` with a declarative plotting API that enables to quickly visualize `spatialdata` objects and their respective elements (i.e. `images`, `labels`, `points` and `shapes`).
 
+SpatialData’s plotting capabilities allow to quickly visualise all contained modalities. The user can specify which elements should be rendered (images, labels, points, shapes) and specify certain parameters for each layer, such as for example the intent to color shapes by a gene’s expression profile or which color to use for which image channel. When the plot is then eventually displayed, all transformations, alignments and coordinate systems are internally processed to form the final visualisation. In concordance with the general SpatialData philosophy, all modalities of the major spatial technologies are supported out of the box.
+
+ 
 <img src='https://raw.githubusercontent.com/scverse/spatialdata-plot/main/docs/spatialdata-plot.png'/>
 
 ## Getting started
 
-Please refer to the [documentation][link-docs]. In particular, the
+For more information on the `spatialdata` format, please refer to the [documentation](https://spatialdata.scverse.org/en/latest/). In particular, the
 
 -   [API documentation][link-api].
 -   [Design doc][link-design-doc].
 -   [Example notebooks][link-notebooks].
+
+For usage examples, please refer to the ["Visualizations"](https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html#visualizations) section of `spatialdata`.
 
 ## Installation
 
@@ -42,10 +47,6 @@ pip install spatialdata-plot
 ```bash
 pip install git+https://github.com/scverse/spatialdata-plot.git@main
 ```
-
-## Release notes
-
-See the [changelog][changelog].
 
 ## Contact
 
