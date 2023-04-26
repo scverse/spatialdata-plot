@@ -10,13 +10,17 @@
 [badge-codecov]: https://codecov.io/gh/scverse/spatialdata-plot/branch/main/graph/badge.svg?token=C45F3ATSVI
 [link-codecov]: https://app.codecov.io/gh/scverse/spatialdata-plot
 
-A very interesting piece of code
+The `spatialdata-plot` package extends `spatialdata` with a declarative plotting API that enables to quickly visualize `spatialdata` objects and their respective elements (i.e. `images`, `labels`, `points` and `shapes`).
+
+<img src='https://raw.githubusercontent.com/scverse/spatialdata-plot/main/docs/spatialdata-plot.png'/>
 
 ## Getting started
 
 Please refer to the [documentation][link-docs]. In particular, the
 
 -   [API documentation][link-api].
+-   [Design doc][link-design-doc].
+-   [Example notebooks][link-notebooks].
 
 ## Installation
 
@@ -56,4 +60,6 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
 [changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
-[link-api]: https://spatialdata-plot.readthedocs.io/latest/api.html
+[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest
+[link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
+[link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html

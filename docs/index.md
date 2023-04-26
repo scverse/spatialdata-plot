@@ -12,7 +12,7 @@ plotting.rst
 
 ```
 
-```{toctree}
+<!-- ```{toctree}
 :hidden: true
 :maxdepth: 2
 :caption: Tutorials
@@ -20,7 +20,7 @@ plotting.rst
 notebooks/preprocessing
 notebooks/demo
 
-```
+``` -->
 
 ```{toctree}
 :hidden: true
