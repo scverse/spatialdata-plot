@@ -684,7 +684,7 @@ class PlotAccessor:
 
         # Manually show plot if we're not in interactive mode
         # https://stackoverflow.com/a/64523765
-        if hasattr(sys, "ps1"):
+        if not hasattr(sys, "ps1"):
             plt.show()
 
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
