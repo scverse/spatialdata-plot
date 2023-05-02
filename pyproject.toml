@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 
 
 [project]
@@ -15,7 +15,9 @@ maintainers = [
 urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
-version = "0.0.1.dev1"
+dynamic= [
+  "version" # allow version to be set by git tags
+]
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 readme = "README.md"
@@ -100,6 +102,15 @@ formats = "ipynb,md"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ['src/spatialdata_plot']
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "_version.py"
 
 [tool.ruff]
 exclude = [
