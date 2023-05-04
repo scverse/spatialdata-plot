@@ -22,7 +22,7 @@ requires-python = ">=3.9"
 license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
-    "spatialdata@git+https://github.com/scverse/spatialdata",
+    "spatialdata",
     "matplotlib",
     "scikit-learn",
     "scanpy",
