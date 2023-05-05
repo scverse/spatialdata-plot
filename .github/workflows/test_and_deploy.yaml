@@ -74,10 +74,11 @@ jobs:
                   name: plotting-results
                   path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
             - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v3.1.1
+              uses: codecov/codecov-action@v3
               with:
-                  name: coverage
-                  verbose: true
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  fail_ci_if_error: true # optional (default = false)
+                  verbose: true # optional (default = false)
     deploy:
         # this will run when you have tagged a commit, starting with "v*"
         # and requires that you have put your twine API key in your
