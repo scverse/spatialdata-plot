@@ -147,14 +147,15 @@ class PlotAccessor:
         size: float = 1.0,
         outline: bool = False,
         outline_width: tuple[float, float] = (0.3, 0.05),
-        outline_color: tuple[str, str] = ("black", "white"),
+        outline_color: tuple[str, str] = ("#000000ff", "#ffffffff"),  # black, white
         alt_var: str | None = None,
         layer: str | None = None,
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
         na_color: str | tuple[float, ...] | None = "lightgrey",
-        alpha: float = 1.0,
+        outline_alpha: float = 1.0,
+        fill_alpha: float = 0.3,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -218,7 +219,8 @@ class PlotAccessor:
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
-            alpha=alpha,
+            outline_alpha=outline_alpha,
+            fill_alpha=fill_alpha,
         )
 
         return sdata
@@ -553,7 +555,6 @@ class PlotAccessor:
             shapes="render_shapes" in render_cmds,
             img_transformations=img_transformations if len(img_transformations) > 0 else None,
         )
-
         # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
@@ -646,7 +647,6 @@ class PlotAccessor:
                 elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:
                     if (
                         sdata.table is not None
-                        # and isinstance(params["instance_key"], str)
                         and isinstance(params.color, str)
                     ):
                         colors = sc.get.obs_df(sdata.table, params.color)

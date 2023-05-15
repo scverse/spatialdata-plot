@@ -31,7 +31,7 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
-from shapely.geometry import Point
+from shapely.geometry import Point, LineString
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -225,10 +225,9 @@ def _get_extent(
 
                         # calculate original image extent
                         if img_transformations is not None:
-                            shifts: dict[str, float] = {}
-                            shifts["c"] = tmp.shape[0]
-                            shifts["y"] = tmp.shape[1]
-                            shifts["x"] = tmp.shape[2]
+                            imaginary_origin: dict[str, float] = {}
+                            imaginary_origin["y"] = 0
+                            imaginary_origin["x"] = 0
 
                             if isinstance(
                                 img_transformations[images_key][cs_name], sd.transformations.transformations.Sequence
@@ -238,27 +237,23 @@ def _get_extent(
                             else:
                                 transformations = [img_transformations[images_key][cs_name]]
 
-                            # First reverse all scaling
+                            # Apply the same transformations to an imaginary origin (0, 0)
                             for transformation in transformations:
                                 if isinstance(transformation, sd.transformations.transformations.Scale):
                                     for idx, ax in enumerate(transformation.axes):
-                                        shifts["c"] /= transformation.scale[idx] if ax == "c" else 1
-                                        shifts["x"] /= transformation.scale[idx] if ax == "x" else 1
-                                        shifts["y"] /= transformation.scale[idx] if ax == "y" else 1
+                                        imaginary_origin["x"] *= transformation.scale[idx] if ax == "x" else 1
+                                        imaginary_origin["y"] *= transformation.scale[idx] if ax == "y" else 1
 
-                            # Then the shift
-                            for transformation in transformations:
                                 if isinstance(transformation, sd.transformations.transformations.Translation):
                                     for idx, ax in enumerate(transformation.axes):
-                                        shifts["c"] -= transformation.translation[idx] if ax == "c" else 0
-                                        shifts["x"] -= transformation.translation[idx] if ax == "x" else 0
-                                        shifts["y"] -= transformation.translation[idx] if ax == "y" else 0
+                                        imaginary_origin["x"] += transformation.translation[idx] if ax == "x" else 0
+                                        imaginary_origin["y"] += transformation.translation[idx] if ax == "y" else 0
 
-                                for ax in ["c", "x", "y"]:
-                                    shifts[ax] = int(shifts[ax])
+                        for ax in ["x", "y"]:
+                            imaginary_origin[ax] = int(imaginary_origin[ax])
 
-                        y_dims += [(tmp.shape[1] - shifts["y"], tmp.shape[1])]  # img is cyx, so we skip 0
-                        x_dims += [(tmp.shape[2] - shifts["x"], tmp.shape[2])]
+                        y_dims += [(imaginary_origin["y"], tmp.shape[1])]  # img is cyx, so we skip 0
+                        x_dims += [(imaginary_origin["x"], tmp.shape[2])]
                         del tmp
 
         if labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
@@ -426,7 +421,7 @@ def _set_outline(
     size: float,
     outline: bool = False,
     outline_width: tuple[float, float] = (0.3, 0.05),
-    outline_color: tuple[str, str] = ("black", "white"),
+    outline_color: tuple[str, str] = ("#0000000ff", "#ffffffff"),  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
     bg_width, gap_width = outline_width
@@ -1009,3 +1004,11 @@ def _translate_image(
         dims=["c", "y", "x"],
         transformations=image.attrs["transform"],
     )
+
+
+def _convert_polygon_to_linestrings(polygon):
+    print(type(polygon))
+    b = polygon.boundary.coords
+    linestrings = [LineString(b[k:k + 2]) for k in range(len(b) - 1)]
+
+    return [list(ls.coords) for ls in linestrings]

@@ -35,6 +35,7 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _normalize,
     _set_color_source_vec,
+    _convert_polygon_to_linestrings,
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
@@ -56,7 +57,8 @@ class ShapesRenderParams:
     alt_var: str | None = None
     layer: str | None = None
     palette: Palette_t = None
-    alpha: float = 1.0
+    outline_alpha: float = 1.0,
+    fill_alpha: float = 0.3,
     size: float = 1.0
 
 
@@ -85,6 +87,9 @@ def _render_shapes(
     else:
         table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
+    # refactor plz, squidpy leftovers
+    render_params.outline_params.bg_color = (0.83, 0.83, 0.83, render_params.fill_alpha)
+    
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
         adata=table,
@@ -94,62 +99,39 @@ def _render_shapes(
         groups=render_params.groups,
         palette=render_params.palette,
         na_color=render_params.cmap_params.na_color,
-        alpha=render_params.alpha,
+        alpha=render_params.fill_alpha,
     )
+    print(color_source_vector, color_vector)
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,
         s: float,
         norm: Any,
+        fill_alpha: float = None,
+        outline_alpha: float = None,
         **kwargs: Any,
     ) -> PatchCollection:
         """Get collection of shapes."""
+
         if shapes["geometry"].iloc[0].geom_type == "Polygon":
-            patches = [Polygon(p.exterior.coords, closed=False) for p in shapes["geometry"]]
+            patches = [Polygon(p.exterior.coords, closed=True) for p in shapes["geometry"]]
         elif shapes["geometry"].iloc[0].geom_type == "Point":
             patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
-        collection = PatchCollection(patches, snap=False, zorder=4, **kwargs)
+        fill_c = ColorConverter().to_rgba_array(c)
+        fill_c[..., -1] = render_params.fill_alpha
+        outline_c = ColorConverter().to_rgba_array(c)
+        outline_c[..., -1] = render_params.outline_alpha
 
-        if isinstance(c, np.ndarray) and np.issubdtype(c.dtype, np.number):
-            collection.set_array(np.ma.masked_invalid(c))
-            collection.set_norm(norm)
-
-        else:
-            # Assign color to drawn shapes, either Polygons or Circles
-            alpha = ColorConverter().to_rgba_array(c)[..., -1]
-            collection.set_facecolor(c)
-            collection.set_alpha(alpha)
+        collection = PatchCollection(patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs)
 
         return collection
 
     norm = copy(render_params.cmap_params.norm)
-    if render_params.outline_params.outline:
-        _cax = _get_collection_shape(
-            shapes=shapes,
-            s=render_params.outline_params.bg_size,
-            c=render_params.outline_params.bg_color,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            # **kwargs,
-        )
-        ax.add_collection(_cax)
-
-        _cax = _get_collection_shape(
-            shapes=shapes,
-            s=render_params.outline_params.gap_size,
-            c=render_params.outline_params.gap_color,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            # **kwargs,
-        )
-        ax.add_collection(_cax)
 
     if len(color_vector) == 0:
-        color_vector = [(0.83, 0.83, 0.83, 1.0)]
+        color_vector = [(0.83, 0.83, 0.83, 1.0)]  # grey
 
     _cax = _get_collection_shape(
         shapes=shapes,
@@ -158,7 +140,8 @@ def _render_shapes(
         rasterized=sc_settings._vector_friendly,
         cmap=render_params.cmap_params.cmap,
         norm=norm,
-        alpha=render_params.alpha,
+        fill_alpha=render_params.fill_alpha,
+        outline_alpha=render_params.outline_alpha
         # **kwargs,
     )
     cax = ax.add_collection(_cax)
@@ -171,7 +154,7 @@ def _render_shapes(
         value_to_plot=render_params.color,
         color_source_vector=color_source_vector,
         palette=render_params.palette,
-        alpha=render_params.alpha,
+        alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
         legend_fontsize=legend_params.legend_fontsize,
         legend_fontweight=legend_params.legend_fontweight,
