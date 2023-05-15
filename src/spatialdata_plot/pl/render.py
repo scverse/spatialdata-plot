@@ -35,7 +35,6 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _normalize,
     _set_color_source_vec,
-    _convert_polygon_to_linestrings,
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
@@ -57,8 +56,8 @@ class ShapesRenderParams:
     alt_var: str | None = None
     layer: str | None = None
     palette: Palette_t = None
-    outline_alpha: float = 1.0,
-    fill_alpha: float = 0.3,
+    outline_alpha: float = (1.0,)
+    fill_alpha: float = (0.3,)
     size: float = 1.0
 
 
@@ -89,7 +88,7 @@ def _render_shapes(
 
     # refactor plz, squidpy leftovers
     render_params.outline_params.bg_color = (0.83, 0.83, 0.83, render_params.fill_alpha)
-    
+
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
         adata=table,
@@ -113,7 +112,6 @@ def _render_shapes(
         **kwargs: Any,
     ) -> PatchCollection:
         """Get collection of shapes."""
-
         if shapes["geometry"].iloc[0].geom_type == "Polygon":
             patches = [Polygon(p.exterior.coords, closed=True) for p in shapes["geometry"]]
         elif shapes["geometry"].iloc[0].geom_type == "Point":
@@ -124,7 +122,9 @@ def _render_shapes(
         outline_c = ColorConverter().to_rgba_array(c)
         outline_c[..., -1] = render_params.outline_alpha
 
-        collection = PatchCollection(patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs)
+        collection = PatchCollection(
+            patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs
+        )
 
         return collection
 
