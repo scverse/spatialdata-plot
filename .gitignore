@@ -35,3 +35,6 @@ tests/figures/
 
 # jupyter checkpoints
 .ipynb_checkpoints
+
+# sphinx files
+*.swp

@@ -4,29 +4,9 @@
 
 ```{toctree}
 :hidden: true
-:maxdepth: 2
-:caption: API
+:maxdepth: 1
 
-preprocessing.rst
-plotting.rst
-
-```
-
-<!-- ```{toctree}
-:hidden: true
-:maxdepth: 2
-:caption: Tutorials
-
-notebooks/preprocessing
-notebooks/demo
-
-``` -->
-
-```{toctree}
-:hidden: true
-:maxdepth: 2
-:caption: Other
-
+api.md
 changelog.md
 template_usage.md
 contributing.md

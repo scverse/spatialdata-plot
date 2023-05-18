@@ -67,6 +67,6 @@ If you use `spatialdata` in your work, please cite the `spatialdata` publication
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
 [changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
-[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest
+[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest/api.html
 [link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
 [link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
