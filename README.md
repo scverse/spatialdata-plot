@@ -60,13 +60,12 @@ If you use `spatialdata` in your work, please cite the `spatialdata` publication
 >
 > Luca Marconato, Giovanni Palla, Kevin A. Yamauchi, Isaac Virshup, Elyas Heidari, Tim Treis, Marcella Toth, Rahul Shrestha, Harald Vöhringer, Wolfgang Huber, Moritz Gerstung, Josh Moore, Fabian J. Theis, Oliver Stegle
 >
-> bioRxiv 2023.05.05.539647; doi: https://doi.org/10.1101/2023.05.05.539647 
-
+> bioRxiv 2023.05.05.539647; doi: https://doi.org/10.1101/2023.05.05.539647
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
 [changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
-[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest
+[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest/api.html
 [link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
 [link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
