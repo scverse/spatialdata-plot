@@ -1,4 +1,6 @@
-# spatialdata-plot
+![SpatialData banner](https://github.com/scverse/spatialdata/blob/main/docs/_static/img/spatialdata_horizontal.png?raw=true)
+
+# spatialdata-plot: rich static plotting from SpatialData objects
 
 [![Tests][badge-tests]][link-tests]
 [![Documentation][badge-docs]][link-docs]
