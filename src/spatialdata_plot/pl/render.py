@@ -56,8 +56,8 @@ class ShapesRenderParams:
     alt_var: str | None = None
     layer: str | None = None
     palette: Palette_t = None
-    outline_alpha: float = (1.0,)
-    fill_alpha: float = (0.3,)
+    outline_alpha: float = 1.0
+    fill_alpha: float = 0.3
     size: float = 1.0
 
 
@@ -100,15 +100,15 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.fill_alpha,
     )
-    print(color_source_vector, color_vector)
+    # print(color_source_vector, color_vector)
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,
         s: float,
         norm: Any,
-        fill_alpha: float = None,
-        outline_alpha: float = None,
+        fill_alpha: Optional[float] = None,
+        outline_alpha: Optional[float] = None,
         **kwargs: Any,
     ) -> PatchCollection:
         """Get collection of shapes."""
@@ -122,11 +122,8 @@ def _render_shapes(
         outline_c = ColorConverter().to_rgba_array(c)
         outline_c[..., -1] = render_params.outline_alpha
 
-        collection = PatchCollection(
-            patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs
-        )
+        return PatchCollection(patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs)
 
-        return collection
 
     norm = copy(render_params.cmap_params.norm)
 
