@@ -124,7 +124,6 @@ def _render_shapes(
 
         return PatchCollection(patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs)
 
-
     norm = copy(render_params.cmap_params.norm)
 
     if len(color_vector) == 0:
