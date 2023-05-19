@@ -31,7 +31,7 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
-from shapely.geometry import Point, LineString
+from shapely.geometry import LineString, Point
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -1009,6 +1009,6 @@ def _translate_image(
 def _convert_polygon_to_linestrings(polygon):
     print(type(polygon))
     b = polygon.boundary.coords
-    linestrings = [LineString(b[k:k + 2]) for k in range(len(b) - 1)]
+    linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
 
     return [list(ls.coords) for ls in linestrings]
