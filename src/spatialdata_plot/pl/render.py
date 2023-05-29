@@ -100,7 +100,7 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.fill_alpha,
     )
-    
+
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,
