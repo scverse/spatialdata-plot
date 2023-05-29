@@ -100,7 +100,6 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.fill_alpha,
     )
-    # print(color_source_vector, color_vector)
 
     def _get_collection_shape(
         shapes: GeoDataFrame,
@@ -117,12 +116,29 @@ def _render_shapes(
         elif shapes["geometry"].iloc[0].geom_type == "Point":
             patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
+        cmap = kwargs["cmap"]
+        norm = colors.Normalize(vmin=min(c), vmax=max(c))
+
+        try:
+            # fails when numeric
+            fill_c = ColorConverter().to_rgba_array(c)
+        except ValueError:
+            c = cmap(norm(c))
+            
         fill_c = ColorConverter().to_rgba_array(c)
         fill_c[..., -1] = render_params.fill_alpha
         outline_c = ColorConverter().to_rgba_array(c)
         outline_c[..., -1] = render_params.outline_alpha
 
-        return PatchCollection(patches, snap=False, zorder=4, lw=1.5, facecolor=fill_c, edgecolor=outline_c, **kwargs)
+        return PatchCollection(
+            patches,
+            snap=False,
+            # zorder=4,
+            lw=1.5,
+            facecolor=fill_c,
+            edgecolor=outline_c, 
+            **kwargs
+        )
 
     norm = copy(render_params.cmap_params.norm)
 
@@ -300,7 +316,8 @@ def _render_images(
 
     if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
         raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
-
+    if render_params.channel is None and len(img.c) == 1:
+        render_params.channel = 0
     if render_params.channel is not None:
         channels = [render_params.channel] if isinstance(render_params.channel, (str, int)) else render_params.channel
         img = img.sel(c=channels)
@@ -418,7 +435,7 @@ def _render_labels(
             norm=render_params.cmap_params.norm if not categorical else None,
             alpha=render_params.fill_alpha,
             origin="lower",
-            zorder=3,
+            # zorder=3,
         )
         cax = ax.add_image(_cax)
 
@@ -441,7 +458,7 @@ def _render_labels(
             norm=render_params.cmap_params.norm if not categorical else None,
             alpha=render_params.outline_alpha,
             origin="lower",
-            zorder=4,
+            # zorder=4,
         )
         cax = ax.add_image(_cax)
 
@@ -465,7 +482,7 @@ def _render_labels(
             norm=render_params.cmap_params.norm if not categorical else None,
             alpha=render_params.fill_alpha,
             origin="lower",
-            zorder=4,
+            # zorder=4,
         )
         cax = ax.add_image(_cax)
 
