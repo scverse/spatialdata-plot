@@ -124,7 +124,7 @@ def _render_shapes(
             fill_c = ColorConverter().to_rgba_array(c)
         except ValueError:
             c = cmap(norm(c))
-            
+
         fill_c = ColorConverter().to_rgba_array(c)
         fill_c[..., -1] = render_params.fill_alpha
         outline_c = ColorConverter().to_rgba_array(c)
@@ -136,8 +136,8 @@ def _render_shapes(
             # zorder=4,
             lw=1.5,
             facecolor=fill_c,
-            edgecolor=outline_c, 
-            **kwargs
+            edgecolor=outline_c,
+            **kwargs,
         )
 
     norm = copy(render_params.cmap_params.norm)
