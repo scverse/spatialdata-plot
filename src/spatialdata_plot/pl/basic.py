@@ -36,6 +36,7 @@ from spatialdata_plot.pl.render import (
 from spatialdata_plot.pl.utils import (
     LegendParams,
     Palette_t,
+    _flatten_transformation_sequence,
     _FontSize,
     _FontWeight,
     _get_cs_contents,
@@ -47,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _set_outline,
     _translate_image,
     save_fig,
-    _flatten_transformation_sequence,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
 
@@ -568,74 +568,61 @@ class PlotAccessor:
         # go through tree
         cs_contents = _get_cs_contents(sdata)
         for i, cs in enumerate(coordinate_systems):
-
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
-            
+
             if members["has_images"].values[0]:
                 for key in sdata.images:
-                    
                     try:
                         transformations = get_transformation(sdata.images[key], to_coordinate_system=cs)
                         transformations = _flatten_transformation_sequence(transformations)
 
                         for t in transformations:
-
                             if isinstance(t, sd.transformations.transformations.Translation):
-                                    
                                 sdata.images[key] = _translate_image(image=sdata.images[key], translation=t)
-                            
-                            else:
 
-                                sdata.images[key] = transform(sdata.images[key], t)                    
-                            
+                            else:
+                                sdata.images[key] = transform(sdata.images[key], t)
+
                     except ValueError:
                         # hack, talk to Luca
                         pass
-                        
+
             if members["has_labels"].values[0]:
                 for key in sdata.labels:
-                    
                     try:
                         transformations = get_transformation(sdata.labels[key], to_coordinate_system=cs)
                         transformations = _flatten_transformation_sequence(transformations)
 
                         for t in transformations:
-
                             if isinstance(t, sd.transformations.transformations.Translation):
-                                    
-                                pass                            
+                                pass
                             else:
-
                                 sdata.labels[key] = transform(sdata.labels[key], t)
-                                
+
                     except ValueError:
                         # hack, talk to Luca
                         pass
-            
+
             if members["has_points"].values[0]:
                 pass
-            
+
             if members["has_shapes"].values[0]:
                 for key in sdata.shapes:
-                    
                     try:
                         transformations = get_transformation(sdata.shapes[key], to_coordinate_system=cs)
                         transformations = _flatten_transformation_sequence(transformations)
 
                         for t in transformations:
-
                             if isinstance(t, sd.transformations.transformations.Translation):
-                                    
-                                pass                            
+                                pass
                             else:
-
                                 sdata.shapes[key] = transform(sdata.shapes[key], t)
-                                
+
                     except ValueError:
                         # hack, talk to Luca
                         pass
-            
+
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:

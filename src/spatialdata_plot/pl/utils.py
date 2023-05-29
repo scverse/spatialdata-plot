@@ -36,13 +36,13 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
+from spatialdata import transform
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 from spatialdata.models import (
     Image2DModel,
 )
 from spatialdata.transformations import get_transformation
-from spatialdata import transform
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
@@ -214,14 +214,12 @@ def _get_extent(
     cs_contents = _get_cs_contents(sdata)
 
     for cs_name, element_ids in cs_mapping.items():
-
         extent[cs_name] = {}
-        
+
         # Using two for-loops in the following code to avoid partial matches
         # since "aa" in ["aaa", "bbb"] would return true
 
         def _get_extent_after_transformations(element, cs_name):
-            
             tmp = element.copy()
             if len(tmp.shape) == 3:
                 x_idx = 2
@@ -232,43 +230,38 @@ def _get_extent(
 
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
-            
-            if len(transformations) == 1 and isinstance(transformations[0], sd.transformations.transformations.Identity):
-                
+
+            if len(transformations) == 1 and isinstance(
+                transformations[0], sd.transformations.transformations.Identity
+            ):
                 result = (0, tmp.shape[y_idx], 0, tmp.shape[x_idx])
-            
+
             else:
-                
                 origin = {
                     "x": 0,
                     "y": 0,
                 }
                 for t in transformations:
-                    
                     if isinstance(t, sd.transformations.transformations.Translation):
-                        
                         tmp = _translate_image(image=tmp, translation=t)
-                        
+
                         for idx, ax in enumerate(t.axes):
                             origin["x"] += t.translation[idx] if ax == "x" else 0
                             origin["y"] += t.translation[idx] if ax == "y" else 0
-                            
+
                     else:
-                        
                         tmp = transform(tmp, t)
-                        
+
                         if isinstance(t, sd.transformations.transformations.Scale):
-                            
                             for idx, ax in enumerate(t.axes):
                                 origin["x"] *= t.scale[idx] if ax == "x" else 1
                                 origin["y"] *= t.scale[idx] if ax == "y" else 1
-                        
+
                         elif isinstance(t, sd.transformations.transformations.Affine):
-                            
                             pass
-                
+
                 result = (origin["x"], tmp.shape[x_idx], origin["y"], tmp.shape[y_idx])
-            
+
             del tmp
             return result
 
@@ -276,16 +269,18 @@ def _get_extent(
             for images_key in sdata.images:
                 for element_id in element_ids:
                     if images_key == element_id:
-            
-                        extent[cs_name][element_id] = _get_extent_after_transformations(sdata.images[element_id], cs_name)
-                            
+                        extent[cs_name][element_id] = _get_extent_after_transformations(
+                            sdata.images[element_id], cs_name
+                        )
+
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
                 for element_id in element_ids:
                     if labels_key == element_id:
-                        
-                        extent[cs_name][element_id] = _get_extent_after_transformations(sdata.labels[element_id], cs_name)
-                        
+                        extent[cs_name][element_id] = _get_extent_after_transformations(
+                            sdata.labels[element_id], cs_name
+                        )
+
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
                 for element_id in element_ids:
@@ -336,34 +331,27 @@ def _get_extent(
                         del tmp_polygons
 
                         extent[cs_name][element_id] = x_dims + y_dims
-                        
+
                         transformations = get_transformation(sdata.shapes[element_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
 
                         for t in transformations:
                             if isinstance(t, sd.transformations.transformations.Translation):
-                                
                                 for idx, ax in enumerate(t.axes):
                                     extent[cs_name][element_id][0] += t.translation[idx] if ax == "x" else 0
                                     extent[cs_name][element_id][1] += t.translation[idx] if ax == "x" else 0
                                     extent[cs_name][element_id][2] += t.translation[idx] if ax == "y" else 0
                                     extent[cs_name][element_id][3] += t.translation[idx] if ax == "y" else 0
-                                    
+
                             else:
-                                
                                 if isinstance(t, sd.transformations.transformations.Scale):
-                                    
                                     for idx, ax in enumerate(t.axes):
                                         extent[cs_name][element_id][1] *= t.scale[idx] if ax == "x" else 1
                                         extent[cs_name][element_id][3] *= t.scale[idx] if ax == "y" else 1
-                                
+
                                 elif isinstance(t, sd.transformations.transformations.Affine):
-                                    
                                     pass
 
-
-                        
-        
         # if has_images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
         #     for images_key in sdata.images:
         #         for element_id in element_ids:
@@ -420,8 +408,6 @@ def _get_extent(
         #                 y_dims += [(tmp.y.min().compute(), tmp.y.max().compute())]
         #                 x_dims += [(tmp.x.min().compute(), tmp.x.max().compute())]
         #                 del tmp
-
-
 
         # if len(x_dims) > 0 and len(y_dims) > 0:
         #     xmax = max(list(sum(x_dims, ())))
@@ -1123,15 +1109,11 @@ def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
     return [list(ls.coords) for ls in linestrings]
 
 
-def _flatten_transformation_sequence(
-    transformation_sequence: List[sd.transformations.transformations.Sequence]
-):
+def _flatten_transformation_sequence(transformation_sequence: List[sd.transformations.transformations.Sequence]):
     if isinstance(transformation_sequence, sd.transformations.transformations.Sequence):
-
         transformations = [t for t in transformation_sequence.transformations]
         found_bottom_of_tree = False
         while not found_bottom_of_tree:
-
             if all([not isinstance(t, sd.transformations.transformations.Sequence) for t in transformations]):
                 found_bottom_of_tree = True
             else:
@@ -1143,9 +1125,7 @@ def _flatten_transformation_sequence(
         return transformations
 
     elif isinstance(transformation_sequence, sd.transformations.transformations.BaseTransformation):
-
         return [transformation_sequence]
 
     else:
-
         raise TypeError("Parameter 'transformation_sequence' must be a Sequence.")
