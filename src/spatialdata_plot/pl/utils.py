@@ -742,12 +742,14 @@ def _set_color_source_vec(
 
     color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
     categories = color_source_vector.categories
+    print(categories, palette, value_to_plot)
     if groups is not None:
         color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
 
-    color_map = _get_palette(
-        adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
-    )
+    color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
+    # color_map = _get_palette(
+    #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
+    # )
     if color_map is None:
         raise ValueError("Unable to create color palette.")
 
@@ -904,11 +906,7 @@ def _decorate_axs(
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
-    # ax.set_yticks([])
-    # ax.set_xticks([])
-    # ax.set_xlabel(fig_params.ax_labels[0])
-    # ax.set_ylabel(fig_params.ax_labels[1])
-    # ax.autoscale_view()  # needed when plotting points but no image
+
 
     if value_to_plot is not None:
         # if only dots were plotted without an associated value

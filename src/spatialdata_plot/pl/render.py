@@ -100,7 +100,7 @@ def _render_shapes(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.fill_alpha,
     )
-
+    
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,
@@ -117,12 +117,12 @@ def _render_shapes(
             patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
 
         cmap = kwargs["cmap"]
-        norm = colors.Normalize(vmin=min(c), vmax=max(c))
 
         try:
             # fails when numeric
             fill_c = ColorConverter().to_rgba_array(c)
         except ValueError:
+            norm = colors.Normalize(vmin=min(c), vmax=max(c))
             c = cmap(norm(c))
             
         fill_c = ColorConverter().to_rgba_array(c)
@@ -158,6 +158,14 @@ def _render_shapes(
     )
     cax = ax.add_collection(_cax)
 
+    if render_params.palette is None:
+        # palette = pd.DataFrame({"color": color_source_vector, "group": color_vector})
+        # palette.drop_duplicates(inplace=True)
+        palette = ListedColormap(set(color_vector))
+        print(palette)
+    else:
+        palette = render_params.palette
+
     _ = _decorate_axs(
         ax=ax,
         cax=cax,
@@ -165,7 +173,7 @@ def _render_shapes(
         adata=table,
         value_to_plot=render_params.color,
         color_source_vector=color_source_vector,
-        palette=render_params.palette,
+        palette=palette,
         alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
         legend_fontsize=legend_params.legend_fontsize,
