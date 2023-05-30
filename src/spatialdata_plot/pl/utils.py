@@ -368,7 +368,7 @@ def _get_extent(
             xmax = max([v[1] for v in cswise_extent.values()])
             ymin = min([v[2] for v in cswise_extent.values()])
             ymax = max([v[3] for v in cswise_extent.values()])
-            for cs_name in cswise_extent.keys():
+            for cs_name in cswise_extent:
                 global_extent[cs_name] = (xmin, xmax, ymin, ymax)
     else:
         return cswise_extent
