@@ -127,7 +127,7 @@ def _render_shapes(
 
         fill_c = ColorConverter().to_rgba_array(c)
         fill_c[..., -1] = render_params.fill_alpha
-        
+
         if render_params.outline_params.outline:
             outline_c = ColorConverter().to_rgba_array(c)
             outline_c[..., -1] = render_params.outline_alpha
