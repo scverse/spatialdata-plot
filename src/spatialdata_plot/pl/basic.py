@@ -4,7 +4,7 @@ import sys
 from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 import matplotlib.pyplot as plt
 import scanpy as sc
@@ -451,6 +451,7 @@ class PlotAccessor:
         figsize: tuple[float, float] | None = None,
         dpi: int | None = None,
         fig: Figure | None = None,
+        title: Optional[Union[str, Sequence[str]]] = None,
         share_extent: bool = True,
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
@@ -510,6 +511,15 @@ class PlotAccessor:
 
         if len(render_cmds.keys()) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+
+        if title is not None:
+            
+            if isinstance(title, str):
+                title = [title]
+                
+            if not all([isinstance(t, str) for t in title]):
+                raise TypeError("All titles must be strings.")
+            
 
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
@@ -686,7 +696,17 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
 
-                ax.set_title(cs)
+                if title is not None:
+                    if len(title) == 1:
+                        t = title[0]
+                    else:
+                        try:
+                            t = title[i]
+                        except IndexError:
+                            raise IndexError("The number of titles must match the number of coordinate systems.")
+                else:
+                    t = cs
+                ax.set_title(t)
                 if any(
                     [
                         cs_contents.query(f"cs == '{cs}'")["has_images"][0],
