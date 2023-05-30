@@ -162,13 +162,7 @@ def _render_shapes(
     )
     cax = ax.add_collection(_cax)
 
-    if render_params.palette is None:
-        # palette = pd.DataFrame({"color": color_source_vector, "group": color_vector})
-        # palette.drop_duplicates(inplace=True)
-        palette = ListedColormap(set(color_vector))
-        print(palette)
-    else:
-        palette = render_params.palette
+    palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette
 
     _ = _decorate_axs(
         ax=ax,

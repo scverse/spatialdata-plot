@@ -701,8 +701,8 @@ class PlotAccessor:
                     else:
                         try:
                             t = title[i]
-                        except IndexError:
-                            raise IndexError("The number of titles must match the number of coordinate systems.")
+                        except IndexError as e:
+                            raise IndexError("The number of titles must match the number of coordinate systems.") from e
                 else:
                     t = cs
                 ax.set_title(t)
