@@ -4,7 +4,7 @@ import sys
 from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Optional, Union
 
 import matplotlib.pyplot as plt
 import scanpy as sc
@@ -513,13 +513,11 @@ class PlotAccessor:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
 
         if title is not None:
-            
             if isinstance(title, str):
                 title = [title]
-                
+
             if not all([isinstance(t, str) for t in title]):
                 raise TypeError("All titles must be strings.")
-            
 
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
