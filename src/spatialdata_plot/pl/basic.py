@@ -156,7 +156,7 @@ class PlotAccessor:
         norm: Optional[Normalize] = None,
         na_color: str | tuple[float, ...] | None = "lightgrey",
         outline_alpha: float = 1.0,
-        fill_alpha: float = 0.3,
+        fill_alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
