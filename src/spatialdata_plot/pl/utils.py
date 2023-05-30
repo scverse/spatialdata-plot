@@ -892,8 +892,6 @@ def _decorate_axs(
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
-
-
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
         # there is not need to plot a legend or a colorbar
