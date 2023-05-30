@@ -578,6 +578,7 @@ class PlotAccessor:
         # go through tree
         cs_contents = _get_cs_contents(sdata)
         for i, cs in enumerate(coordinate_systems):
+            sdata = self._copy()
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
 

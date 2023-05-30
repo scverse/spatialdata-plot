@@ -183,8 +183,8 @@ def _get_extent(
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
-    img_transformations: Optional[dict[str, dict[str, sd.transformations.transformations.BaseTransformation]]] = None,
-    share_extent: bool = True,
+    # img_transformations: Optional[dict[str, dict[str, sd.transformations.transformations.BaseTransformation]]] = None,
+    share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
 
@@ -352,79 +352,26 @@ def _get_extent(
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
 
-        # if has_images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
-        #     for images_key in sdata.images:
-        #         for element_id in element_ids:
-        #             if images_key == element_id:
-        #                 tmp = sdata.images[element_id]
-
-        #                 # calculate original image extent
-        #                 if img_transformations is not None:
-        #                     imaginary_origin: dict[str, float] = {}
-        #                     imaginary_origin["y"] = 0
-        #                     imaginary_origin["x"] = 0
-
-        #                     if isinstance(
-        #                         img_transformations[images_key][cs_name], sd.transformations.transformations.Sequence
-        #                     ):
-        #                         transformations = list(img_transformations[images_key][cs_name].transformations)
-
-        #                     else:
-        #                         transformations = [img_transformations[images_key][cs_name]]
-
-        #                     # Apply the same transformations to an imaginary origin (0, 0)
-        #                     for transformation in transformations:
-        #                         if isinstance(transformation, sd.transformations.transformations.Scale):
-        #                             for idx, ax in enumerate(transformation.axes):
-        #                                 imaginary_origin["x"] *= transformation.scale[idx] if ax == "x" else 1
-        #                                 imaginary_origin["y"] *= transformation.scale[idx] if ax == "y" else 1
-
-        #                         if isinstance(transformation, sd.transformations.transformations.Translation):
-        #                             for idx, ax in enumerate(transformation.axes):
-        #                                 imaginary_origin["x"] += transformation.translation[idx] if ax == "x" else 0
-        #                                 imaginary_origin["y"] += transformation.translation[idx] if ax == "y" else 0
-
-        #                 for ax in ["x", "y"]:
-        #                     imaginary_origin[ax] = int(imaginary_origin[ax])
-
-        #                 y_dims += [(imaginary_origin["y"], tmp.shape[1])]  # img is cyx, so we skip 0
-        #                 x_dims += [(imaginary_origin["x"], tmp.shape[2])]
-        #                 del tmp
-
-        # if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
-        #     for labels_key in sdata.labels:
-        #         for element_id in element_ids:
-        #             if labels_key == element_id:
-        #                 tmp = sdata.labels[element_id]
-        #                 y_dims += [(0, tmp.shape[0])]
-        #                 x_dims += [(0, tmp.shape[1])]
-        #                 del tmp
-
-        # if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-        #     for points_key in sdata.points:
-        #         for element_id in element_ids:
-        #             if points_key == element_id:
-        #                 tmp = sdata.points[element_id]
-        #                 y_dims += [(tmp.y.min().compute(), tmp.y.max().compute())]
-        #                 x_dims += [(tmp.x.min().compute(), tmp.x.max().compute())]
-        #                 del tmp
-
-        # if len(x_dims) > 0 and len(y_dims) > 0:
-        #     xmax = max(list(sum(x_dims, ())))
-        #     xmin = min(list(sum(x_dims, ())))
-        #     ymax = max(list(sum(y_dims, ())))
-        #     ymin = min(list(sum(y_dims, ())))
-        #     extent[cs_name] = (xmin, xmax, ymin, ymax)
-    final_extent = {}
+    cswise_extent = {}
     for cs_name, cs_contents in extent.items():
         if len(cs_contents) > 0:
             xmin = min([v[0] for v in cs_contents.values()])
             xmax = max([v[1] for v in cs_contents.values()])
             ymin = min([v[2] for v in cs_contents.values()])
             ymax = max([v[3] for v in cs_contents.values()])
-            final_extent[cs_name] = (xmin, xmax, ymin, ymax)
+            cswise_extent[cs_name] = (xmin, xmax, ymin, ymax)
 
-    return final_extent
+    if share_extent:
+        global_extent = {}
+        if len(cs_contents) > 0:
+            xmin = min([v[0] for v in cswise_extent.values()])
+            xmax = max([v[1] for v in cswise_extent.values()])
+            ymin = min([v[2] for v in cswise_extent.values()])
+            ymax = max([v[3] for v in cswise_extent.values()])
+            for cs_name in cswise_extent.keys():
+                global_extent[cs_name] = (xmin, xmax, ymin, ymax)
+    else:
+        return cswise_extent
 
 
 def _panel_grid(
