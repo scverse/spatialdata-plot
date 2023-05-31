@@ -183,7 +183,6 @@ def _get_extent(
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
-    # img_transformations: Optional[dict[str, dict[str, sd.transformations.transformations.BaseTransformation]]] = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -221,9 +220,6 @@ def _get_extent(
 
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
-
-        # Using two for-loops in the following code to avoid partial matches
-        # since "aa" in ["aaa", "bbb"] would return true
 
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()
@@ -362,6 +358,17 @@ def _get_extent(
 
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
+        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
+            for points_key in sdata.points:
+                for e_id in element_ids:
+                    if points_key == e_id:
+                        tmp = sdata.points[points_key]
+                        xmin = tmp["x"].min().compute()
+                        xmax = tmp["x"].max().compute()
+                        ymin = tmp["y"].min().compute()
+                        ymax = tmp["y"].max().compute()
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
+
         if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
             for points_key in sdata.points:
                 for e_id in element_ids:
