@@ -42,7 +42,7 @@ from spatialdata._types import ArrayLike
 from spatialdata.models import (
     Image2DModel,
 )
-from spatialdata.transformations import get_transformation, set_transformation
+from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
@@ -252,14 +252,6 @@ def _get_extent(
                 for t in transformations:
                     if isinstance(t, sd.transformations.transformations.Translation):
                         tmp = _translate_image(image=tmp, translation=t)
-            else:
-                origin = {
-                    "x": 0,
-                    "y": 0,
-                }
-                for t in transformations:
-                    if isinstance(t, sd.transformations.transformations.Translation):
-                        tmp = _translate_image(image=tmp, translation=t)
 
                         for idx, ax in enumerate(t.axes):
                             origin["x"] += t.translation[idx] if ax == "x" else 0
@@ -374,7 +366,6 @@ def _get_extent(
             for points_key in sdata.points:
                 for e_id in element_ids:
                     if points_key == e_id:
-
                         tmp = sdata.points[points_key]
                         xmin = tmp["x"].min().compute()
                         xmax = tmp["x"].max().compute()
@@ -1087,7 +1078,6 @@ def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
 def _flatten_transformation_sequence(
     transformation_sequence: list[sd.transformations.transformations.Sequence],
 ) -> list[sd.transformations.transformations.Sequence]:
-
     if isinstance(transformation_sequence, sd.transformations.transformations.Sequence):
         transformations = list(transformation_sequence.transformations)
         found_bottom_of_tree = False
@@ -1109,7 +1099,6 @@ def _flatten_transformation_sequence(
 
 
 def _robust_transform(element: Any, cs: str) -> Any:
-
     try:
         transformations = get_transformation(element, get_all=True)
         if cs not in transformations:
@@ -1118,11 +1107,9 @@ def _robust_transform(element: Any, cs: str) -> Any:
         transformations = _flatten_transformation_sequence(transformations)
         for _, t in enumerate(transformations):
             if isinstance(t, sd.transformations.transformations.Translation):
-
                 element = _translate_image(image=element, translation=t)
 
             elif isinstance(t, sd.transformations.transformations.Affine):
-
                 # edge case, waiting for Luca to decompose affine into components
                 # element = transform(element, t)
                 # new_transformations = get_transformation(element, get_all=True)
@@ -1138,8 +1125,8 @@ def _robust_transform(element: Any, cs: str) -> Any:
             else:
                 element = transform(element, t)
 
-    except ValueError:
+    except ValueError as e:
         # hack, talk to Luca
-        raise ValueError("Unable to transform element.")
+        raise ValueError("Unable to transform element.") from e
 
     return element
