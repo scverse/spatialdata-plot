@@ -18,9 +18,7 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
-from spatialdata import transform
 from spatialdata._logging import logger as logg
-from spatialdata.transformations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -36,7 +34,6 @@ from spatialdata_plot.pl.render import (
 from spatialdata_plot.pl.utils import (
     LegendParams,
     Palette_t,
-    _flatten_transformation_sequence,
     _FontSize,
     _FontWeight,
     _get_cs_contents,
@@ -45,10 +42,9 @@ from spatialdata_plot.pl.utils import (
     _multiscale_to_image,
     _prepare_cmap_norm,
     _prepare_params_plot,
-    _set_outline,
-    _translate_image,
-    save_fig,
     _robust_transform,
+    _set_outline,
+    save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
 
@@ -529,7 +525,7 @@ class PlotAccessor:
             has_labels="render_labels" in render_cmds,
             has_points="render_points" in render_cmds,
             has_shapes="render_shapes" in render_cmds,
-            coordinate_systems=coordinate_systems
+            coordinate_systems=coordinate_systems,
         )
 
         # handle coordinate system
@@ -674,7 +670,7 @@ class PlotAccessor:
                 else:
                     t = cs
                 ax.set_title(t)
-                
+
             if any(
                 [
                     cs_contents.query(f"cs == '{cs}'")["has_images"][0],
