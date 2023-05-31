@@ -236,12 +236,22 @@ def _get_extent(
 
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
+            transformations = get_transformation(tmp, to_coordinate_system=cs_name)
+            transformations = _flatten_transformation_sequence(transformations)
 
             if len(transformations) == 1 and isinstance(
                 transformations[0], sd.transformations.transformations.Identity
             ):
                 result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
+            else:
+                origin = {
+                    "x": 0,
+                    "y": 0,
+                }
+                for t in transformations:
+                    if isinstance(t, sd.transformations.transformations.Translation):
+                        tmp = _translate_image(image=tmp, translation=t)
             else:
                 origin = {
                     "x": 0,
@@ -323,9 +333,13 @@ def _get_extent(
                             xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
                             y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
                             x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
+                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
+                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
 
                         if not tmp_polygons.empty:
                             xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
+                            y_dims += [ymin, ymax]
+                            x_dims += [xmin, xmax]
                             y_dims += [ymin, ymax]
                             x_dims += [xmin, xmax]
 
@@ -333,7 +347,10 @@ def _get_extent(
                         del tmp_polygons
 
                         extent[cs_name][e_id] = x_dims + y_dims
+                        extent[cs_name][e_id] = x_dims + y_dims
 
+                        transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
+                        transformations = _flatten_transformation_sequence(transformations)
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
 
