@@ -183,7 +183,6 @@ def _get_extent(
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
-    # img_transformations: Optional[dict[str, dict[str, sd.transformations.transformations.BaseTransformation]]] = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -222,9 +221,6 @@ def _get_extent(
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
 
-        # Using two for-loops in the following code to avoid partial matches
-        # since "aa" in ["aaa", "bbb"] would return true
-
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()
             if len(tmp.shape) == 3:
@@ -234,8 +230,6 @@ def _get_extent(
                 x_idx = 1
                 y_idx = 0
 
-            transformations = get_transformation(tmp, to_coordinate_system=cs_name)
-            transformations = _flatten_transformation_sequence(transformations)
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
 
@@ -325,13 +319,9 @@ def _get_extent(
                             xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
                             y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
                             x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
-                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
-                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
 
                         if not tmp_polygons.empty:
                             xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
-                            y_dims += [ymin, ymax]
-                            x_dims += [xmin, xmax]
                             y_dims += [ymin, ymax]
                             x_dims += [xmin, xmax]
 
@@ -339,10 +329,7 @@ def _get_extent(
                         del tmp_polygons
 
                         extent[cs_name][e_id] = x_dims + y_dims
-                        extent[cs_name][e_id] = x_dims + y_dims
 
-                        transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
-                        transformations = _flatten_transformation_sequence(transformations)
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
 
@@ -362,6 +349,7 @@ def _get_extent(
 
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
+
         if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
             for points_key in sdata.points:
                 for e_id in element_ids:
