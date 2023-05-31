@@ -42,7 +42,7 @@ from spatialdata._types import ArrayLike
 from spatialdata.models import (
     Image2DModel,
 )
-from spatialdata.transformations import get_transformation
+from spatialdata.transformations import get_transformation, set_transformation
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
@@ -178,7 +178,7 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: Union[str, Sequence[str]] = "all",
+    coordinate_systems: Optional[Union[str, Sequence[str]]] = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
@@ -213,6 +213,12 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     cs_contents = _get_cs_contents(sdata)
 
+    if coordinate_systems is not None:
+        if isinstance(coordinate_systems, str):
+            coordinate_systems = [coordinate_systems]
+        cs_contents = cs_contents[cs_contents["cs"].isin(coordinate_systems)]
+        cs_mapping = {k: v for k, v in cs_mapping.items() if k in coordinate_systems}
+
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
 
@@ -234,7 +240,7 @@ def _get_extent(
             if len(transformations) == 1 and isinstance(
                 transformations[0], sd.transformations.transformations.Identity
             ):
-                result = (0, tmp.shape[y_idx], 0, tmp.shape[x_idx])
+                result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
             else:
                 origin = {
@@ -347,6 +353,17 @@ def _get_extent(
 
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
+        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
+            for points_key in sdata.points:
+                for e_id in element_ids:
+                    if points_key == e_id:
+
+                        tmp = sdata.points[points_key]
+                        xmin = tmp["x"].min().compute()
+                        xmax = tmp["x"].max().compute()
+                        ymin = tmp["y"].min().compute()
+                        ymax = tmp["y"].max().compute()
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
     cswise_extent = {}
     for cs_name, cs_contents in extent.items():
@@ -1044,7 +1061,6 @@ def _translate_image(
 
 
 def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
-    # print(type(polygon))
     b = polygon.boundary.coords
     linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
 
@@ -1054,8 +1070,6 @@ def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
 def _flatten_transformation_sequence(
     transformation_sequence: list[sd.transformations.transformations.Sequence],
 ) -> list[sd.transformations.transformations.Sequence]:
-    if isinstance(transformation_sequence, sd.transformations.transformations.BaseTransformation):
-        return [transformation_sequence]
 
     if isinstance(transformation_sequence, sd.transformations.transformations.Sequence):
         transformations = list(transformation_sequence.transformations)
@@ -1071,4 +1085,44 @@ def _flatten_transformation_sequence(
 
         return transformations
 
+    if isinstance(transformation_sequence, sd.transformations.transformations.BaseTransformation):
+        return [transformation_sequence]
+
     raise TypeError("Parameter 'transformation_sequence' must be a Sequence.")
+
+
+def _robust_transform(element: Any, cs: str) -> Any:
+
+    try:
+        transformations = get_transformation(element, get_all=True)
+        if cs not in transformations:
+            return element
+        transformations = transformations[cs]
+        transformations = _flatten_transformation_sequence(transformations)
+        for _, t in enumerate(transformations):
+            if isinstance(t, sd.transformations.transformations.Translation):
+
+                element = _translate_image(image=element, translation=t)
+
+            elif isinstance(t, sd.transformations.transformations.Affine):
+
+                # edge case, waiting for Luca to decompose affine into components
+                # element = transform(element, t)
+                # new_transformations = get_transformation(element, get_all=True)
+                # new_transformations = new_transformations[cs]
+                # new_transformations = _flatten_transformation_sequence(new_transformations)
+                # seq = new_transformations[:len(new_transformations) - len(transformations)]
+                # seq = sd.transformations.Sequence(seq)
+                # set_transformation(element, seq, to_coordinate_system=cs)
+                # element = _robust_transform(element, cs)
+                # print(element.shape)
+                pass
+
+            else:
+                element = transform(element, t)
+
+    except ValueError:
+        # hack, talk to Luca
+        raise ValueError("Unable to transform element.")
+
+    return element

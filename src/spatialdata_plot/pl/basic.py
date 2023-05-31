@@ -48,6 +48,7 @@ from spatialdata_plot.pl.utils import (
     _set_outline,
     _translate_image,
     save_fig,
+    _robust_transform,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
 
@@ -528,8 +529,9 @@ class PlotAccessor:
             has_labels="render_labels" in render_cmds,
             has_points="render_points" in render_cmds,
             has_shapes="render_shapes" in render_cmds,
-            # img_transformations=img_transformations if len(img_transformations) > 0 else None,
+            coordinate_systems=coordinate_systems
         )
+
         # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
@@ -582,57 +584,22 @@ class PlotAccessor:
 
             if members["has_images"].values[0]:
                 for key in sdata.images:
-                    try:
-                        transformations = get_transformation(sdata.images[key], to_coordinate_system=cs)
-                        transformations = _flatten_transformation_sequence(transformations)
-
-                        for t in transformations:
-                            if isinstance(t, sd.transformations.transformations.Translation):
-                                sdata.images[key] = _translate_image(image=sdata.images[key], translation=t)
-
-                            else:
-                                sdata.images[key] = transform(sdata.images[key], t)
-
-                    except ValueError:
-                        # hack, talk to Luca
-                        pass
+                    sdata.images[key] = _robust_transform(sdata.images[key], cs)
 
             if members["has_labels"].values[0]:
                 for key in sdata.labels:
-                    try:
-                        transformations = get_transformation(sdata.labels[key], to_coordinate_system=cs)
-                        transformations = _flatten_transformation_sequence(transformations)
-
-                        for t in transformations:
-                            if isinstance(t, sd.transformations.transformations.Translation):
-                                pass
-                            else:
-                                sdata.labels[key] = transform(sdata.labels[key], t)
-
-                    except ValueError:
-                        # hack, talk to Luca
-                        pass
+                    sdata.labels[key] = _robust_transform(sdata.labels[key], cs)
 
             if members["has_points"].values[0]:
-                pass
+                for key in sdata.points:
+                    sdata.points[key] = _robust_transform(sdata.points[key], cs)
 
             if members["has_shapes"].values[0]:
                 for key in sdata.shapes:
-                    try:
-                        transformations = get_transformation(sdata.shapes[key], to_coordinate_system=cs)
-                        transformations = _flatten_transformation_sequence(transformations)
-
-                        for t in transformations:
-                            if isinstance(t, sd.transformations.transformations.Translation):
-                                pass
-                            else:
-                                sdata.shapes[key] = transform(sdata.shapes[key], t)
-
-                    except ValueError:
-                        # hack, talk to Luca
-                        pass
+                    sdata.shapes[key] = _robust_transform(sdata.shapes[key], cs)
 
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
+
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:
                     _render_images(
@@ -643,6 +610,7 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
+                        # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     if sdata.table is not None and isinstance(params.color, str):
@@ -706,16 +674,17 @@ class PlotAccessor:
                 else:
                     t = cs
                 ax.set_title(t)
-                if any(
-                    [
-                        cs_contents.query(f"cs == '{cs}'")["has_images"][0],
-                        cs_contents.query(f"cs == '{cs}'")["has_labels"][0],
-                        cs_contents.query(f"cs == '{cs}'")["has_points"][0],
-                        cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
-                    ]
-                ):
-                    ax.set_xlim(extent[cs][0], extent[cs][1])
-                    ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
+                
+            if any(
+                [
+                    cs_contents.query(f"cs == '{cs}'")["has_images"][0],
+                    cs_contents.query(f"cs == '{cs}'")["has_labels"][0],
+                    cs_contents.query(f"cs == '{cs}'")["has_points"][0],
+                    cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
+                ]
+            ):
+                ax.set_xlim(extent[cs][0], extent[cs][1])
+                ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
