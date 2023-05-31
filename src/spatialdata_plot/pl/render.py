@@ -309,6 +309,7 @@ def _render_images(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    # extent: tuple[float, float, float, float] | None = None,
 ) -> None:
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -357,6 +358,7 @@ def _render_images(
         img.data,
         cmap=render_params.cmap_params.cmap,
         alpha=render_params.alpha,
+        # extent=extent,
     )
 
 
