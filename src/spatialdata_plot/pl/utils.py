@@ -446,6 +446,7 @@ def _prepare_cmap_norm(
     vmin: float | None = None,
     vmax: float | None = None,
     vcenter: float | None = None,
+    **kwargs: Any,
 ) -> CmapParams:
     cmap = copy(get_cmap(cmap))
     cmap.set_bad("lightgray" if na_color is None else na_color)
