@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import dask.dataframe as dd
 import matplotlib
@@ -59,6 +59,7 @@ class ShapesRenderParams:
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
     size: float = 1.0
+    transfunc: Callable[[float], float] | None = None
 
 
 def _render_shapes(
@@ -101,6 +102,10 @@ def _render_shapes(
         alpha=render_params.fill_alpha,
     )
 
+    # color_source_vector is None when the values aren't categorical
+    if color_source_vector is None and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
+
     def _get_collection_shape(
         shapes: GeoDataFrame,
         c: Any,
@@ -122,8 +127,11 @@ def _render_shapes(
             # fails when numeric
             fill_c = ColorConverter().to_rgba_array(c)
         except ValueError:
-            norm = colors.Normalize(vmin=min(c), vmax=max(c))
-            c = cmap(norm(c))
+            if norm is None:
+                c = cmap(c)
+            else:
+                norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                c = cmap(norm(c))
 
         fill_c = ColorConverter().to_rgba_array(c)
         fill_c[..., -1] = render_params.fill_alpha
@@ -199,6 +207,7 @@ class PointsRenderParams:
     palette: Palette_t = None
     alpha: float = 1.0
     size: float = 1.0
+    transfunc: Callable[[float], float] | None = None
 
 
 def _render_points(
@@ -252,6 +261,10 @@ def _render_points(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.alpha,
     )
+
+    # color_source_vector is None when the values aren't categorical
+    if color_source_vector is None and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
 
     norm = copy(render_params.cmap_params.norm)
     _cax = ax.scatter(
@@ -377,6 +390,7 @@ class LabelsRenderParams:
     palette: Palette_t = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
+    transfunc: Callable[[float], float] | None = None
 
 
 def _render_labels(
@@ -422,6 +436,10 @@ def _render_labels(
         na_color=render_params.cmap_params.na_color,
         alpha=render_params.fill_alpha,
     )
+
+    # color_source_vector is None when the values aren't categorical
+    if color_source_vector is None and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
 
     if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
         # First get the labels infill and plot them
