@@ -31,6 +31,7 @@ from spatialdata_plot.pl.utils import (
     _decorate_axs,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
+    _make_patch_from_multipolygon,
     _map_color_seg,
     _maybe_set_colors,
     _normalize,
@@ -110,11 +111,19 @@ def _render_shapes(
         outline_alpha: Optional[float] = None,
         **kwargs: Any,
     ) -> PatchCollection:
-        """Get collection of shapes."""
-        if shapes["geometry"].iloc[0].geom_type == "Polygon":
-            patches = [Polygon(p.exterior.coords, closed=True) for p in shapes["geometry"]]
-        elif shapes["geometry"].iloc[0].geom_type == "Point":
-            patches = [Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shapes["geometry"], shapes["radius"])]
+        polygon_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")]
+        multipolygon_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "MultiPolygon")]
+        circle_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "Point")]
+
+        patches = []
+        if len(polygon_df) > 0:
+            patches += [Polygon(p.exterior.coords, closed=True) for p in polygon_df["geometry"]]
+        if len(circle_df) > 0:
+            patches += [
+                Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(circle_df["geometry"], circle_df["radius"])
+            ]
+        if len(multipolygon_df) > 0:
+            patches += [_make_patch_from_multipolygon(mp) for mp in multipolygon_df["geometry"]]
 
         cmap = kwargs["cmap"]
 
@@ -160,6 +169,7 @@ def _render_shapes(
         outline_alpha=render_params.outline_alpha
         # **kwargs,
     )
+
     cax = ax.add_collection(_cax)
 
     palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette

@@ -9,10 +9,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Optional, Union
 
+import matplotlib.patches as mpatches
+import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
+import shapely
 import spatial_image
 import spatialdata as sd
 import xarray as xr
@@ -305,7 +308,9 @@ def _get_extent(
                             sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
                         ]
                         tmp_polygons = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Polygon")
+                            sdata.shapes[e_id]["geometry"].apply(
+                                lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"]
+                            )
                         ]
 
                         if not tmp_points.empty:
@@ -321,13 +326,9 @@ def _get_extent(
                             xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
                             y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
                             x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
-                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
-                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
 
                         if not tmp_polygons.empty:
                             xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
-                            y_dims += [ymin, ymax]
-                            x_dims += [xmin, xmax]
                             y_dims += [ymin, ymax]
                             x_dims += [xmin, xmax]
 
@@ -335,10 +336,7 @@ def _get_extent(
                         del tmp_polygons
 
                         extent[cs_name][e_id] = x_dims + y_dims
-                        extent[cs_name][e_id] = x_dims + y_dims
 
-                        transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
-                        transformations = _flatten_transformation_sequence(transformations)
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
 
@@ -358,16 +356,6 @@ def _get_extent(
 
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
-        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-            for points_key in sdata.points:
-                for e_id in element_ids:
-                    if points_key == e_id:
-                        tmp = sdata.points[points_key]
-                        xmin = tmp["x"].min().compute()
-                        xmax = tmp["x"].max().compute()
-                        ymin = tmp["y"].min().compute()
-                        ymax = tmp["y"].max().compute()
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
         if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
             for points_key in sdata.points:
@@ -1137,3 +1125,40 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
+    # https://stackoverflow.com/a/21922058
+    if len(mp.geoms) > 1:
+        raise NotImplementedError("Currently, lists of Polygons are not supported. Only Polygons with holes.")
+
+    geom = mp.geoms[0]
+    if geom.type == "Polygon":
+        exterior_coords = geom.exterior.coords[:]
+        interior_coords = []
+        for interior in geom.interiors:
+            interior_coords += interior.coords[:]
+    elif geom.type == "MultiPolygon":
+        exterior_coords = []
+        interior_coords = []
+        for part in geom:
+            epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
+            exterior_coords += epc["exterior_coords"]
+            interior_coords += epc["interior_coords"]
+    else:
+        raise ValueError("Unhandled geometry type: " + repr(geom.type))
+
+    return interior_coords, exterior_coords
+
+
+def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
+    # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
+
+    inside, outside = _split_multipolygon_into_outer_and_inner(mp)
+    codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
+    codes[0] = mpath.Path.MOVETO
+    vertices = np.concatenate((outside, inside[::-1]))
+    all_codes = np.concatenate((codes, codes))
+    path = mpath.Path(vertices, all_codes)
+
+    return mpatches.PathPatch(path)
