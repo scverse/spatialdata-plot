@@ -82,7 +82,7 @@ def _render_shapes(
         shapes = sdata_filt.shapes[shapes_key]
 
     if sdata.table is None:
-        table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(shapes))))
+        table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(len(shapes)), dtype=str)))
     else:
         table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
