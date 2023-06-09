@@ -83,7 +83,7 @@ def _render_shapes(
         shapes = sdata_filt.shapes[shapes_key]
 
     if sdata.table is None:
-        table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(shapes))))
+        table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(len(shapes)), dtype=str)))
     else:
         table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([shapes_key])]
 
@@ -155,7 +155,7 @@ def _render_shapes(
     norm = copy(render_params.cmap_params.norm)
 
     if len(color_vector) == 0:
-        color_vector = [(0.83, 0.83, 0.83, 1.0)]  # grey
+        color_vector = [render_params.cmap_params.na_color]
 
     _cax = _get_collection_shape(
         shapes=shapes,

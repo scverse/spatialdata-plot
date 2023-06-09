@@ -286,6 +286,7 @@ class PlotAccessor:
             palette=palette,
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
+            size=size,
         )
 
         return sdata
