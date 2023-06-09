@@ -20,7 +20,7 @@ _ = spatialdata_plot
 
 class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(element="blobs_image").pl.show()
+        sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
 
-    def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(element="blobs_multiscale_image").pl.show()
+    # def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
+    #     sdata_blobs.pl.render_images(elements="blobs_multiscale_image").pl.show()

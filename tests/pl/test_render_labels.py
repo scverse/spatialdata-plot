@@ -20,4 +20,4 @@ _ = spatialdata_plot
 
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels().pl.show()
+        sdata_blobs.pl.render_labels(elements="blobs_labels").pl.show()
