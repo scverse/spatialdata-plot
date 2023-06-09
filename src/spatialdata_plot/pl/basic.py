@@ -284,6 +284,7 @@ class PlotAccessor:
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
+            size=size,
         )
 
         return sdata

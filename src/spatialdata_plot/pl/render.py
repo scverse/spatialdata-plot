@@ -152,7 +152,7 @@ def _render_shapes(
     norm = copy(render_params.cmap_params.norm)
 
     if len(color_vector) == 0:
-        color_vector = [(0.83, 0.83, 0.83, 1.0)]  # grey
+        color_vector = [render_params.cmap_params.na_color]
 
     _cax = _get_collection_shape(
         shapes=shapes,
