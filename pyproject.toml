@@ -48,7 +48,7 @@ test = [
 ]
 
 [tool.coverage.run]
-source = ["spatialdata-plot"]
+source = ["spatialdata_plot"]
 omit = [
     "**/test_*.py",
 ]
