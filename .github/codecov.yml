@@ -1,4 +1,4 @@
-# Based on spatialdata
+# Based on pydata/xarray
 codecov:
     require_ci_to_pass: false
 
