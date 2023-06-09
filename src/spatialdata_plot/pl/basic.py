@@ -219,6 +219,7 @@ class PlotAccessor:
             palette=palette,
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
+            transfunc=kwargs.get("transfunc", None),
         )
 
         return sdata
@@ -284,6 +285,8 @@ class PlotAccessor:
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
+            transfunc=kwargs.get("transfunc", None),
+            size=size,
         )
 
         return sdata
@@ -428,6 +431,7 @@ class PlotAccessor:
             palette=palette,
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
+            transfunc=kwargs.get("transfunc", None),
         )
 
         return sdata
