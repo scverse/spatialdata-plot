@@ -232,8 +232,6 @@ def _get_extent(
 
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
-            transformations = get_transformation(tmp, to_coordinate_system=cs_name)
-            transformations = _flatten_transformation_sequence(transformations)
 
             if len(transformations) == 1 and isinstance(
                 transformations[0], sd.transformations.transformations.Identity
@@ -321,8 +319,6 @@ def _get_extent(
                             xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
                             y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
                             x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
-                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
-                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
 
                         if not tmp_polygons.empty:
                             xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
@@ -332,7 +328,6 @@ def _get_extent(
                         del tmp_points
                         del tmp_polygons
 
-                        extent[cs_name][e_id] = x_dims + y_dims
                         extent[cs_name][e_id] = x_dims + y_dims
 
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
@@ -354,16 +349,6 @@ def _get_extent(
 
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
-        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-            for points_key in sdata.points:
-                for e_id in element_ids:
-                    if points_key == e_id:
-                        tmp = sdata.points[points_key]
-                        xmin = tmp["x"].min().compute()
-                        xmax = tmp["x"].max().compute()
-                        ymin = tmp["y"].min().compute()
-                        ymax = tmp["y"].max().compute()
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
     cswise_extent = {}
     for cs_name, cs_contents in extent.items():
@@ -450,6 +435,7 @@ def _prepare_cmap_norm(
     vmin: float | None = None,
     vmax: float | None = None,
     vcenter: float | None = None,
+    **kwargs: Any,
 ) -> CmapParams:
     cmap = copy(get_cmap(cmap))
     cmap.set_bad("lightgray" if na_color is None else na_color)

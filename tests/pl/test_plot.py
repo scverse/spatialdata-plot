@@ -8,6 +8,7 @@ from tests.conftest import PlotTester, PlotTesterMeta
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=40, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
+_ = spatialdata_plot
 
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
@@ -27,4 +28,4 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
 class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_images(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images().pl.show()
+        sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
