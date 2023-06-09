@@ -305,7 +305,9 @@ def _get_extent(
                             sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
                         ]
                         tmp_polygons = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"])
+                            sdata.shapes[e_id]["geometry"].apply(
+                                lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"]
+                            )
                         ]
 
                         if not tmp_points.empty:
