@@ -27,4 +27,4 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
 class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_images(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images().pl.show()
+        sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
