@@ -8,6 +8,7 @@ from tests.conftest import PlotTester, PlotTesterMeta
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=40, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
+_ = spatialdata_plot
 
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
