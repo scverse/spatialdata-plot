@@ -273,6 +273,8 @@ def _get_extent(
                     if images_key == e_id:
                         if not isinstance(sdata.images[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
+                        else:
+                            pass
 
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
@@ -280,6 +282,8 @@ def _get_extent(
                     if labels_key == e_id:
                         if not isinstance(sdata.labels[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
+                        else:
+                            pass
 
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
