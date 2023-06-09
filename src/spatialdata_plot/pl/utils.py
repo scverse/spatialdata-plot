@@ -18,9 +18,9 @@ import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+import matplotlib
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
-from matplotlib.cm import get_cmap
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import Colormap, LinearSegmentedColormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
 from matplotlib.figure import Figure
@@ -456,7 +456,7 @@ def _prepare_cmap_norm(
     vcenter: float | None = None,
     **kwargs: Any,
 ) -> CmapParams:
-    cmap = copy(get_cmap(cmap))
+    cmap = copy(matplotlib.colormaps[rcParams["image.cmap"] if cmap is None else cmap])
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if isinstance(norm, Normalize):
