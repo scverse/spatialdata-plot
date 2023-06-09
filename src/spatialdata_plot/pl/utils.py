@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Optional, Union
 
+import matplotlib
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
@@ -18,7 +19,6 @@ import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
-import matplotlib
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
 from matplotlib.collections import PatchCollection
