@@ -350,6 +350,17 @@ def _get_extent(
                                 elif isinstance(t, sd.transformations.transformations.Affine):
                                     pass
 
+        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
+            for points_key in sdata.points:
+                for e_id in element_ids:
+                    if points_key == e_id:
+                        tmp = sdata.points[points_key]
+                        xmin = tmp["x"].min().compute()
+                        xmax = tmp["x"].max().compute()
+                        ymin = tmp["y"].min().compute()
+                        ymax = tmp["y"].max().compute()
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
+
     cswise_extent = {}
     for cs_name, cs_contents in extent.items():
         if len(cs_contents) > 0:

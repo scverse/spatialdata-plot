@@ -70,23 +70,25 @@ def _render_shapes(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    elements = render_params.elements
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
     )
-    if isinstance(render_params.elements, str):
-        render_params.elements = [render_params.elements]
+    if isinstance(elements, str):
+        elements = [elements]
 
-    if render_params.elements is None:
-        render_params.elements = list(sdata_filt.shapes.keys())
+    if elements is None:
+        elements = list(sdata_filt.shapes.keys())
 
-    shapes = [sdata.shapes[e] for e in render_params.elements]
+    shapes = [sdata.shapes[e] for e in elements]
     n_shapes = sum([len(s) for s in shapes])
 
     if sdata.table is None:
         table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
     else:
-        table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin(render_params.elements)]
+        table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin(elements)]
 
     # refactor plz, squidpy leftovers
     render_params.outline_params.bg_color = (0.83, 0.83, 0.83, render_params.fill_alpha)
@@ -224,17 +226,19 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    elements = render_params.elements
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
     )
-    if isinstance(render_params.elements, str):
-        render_params.elements = [render_params.elements]
+    if isinstance(elements, str):
+        elements = [elements]
 
-    if render_params.elements is None:
-        render_params.elements = list(sdata_filt.points.keys())
+    if elements is None:
+        elements = list(sdata_filt.points.keys())
 
-    points = [sdata.points[e] for e in render_params.elements]
+    points = [sdata.points[e] for e in elements]
 
     coords = ["x", "y"]
     if render_params.color is not None:
@@ -328,17 +332,20 @@ def _render_images(
     legend_params: LegendParams,
     # extent: tuple[float, float, float, float] | None = None,
 ) -> None:
+    elements = render_params.elements
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
     )
-    if isinstance(render_params.elements, str):
-        render_params.elements = [render_params.elements]
 
-    if render_params.elements is None:
-        render_params.elements = list(sdata_filt.images.keys())
+    if isinstance(elements, str):
+        elements = [elements]
 
-    images = [sdata.images[e] for e in render_params.elements]
+    if elements is None:
+        elements = list(sdata_filt.images.keys())
+
+    images = [sdata.images[e] for e in elements]
 
     for img in images:
         if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
@@ -411,19 +418,21 @@ def _render_labels(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    elements = render_params.elements
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
     )
-    if isinstance(render_params.elements, str):
-        render_params.elements = [render_params.elements]
+    if isinstance(elements, str):
+        elements = [elements]
 
-    if render_params.elements is None:
-        render_params.elements = list(sdata_filt.labels.keys())
+    if elements is None:
+        elements = list(sdata_filt.labels.keys())
 
-    labels = [sdata.labels[e].values for e in render_params.elements]
+    labels = [sdata.labels[e].values for e in elements]
 
-    for label, labels_key in zip(labels, render_params.elements):
+    for label, labels_key in zip(labels, elements):
         if sdata.table is None:
             instance_id = np.unique(label)
             table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
