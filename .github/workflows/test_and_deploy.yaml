@@ -75,8 +75,6 @@ jobs:
                   token: ${{ secrets.CODECOV_TOKEN }}
                   fail_ci_if_error: true # optional (default = false)
                   verbose: true # optional (default = false)
-                  fixes:
-                      - "/spatialdata-plot/spatialdata-plot/::spatialdata-plot/src/spatialdat_plot/"
     deploy:
         # this will run when you have tagged a commit, starting with "v*"
         # and requires that you have put your twine API key in your
