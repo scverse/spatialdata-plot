@@ -692,8 +692,15 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
-                ax.set_xlim(extent[cs][0], extent[cs][1])
-                ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
+                # If the axis already has limits, only expand them but not overwrite
+                x_min, x_max = ax.get_xlim()
+                y_min, y_max = ax.get_ylim()
+                x_min = min(x_min, extent[cs][0])
+                x_max = max(x_max, extent[cs][1])
+                y_min = min(y_min, extent[cs][2])
+                y_max = max(y_max, extent[cs][3])
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)

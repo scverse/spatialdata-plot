@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Optional, Union
 
+import matplotlib
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
@@ -20,7 +21,6 @@ from anndata import AnnData
 from cycler import Cycler, cycler
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
-from matplotlib.cm import get_cmap
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import Colormap, LinearSegmentedColormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
 from matplotlib.figure import Figure
@@ -271,13 +271,19 @@ def _get_extent(
             for images_key in sdata.images:
                 for e_id in element_ids:
                     if images_key == e_id:
-                        extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
+                        if not isinstance(sdata.images[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
+                        else:
+                            pass
 
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
                 for e_id in element_ids:
                     if labels_key == e_id:
-                        extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
+                        if not isinstance(sdata.labels[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
+                        else:
+                            pass
 
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
@@ -303,7 +309,9 @@ def _get_extent(
                             sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
                         ]
                         tmp_polygons = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Polygon")
+                            sdata.shapes[e_id]["geometry"].apply(
+                                lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"]
+                            )
                         ]
 
                         if not tmp_points.empty:
@@ -448,7 +456,7 @@ def _prepare_cmap_norm(
     vcenter: float | None = None,
     **kwargs: Any,
 ) -> CmapParams:
-    cmap = copy(get_cmap(cmap))
+    cmap = copy(matplotlib.colormaps[rcParams["image.cmap"] if cmap is None else cmap])
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if isinstance(norm, Normalize):
