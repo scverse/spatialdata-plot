@@ -18,14 +18,6 @@ _ = spatialdata_plot
 #    ".png" is appended to <your_filename>, no need to set it
 
 
-class TestLabels(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_labels(self, sdata_blobs: SpatialData):
-        # TODO: support multiscale labels
-        if "blobs_multiscale_labels" in sdata_blobs.labels:
-            del sdata_blobs.labels["blobs_multiscale_labels"]
-        sdata_blobs.pl.render_labels(color="channel_2_mean").pl.show()
-
-
-class TestImages(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_images(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images().pl.show()
+class TestShapes(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
