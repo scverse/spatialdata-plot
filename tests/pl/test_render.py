@@ -29,8 +29,8 @@ def test_render_images_can_plot_multiple_cyx_images(share_coordinate_system: str
     if share_coordinate_system == "all":
         assert len(axs) == 1
 
-    elif share_coordinate_system == "two":
+    if share_coordinate_system == "two":
         assert len(axs) == 2
 
-    elif share_coordinate_system == "none":
+    if share_coordinate_system == "none":
         assert len(axs) == 3

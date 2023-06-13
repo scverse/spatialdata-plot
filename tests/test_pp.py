@@ -150,24 +150,3 @@ def test_get_bb_wrong_input_length(sdata, request):
 
     with pytest.raises(ValueError, match="Parameter 'y' must be of length 2."):
         sdata.pp.get_bb((0, 5), (0, 5, 2))
-
-
-# @pytest.mark.parametrize(
-#     "sdata, keys, nrows ",
-#     [
-#         ("full_sdata", "data1", 3),
-#         ("full_sdata", ["data1", "data3"], 23),
-#     ],
-# )
-# def test_table_gets_subset_when_images_are_subset(sdata, keys, nrows, request):
-#     """Tests wether the images inside sdata can be clipped to a bounding box."""
-
-#     sdata = request.getfixturevalue(sdata)
-
-#     assert sdata.table.n_obs == 30
-
-#     new_sdata = sdata.pp.get_elements(keys)
-
-#     print(new_sdata.table)
-
-#     assert len(new_sdata.table.obs) == nrows

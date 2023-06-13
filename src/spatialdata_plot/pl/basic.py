@@ -139,7 +139,7 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        element: str | None = None,
+        elements: str | list[str] | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
@@ -161,8 +161,8 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element
-            The name of the shapes element to render. If `None`, the first
+        elements
+            The name of the shapes element(s) to render. If `None`, all
             shapes element in the `SpatialData` object will be used.
         color
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
@@ -209,7 +209,7 @@ class PlotAccessor:
         )
         outline_params = _set_outline(size, outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
-            element=element,
+            elements=elements,
             color=color,
             groups=groups,
             outline_params=outline_params,
@@ -219,13 +219,14 @@ class PlotAccessor:
             palette=palette,
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
+            transfunc=kwargs.get("transfunc", None),
         )
 
         return sdata
 
     def render_points(
         self,
-        element: str | None = None,
+        elements: str | list[str] | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
@@ -241,8 +242,8 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element
-            The name of the points element to render. If `None`, the first
+        elements
+            The name of the points element(s) to render. If `None`, all
             shapes element in the `SpatialData` object will be used.
         color
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
@@ -278,19 +279,21 @@ class PlotAccessor:
             **kwargs,
         )
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
-            element=element,
+            elements=elements,
             color=color,
             groups=groups,
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
+            transfunc=kwargs.get("transfunc", None),
+            size=size,
         )
 
         return sdata
 
     def render_images(
         self,
-        element: str | None = None,
+        elements: str | list[str] | None = None,
         channel: list[str] | list[int] | int | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Optional[Normalize] = None,
@@ -304,9 +307,9 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element
-            The name of the image element to render. If `None`, the first
-            shapes element in the `SpatialData` object will be used.
+        elements
+            The name of the image element(s) to render. If `None`, all
+            shapes elements in the `SpatialData` object will be used.
         channel
             To select which channel to plot (all by default).
         cmap
@@ -335,7 +338,7 @@ class PlotAccessor:
             **kwargs,
         )
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
-            element=element,
+            elements=elements,
             channel=channel,
             cmap_params=cmap_params,
             palette=palette,
@@ -346,7 +349,7 @@ class PlotAccessor:
 
     def render_labels(
         self,
-        element: str | None = None,
+        elements: str | list[str] | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         contour_px: int = 3,
@@ -366,9 +369,9 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element
-            The name of the labels element to render. If `None`, the first
-            labels element in the `SpatialData` object will be used.
+        elements
+            The name of the labels element(s) to render. If `None`, all
+            labels elements in the `SpatialData` object will be used.
         color
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
         groups
@@ -417,7 +420,7 @@ class PlotAccessor:
             **kwargs,
         )
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
-            element=element,
+            elements=elements,
             color=color,
             groups=groups,
             contour_px=contour_px,
@@ -428,6 +431,7 @@ class PlotAccessor:
             palette=palette,
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
+            transfunc=kwargs.get("transfunc", None),
         )
 
         return sdata
@@ -519,6 +523,15 @@ class PlotAccessor:
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
 
+        # handle coordinate system
+        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        if isinstance(coordinate_systems, str):
+            coordinate_systems = [coordinate_systems]
+
+        for cs in coordinate_systems:
+            if cs not in sdata.coordinate_systems:
+                raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
+
         extent = _get_extent(
             sdata=sdata,
             has_images="render_images" in render_cmds,
@@ -527,11 +540,6 @@ class PlotAccessor:
             has_shapes="render_shapes" in render_cmds,
             coordinate_systems=coordinate_systems,
         )
-
-        # handle coordinate system
-        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
-        if isinstance(coordinate_systems, str):
-            coordinate_systems = [coordinate_systems]
 
         # Use extent to filter out coordinate system without the relevant elements
         valid_cs = []
@@ -542,13 +550,18 @@ class PlotAccessor:
                 logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
         coordinate_systems = valid_cs
 
+        # print(coordinate_systems)
+        # cs_mapping = _get_coordinate_system_mapping(sdata)
+        # print(cs_mapping)
+
         # check that coordinate system and elements to be rendered match
-        for cmd, params in render_cmds.items():
-            if params.element is not None and len([params.element]) != len(coordinate_systems):
-                raise ValueError(
-                    f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
-                    f"({len(params.element)}) in command {cmd}."
-                )
+        # for cmd, params in render_cmds.items():
+        #     if params.elements is not None and len([params.elements]) != len(coordinate_systems):
+        #         print(params.elements)
+        #         raise ValueError(
+        #             f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
+        #             f"({len(params.elements)}) in command {cmd}."
+        #         )
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
@@ -679,8 +692,15 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
-                ax.set_xlim(extent[cs][0], extent[cs][1])
-                ax.set_ylim(extent[cs][3], extent[cs][2])  # (0, 0) is top-left
+                # If the axis already has limits, only expand them but not overwrite
+                x_min, x_max = ax.get_xlim()
+                y_min, y_max = ax.get_ylim()
+                x_min = min(x_min, extent[cs][0])
+                x_max = max(x_max, extent[cs][1])
+                y_min = min(y_min, extent[cs][2])
+                y_max = max(y_max, extent[cs][3])
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)

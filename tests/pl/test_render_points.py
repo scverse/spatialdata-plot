@@ -8,6 +8,7 @@ from tests.conftest import PlotTester, PlotTesterMeta
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=40, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
+_ = spatialdata_plot
 
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
@@ -17,14 +18,6 @@ matplotlib.use("agg")  # same as GitHub action runner
 #    ".png" is appended to <your_filename>, no need to set it
 
 
-class TestLabels(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_labels(self, sdata_blobs: SpatialData):
-        # TODO: support multiscale labels
-        if "blobs_multiscale_labels" in sdata_blobs.labels:
-            del sdata_blobs.labels["blobs_multiscale_labels"]
-        sdata_blobs.pl.render_labels(color="channel_2_mean").pl.show()
-
-
-class TestImages(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_images(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images().pl.show()
+class TestPoints(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_points(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(elements="blobs_points").pl.show()
