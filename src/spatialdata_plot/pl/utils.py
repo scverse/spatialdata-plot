@@ -1127,3 +1127,17 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _mpl_ax_contains_elements(ax: Axes) -> bool:
+    """Check if any objects have been plotted on the axes object.
+
+    While extracting the extent, we need to know if the axes object has just been
+    initialised and therefore has extent (0, 1), (0,1) or if it has been plotted on
+    and therefore has a different extent.
+
+    Based on: https://stackoverflow.com/a/71966295
+    """
+    return (
+        len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
+    )

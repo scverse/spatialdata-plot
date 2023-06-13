@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 import matplotlib.pyplot as plt
+import numpy as np
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
@@ -39,6 +40,7 @@ from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
+    _mpl_ax_contains_elements,
     _multiscale_to_image,
     _prepare_cmap_norm,
     _prepare_params_plot,
@@ -523,6 +525,14 @@ class PlotAccessor:
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
 
+        # get original axis extent for later comparison
+        x_min_orig, x_max_orig = (np.inf, -np.inf)
+        y_min_orig, y_max_orig = (np.inf, -np.inf)
+
+        if isinstance(ax, Axes) and _mpl_ax_contains_elements(ax):
+            x_min_orig, x_max_orig = ax.get_xlim()
+            y_max_orig, y_min_orig = ax.get_ylim()  # (0, 0) is top-left
+
         # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
@@ -693,12 +703,10 @@ class PlotAccessor:
                 ]
             ):
                 # If the axis already has limits, only expand them but not overwrite
-                x_min, x_max = ax.get_xlim()
-                y_min, y_max = ax.get_ylim()
-                x_min = min(x_min, extent[cs][0])
-                x_max = max(x_max, extent[cs][1])
-                y_min = min(y_min, extent[cs][2])
-                y_max = max(y_max, extent[cs][3])
+                x_min = min(x_min_orig, extent[cs][0])
+                x_max = max(x_max_orig, extent[cs][1])
+                y_min = min(y_min_orig, extent[cs][2])
+                y_max = max(y_max_orig, extent[cs][3])
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
