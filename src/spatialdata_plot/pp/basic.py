@@ -116,7 +116,7 @@ class PreprocessingAccessor:
         if not isinstance(elements, (str, list)):
             raise TypeError("Parameter 'elements' must be a string or a list of strings.")
 
-        if not all([isinstance(e, str) for e in elements]):
+        if not all(isinstance(e, str) for e in elements):
             raise TypeError("When parameter 'elements' is a list, all elements must be strings.")
 
         if isinstance(elements, str):

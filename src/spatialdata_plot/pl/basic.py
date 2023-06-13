@@ -4,7 +4,7 @@ import sys
 from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import scanpy as sc
@@ -82,11 +82,11 @@ class PlotAccessor:
 
     def _copy(
         self,
-        images: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
-        labels: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
-        points: Union[None, dict[str, DaskDataFrame]] = None,
-        shapes: Union[None, dict[str, GeoDataFrame]] = None,
-        table: Union[None, AnnData] = None,
+        images: None | dict[str, SpatialImage | MultiscaleSpatialImage] = None,
+        labels: None | dict[str, SpatialImage | MultiscaleSpatialImage] = None,
+        points: None | dict[str, DaskDataFrame] = None,
+        shapes: None | dict[str, GeoDataFrame] = None,
+        table: None | AnnData = None,
     ) -> sd.SpatialData:
         """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
@@ -150,7 +150,7 @@ class PlotAccessor:
         layer: str | None = None,
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
-        norm: Optional[Normalize] = None,
+        norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = "lightgrey",
         outline_alpha: float = 1.0,
         fill_alpha: float = 1.0,
@@ -232,7 +232,7 @@ class PlotAccessor:
         size: float = 1.0,
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
-        norm: Optional[Normalize] = None,
+        norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         alpha: float = 1.0,
         **kwargs: Any,
@@ -296,7 +296,7 @@ class PlotAccessor:
         elements: str | list[str] | None = None,
         channel: list[str] | list[int] | int | str | None = None,
         cmap: Colormap | str | None = None,
-        norm: Optional[Normalize] = None,
+        norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         palette: Palette_t = None,
         alpha: float = 1.0,
@@ -358,7 +358,7 @@ class PlotAccessor:
         layer: str | None = None,
         palette: Palette_t = None,
         cmap: Colormap | str | None = None,
-        norm: Optional[Normalize] = None,
+        norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float = 1.0,
         fill_alpha: float = 0.3,
@@ -452,11 +452,11 @@ class PlotAccessor:
         figsize: tuple[float, float] | None = None,
         dpi: int | None = None,
         fig: Figure | None = None,
-        title: Optional[Union[str, Sequence[str]]] = None,
+        title: None | str | Sequence[str] = None,
         share_extent: bool = True,
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
-        save: Optional[Union[str, Path]] = None,
+        save: None | str | Path = None,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -517,7 +517,7 @@ class PlotAccessor:
             if isinstance(title, str):
                 title = [title]
 
-            if not all([isinstance(t, str) for t in title]):
+            if not all(isinstance(t, str) for t in title):
                 raise TypeError("All titles must be strings.")
 
         # Simplicstic solution: If the images are multiscale, just use the first
