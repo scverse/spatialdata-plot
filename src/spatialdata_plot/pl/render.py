@@ -115,8 +115,8 @@ def _render_shapes(
         c: Any,
         s: float,
         norm: Any,
-        fill_alpha: Optional[float] = None,
-        outline_alpha: Optional[float] = None,
+        fill_alpha: None | float = None,
+        outline_alpha: None | float = None,
         **kwargs: Any,
     ) -> PatchCollection:
         polygon_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")]

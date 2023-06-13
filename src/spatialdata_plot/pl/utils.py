@@ -112,7 +112,7 @@ def _prepare_params_plot(
         fig, grid = _panel_grid(
             num_panels=num_panels, hspace=hspace, wspace=wspace, ncols=ncols, dpi=dpi, figsize=figsize
         )
-        axs: Union[Sequence[Axes], None] = [plt.subplot(grid[c]) for c in range(num_panels)]
+        axs: None | Sequence[Axes] = [plt.subplot(grid[c]) for c in range(num_panels)]
     elif num_panels > 1 and ax is not None:
         if len(ax) != num_panels:
             raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
@@ -151,10 +151,10 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
     for cs_name, element_ids in cs_mapping.items():
         # determine if coordinate system has the respective elements
-        cs_has_images = bool(any([(e in sdata.images) for e in element_ids]))
-        cs_has_labels = bool(any([(e in sdata.labels) for e in element_ids]))
-        cs_has_points = bool(any([(e in sdata.points) for e in element_ids]))
-        cs_has_shapes = bool(any([(e in sdata.shapes) for e in element_ids]))
+        cs_has_images = bool(any((e in sdata.images) for e in element_ids))
+        cs_has_labels = bool(any((e in sdata.labels) for e in element_ids))
+        cs_has_points = bool(any((e in sdata.points) for e in element_ids))
+        cs_has_shapes = bool(any((e in sdata.shapes) for e in element_ids))
 
         cs_contents = pd.concat(
             [
@@ -181,7 +181,7 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: Optional[Union[str, Sequence[str]]] = None,
+    coordinate_systems: None | str | Sequence[str] = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
@@ -480,7 +480,7 @@ class OutlineParams:
     gap_size: float
     gap_color: str
     bg_size: float
-    bg_color: Union[str, tuple[float, ...]]
+    bg_color: str | tuple[float, ...]
 
 
 def _set_outline(
@@ -504,7 +504,7 @@ def _set_outline(
     return OutlineParams(outline, gap_size, gap_color, bg_size, bg_color)
 
 
-def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> Union[plt.Figure, plt.Axes]:
+def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
     """Set up the axs objects.
 
     Parameters
@@ -630,7 +630,7 @@ def _normalize(
     return norm
 
 
-def _get_colors_for_categorical_obs(categories: Sequence[Union[str, int]], palette: Palette_t = None) -> list[str]:
+def _get_colors_for_categorical_obs(categories: Sequence[str | int], palette: Palette_t = None) -> list[str]:
     """
     Return a list of colors for a categorical observation.
 
@@ -771,7 +771,7 @@ def _map_color_seg(
 def _get_palette(
     categories: Sequence[Any],
     adata: AnnData | None = None,
-    cluster_key: Optional[str] | None = None,
+    cluster_key: None | str = None,
     palette: Palette_t = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
@@ -1082,7 +1082,7 @@ def _flatten_transformation_sequence(
         transformations = list(transformation_sequence.transformations)
         found_bottom_of_tree = False
         while not found_bottom_of_tree:
-            if all([not isinstance(t, sd.transformations.transformations.Sequence) for t in transformations]):
+            if all(not isinstance(t, sd.transformations.transformations.Sequence) for t in transformations):
                 found_bottom_of_tree = True
             else:
                 for idx, t in enumerate(transformations):

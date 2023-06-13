@@ -161,6 +161,3 @@ target-version = "py39"
     "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
 [tool.ruff.pydocstyle]
 convention = "numpy"
-[tool.ruff.pyupgrade]
-# Preserve types, even if a file imports `from __future__ import annotations`.
-keep-runtime-typing = true
