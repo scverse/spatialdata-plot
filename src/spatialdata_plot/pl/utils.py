@@ -183,6 +183,7 @@ def _get_extent(
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
+    elements: Optional[Iterable[Any]] = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -191,16 +192,18 @@ def _get_extent(
     ----------
     sdata
         The sd.SpatialData object to retrieve the extent from
-    images
+    has_images
         Flag indicating whether to consider images when calculating the extent
-    labels
+    has_labels
         Flag indicating whether to consider labels when calculating the extent
-    points
+    has_points
         Flag indicating whether to consider points when calculating the extent
-    shapes
-        Flag indicating whether to consider shaoes when calculating the extent
-    img_transformations
-        List of transformations already applied to the images
+    has_shapes
+        Flag indicating whether to consider shapes when calculating the extent
+    elements
+        Optional list of element names to be considered. When None, all are used.
+    share_extent
+        Flag indicating whether to use the same extent for all coordinate systems
 
     Returns
     -------
@@ -212,6 +215,12 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     cs_contents = _get_cs_contents(sdata)
 
+    if elements is None:  # to shut up ruff
+        elements = []
+
+    if not isinstance(elements, list):
+        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
+
     if coordinate_systems is not None:
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
@@ -220,6 +229,8 @@ def _get_extent(
 
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
+        if len(elements) > 0:
+            element_ids = [e for e in element_ids if e in elements]
 
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()

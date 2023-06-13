@@ -542,12 +542,38 @@ class PlotAccessor:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
+        # Check if user specified only certain elements to be plotted
+        cs_contents = _get_cs_contents(sdata)
+        elements_to_be_rendered = []
+        for cmd, params in render_cmds.items():
+            if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:  # noqa: SIM102
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+
         extent = _get_extent(
             sdata=sdata,
             has_images="render_images" in render_cmds,
             has_labels="render_labels" in render_cmds,
             has_points="render_points" in render_cmds,
             has_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
             coordinate_systems=coordinate_systems,
         )
 
@@ -595,7 +621,6 @@ class PlotAccessor:
         )
 
         # go through tree
-        cs_contents = _get_cs_contents(sdata)
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
             # properly transform all elements to the current coordinate system
