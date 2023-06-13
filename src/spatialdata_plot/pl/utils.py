@@ -9,9 +9,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Optional, Union
 
+import matplotlib
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
-import matplotlib
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
