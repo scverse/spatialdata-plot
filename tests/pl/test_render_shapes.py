@@ -1,10 +1,10 @@
+import geopandas as gpd
 import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from shapely.geometry import MultiPolygon, Polygon
 from spatialdata import SpatialData
 from spatialdata.models import ShapesModel
-from shapely.geometry import Polygon, MultiPolygon
-import geopandas as gpd
 
 from tests.conftest import PlotTester, PlotTesterMeta
 
@@ -29,16 +29,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
 
     def test_plot_can_render_multipolygons(self):
-
         def _make_multi():
-            hole = MultiPolygon([(
-                ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)),
-                [((0.2,0.2), (0.2,0.8), (0.8,0.8), (0.8,0.2))]
-            )])
-            overlap = MultiPolygon([
-                Polygon([(2.0, 0.0), (2.0, 0.8), (2.8, 0.8), (2.8, 0.0)]),
-                Polygon([(2.2, 0.2), (2.2, 1.0), (3.0, 1.0), (3.0, 0.2)])
-            ])
+            hole = MultiPolygon(
+                [(((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)), [((0.2, 0.2), (0.2, 0.8), (0.8, 0.8), (0.8, 0.2))])]
+            )
+            overlap = MultiPolygon(
+                [
+                    Polygon([(2.0, 0.0), (2.0, 0.8), (2.8, 0.8), (2.8, 0.0)]),
+                    Polygon([(2.2, 0.2), (2.2, 1.0), (3.0, 1.0), (3.0, 0.2)]),
+                ]
+            )
             poly = Polygon([(4.0, 0.0), (4.0, 1.0), (5.0, 1.0), (5.0, 0.0)])
             polygon_series = gpd.GeoSeries([hole, overlap, poly])
             cell_polygon_table = gpd.GeoDataFrame(geometry=polygon_series)
