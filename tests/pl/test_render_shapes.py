@@ -2,6 +2,9 @@ import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from spatialdata import SpatialData
+from spatialdata.models import ShapesModel
+from shapely.geometry import Polygon, MultiPolygon
+import geopandas as gpd
 
 from tests.conftest import PlotTester, PlotTesterMeta
 
@@ -24,3 +27,23 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_render_polygons(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
+
+    def test_plot_can_render_multipolygons(self):
+
+        def _make_multi():
+            hole = MultiPolygon([(
+                ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)),
+                [((0.2,0.2), (0.2,0.8), (0.8,0.8), (0.8,0.2))]
+            )])
+            overlap = MultiPolygon([
+                Polygon([(2.0, 0.0), (2.0, 0.8), (2.8, 0.8), (2.8, 0.0)]),
+                Polygon([(2.2, 0.2), (2.2, 1.0), (3.0, 1.0), (3.0, 0.2)])
+            ])
+            poly = Polygon([(4.0, 0.0), (4.0, 1.0), (5.0, 1.0), (5.0, 0.0)])
+            polygon_series = gpd.GeoSeries([hole, overlap, poly])
+            cell_polygon_table = gpd.GeoDataFrame(geometry=polygon_series)
+            sd_polygons = ShapesModel.parse(cell_polygon_table)
+            return sd_polygons
+
+        sdata = SpatialData(shapes={"p": _make_multi()})
+        sdata.pl.render_shapes(outline=True, fill_alpha=0.3).pl.show()
