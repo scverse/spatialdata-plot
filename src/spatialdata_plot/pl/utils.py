@@ -1134,24 +1134,22 @@ def _robust_transform(element: Any, cs: str) -> Any:
 
 def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
     # https://stackoverflow.com/a/21922058
-    if len(mp.geoms) > 1:
-        raise NotImplementedError("Currently, lists of Polygons are not supported. Only Polygons with holes.")
 
-    geom = mp.geoms[0]
-    if geom.type == "Polygon":
-        exterior_coords = geom.exterior.coords[:]
-        interior_coords = []
-        for interior in geom.interiors:
-            interior_coords += interior.coords[:]
-    elif geom.type == "MultiPolygon":
-        exterior_coords = []
-        interior_coords = []
-        for part in geom:
-            epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
-            exterior_coords += epc["exterior_coords"]
-            interior_coords += epc["interior_coords"]
-    else:
-        raise ValueError("Unhandled geometry type: " + repr(geom.type))
+    for geom in mp.geoms:
+        if geom.geom_type == "Polygon":
+            exterior_coords = geom.exterior.coords[:]
+            interior_coords = []
+            for interior in geom.interiors:
+                interior_coords += interior.coords[:]
+        elif geom.geom_type == "MultiPolygon":
+            exterior_coords = []
+            interior_coords = []
+            for part in geom:
+                epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
+                exterior_coords += epc["exterior_coords"]
+                interior_coords += epc["interior_coords"]
+        else:
+            raise ValueError("Unhandled geometry type: " + repr(geom.type))
 
     return interior_coords, exterior_coords
 
@@ -1159,11 +1157,21 @@ def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type:
 def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
     # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
 
-    inside, outside = _split_multipolygon_into_outer_and_inner(mp)
-    codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
-    codes[0] = mpath.Path.MOVETO
-    vertices = np.concatenate((outside, inside[::-1]))
-    all_codes = np.concatenate((codes, codes))
-    path = mpath.Path(vertices, all_codes)
+    patches = []
+    for geom in mp.geoms:
+        if len(geom.interiors) == 0:
+            # polygon has no holes
+            patches += [mpatches.Polygon(geom.exterior.coords, closed=True)]
+        else:
+            inside, outside = _split_multipolygon_into_outer_and_inner(mp)
+            if len(inside) > 0:
+                codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
+                codes[0] = mpath.Path.MOVETO
+                all_codes = np.concatenate((codes, codes))
+                vertices = np.concatenate((outside, inside[::-1]))
+            else:
+                all_codes = []
+                vertices = np.concatenate(outside)
+            patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
 
-    return mpatches.PathPatch(path)
+    return patches

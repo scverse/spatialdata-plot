@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass
 from functools import partial
+from itertools import chain
 from typing import Any, Callable, Optional, Union
 
+import geopandas as gpd
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -119,9 +122,15 @@ def _render_shapes(
         outline_alpha: None | float = None,
         **kwargs: Any,
     ) -> PatchCollection:
-        polygon_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")]
-        multipolygon_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "MultiPolygon")]
-        circle_df = shapes[shapes["geometry"].apply(lambda geom: geom.geom_type == "Point")]
+        polygon_df = shapes[
+            shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")  # type: ignore[call-overload]
+        ]
+        multipolygon_df = shapes[
+            shapes["geometry"].apply(lambda geom: geom.geom_type == "MultiPolygon")  # type: ignore[call-overload]
+        ]
+        circle_df = shapes[
+            shapes["geometry"].apply(lambda geom: geom.geom_type == "Point")  # type: ignore[call-overload]
+        ]
 
         patches = []
         if len(polygon_df) > 0:
@@ -132,6 +141,10 @@ def _render_shapes(
             ]
         if len(multipolygon_df) > 0:
             patches += [_make_patch_from_multipolygon(mp) for mp in multipolygon_df["geometry"]]
+
+        # flatten list since multipolygons cause a nested list
+        with contextlib.suppress(Exception):
+            patches = list(chain.from_iterable([x] if not isinstance(x, list) else x for x in patches))
 
         cmap = kwargs["cmap"]
 
@@ -169,6 +182,8 @@ def _render_shapes(
     if len(color_vector) == 0:
         color_vector = [render_params.cmap_params.na_color]
 
+    shapes = pd.concat(shapes, ignore_index=True)
+    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
     _cax = _get_collection_shape(
         shapes=shapes,
         s=render_params.size,
