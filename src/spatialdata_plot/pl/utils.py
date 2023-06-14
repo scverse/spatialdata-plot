@@ -178,12 +178,12 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: None | str | Sequence[str] = None,
+    coordinate_systems: Sequence[str] | str | None = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
-    elements: Optional[Iterable[Any]] = None,
+    elements: Iterable[Any] | None = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.

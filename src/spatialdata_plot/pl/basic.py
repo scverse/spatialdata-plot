@@ -456,6 +456,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: None | str | Sequence[str] = None,
         share_extent: bool = True,
+        pad_extent: int = 0,
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
         save: None | str | Path = None,
@@ -728,10 +729,10 @@ class PlotAccessor:
                 ]
             ):
                 # If the axis already has limits, only expand them but not overwrite
-                x_min = min(x_min_orig, extent[cs][0])
-                x_max = max(x_max_orig, extent[cs][1])
-                y_min = min(y_min_orig, extent[cs][2])
-                y_max = max(y_max_orig, extent[cs][3])
+                x_min = min(x_min_orig, extent[cs][0]) - pad_extent
+                x_max = max(x_max_orig, extent[cs][1]) + pad_extent
+                y_min = min(y_min_orig, extent[cs][2]) - pad_extent
+                y_max = max(y_max_orig, extent[cs][3]) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
