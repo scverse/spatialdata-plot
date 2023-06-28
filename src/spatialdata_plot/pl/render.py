@@ -366,7 +366,6 @@ def _render_images(
                 color = render_params.palette
 
             else:
-                print(img.coords["c"].values.tolist())
                 color = _get_colors_for_categorical_obs(
                     img.coords["c"].values.tolist(), palette=render_params.cmap_params.cmap
                 )
