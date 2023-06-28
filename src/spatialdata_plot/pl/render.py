@@ -367,7 +367,9 @@ def _render_images(
 
             else:
                 print(img.coords["c"].values.tolist())
-                color = _get_colors_for_categorical_obs(img.coords["c"].values.tolist(), palette=render_params.cmap_params.cmap)
+                color = _get_colors_for_categorical_obs(
+                    img.coords["c"].values.tolist(), palette=render_params.cmap_params.cmap
+                )
 
             cmaps = _get_linear_colormap([str(c) for c in color[:num_channels]], "k")
             img = _normalize(img, clip=True)
