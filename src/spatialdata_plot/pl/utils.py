@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -87,7 +87,7 @@ def _prepare_params_plot(
     frameon: bool | None = None,
     # this is passed at `render_*`
     cmap: Colormap | str | None = None,
-    norm: Union[Normalize, Sequence[Normalize]] | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -446,7 +446,7 @@ class CmapParams:
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: Union[Normalize, Sequence[Normalize]] | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -626,8 +626,8 @@ def _normalize(
 
 def _get_colors_for_categorical_obs(
     categories: Sequence[str | int],
-    palette: Optional[Union[str, ListedColormap]] = None,
-    alpha=1.0,
+    palette: ListedColormap | str | None = None,
+    alpha: float = 1.0,
 ) -> list[str]:
     """
     Return a list of colors for a categorical observation.
@@ -674,7 +674,7 @@ def _get_colors_for_categorical_obs(
     elif isinstance(palette, ListedColormap):
         palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
     elif isinstance(palette, LinearSegmentedColormap):
-        palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]
+        palette = [to_hex(palette(x, alpha=alpha)) for x in [color_idx]]
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
 
@@ -687,8 +687,8 @@ def _set_color_source_vec(
     use_raw: bool | None = None,
     alt_var: str | None = None,
     layer: str | None = None,
-    groups: Union[str, Sequence[str]] | None = None,
-    palette: Optional[Union[str, ListedColormap]] = None,
+    groups: Sequence[str] | str | None = None,
+    palette: ListedColormap | str | None = None,
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
@@ -783,7 +783,7 @@ def _get_palette(
     categories: Sequence[Any],
     adata: AnnData | None = None,
     cluster_key: None | str = None,
-    palette: Optional[Union[str, ListedColormap]] = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
     if adata is not None and palette is None:
@@ -859,7 +859,7 @@ def _decorate_axs(
     adata: AnnData,
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
-    palette: Optional[Union[str, ListedColormap]] = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     legend_fontsize: int | float | _FontSize | None = None,

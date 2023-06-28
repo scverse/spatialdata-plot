@@ -13,7 +13,7 @@ from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, Normalize
+from matplotlib.colors import Colormap, ListedColormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
@@ -33,7 +33,6 @@ from spatialdata_plot.pl.render import (
 )
 from spatialdata_plot.pl.utils import (
     LegendParams,
-    Palette_t,
     _FontSize,
     _FontWeight,
     _get_cs_contents,
@@ -148,7 +147,7 @@ class PlotAccessor:
         outline_color: tuple[str, str] = ("#000000ff", "#ffffffff"),  # black, white
         alt_var: str | None = None,
         layer: str | None = None,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = "lightgrey",
@@ -230,7 +229,7 @@ class PlotAccessor:
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -298,7 +297,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -356,7 +355,7 @@ class PlotAccessor:
         outline: bool = False,
         alt_var: str | None = None,
         layer: str | None = None,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
