@@ -22,5 +22,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
 
+    def test_plot_can_render_circles_with_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", outline=True).pl.show()
+
     def test_plot_can_render_polygons(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
