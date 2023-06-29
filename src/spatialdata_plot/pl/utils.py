@@ -614,9 +614,9 @@ def _normalize(
     xr.DataArray
         A min-max normalized image.
     """
-    perc = np.percentile(img, [pmin, pmax], axis=(1, 2)).T
+    perc = np.percentile(img, [pmin, pmax])
 
-    norm = (img - np.expand_dims(perc[:, 0], (1, 2))) / (np.expand_dims(perc[:, 1] - perc[:, 0], (1, 2)) + eps)
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
 
     if clip:
         norm = np.clip(norm, 0, 1)
@@ -674,7 +674,7 @@ def _get_colors_for_categorical_obs(
     elif isinstance(palette, ListedColormap):
         palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
     elif isinstance(palette, LinearSegmentedColormap):
-        palette = [to_hex(palette(x, alpha=alpha)) for x in [color_idx]]
+        palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
 
