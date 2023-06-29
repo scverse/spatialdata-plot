@@ -502,7 +502,7 @@ def _set_outline(
     # the default black and white colors can be changes using the contour_config parameter
     if isinstance(outline_color, str):
         bg_color, gap_color = outline_color, outline_color
-    elif len(outline_color) == 4 and all(isinstance(c, float) for c in outline_color):
+    elif (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
         hex_color = matplotlib.colors.to_hex(outline_color)
         bg_color, gap_color = hex_color, hex_color
     else:
