@@ -428,7 +428,7 @@ def _render_images(
             raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
         if n_channels > 1:
-            layer = img.sel(c=channels)
+            layer = img.sel(c=channels).copy(deep=True)
 
             channel_colors: list[str] | Any
             if render_params.palette is None:
@@ -440,16 +440,19 @@ def _render_images(
 
             channel_cmaps = _get_linear_colormap([str(c) for c in channel_colors[:n_channels]], "k")
 
+            layer_vals = []
             if render_params.quantiles_for_norm != (None, None):
                 for i in range(n_channels):
-                    layer.values[i] = _normalize(
-                        layer.values[i],
-                        pmin=render_params.quantiles_for_norm[0],
-                        pmax=render_params.quantiles_for_norm[1],
-                        clip=True,
+                    layer_vals.append(
+                        _normalize(
+                            layer.values[i],
+                            pmin=render_params.quantiles_for_norm[0],
+                            pmax=render_params.quantiles_for_norm[1],
+                            clip=True,
+                        )
                     )
 
-            colored = np.stack([channel_cmaps[i](layer.values[i]) for i in range(n_channels)], 0).sum(0)
+            colored = np.stack([channel_cmaps[i](layer_vals[i]) for i in range(n_channels)], 0).sum(0)
 
             layer = xr.DataArray(
                 data=colored,
