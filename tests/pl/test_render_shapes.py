@@ -34,10 +34,15 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_polygons_with_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(elements="blobs_polygons", outline=True).pl.show()
 
-    def test_plot_can_render_polygons_with_colored_outline(self, sdata_blobs: SpatialData):
+    def test_plot_can_render_polygons_with_str_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(elements="blobs_polygons", outline=True, outline_color="red").pl.show()
 
-    def test_plot_can_render_polygons_with_numericcolored_outline(self, sdata_blobs: SpatialData):
+    def test_plot_can_render_polygons_with_rgb_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            elements="blobs_polygons", outline=True, outline_color=(0.0, 0.0, 1.0, 1.0)
+        ).pl.show()
+
+    def test_plot_can_render_polygons_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(
             elements="blobs_polygons", outline=True, outline_color=(0.0, 1.0, 0.0, 1.0)
         ).pl.show()
