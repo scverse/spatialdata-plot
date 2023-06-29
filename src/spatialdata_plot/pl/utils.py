@@ -500,7 +500,13 @@ def _set_outline(
     gap_size = (point + (point * gap_width) * 2) ** 2
     bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
     # the default black and white colors can be changes using the contour_config parameter
-    bg_color, gap_color = outline_color
+    if isinstance(outline_color, str):
+        bg_color, gap_color = outline_color, outline_color
+    elif len(outline_color) == 4 and all(isinstance(c, float) for c in outline_color):
+        hex_color = matplotlib.colors.to_hex(outline_color)
+        bg_color, gap_color = hex_color, hex_color
+    else:
+        bg_color, gap_color = outline_color
 
     if outline:
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
