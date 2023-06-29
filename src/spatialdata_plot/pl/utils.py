@@ -175,11 +175,12 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: None | str | Sequence[str] = None,
+    coordinate_systems: Sequence[str] | str | None = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
+    elements: Iterable[Any] | None = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -188,16 +189,18 @@ def _get_extent(
     ----------
     sdata
         The sd.SpatialData object to retrieve the extent from
-    images
+    has_images
         Flag indicating whether to consider images when calculating the extent
-    labels
+    has_labels
         Flag indicating whether to consider labels when calculating the extent
-    points
+    has_points
         Flag indicating whether to consider points when calculating the extent
-    shapes
-        Flag indicating whether to consider shaoes when calculating the extent
-    img_transformations
-        List of transformations already applied to the images
+    has_shapes
+        Flag indicating whether to consider shapes when calculating the extent
+    elements
+        Optional list of element names to be considered. When None, all are used.
+    share_extent
+        Flag indicating whether to use the same extent for all coordinate systems
 
     Returns
     -------
@@ -209,6 +212,12 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     cs_contents = _get_cs_contents(sdata)
 
+    if elements is None:  # to shut up ruff
+        elements = []
+
+    if not isinstance(elements, list):
+        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
+
     if coordinate_systems is not None:
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
@@ -217,6 +226,8 @@ def _get_extent(
 
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
+        if len(elements) > 0:
+            element_ids = [e for e in element_ids if e in elements]
 
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()
@@ -1144,3 +1155,17 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _mpl_ax_contains_elements(ax: Axes) -> bool:
+    """Check if any objects have been plotted on the axes object.
+
+    While extracting the extent, we need to know if the axes object has just been
+    initialised and therefore has extent (0, 1), (0,1) or if it has been plotted on
+    and therefore has a different extent.
+
+    Based on: https://stackoverflow.com/a/71966295
+    """
+    return (
+        len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
+    )
