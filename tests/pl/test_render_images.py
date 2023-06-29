@@ -38,7 +38,11 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_images(elements="blobs_image", channel=1, cmap="Reds").pl.show()
 
     def test_plot_can_pass_color_to_each_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]).pl.show()
+        sdata_blobs.pl.render_images(
+            elements="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
+        ).pl.show()
 
     def test_plot_can_pass_cmap_to_each_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]).pl.show()
+        sdata_blobs.pl.render_images(
+            elements="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]
+        ).pl.show()
