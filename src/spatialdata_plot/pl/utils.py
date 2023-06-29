@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -46,9 +46,6 @@ from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
-Palette_t = Optional[Union[str, ListedColormap]]
-_Normalize = Union[Normalize, Sequence[Normalize]]
-_SeqStr = Union[str, Sequence[str]]
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
@@ -90,7 +87,7 @@ def _prepare_params_plot(
     frameon: bool | None = None,
     # this is passed at `render_*`
     cmap: Colormap | str | None = None,
-    norm: _Normalize | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -178,11 +175,12 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: None | str | Sequence[str] = None,
+    coordinate_systems: Sequence[str] | str | None = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
+    elements: Iterable[Any] | None = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -191,16 +189,18 @@ def _get_extent(
     ----------
     sdata
         The sd.SpatialData object to retrieve the extent from
-    images
+    has_images
         Flag indicating whether to consider images when calculating the extent
-    labels
+    has_labels
         Flag indicating whether to consider labels when calculating the extent
-    points
+    has_points
         Flag indicating whether to consider points when calculating the extent
-    shapes
-        Flag indicating whether to consider shaoes when calculating the extent
-    img_transformations
-        List of transformations already applied to the images
+    has_shapes
+        Flag indicating whether to consider shapes when calculating the extent
+    elements
+        Optional list of element names to be considered. When None, all are used.
+    share_extent
+        Flag indicating whether to use the same extent for all coordinate systems
 
     Returns
     -------
@@ -212,6 +212,12 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     cs_contents = _get_cs_contents(sdata)
 
+    if elements is None:  # to shut up ruff
+        elements = []
+
+    if not isinstance(elements, list):
+        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
+
     if coordinate_systems is not None:
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
@@ -220,6 +226,8 @@ def _get_extent(
 
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
+        if len(elements) > 0:
+            element_ids = [e for e in element_ids if e in elements]
 
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()
@@ -449,7 +457,7 @@ class CmapParams:
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: _Normalize | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -627,7 +635,11 @@ def _normalize(
     return norm
 
 
-def _get_colors_for_categorical_obs(categories: Sequence[str | int], palette: Palette_t = None) -> list[str]:
+def _get_colors_for_categorical_obs(
+    categories: Sequence[str | int],
+    palette: ListedColormap | str | None = None,
+    alpha: float = 1.0,
+) -> list[str]:
     """
     Return a list of colors for a categorical observation.
 
@@ -644,27 +656,40 @@ def _get_colors_for_categorical_obs(categories: Sequence[str | int], palette: Pa
     -------
     None
     """
-    length = len(categories)
+    len_cat = len(categories)
 
     # check if default matplotlib palette has enough colors
     if palette is None:
-        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= length:
+        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
-            palette = [next(cc)["color"] for _ in range(length)]
+            palette = [next(cc)["color"] for _ in range(len_cat)]
         else:
-            if length <= 20:
+            if len_cat <= 20:
                 palette = default_20
-            elif length <= 28:
+            elif len_cat <= 28:
                 palette = default_28
-            elif length <= len(default_102):  # 103 colors
+            elif len_cat <= len(default_102):  # 103 colors
                 palette = default_102
             else:
-                palette = ["grey" for _ in range(length)]
+                palette = ["grey" for _ in range(len_cat)]
                 logging.info(
                     "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
                 )
 
-    return palette[:length]  # type: ignore[return-value]
+    # otherwise, single chanels turn out grey
+    color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
+
+    if isinstance(palette, str):
+        cmap = plt.get_cmap(palette)
+        palette = [to_hex(x) for x in cmap(color_idx, alpha=alpha)]
+    elif isinstance(palette, ListedColormap):
+        palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
+    elif isinstance(palette, LinearSegmentedColormap):
+        palette = [to_hex(palette(x, alpha=alpha)) for x in [color_idx]]
+    else:
+        raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+
+    return palette[:len_cat]  # type: ignore[return-value]
 
 
 def _set_color_source_vec(
@@ -673,8 +698,8 @@ def _set_color_source_vec(
     use_raw: bool | None = None,
     alt_var: str | None = None,
     layer: str | None = None,
-    groups: _SeqStr | None = None,
-    palette: Palette_t = None,
+    groups: Sequence[str] | str | None = None,
+    palette: ListedColormap | str | None = None,
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
@@ -769,7 +794,7 @@ def _get_palette(
     categories: Sequence[Any],
     adata: AnnData | None = None,
     cluster_key: None | str = None,
-    palette: Palette_t = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
     if adata is not None and palette is None:
@@ -845,7 +870,7 @@ def _decorate_axs(
     adata: AnnData,
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
-    palette: Palette_t = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     legend_fontsize: int | float | _FontSize | None = None,
@@ -1127,3 +1152,17 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _mpl_ax_contains_elements(ax: Axes) -> bool:
+    """Check if any objects have been plotted on the axes object.
+
+    While extracting the extent, we need to know if the axes object has just been
+    initialised and therefore has extent (0, 1), (0,1) or if it has been plotted on
+    and therefore has a different extent.
+
+    Based on: https://stackoverflow.com/a/71966295
+    """
+    return (
+        len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
+    )
