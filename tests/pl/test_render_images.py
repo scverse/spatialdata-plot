@@ -22,5 +22,23 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
 
-    # def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
-    #     sdata_blobs.pl.render_images(elements="blobs_multiscale_image").pl.show()
+    def test_plot_can_pass_cmap_to_render_images(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", cmap="seismic").pl.show()
+
+    def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=0).pl.show()
+
+    def test_plot_can_render_two_channels_from_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1]).pl.show()
+
+    def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=1, palette="red").pl.show()
+
+    def test_plot_can_pass_cmap_to_single_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=1, cmap="Reds").pl.show()
+
+    def test_plot_can_pass_color_to_each_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]).pl.show()
+
+    def test_plot_can_pass_cmap_to_each_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]).pl.show()
