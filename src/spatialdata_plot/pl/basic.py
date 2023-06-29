@@ -300,7 +300,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
-        quantile_norm: bool = True,
+        quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8),  # defaults from CSBDeep
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -321,8 +321,8 @@ class PlotAccessor:
             Color to be used for NAs values, if present.
         alpha
             Alpha value for the shapes.
-        quantile_norm
-            If True, normalize each channel by its quantiles.
+        quantiles_for_norm
+            Tuple of (pmin, pmax) which will be used for quantile normalization.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -363,7 +363,7 @@ class PlotAccessor:
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
-            quantile_norm=quantile_norm,
+            quantiles_for_norm=quantiles_for_norm,
         )
 
         return sdata

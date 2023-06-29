@@ -320,7 +320,7 @@ class ImageRenderParams:
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | str | None = None
     alpha: float = 1.0
-    quantile_norm: bool = True
+    quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8)  # defaults from CSBDeep
 
 
 def _render_images(
@@ -381,8 +381,13 @@ def _render_images(
             for idx, channel in enumerate(channels):
                 layer = img.sel(c=channel)
 
-                if render_params.quantile_norm:
-                    layer = _normalize(layer, clip=True)
+                if render_params.quantiles_for_norm != (None, None):
+                    layer = _normalize(
+                        layer,
+                        pmin=render_params.quantiles_for_norm[0],
+                        pmax=render_params.quantiles_for_norm[1],
+                        clip=True,
+                    )
 
                 if render_params.cmap_params[idx].norm is not None:
                     layer = render_params.cmap_params[idx].norm(layer)
@@ -397,8 +402,10 @@ def _render_images(
         if n_channels == 1:
             layer = img.sel(c=channels)
 
-            if render_params.quantile_norm:
-                layer = _normalize(layer, clip=True)
+            if render_params.quantiles_for_norm != (None, None):
+                layer = _normalize(
+                    layer, pmin=render_params.quantiles_for_norm[0], pmax=render_params.quantiles_for_norm[1], clip=True
+                )
 
             if render_params.cmap_params[0].norm is not None:
                 layer = render_params.cmap_params[0].norm(layer)
@@ -433,9 +440,14 @@ def _render_images(
 
             channel_cmaps = _get_linear_colormap([str(c) for c in channel_colors[:n_channels]], "k")
 
-            if render_params.quantile_norm:
+            if render_params.quantiles_for_norm != (None, None):
                 for i in range(n_channels):
-                    layer.values[i] = _normalize(layer.values[i], clip=True)
+                    layer.values[i] = _normalize(
+                        layer.values[i],
+                        pmin=render_params.quantiles_for_norm[0],
+                        pmax=render_params.quantiles_for_norm[1],
+                        clip=True,
+                    )
 
             colored = np.stack([channel_cmaps[i](layer.values[i]) for i in range(n_channels)], 0).sum(0)
 
