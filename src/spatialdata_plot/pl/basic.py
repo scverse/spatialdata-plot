@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
@@ -38,6 +39,7 @@ from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
+    _mpl_ax_contains_elements,
     _multiscale_to_image,
     _prepare_cmap_norm,
     _prepare_params_plot,
@@ -453,6 +455,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: None | str | Sequence[str] = None,
         share_extent: bool = True,
+        pad_extent: int = 0,
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
         save: None | str | Path = None,
@@ -522,6 +525,14 @@ class PlotAccessor:
         # Simplicstic solution: If the images are multiscale, just use the first
         sdata = _multiscale_to_image(sdata)
 
+        # get original axis extent for later comparison
+        x_min_orig, x_max_orig = (np.inf, -np.inf)
+        y_min_orig, y_max_orig = (np.inf, -np.inf)
+
+        if isinstance(ax, Axes) and _mpl_ax_contains_elements(ax):
+            x_min_orig, x_max_orig = ax.get_xlim()
+            y_max_orig, y_min_orig = ax.get_ylim()  # (0, 0) is top-left
+
         # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
@@ -531,12 +542,38 @@ class PlotAccessor:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
+        # Check if user specified only certain elements to be plotted
+        cs_contents = _get_cs_contents(sdata)
+        elements_to_be_rendered = []
+        for cmd, params in render_cmds.items():
+            if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:  # noqa: SIM102
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+
         extent = _get_extent(
             sdata=sdata,
             has_images="render_images" in render_cmds,
             has_labels="render_labels" in render_cmds,
             has_points="render_points" in render_cmds,
             has_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
             coordinate_systems=coordinate_systems,
         )
 
@@ -584,7 +621,6 @@ class PlotAccessor:
         )
 
         # go through tree
-        cs_contents = _get_cs_contents(sdata)
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
             # properly transform all elements to the current coordinate system
@@ -692,12 +728,10 @@ class PlotAccessor:
                 ]
             ):
                 # If the axis already has limits, only expand them but not overwrite
-                x_min, x_max = ax.get_xlim()
-                y_min, y_max = ax.get_ylim()
-                x_min = min(x_min, extent[cs][0])
-                x_max = max(x_max, extent[cs][1])
-                y_min = min(y_min, extent[cs][2])
-                y_max = max(y_max, extent[cs][3])
+                x_min = min(x_min_orig, extent[cs][0]) - pad_extent
+                x_max = max(x_max_orig, extent[cs][1]) + pad_extent
+                y_min = min(y_min_orig, extent[cs][2]) - pad_extent
+                y_max = max(y_max_orig, extent[cs][3]) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
