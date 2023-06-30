@@ -33,6 +33,7 @@ from spatialdata_plot.pl.render import (
     _render_shapes,
 )
 from spatialdata_plot.pl.utils import (
+    CmapParams,
     LegendParams,
     _FontSize,
     _FontWeight,
@@ -296,11 +297,12 @@ class PlotAccessor:
         self,
         elements: str | list[str] | None = None,
         channel: list[str] | list[int] | int | str | None = None,
-        cmap: Colormap | str | None = None,
+        cmap: list[Colormap] | list[str] | Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
+        quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8),  # defaults from CSBDeep
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -321,6 +323,8 @@ class PlotAccessor:
             Color to be used for NAs values, if present.
         alpha
             Alpha value for the shapes.
+        quantiles_for_norm
+            Tuple of (pmin, pmax) which will be used for quantile normalization.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -332,18 +336,36 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
+        if channel is None and cmap is None:
+            cmap = "brg"
+
+        cmap_params: list[CmapParams] | CmapParams
+        if isinstance(cmap, list):
+            cmap_params = [
+                _prepare_cmap_norm(
+                    cmap=c,
+                    norm=norm,
+                    na_color=na_color,  # type: ignore[arg-type]
+                    **kwargs,
+                )
+                for c in cmap
+            ]
+
+        else:
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=na_color,  # type: ignore[arg-type]
+                **kwargs,
+            )
+
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
             elements=elements,
             channel=channel,
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
+            quantiles_for_norm=quantiles_for_norm,
         )
 
         return sdata
