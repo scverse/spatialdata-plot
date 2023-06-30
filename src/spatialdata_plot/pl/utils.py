@@ -603,8 +603,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
 
 def _normalize(
     img: xr.DataArray,
-    pmin: float = 3.0,
-    pmax: float = 99.8,
+    pmin: float | None = 3.0,
+    pmax: float | None = 99.8,
     eps: float = 1e-20,
     clip: bool = False,
     name: str = "normed",
@@ -618,9 +618,9 @@ def _normalize(
     dataarray
         A xarray DataArray with an image field.
     pmin
-        Lower quantile (min value) used to perform qunatile normalization.
+        Lower quantile (min value) used to perform quantile normalization.
     pmax
-        Upper quantile (max value) used to perform qunatile normalization.
+        Upper quantile (max value) used to perform quantile normalization.
     eps
         Epsilon float added to prevent 0 division.
     clip
@@ -631,9 +631,12 @@ def _normalize(
     xr.DataArray
         A min-max normalized image.
     """
-    perc = np.percentile(img, [pmin, pmax], axis=(1, 2)).T
+    pmin = pmin or 0.0
+    pmax = pmax or 100.0
 
-    norm = (img - np.expand_dims(perc[:, 0], (1, 2))) / (np.expand_dims(perc[:, 1] - perc[:, 0], (1, 2)) + eps)
+    perc = np.percentile(img, [pmin, pmax])
+
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
 
     if clip:
         norm = np.clip(norm, 0, 1)
@@ -691,7 +694,7 @@ def _get_colors_for_categorical_obs(
     elif isinstance(palette, ListedColormap):
         palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
     elif isinstance(palette, LinearSegmentedColormap):
-        palette = [to_hex(palette(x, alpha=alpha)) for x in [color_idx]]
+        palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
 

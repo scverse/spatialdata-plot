@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Union
 
 import matplotlib
 import numpy as np
@@ -21,6 +21,7 @@ from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.utils import (
     CmapParams,
     FigParams,
@@ -37,7 +38,6 @@ from spatialdata_plot.pl.utils import (
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
-Palette_t = Optional[Union[str, ListedColormap]]
 _Normalize = Union[Normalize, Sequence[Normalize]]
 to_hex = partial(colors.to_hex, keep_alpha=True)
 
@@ -54,7 +54,7 @@ class ShapesRenderParams:
     contour_px: int | None = None
     alt_var: str | None = None
     layer: str | None = None
-    palette: Palette_t = None
+    palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
     size: float = 1.0
@@ -208,7 +208,7 @@ class PointsRenderParams:
     elements: str | Sequence[str] | None = None
     color: str | None = None
     groups: str | Sequence[str] | None = None
-    palette: Palette_t = None
+    palette: ListedColormap | str | None = None
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
@@ -312,11 +312,12 @@ def _render_points(
 class ImageRenderParams:
     """Labels render parameters.."""
 
-    cmap_params: CmapParams
+    cmap_params: list[CmapParams] | CmapParams
     elements: str | Sequence[str] | None = None
     channel: list[str] | list[int] | int | str | None = None
-    palette: Palette_t = None
+    palette: ListedColormap | str | None = None
     alpha: float = 1.0
+    quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8)  # defaults from CSBDeep
 
 
 def _render_images(
@@ -347,47 +348,126 @@ def _render_images(
     for img in images:
         if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
             raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
-        if render_params.channel is None and len(img.c) == 1:
-            render_params.channel = 0
-        if render_params.channel is not None:
+
+        if render_params.channel is None:
+            channels = img.coords["c"].values
+        else:
             channels = (
                 [render_params.channel] if isinstance(render_params.channel, (str, int)) else render_params.channel
             )
-            img = img.sel(c=channels)
-            num_channels = img.sizes["c"]
+
+        n_channels = len(channels)
+
+        got_multiple_cmaps = isinstance(render_params.cmap_params, list)
+
+        if not isinstance(render_params.cmap_params, list):
+            render_params.cmap_params = [render_params.cmap_params] * n_channels
+
+        if got_multiple_cmaps:
+            logger.warning(
+                "You're blending multiple cmaps. "
+                "If the plot doesn't look like you expect, it might be because your "
+                "cmaps go from a given color to 'white', and not to 'transparent'. "
+                "Therefore, the 'white' of higher layers will overlay the lower layers. "
+                "Consider using 'palette' instead."
+            )
 
             if render_params.palette is not None:
-                if num_channels > len(render_params.palette):
-                    raise ValueError("If palette is provided, it must match the number of channels.")
+                logger.warning("Parameter 'palette' is ignored when a 'cmap' is provided.")
 
-                color = render_params.palette
+            for idx, channel in enumerate(channels):
+                layer = img.sel(c=channel)
 
-            else:
-                color = _get_colors_for_categorical_obs(
-                    img.coords["c"].values.tolist(), palette=render_params.cmap_params.cmap
+                if render_params.quantiles_for_norm != (None, None):
+                    layer = _normalize(
+                        layer,
+                        pmin=render_params.quantiles_for_norm[0],
+                        pmax=render_params.quantiles_for_norm[1],
+                        clip=True,
+                    )
+
+                if render_params.cmap_params[idx].norm is not None:
+                    layer = render_params.cmap_params[idx].norm(layer)
+
+                ax.imshow(
+                    layer,
+                    cmap=render_params.cmap_params[idx].cmap,
+                    alpha=(1 / n_channels),
+                )
+            break
+
+        if n_channels == 1:
+            layer = img.sel(c=channels)
+
+            if render_params.quantiles_for_norm != (None, None):
+                layer = _normalize(
+                    layer, pmin=render_params.quantiles_for_norm[0], pmax=render_params.quantiles_for_norm[1], clip=True
                 )
 
-            cmaps = _get_linear_colormap([str(c) for c in color[:num_channels]], "k")
-            img = _normalize(img, clip=True)
-            colored = np.stack([cmaps[i](img.values[i]) for i in range(num_channels)], 0).sum(0)
-            img = xr.DataArray(
+            if render_params.cmap_params[0].norm is not None:
+                layer = render_params.cmap_params[0].norm(layer)
+
+            if render_params.palette is None:
+                ax.imshow(
+                    layer.squeeze(),  # get rid of the channel dimension
+                    cmap=render_params.cmap_params[0].cmap,
+                )
+
+            else:
+                ax.imshow(
+                    layer.squeeze(),  # get rid of the channel dimension
+                    cmap=_get_linear_colormap([render_params.palette], "k")[0],
+                )
+
+            break
+
+        if render_params.palette is not None and n_channels != len(render_params.palette):
+            raise ValueError("If 'palette' is provided, its length must match the number of channels.")
+
+        if n_channels > 1:
+            layer = img.sel(c=channels).copy(deep=True)
+
+            channel_colors: list[str] | Any
+            if render_params.palette is None:
+                channel_colors = _get_colors_for_categorical_obs(
+                    layer.coords["c"].values.tolist(), palette=render_params.cmap_params[0].cmap
+                )
+            else:
+                channel_colors = render_params.palette
+
+            channel_cmaps = _get_linear_colormap([str(c) for c in channel_colors[:n_channels]], "k")
+
+            layer_vals = []
+            if render_params.quantiles_for_norm != (None, None):
+                for i in range(n_channels):
+                    layer_vals.append(
+                        _normalize(
+                            layer.values[i],
+                            pmin=render_params.quantiles_for_norm[0],
+                            pmax=render_params.quantiles_for_norm[1],
+                            clip=True,
+                        )
+                    )
+
+            colored = np.stack([channel_cmaps[i](layer_vals[i]) for i in range(n_channels)], 0).sum(0)
+
+            layer = xr.DataArray(
                 data=colored,
                 coords=[
-                    img.coords["y"],
-                    img.coords["x"],
+                    layer.coords["y"],
+                    layer.coords["x"],
                     ["R", "G", "B", "A"],
                 ],
                 dims=["y", "x", "c"],
             )
+            layer = layer.transpose("y", "x", "c")  # for plotting
 
-        img = img.transpose("y", "x", "c")  # for plotting
-
-        ax.imshow(
-            img.data,
-            cmap=render_params.cmap_params.cmap,
-            alpha=render_params.alpha,
-            # extent=extent,
-        )
+            ax.imshow(
+                layer.data,
+                cmap=channel_cmaps[0],
+                alpha=render_params.alpha,
+                norm=render_params.cmap_params[0].norm,
+            )
 
 
 @dataclass
@@ -402,7 +482,7 @@ class LabelsRenderParams:
     outline: bool = False
     alt_var: str | None = None
     layer: str | None = None
-    palette: Palette_t = None
+    palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None
