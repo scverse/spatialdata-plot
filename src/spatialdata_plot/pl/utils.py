@@ -686,6 +686,8 @@ def _get_colors_for_categorical_obs(
     if isinstance(palette, str):
         cmap = plt.get_cmap(palette)
         palette = [to_hex(x) for x in cmap(color_idx, alpha=alpha)]
+    elif isinstance(palette, list):
+        palette = [to_hex(x) for x in palette]
     elif isinstance(palette, ListedColormap):
         palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
     elif isinstance(palette, LinearSegmentedColormap):
