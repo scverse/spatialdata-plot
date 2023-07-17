@@ -20,13 +20,10 @@ SpatialData’s plotting capabilities allow to quickly visualise all contained m
 
 ## Getting started
 
-For more information on the `spatialdata` format, please refer to the [documentation](https://spatialdata.scverse.org/en/latest/). In particular, the
+For more information on the `spatialdata-plot` library, please refer to the [documentation](https://spatialdata.scverse.org/projects/plot/en/latest/index.html). In particular, the
 
 -   [API documentation][link-api].
--   [Design doc][link-design-doc].
--   [Example notebooks][link-notebooks].
-
-For usage examples, please refer to the ["Visualizations"](https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html#visualizations) section of `spatialdata`.
+-   [Example notebooks][link-notebooks] (section "Visiualizations")
 
 ## Installation
 
