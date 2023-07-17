@@ -147,7 +147,7 @@ class PlotAccessor:
         size: float = 1.0,
         outline: bool = False,
         outline_width: tuple[float, float] = (0.3, 0.05),
-        outline_color: tuple[str, str] = ("#000000ff", "#ffffffff"),  # black, white
+        outline_color: str | list[float] = "#000000ff",
         alt_var: str | None = None,
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
