@@ -482,17 +482,16 @@ class OutlineParams:
     """Cmap params."""
 
     outline: bool
+    outline_color: str | list[float]
     gap_size: float
-    gap_color: str
     bg_size: float
-    bg_color: str | tuple[float, ...]
 
 
 def _set_outline(
     size: float,
     outline: bool = False,
     outline_width: tuple[float, float] = (0.3, 0.05),
-    outline_color: tuple[str, str] = ("#0000000ff", "#ffffffff"),  # black, white
+    outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
     bg_width, gap_width = outline_width
@@ -500,13 +499,15 @@ def _set_outline(
     gap_size = (point + (point * gap_width) * 2) ** 2
     bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
     # the default black and white colors can be changes using the contour_config parameter
-    bg_color, gap_color = outline_color
+
+    if (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
+        outline_color = matplotlib.colors.to_hex(outline_color)
 
     if outline:
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, gap_size, gap_color, bg_size, bg_color)
+    return OutlineParams(outline, outline_color, gap_size, bg_size)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:

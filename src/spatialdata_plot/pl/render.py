@@ -90,9 +90,6 @@ def _render_shapes(
     else:
         table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin(elements)]
 
-    # refactor plz, squidpy leftovers
-    render_params.outline_params.bg_color = (0.83, 0.83, 0.83, render_params.fill_alpha)
-
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
         adata=table,
@@ -144,7 +141,7 @@ def _render_shapes(
         fill_c[..., -1] = render_params.fill_alpha
 
         if render_params.outline_params.outline:
-            outline_c = ColorConverter().to_rgba_array(c)
+            outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
             outline_c[..., -1] = render_params.outline_alpha
         else:
             outline_c = None
