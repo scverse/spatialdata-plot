@@ -18,7 +18,7 @@ from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
-from spatialdata.datasets import blobs
+from spatialdata.datasets import blobs, raccoon
 from spatialdata.models import (
     Image2DModel,
     Image3DModel,
@@ -54,6 +54,11 @@ def full_sdata() -> SpatialData:
 @pytest.fixture()
 def sdata_blobs() -> SpatialData:
     return blobs()
+
+
+@pytest.fixture()
+def sdata_raccoon() -> SpatialData:
+    return raccoon()
 
 
 @pytest.fixture
