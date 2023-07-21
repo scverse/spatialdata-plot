@@ -29,7 +29,6 @@ from spatialdata_plot.pl.utils import (
     OutlineParams,
     ScalebarParams,
     _decorate_axs,
-    _get_colors_for_categorical_obs,
     _get_linear_colormap,
     _map_color_seg,
     _maybe_set_colors,
@@ -424,14 +423,12 @@ def _render_images(
         if render_params.palette is not None and n_channels != len(render_params.palette):
             raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
-        if n_channels > 1:
+        if n_channels == 3:
             layer = img.sel(c=channels).copy(deep=True)
 
             channel_colors: list[str] | Any
             if render_params.palette is None:
-                channel_colors = _get_colors_for_categorical_obs(
-                    layer.coords["c"].values.tolist(), palette=render_params.cmap_params[0].cmap
-                )
+                channel_colors = ["#ff0000ff", "#00ff00ff", "#0000ffff"]
             else:
                 channel_colors = render_params.palette
 
