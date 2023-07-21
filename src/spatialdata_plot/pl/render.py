@@ -423,7 +423,7 @@ def _render_images(
         if render_params.palette is not None and n_channels != len(render_params.palette):
             raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
-        if n_channels == 3:
+        if n_channels > 1:  # to capture n_channels = 3 and custom number cases
             layer = img.sel(c=channels).copy(deep=True)
 
             channel_colors: list[str] | Any
