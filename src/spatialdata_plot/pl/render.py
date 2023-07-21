@@ -344,7 +344,6 @@ def _render_images(
     images = [sdata.images[e] for e in elements]
 
     for img in images:
-
         if render_params.channel is None:
             channels = img.coords["c"].values
         else:
