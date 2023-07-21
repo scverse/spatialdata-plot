@@ -344,8 +344,6 @@ def _render_images(
     images = [sdata.images[e] for e in elements]
 
     for img in images:
-        # if (len(img.c) > 3 or len(img.c) == 2) and render_params.channel is None:
-        #     raise NotImplementedError("Only 1 or 3 channels are supported at the moment.")
 
         if render_params.channel is None:
             channels = img.coords["c"].values
