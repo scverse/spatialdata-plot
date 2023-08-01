@@ -7,11 +7,12 @@ from functools import partial
 from typing import Any, Callable, Union
 
 import matplotlib
-import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import spatial_image
 import spatialdata as sd
+import xarray
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib import colors
@@ -22,6 +23,7 @@ from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata.models import (
     Image2DModel,
+    Labels2DModel,
 )
 
 from spatialdata_plot._logging import logger
@@ -346,10 +348,10 @@ def _render_images(
         elements = list(sdata_filt.images.keys())
 
     images = [sdata.images[e] for e in elements]
-    for img in images:
-        if isinstance(img, msi.multiscale_spatial_image.MultiscaleSpatialImage):
+    for img, img_key in zip(images, elements):
+        if not isinstance(img, xarray.SpatialImage):
             img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning("Multi-scale images not yet supported, using scale0 of multi-scale image.")
+            logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
 
         if render_params.channel is None:
             channels = img.coords["c"].values
@@ -519,9 +521,13 @@ def _render_labels(
     if elements is None:
         elements = list(sdata_filt.labels.keys())
 
-    labels = [sdata.labels[e].values for e in elements]
+    labels = [sdata.labels[e] for e in elements]
 
-    for label, labels_key in zip(labels, elements):
+    for label, label_key in zip(labels, elements):
+        if not isinstance(label, spatial_image.SpatialImage):
+            label = Labels2DModel.parse(label["scale0"].ds.to_array().squeeze(axis=0))
+            logger.warning(f"Multi-scale labels not yet supported, using scale0 of multi-scale label '{label_key}'.")
+
         if sdata.table is None:
             instance_id = np.unique(label)
             table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
@@ -529,7 +535,7 @@ def _render_labels(
             instance_key = _get_instance_key(sdata)
             region_key = _get_region_key(sdata)
 
-            table = sdata.table[sdata.table.obs[region_key].isin([labels_key])]
+            table = sdata.table[sdata.table.obs[region_key].isin([label_key])]
 
             # get isntance id based on subsetted table
             instance_id = table.obs[instance_key].values
@@ -549,7 +555,7 @@ def _render_labels(
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
             # First get the labels infill and plot them
             labels_infill = _map_color_seg(
-                seg=label,
+                seg=label.values,
                 cell_id=instance_id,
                 color_vector=color_vector,
                 color_source_vector=color_source_vector,
@@ -572,7 +578,7 @@ def _render_labels(
 
             # Then overlay the contour
             labels_contour = _map_color_seg(
-                seg=label,
+                seg=label.values,
                 cell_id=instance_id,
                 color_vector=color_vector,
                 color_source_vector=color_source_vector,
