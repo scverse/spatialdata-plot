@@ -7,6 +7,7 @@ from functools import partial
 from typing import Any, Callable, Union
 
 import matplotlib
+import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -19,6 +20,9 @@ from matplotlib.colors import ColorConverter, ListedColormap, Normalize
 from matplotlib.patches import Circle, Polygon
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
+from spatialdata.models import (
+    Image2DModel,
+)
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.utils import (
@@ -342,8 +346,11 @@ def _render_images(
         elements = list(sdata_filt.images.keys())
 
     images = [sdata.images[e] for e in elements]
-
     for img in images:
+        if isinstance(img, msi.multiscale_spatial_image.MultiscaleSpatialImage):
+            img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
+            logger.warning("Multi-scale images not yet supported, using scale0 of multi-scale image.")
+
         if render_params.channel is None:
             channels = img.coords["c"].values
         else:
