@@ -51,7 +51,6 @@ class ShapesRenderParams:
     color: str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
-    alt_var: str | None = None
     layer: str | None = None
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
@@ -81,120 +80,134 @@ def _render_shapes(
     if elements is None:
         elements = list(sdata_filt.shapes.keys())
 
-    shapes = [sdata.shapes[e] for e in elements]
-    n_shapes = sum([len(s) for s in shapes])
+    for e in elements:
+        # shapes = [sdata.shapes[e] for e in elements]
+        shapes = sdata.shapes[e]
+        n_shapes = sum([len(s) for s in shapes])
 
-    if sdata.table is None:
-        table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
-    else:
-        table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin(elements)]
+        if sdata.table is None:
+            table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
 
-    # get color vector (categorical or continuous)
-    color_source_vector, color_vector, _ = _set_color_source_vec(
-        adata=table,
-        value_to_plot=render_params.color,
-        alt_var=render_params.alt_var,
-        layer=render_params.layer,
-        groups=render_params.groups,
-        palette=render_params.palette,
-        na_color=render_params.cmap_params.na_color,
-        alpha=render_params.fill_alpha,
-    )
-
-    # color_source_vector is None when the values aren't categorical
-    if color_source_vector is None and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
-
-    def _get_collection_shape(
-        shapes: list[GeoDataFrame],
-        c: Any,
-        s: float,
-        norm: Any,
-        fill_alpha: None | float = None,
-        outline_alpha: None | float = None,
-        **kwargs: Any,
-    ) -> PatchCollection:
-        patches = []
-        for shape in shapes:
-            # We assume that all elements in one collection are of the same type
-            if shape["geometry"].iloc[0].geom_type == "Polygon":
-                patches += [Polygon(p.exterior.coords, closed=True) for p in shape["geometry"]]
-            elif shape["geometry"].iloc[0].geom_type == "Point":
-                patches += [
-                    Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(shape["geometry"], shape["radius"])
-                ]
-
-        cmap = kwargs["cmap"]
-
-        try:
-            # fails when numeric
-            fill_c = ColorConverter().to_rgba_array(c)
-        except ValueError:
-            if norm is None:
-                c = cmap(c)
-            else:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c))
-                c = cmap(norm(c))
-
-        fill_c = ColorConverter().to_rgba_array(c)
-        fill_c[..., -1] = render_params.fill_alpha
-
-        if render_params.outline_params.outline:
-            outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
-            outline_c[..., -1] = render_params.outline_alpha
         else:
-            outline_c = None
+            table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([e])]
 
-        return PatchCollection(
-            patches,
-            snap=False,
-            # zorder=4,
-            lw=1.5,
-            facecolor=fill_c,
-            edgecolor=outline_c,
-            **kwargs,
+        # get color vector (categorical or continuous)
+        color_source_vector, color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=sdata_filt.shapes[e],
+            element_name=e,
+            value_to_plot=render_params.color,
+            layer=render_params.layer,
+            groups=render_params.groups,
+            palette=render_params.palette,
+            na_color=render_params.cmap_params.na_color,
+            alpha=render_params.fill_alpha,
         )
+        # try:
+        #     print(len(color_source_vector))
+        # except TypeError:
+        #     print("None")
+        # try:
+        #     print(len(color_vector))
+        # except TypeError:
+        #     print("None")
 
-    norm = copy(render_params.cmap_params.norm)
+        # color_source_vector is None when the values aren't categorical
+        if color_source_vector is None and render_params.transfunc is not None:
+            color_vector = render_params.transfunc(color_vector)
 
-    if len(color_vector) == 0:
-        color_vector = [render_params.cmap_params.na_color]
+        def _get_collection_shape(
+            shapes: list[GeoDataFrame],
+            c: Any,
+            s: float,
+            norm: Any,
+            fill_alpha: None | float = None,
+            outline_alpha: None | float = None,
+            **kwargs: Any,
+        ) -> PatchCollection:
+            patches = []
+            # for shape in shapes:
+            # We assume that all elements in one collection are of the same type
+            if shapes["geometry"].iloc[0].geom_type == "Polygon":  # type: ignore[call-overload]
+                patches += [
+                    Polygon(p.exterior.coords, closed=True) for p in shapes["geometry"]  # type: ignore[call-overload]
+                ]
+            elif str(shapes["geometry"].iloc[0].geom_type) == "Point":  # type: ignore[call-overload]
+                points = zip(shapes["geometry"], shapes["radius"])  # type: ignore[call-overload]
+                patches += [Circle((circ.x, circ.y), radius=r * s) for circ, r in points]
 
-    _cax = _get_collection_shape(
-        shapes=shapes,
-        s=render_params.size,
-        c=color_vector,
-        rasterized=sc_settings._vector_friendly,
-        cmap=render_params.cmap_params.cmap,
-        norm=norm,
-        fill_alpha=render_params.fill_alpha,
-        outline_alpha=render_params.outline_alpha
-        # **kwargs,
-    )
-    cax = ax.add_collection(_cax)
+            cmap = kwargs["cmap"]
 
-    palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette
+            try:
+                # fails when numeric
+                fill_c = ColorConverter().to_rgba_array(c)
+            except ValueError:
+                if norm is None:
+                    c = cmap(c)
+                else:
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                    c = cmap(norm(c))
 
-    _ = _decorate_axs(
-        ax=ax,
-        cax=cax,
-        fig_params=fig_params,
-        adata=table,
-        value_to_plot=render_params.color,
-        color_source_vector=color_source_vector,
-        palette=palette,
-        alpha=render_params.fill_alpha,
-        na_color=render_params.cmap_params.na_color,
-        legend_fontsize=legend_params.legend_fontsize,
-        legend_fontweight=legend_params.legend_fontweight,
-        legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend,
-        colorbar=legend_params.colorbar,
-        scalebar_dx=scalebar_params.scalebar_dx,
-        scalebar_units=scalebar_params.scalebar_units,
-        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
-    )
+            fill_c = ColorConverter().to_rgba_array(c)
+            fill_c[..., -1] = render_params.fill_alpha
+
+            if render_params.outline_params.outline:
+                outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
+                outline_c[..., -1] = render_params.outline_alpha
+            else:
+                outline_c = None
+
+            return PatchCollection(
+                patches,
+                snap=False,
+                # zorder=4,
+                lw=1.5,
+                facecolor=fill_c,
+                edgecolor=outline_c,
+                **kwargs,
+            )
+
+        norm = copy(render_params.cmap_params.norm)
+
+        if len(color_vector) == 0:
+            color_vector = [render_params.cmap_params.na_color]
+
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.size,
+            c=color_vector,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            fill_alpha=render_params.fill_alpha,
+            outline_alpha=render_params.outline_alpha
+            # **kwargs,
+        )
+        cax = ax.add_collection(_cax)
+
+        if color_source_vector is not None:
+            palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette
+
+            _ = _decorate_axs(
+                ax=ax,
+                cax=cax,
+                fig_params=fig_params,
+                adata=table,
+                value_to_plot=render_params.color,
+                color_source_vector=color_source_vector,
+                palette=palette,
+                alpha=render_params.fill_alpha,
+                na_color=render_params.cmap_params.na_color,
+                legend_fontsize=legend_params.legend_fontsize,
+                legend_fontweight=legend_params.legend_fontweight,
+                legend_loc=legend_params.legend_loc,
+                legend_fontoutline=legend_params.legend_fontoutline,
+                na_in_legend=legend_params.na_in_legend,
+                colorbar=legend_params.colorbar,
+                scalebar_dx=scalebar_params.scalebar_dx,
+                scalebar_units=scalebar_params.scalebar_units,
+                # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+            )
     ax.set_aspect("equal")
     ax.invert_yaxis()
 
@@ -236,73 +249,76 @@ def _render_points(
 
     points = [sdata.points[e] for e in elements]
 
-    coords = ["x", "y"]
-    if render_params.color is not None:
-        color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
-        coords.extend(color)
+    for p in points:
+        coords = ["x", "y"]
+        if render_params.color is not None:
+            color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
+            coords.extend(color)
 
-    point_df = pd.concat([point[coords].compute() for point in points], axis=0)
+        point_df = pd.concat([point[coords].compute() for point in points], axis=0)
 
-    # we construct an anndata to hack the plotting functions
-    adata = AnnData(
-        X=point_df[["x", "y"]].values, obs=point_df[coords].reset_index(), dtype=point_df[["x", "y"]].values.dtype
-    )
-    if render_params.color is not None:
-        cols = sc.get.obs_df(adata, render_params.color)
-        # maybe set color based on type
-        if is_categorical_dtype(cols):
-            _maybe_set_colors(
-                source=adata,
-                target=adata,
-                key=render_params.color,
-                palette=render_params.palette,
-            )
-    color_source_vector, color_vector, _ = _set_color_source_vec(
-        adata=adata,
-        value_to_plot=render_params.color,
-        groups=render_params.groups,
-        palette=render_params.palette,
-        na_color=render_params.cmap_params.na_color,
-        alpha=render_params.alpha,
-    )
+        # we construct an anndata to hack the plotting functions
+        adata = AnnData(
+            X=point_df[["x", "y"]].values, obs=point_df[coords].reset_index(), dtype=point_df[["x", "y"]].values.dtype
+        )
+        if render_params.color is not None:
+            cols = sc.get.obs_df(adata, render_params.color)
+            # maybe set color based on type
+            if is_categorical_dtype(cols):
+                _maybe_set_colors(
+                    source=adata,
+                    target=adata,
+                    key=render_params.color,
+                    palette=render_params.palette,
+                )
+        color_source_vector, color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=sdata_filt.points[p],
+            element_name=p,
+            value_to_plot=render_params.color,
+            groups=render_params.groups,
+            palette=render_params.palette,
+            na_color=render_params.cmap_params.na_color,
+            alpha=render_params.alpha,
+        )
 
-    # color_source_vector is None when the values aren't categorical
-    if color_source_vector is None and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
+        # color_source_vector is None when the values aren't categorical
+        if color_source_vector is None and render_params.transfunc is not None:
+            color_vector = render_params.transfunc(color_vector)
 
-    norm = copy(render_params.cmap_params.norm)
-    _cax = ax.scatter(
-        adata[:, 0].X.flatten(),
-        adata[:, 1].X.flatten(),
-        s=render_params.size,
-        c=color_vector,
-        rasterized=sc_settings._vector_friendly,
-        cmap=render_params.cmap_params.cmap,
-        norm=norm,
-        alpha=render_params.alpha,
-        # **kwargs,
-    )
-    cax = ax.add_collection(_cax)
-    _ = _decorate_axs(
-        ax=ax,
-        cax=cax,
-        fig_params=fig_params,
-        adata=adata,
-        value_to_plot=render_params.color,
-        color_source_vector=color_source_vector,
-        palette=render_params.palette,
-        alpha=render_params.alpha,
-        na_color=render_params.cmap_params.na_color,
-        legend_fontsize=legend_params.legend_fontsize,
-        legend_fontweight=legend_params.legend_fontweight,
-        legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend,
-        colorbar=legend_params.colorbar,
-        scalebar_dx=scalebar_params.scalebar_dx,
-        scalebar_units=scalebar_params.scalebar_units,
-        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
-    )
+        norm = copy(render_params.cmap_params.norm)
+        _cax = ax.scatter(
+            adata[:, 0].X.flatten(),
+            adata[:, 1].X.flatten(),
+            s=render_params.size,
+            c=color_vector,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            alpha=render_params.alpha,
+            # **kwargs,
+        )
+        cax = ax.add_collection(_cax)
+        _ = _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=adata,
+            value_to_plot=render_params.color,
+            color_source_vector=color_source_vector,
+            palette=render_params.palette,
+            alpha=render_params.alpha,
+            na_color=render_params.cmap_params.na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=legend_params.colorbar,
+            scalebar_dx=scalebar_params.scalebar_dx,
+            scalebar_units=scalebar_params.scalebar_units,
+            # scalebar_kwargs=scalebar_params.scalebar_kwargs,
+        )
     ax.set_aspect("equal")
     ax.invert_yaxis()
 
@@ -529,9 +545,10 @@ def _render_labels(
 
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
-            adata=table,
+            sdata=sdata_filt,
+            element=sdata_filt.labels[labels_key],
+            element_name=labels_key,
             value_to_plot=render_params.color,
-            alt_var=render_params.alt_var,
             layer=render_params.layer,
             groups=render_params.groups,
             palette=render_params.palette,

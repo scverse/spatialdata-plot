@@ -179,8 +179,6 @@ class PlotAccessor:
             Width of the border.
         outline_color
             Color of the border.
-        alt_var
-            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
@@ -215,7 +213,6 @@ class PlotAccessor:
             color=color,
             groups=groups,
             outline_params=outline_params,
-            alt_var=alt_var,
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
@@ -679,15 +676,15 @@ class PlotAccessor:
                         # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
-                    if sdata.table is not None and isinstance(params.color, str):
-                        colors = sc.get.obs_df(sdata.table, params.color)
-                        if is_categorical_dtype(colors):
-                            _maybe_set_colors(
-                                source=sdata.table,
-                                target=sdata.table,
-                                key=params.color,
-                                palette=params.palette,
-                            )
+                    # if sdata.table is not None and isinstance(params.color, str):
+                    #     colors = sc.get.obs_df(sdata.table, params.color)
+                    #     if is_categorical_dtype(colors):
+                    #         _maybe_set_colors(
+                    #             source=sdata.table,
+                    #             target=sdata.table,
+                    #             key=params.color,
+                    #             palette=params.palette,
+                    #         )
                     _render_shapes(
                         sdata=sdata,
                         render_params=params,

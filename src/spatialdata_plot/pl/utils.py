@@ -37,13 +37,13 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import transform
+from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import (
-    Image2DModel,
-)
+from spatialdata.models import Image2DModel, SpatialElement
 from spatialdata.transformations import get_transformation
 
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
@@ -699,10 +699,10 @@ def _get_colors_for_categorical_obs(
 
 
 def _set_color_source_vec(
-    adata: AnnData,
+    sdata: sd.SpatialData,
+    element: SpatialElement | None,
     value_to_plot: str | None,
-    use_raw: bool | None = None,
-    alt_var: str | None = None,
+    element_name: list[str] | str | None = None,
     layer: str | None = None,
     groups: Sequence[str] | str | None = None,
     palette: ListedColormap | str | None = None,
@@ -710,39 +710,54 @@ def _set_color_source_vec(
     alpha: float = 1.0,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
-        color = np.full(adata.n_obs, to_hex(na_color))
+        color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
-    if alt_var is not None and value_to_plot not in adata.obs and value_to_plot not in adata.var_names:
-        value_to_plot = adata.var_names[adata.var[alt_var] == value_to_plot][0]
-    if use_raw and value_to_plot not in adata.obs:
-        color_source_vector = adata.raw.obs_vector(value_to_plot)
-    else:
-        color_source_vector = adata.obs_vector(value_to_plot, layer=layer)
+    # Figure out where to get the color from
+    origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+    if len(origins) > 1:
+        raise ValueError(
+            f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
+        )
 
-    if not is_categorical_dtype(color_source_vector):
-        return None, color_source_vector, False
+    if len(origins) == 1:
+        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+        color_source_vector = vals[value_to_plot]
 
-    color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-    categories = color_source_vector.categories
+        # if all([isinstance(x, str) for x in color_source_vector]):
+        #     raise TypeError(
+        #         f"Color key '{value_to_plot}' for element '{element_name}' has string values, "
+        #         f"but should be numerical or categorical."
+        #     )
 
-    if groups is not None:
-        color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
+        # numerical case, return early
+        if not is_categorical_dtype(color_source_vector):
+            return None, color_source_vector, False
 
-    color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
-    # color_map = _get_palette(
-    #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
-    # )
-    if color_map is None:
-        raise ValueError("Unable to create color palette.")
+        color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
+        categories = color_source_vector.categories
 
-    # do not rename categories, as colors need not be unique
-    color_vector = color_source_vector.map(color_map)
-    if color_vector.isna().any():
-        color_vector = color_vector.add_categories([to_hex(na_color)])
-        color_vector = color_vector.fillna(to_hex(na_color))
+        if groups is not None:
+            color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
 
-    return color_source_vector, color_vector, True
+        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
+        # color_map = _get_palette(
+        #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
+        # )
+        if color_map is None:
+            raise ValueError("Unable to create color palette.")
+
+        # do not rename categories, as colors need not be unique
+        color_vector = color_source_vector.map(color_map)
+        if color_vector.isna().any():
+            color_vector = color_vector.add_categories([to_hex(na_color)])
+            color_vector = color_vector.fillna(to_hex(na_color))
+
+        return color_source_vector, color_vector, True
+
+    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
+    color = np.full(sdata.table.n_obs, to_hex(na_color))
+    return color, color, False
 
 
 def _map_color_seg(
