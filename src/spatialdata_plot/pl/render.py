@@ -12,7 +12,6 @@ import pandas as pd
 import scanpy as sc
 import spatial_image
 import spatialdata as sd
-import xarray
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib import colors
@@ -349,7 +348,7 @@ def _render_images(
 
     images = [sdata.images[e] for e in elements]
     for img, img_key in zip(images, elements):
-        if not isinstance(img, xarray.SpatialImage):
+        if not isinstance(img, spatial_image.SpatialImage):
             img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
             logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
 
