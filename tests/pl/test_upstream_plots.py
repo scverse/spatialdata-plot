@@ -46,3 +46,19 @@ class TestNotebooksTransformations(PlotTester, metaclass=PlotTesterMeta):
         set_transformation(sdata_raccoon.images["raccoon"], map_axis, to_coordinate_system="global")
 
         sdata_raccoon.pl.render_images().pl.render_labels().pl.render_shapes().pl.show()
+
+
+def test_plot_can_render_blobs_images(sdata_blobs: SpatialData):
+    sdata_blobs.pl.render_images().pl.show()
+
+
+def test_plot_can_render_blobs_points(sdata_blobs: SpatialData):
+    sdata_blobs.pl.render_points().pl.show()
+
+
+def test_plot_can_render_blobs_labels(sdata_blobs: SpatialData):
+    sdata_blobs.pl.render_labels().pl.show()
+
+
+def test_plot_can_render_blobs_shapes(sdata_blobs: SpatialData):
+    sdata_blobs.pl.render_shapes().pl.show()

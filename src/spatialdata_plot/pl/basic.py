@@ -41,7 +41,6 @@ from spatialdata_plot.pl.utils import (
     _get_extent,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
-    _multiscale_to_image,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _robust_transform,
@@ -541,9 +540,6 @@ class PlotAccessor:
             if not all(isinstance(t, str) for t in title):
                 raise TypeError("All titles must be strings.")
 
-        # Simplicstic solution: If the images are multiscale, just use the first
-        sdata = _multiscale_to_image(sdata)
-
         # get original axis extent for later comparison
         x_min_orig, x_max_orig = (np.inf, -np.inf)
         y_min_orig, y_max_orig = (np.inf, -np.inf)
@@ -604,19 +600,6 @@ class PlotAccessor:
             else:
                 logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
         coordinate_systems = valid_cs
-
-        # print(coordinate_systems)
-        # cs_mapping = _get_coordinate_system_mapping(sdata)
-        # print(cs_mapping)
-
-        # check that coordinate system and elements to be rendered match
-        # for cmd, params in render_cmds.items():
-        #     if params.elements is not None and len([params.elements]) != len(coordinate_systems):
-        #         print(params.elements)
-        #         raise ValueError(
-        #             f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
-        #             f"({len(params.elements)}) in command {cmd}."
-        #         )
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
