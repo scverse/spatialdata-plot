@@ -39,9 +39,7 @@ from skimage.util import map_array
 from spatialdata import transform
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import (
-    Image2DModel,
-)
+from spatialdata.models import Image2DModel, Labels2DModel
 from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
@@ -279,19 +277,21 @@ def _get_extent(
             for images_key in sdata.images:
                 for e_id in element_ids:
                     if images_key == e_id:
-                        if not isinstance(sdata.images[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.images[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
                         else:
-                            pass
+                            img = Image2DModel.parse(sdata.images[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(img, cs_name)
 
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
                 for e_id in element_ids:
                     if labels_key == e_id:
-                        if not isinstance(sdata.labels[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.labels[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
                         else:
-                            pass
+                            label = Labels2DModel.parse(sdata.labels[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(label, cs_name)
 
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
