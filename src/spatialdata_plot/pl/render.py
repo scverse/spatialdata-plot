@@ -176,6 +176,11 @@ def _render_shapes(
         outline_alpha=render_params.outline_alpha
         # **kwargs,
     )
+    
+    # Sets the limits of the colorbar to the values instead of [0, 1]
+    if not norm:
+        _cax.set_clim(min(color_vector), max(color_vector))
+
     cax = ax.add_collection(_cax)
 
     palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette
