@@ -1,3 +1,4 @@
+import geopandas as gpd
 import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
@@ -46,3 +47,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(
             elements="blobs_polygons", outline=True, outline_color=(0.0, 1.0, 0.0, 1.0)
         ).pl.show()
+
+    def test_plot_can_render_empty_geometry(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_circles"].at[0, "geometry"] = gpd.points_from_xy([None], [None])[0]
+        sdata_blobs.pl.render_shapes().pl.show()
