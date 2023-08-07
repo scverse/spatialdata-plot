@@ -121,6 +121,8 @@ def _render_shapes(
     ) -> PatchCollection:
         patches = []
         for shape in shapes:
+            # remove empty points/polygons
+            shape = shape[shape["geometry"].apply(lambda geom: not geom.is_empty)]
             # We assume that all elements in one collection are of the same type
             if shape["geometry"].iloc[0].geom_type == "Polygon":
                 patches += [Polygon(p.exterior.coords, closed=True) for p in shape["geometry"]]

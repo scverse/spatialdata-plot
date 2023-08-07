@@ -195,6 +195,10 @@ class PlotAccessor:
         kwargs
             Additional arguments to be passed to cmap and norm.
 
+        Notes
+        -------
+            - Empty geometries will be removed at the time of plotting.
+
         Returns
         -------
         None
