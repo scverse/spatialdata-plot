@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   Multi-scale images/labels are now correctly substituted and the action is logged (#131).
+-   Empty geometries among the shapes can be handeled (#133).
 
 ## [0.0.2] - 2023-06-25
 
