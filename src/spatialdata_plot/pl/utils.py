@@ -485,23 +485,28 @@ class OutlineParams:
 
     outline: bool
     outline_color: str | list[float]
-    gap_size: float
-    bg_size: float
+    linewidth: float
 
 
 def _set_outline(
     size: float,
     outline: bool = False,
-    outline_width: tuple[float, float] = (0.3, 0.05),
+    outline_width: float = 1.5,
     outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    bg_width, gap_width = outline_width
-    point = np.sqrt(size)
-    gap_size = (point + (point * gap_width) * 2) ** 2
-    bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
-    # the default black and white colors can be changes using the contour_config parameter
+    # Type checks for outline_width
+    if isinstance(outline_width, int):
+        outline_width = float(outline_width)
+    if not isinstance(outline_width, float):
+        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
+    if outline_width == 0.0:
+        outline = False
+    if outline_width < 0.0:
+        logging.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
+        outline_width = (-1) * outline_width
 
+    # the default black and white colors can be changed using the contour_config parameter
     if (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
         outline_color = matplotlib.colors.to_hex(outline_color)
 
@@ -509,7 +514,7 @@ def _set_outline(
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, outline_color, gap_size, bg_size)
+    return OutlineParams(outline, outline_color, outline_width)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
