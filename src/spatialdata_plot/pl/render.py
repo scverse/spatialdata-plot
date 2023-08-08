@@ -156,7 +156,7 @@ def _render_shapes(
             patches,
             snap=False,
             # zorder=4,
-            lw=1.5,
+            lw=render_params.outline_params.linewidth,
             facecolor=fill_c,
             edgecolor=outline_c,
             **kwargs,

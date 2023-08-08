@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning][].
 
 -   Multi-scale images/labels are now correctly substituted and the action is logged (#131).
 -   Empty geometries among the shapes can be handeled (#133).
+-   `outline_width` parameter in render_shapes is now a float that actually determines the line width (#139).
 
 ## [0.0.2] - 2023-06-25
 

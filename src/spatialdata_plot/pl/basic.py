@@ -145,7 +145,7 @@ class PlotAccessor:
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
         outline: bool = False,
-        outline_width: tuple[float, float] = (0.3, 0.05),
+        outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
         alt_var: str | None = None,
         layer: str | None = None,
@@ -198,6 +198,7 @@ class PlotAccessor:
         Notes
         -----
             Empty geometries will be removed at the time of plotting.
+            An ``outline_width`` of 0.0 leads to no border being plotted.
 
         Returns
         -------
@@ -538,7 +539,7 @@ class PlotAccessor:
                 render_cmds[cmd] = params
 
         if len(render_cmds.keys()) == 0:
-            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
 
         if title is not None:
             if isinstance(title, str):
