@@ -839,11 +839,11 @@ def _get_palette(
 
     if isinstance(palette, str):
         cmap = plt.get_cmap(palette)
-        palette = [to_hex(x) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
     elif isinstance(palette, ListedColormap):
-        palette = [to_hex(x) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
+        cmap = palette
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+    palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
 
     return dict(zip(categories, palette))
 
