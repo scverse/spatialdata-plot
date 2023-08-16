@@ -123,12 +123,11 @@ def _render_shapes(
         outline_alpha: None | float = None,
         **kwargs: Any,
     ) -> PatchCollection:
-
         print(shapes)
         patches = []
         # remove empty points/polygons
         shapes = shapes[shapes["geometry"].apply(lambda geom: not geom.is_empty)]
-        
+
         polygon_df = shapes[
             shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")  # type: ignore[call-overload]
         ]
@@ -138,7 +137,7 @@ def _render_shapes(
         circle_df = shapes[
             shapes["geometry"].apply(lambda geom: geom.geom_type == "Point")  # type: ignore[call-overload]
         ]
-        
+
         if len(polygon_df) > 0:
             patches += [Polygon(p.exterior.coords, closed=True) for p in polygon_df["geometry"]]
         if len(circle_df) > 0:
