@@ -88,4 +88,4 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata.obs.loc[:, "val"] = [1, 2, 3, 4]
         table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
         sdata.table = table
-        sdata.pl.render_shapes(col="val", outline=True, fill_alpha=0.3).pl.show()
+        sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
