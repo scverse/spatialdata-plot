@@ -44,7 +44,7 @@ from spatialdata_plot.pl.utils import (
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
-_Normalize = Normalize | Sequence[Normalize]
+_Normalize = Union[Normalize, Sequence[Normalize]]
 to_hex = partial(colors.to_hex, keep_alpha=True)
 
 
