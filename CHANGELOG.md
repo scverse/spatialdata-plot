@@ -11,10 +11,10 @@ and this project adheres to [Semantic Versioning][].
 ## [0.0.5] -tbd
 
 ### Added
-- Multipolygons are now handled correctly (#93)
+
+-   Multipolygons are now handled correctly (#93)
 
 ### Fixed
-
 
 ## [0.0.4] - 2023-08-11
 
