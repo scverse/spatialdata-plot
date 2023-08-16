@@ -302,7 +302,7 @@ def _get_extent(
                     if shapes_key == e_id:
 
                         def get_point_bb(
-                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 1
+                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 0
                         ) -> Point:
                             x, y = point.coords[0]
                             if method == "topleft":
@@ -349,7 +349,12 @@ def _get_extent(
                         del tmp_points
                         del tmp_polygons
 
-                        extent[cs_name][e_id] = x_dims + y_dims
+                        xmin = np.min(x_dims)
+                        xmax = np.max(x_dims)
+                        ymin = np.min(y_dims)
+                        ymax = np.max(y_dims)
+
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)

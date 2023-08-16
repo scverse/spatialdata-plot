@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import contextlib
 from collections.abc import Sequence
 from copy import copy
 from dataclasses import dataclass
 from functools import partial
-from itertools import chain
 from typing import Any, Callable
 
 import geopandas as gpd
@@ -123,34 +121,22 @@ def _render_shapes(
         outline_alpha: None | float = None,
         **kwargs: Any,
     ) -> PatchCollection:
-        print(shapes)
-        patches = []
-        # remove empty points/polygons
-        shapes = shapes[shapes["geometry"].apply(lambda geom: not geom.is_empty)]
+        """
+        Get a PatchCollection for rendering given geometries with specified colors and outlines.
 
-        polygon_df = shapes[
-            shapes["geometry"].apply(lambda geom: geom.geom_type == "Polygon")  # type: ignore[call-overload]
-        ]
-        multipolygon_df = shapes[
-            shapes["geometry"].apply(lambda geom: geom.geom_type == "MultiPolygon")  # type: ignore[call-overload]
-        ]
-        circle_df = shapes[
-            shapes["geometry"].apply(lambda geom: geom.geom_type == "Point")  # type: ignore[call-overload]
-        ]
+        Args:
+        - shapes (list[GeoDataFrame]): List of geometrical shapes.
+        - c: Color parameter.
+        - s (float): Size of the shape.
+        - norm: Normalization for the color map.
+        - fill_alpha (float, optional): Opacity for the fill color.
+        - outline_alpha (float, optional): Opacity for the outline.
+        - **kwargs: Additional keyword arguments.
 
-        if len(polygon_df) > 0:
-            patches += [Polygon(p.exterior.coords, closed=True) for p in polygon_df["geometry"]]
-        if len(circle_df) > 0:
-            patches += [
-                Circle((circ.x, circ.y), radius=r * s) for circ, r in zip(circle_df["geometry"], circle_df["radius"])
-            ]
-        if len(multipolygon_df) > 0:
-            patches += [_make_patch_from_multipolygon(mp) for mp in multipolygon_df["geometry"]]
-
-        # flatten list since multipolygons cause a nested list
-        with contextlib.suppress(Exception):
-            patches = list(chain.from_iterable([x] if not isinstance(x, list) else x for x in patches))
-
+        Returns
+        -------
+        - PatchCollection: Collection of patches for rendering.
+        """
         cmap = kwargs["cmap"]
 
         try:
@@ -169,16 +155,60 @@ def _render_shapes(
         if render_params.outline_params.outline:
             outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
             outline_c[..., -1] = render_params.outline_alpha
+            outline_c = outline_c.tolist()
         else:
-            outline_c = None
+            outline_c = [None]
+        outline_c = outline_c * fill_c.shape[0]
+
+        shapes_df = pd.DataFrame(shapes, copy=True)
+
+        # remove empty points/polygons
+        shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
+
+        rows = []
+
+        def assign_fill_and_outline_to_row(
+            shapes: list[GeoDataFrame], fill_c: list[Any], outline_c: list[Any], row: pd.Series, idx: int
+        ) -> None:
+            if len(shapes) > 1 and len(fill_c) == 1:
+                row["fill_c"] = fill_c
+                row["outline_c"] = outline_c
+            else:
+                row["fill_c"] = fill_c[idx]
+                row["outline_c"] = outline_c[idx]
+
+        # Match colors to the geometry, potentially expanding the row in case of
+        # multipolygons
+        for idx, row in shapes_df.iterrows():
+            geom = row["geometry"]
+            if geom.geom_type == "Polygon":
+                row = row.to_dict()
+                row["geometry"] = Polygon(geom.exterior.coords, closed=True)
+                assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
+                rows.append(row)
+
+            elif geom.geom_type == "MultiPolygon":
+                mp = _make_patch_from_multipolygon(geom)
+                for _, m in enumerate(mp):
+                    mp_copy = row.to_dict()
+                    mp_copy["geometry"] = m
+                    assign_fill_and_outline_to_row(shapes, fill_c, outline_c, mp_copy, idx)
+                    rows.append(mp_copy)
+
+            elif geom.geom_type == "Point":
+                row = row.to_dict()
+                row["geometry"] = Circle((geom.x, geom.y), radius=row["radius"])
+                assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
+                rows.append(row)
+
+        patches = pd.DataFrame(rows)
 
         return PatchCollection(
-            patches,
+            patches["geometry"].values.tolist(),
             snap=False,
-            # zorder=4,
             lw=render_params.outline_params.linewidth,
-            facecolor=fill_c,
-            edgecolor=outline_c,
+            facecolor=patches["fill_c"],
+            edgecolor=None if all(outline is None for outline in outline_c) else outline_c,
             **kwargs,
         )
 
