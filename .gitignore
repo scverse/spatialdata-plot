@@ -38,3 +38,6 @@ tests/figures/
 
 # sphinx files
 *.swp
+
+# other
+_version.py

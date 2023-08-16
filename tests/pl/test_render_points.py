@@ -19,5 +19,5 @@ _ = spatialdata_plot
 
 
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_points(self, sdata_blobs: SpatialData):
+    def test_plot_can_render_points(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(elements="blobs_points").pl.show()

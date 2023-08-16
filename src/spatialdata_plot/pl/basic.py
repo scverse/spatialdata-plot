@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
+import numpy as np
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, Normalize
+from matplotlib.colors import Colormap, ListedColormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
@@ -32,14 +33,14 @@ from spatialdata_plot.pl.render import (
     _render_shapes,
 )
 from spatialdata_plot.pl.utils import (
+    CmapParams,
     LegendParams,
-    Palette_t,
     _FontSize,
     _FontWeight,
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
-    _multiscale_to_image,
+    _mpl_ax_contains_elements,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _robust_transform,
@@ -144,11 +145,11 @@ class PlotAccessor:
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
         outline: bool = False,
-        outline_width: tuple[float, float] = (0.3, 0.05),
-        outline_color: tuple[str, str] = ("#000000ff", "#ffffffff"),  # black, white
+        outline_width: float = 1.5,
+        outline_color: str | list[float] = "#000000ff",
         alt_var: str | None = None,
         layer: str | None = None,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = "lightgrey",
@@ -194,6 +195,11 @@ class PlotAccessor:
         kwargs
             Additional arguments to be passed to cmap and norm.
 
+        Notes
+        -----
+            Empty geometries will be removed at the time of plotting.
+            An ``outline_width`` of 0.0 leads to no border being plotted.
+
         Returns
         -------
         None
@@ -230,7 +236,7 @@ class PlotAccessor:
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -295,11 +301,12 @@ class PlotAccessor:
         self,
         elements: str | list[str] | None = None,
         channel: list[str] | list[int] | int | str | None = None,
-        cmap: Colormap | str | None = None,
+        cmap: list[Colormap] | list[str] | Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
+        quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8),  # defaults from CSBDeep
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -320,6 +327,8 @@ class PlotAccessor:
             Color to be used for NAs values, if present.
         alpha
             Alpha value for the shapes.
+        quantiles_for_norm
+            Tuple of (pmin, pmax) which will be used for quantile normalization.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -331,18 +340,36 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
+        if channel is None and cmap is None:
+            cmap = "brg"
+
+        cmap_params: list[CmapParams] | CmapParams
+        if isinstance(cmap, list):
+            cmap_params = [
+                _prepare_cmap_norm(
+                    cmap=c,
+                    norm=norm,
+                    na_color=na_color,  # type: ignore[arg-type]
+                    **kwargs,
+                )
+                for c in cmap
+            ]
+
+        else:
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=na_color,  # type: ignore[arg-type]
+                **kwargs,
+            )
+
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
             elements=elements,
             channel=channel,
             cmap_params=cmap_params,
             palette=palette,
             alpha=alpha,
+            quantiles_for_norm=quantiles_for_norm,
         )
 
         return sdata
@@ -356,7 +383,7 @@ class PlotAccessor:
         outline: bool = False,
         alt_var: str | None = None,
         layer: str | None = None,
-        palette: Palette_t = None,
+        palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -454,6 +481,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: None | str | Sequence[str] = None,
         share_extent: bool = True,
+        pad_extent: int = 0,
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
         save: None | str | Path = None,
@@ -511,7 +539,7 @@ class PlotAccessor:
                 render_cmds[cmd] = params
 
         if len(render_cmds.keys()) == 0:
-            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
 
         if title is not None:
             if isinstance(title, str):
@@ -520,8 +548,13 @@ class PlotAccessor:
             if not all(isinstance(t, str) for t in title):
                 raise TypeError("All titles must be strings.")
 
-        # Simplicstic solution: If the images are multiscale, just use the first
-        sdata = _multiscale_to_image(sdata)
+        # get original axis extent for later comparison
+        x_min_orig, x_max_orig = (np.inf, -np.inf)
+        y_min_orig, y_max_orig = (np.inf, -np.inf)
+
+        if isinstance(ax, Axes) and _mpl_ax_contains_elements(ax):
+            x_min_orig, x_max_orig = ax.get_xlim()
+            y_max_orig, y_min_orig = ax.get_ylim()  # (0, 0) is top-left
 
         # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
@@ -532,12 +565,38 @@ class PlotAccessor:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
+        # Check if user specified only certain elements to be plotted
+        cs_contents = _get_cs_contents(sdata)
+        elements_to_be_rendered = []
+        for cmd, params in render_cmds.items():
+            if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:  # noqa: SIM102
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+
         extent = _get_extent(
             sdata=sdata,
             has_images="render_images" in render_cmds,
             has_labels="render_labels" in render_cmds,
             has_points="render_points" in render_cmds,
             has_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
             coordinate_systems=coordinate_systems,
         )
 
@@ -549,19 +608,6 @@ class PlotAccessor:
             else:
                 logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
         coordinate_systems = valid_cs
-
-        # print(coordinate_systems)
-        # cs_mapping = _get_coordinate_system_mapping(sdata)
-        # print(cs_mapping)
-
-        # check that coordinate system and elements to be rendered match
-        # for cmd, params in render_cmds.items():
-        #     if params.elements is not None and len([params.elements]) != len(coordinate_systems):
-        #         print(params.elements)
-        #         raise ValueError(
-        #             f"Number of coordinate systems ({len(coordinate_systems)}) does not match number of elements "
-        #             f"({len(params.elements)}) in command {cmd}."
-        #         )
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
@@ -585,7 +631,6 @@ class PlotAccessor:
         )
 
         # go through tree
-        cs_contents = _get_cs_contents(sdata)
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
             # properly transform all elements to the current coordinate system
@@ -693,12 +738,10 @@ class PlotAccessor:
                 ]
             ):
                 # If the axis already has limits, only expand them but not overwrite
-                x_min, x_max = ax.get_xlim()
-                y_min, y_max = ax.get_ylim()
-                x_min = min(x_min, extent[cs][0])
-                x_max = max(x_max, extent[cs][1])
-                y_min = min(y_min, extent[cs][2])
-                y_max = max(y_max, extent[cs][3])
+                x_min = min(x_min_orig, extent[cs][0]) - pad_extent
+                x_max = max(x_max_orig, extent[cs][1]) + pad_extent
+                y_min = min(y_min_orig, extent[cs][2]) - pad_extent
+                y_max = max(y_max_orig, extent[cs][3]) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 

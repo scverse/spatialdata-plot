@@ -5,12 +5,15 @@
 [![Tests][badge-tests]][link-tests]
 [![Documentation][badge-docs]][link-docs]
 [![Codecov][badge-codecov]][link-codecov]
+[![Documentation][badge-pypi]][link-pypi]
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test_and_deploy.yaml?branch=main
 [link-tests]: https://github.com/scverse/spatialdata-plot/actions/workflows/test.yml
 [badge-docs]: https://img.shields.io/readthedocs/spatialdata-plot
 [badge-codecov]: https://codecov.io/gh/scverse/spatialdata-plot/branch/main/graph/badge.svg?token=C45F3ATSVI
 [link-codecov]: https://app.codecov.io/gh/scverse/spatialdata-plot
+[badge-pypi]: https://badge.fury.io/py/spatialdata_plot.svg
+[link-pypi]: https://pypi.org/project/spatialdata-plot/
 
 The `spatialdata-plot` package extends `spatialdata` with a declarative plotting API that enables to quickly visualize `spatialdata` objects and their respective elements (i.e. `images`, `labels`, `points` and `shapes`).
 
@@ -20,13 +23,10 @@ SpatialData’s plotting capabilities allow to quickly visualise all contained m
 
 ## Getting started
 
-For more information on the `spatialdata` format, please refer to the [documentation](https://spatialdata.scverse.org/en/latest/). In particular, the
+For more information on the `spatialdata-plot` library, please refer to the [documentation](https://spatialdata.scverse.org/projects/plot/en/latest/index.html). In particular, the
 
 -   [API documentation][link-api].
--   [Design doc][link-design-doc].
--   [Example notebooks][link-notebooks].
-
-For usage examples, please refer to the ["Visualizations"](https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html#visualizations) section of `spatialdata`.
+-   [Example notebooks][link-notebooks] (section "Visiualizations")
 
 ## Installation
 

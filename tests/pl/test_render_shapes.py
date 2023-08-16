@@ -23,10 +23,42 @@ _ = spatialdata_plot
 
 class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
+        sdata_blobs.pl.render_shapes(elements="blobs_circles").pl.show()
+
+    def test_plot_can_render_circles_with_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_circles", outline=True).pl.show()
+
+    def test_plot_can_render_circles_with_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_circles", outline=True, outline_color="red").pl.show()
 
     def test_plot_can_render_polygons(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
+        sdata_blobs.pl.render_shapes(elements="blobs_polygons").pl.show()
+
+    def test_plot_can_render_polygons_with_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_polygons", outline=True).pl.show()
+
+    def test_plot_can_render_polygons_with_str_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_polygons", outline=True, outline_color="red").pl.show()
+
+    def test_plot_can_render_polygons_with_rgb_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            elements="blobs_polygons", outline=True, outline_color=(0.0, 0.0, 1.0, 1.0)
+        ).pl.show()
+
+    def test_plot_can_render_polygons_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            elements="blobs_polygons", outline=True, outline_color=(0.0, 1.0, 0.0, 1.0)
+        ).pl.show()
+
+    def test_plot_can_render_empty_geometry(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_circles"].at[0, "geometry"] = gpd.points_from_xy([None], [None])[0]
+        sdata_blobs.pl.render_shapes().pl.show()
+
+    def test_plot_can_render_circles_with_default_outline_width(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_circles", outline=True).pl.show()
+
+    def test_plot_can_render_circles_with_specified_outline_width(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_circles", outline=True, outline_width=3.0).pl.show()
 
     def test_plot_can_render_multipolygons(self):
         def _make_multi():

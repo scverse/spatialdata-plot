@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -42,16 +42,11 @@ from skimage.util import map_array
 from spatialdata import transform
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import (
-    Image2DModel,
-)
+from spatialdata.models import Image2DModel, Labels2DModel
 from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
-Palette_t = Optional[Union[str, ListedColormap]]
-_Normalize = Union[Normalize, Sequence[Normalize]]
-_SeqStr = Union[str, Sequence[str]]
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
@@ -93,7 +88,7 @@ def _prepare_params_plot(
     frameon: bool | None = None,
     # this is passed at `render_*`
     cmap: Colormap | str | None = None,
-    norm: _Normalize | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -181,11 +176,12 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
 def _get_extent(
     sdata: sd.SpatialData,
-    coordinate_systems: None | str | Sequence[str] = None,
+    coordinate_systems: Sequence[str] | str | None = None,
     has_images: bool = True,
     has_labels: bool = True,
     has_points: bool = True,
     has_shapes: bool = True,
+    elements: Iterable[Any] | None = None,
     share_extent: bool = False,
 ) -> dict[str, tuple[int, int, int, int]]:
     """Return the extent of all elements in their respective coordinate systems.
@@ -194,16 +190,18 @@ def _get_extent(
     ----------
     sdata
         The sd.SpatialData object to retrieve the extent from
-    images
+    has_images
         Flag indicating whether to consider images when calculating the extent
-    labels
+    has_labels
         Flag indicating whether to consider labels when calculating the extent
-    points
+    has_points
         Flag indicating whether to consider points when calculating the extent
-    shapes
-        Flag indicating whether to consider shaoes when calculating the extent
-    img_transformations
-        List of transformations already applied to the images
+    has_shapes
+        Flag indicating whether to consider shapes when calculating the extent
+    elements
+        Optional list of element names to be considered. When None, all are used.
+    share_extent
+        Flag indicating whether to use the same extent for all coordinate systems
 
     Returns
     -------
@@ -215,6 +213,12 @@ def _get_extent(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     cs_contents = _get_cs_contents(sdata)
 
+    if elements is None:  # to shut up ruff
+        elements = []
+
+    if not isinstance(elements, list):
+        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
+
     if coordinate_systems is not None:
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
@@ -223,6 +227,8 @@ def _get_extent(
 
     for cs_name, element_ids in cs_mapping.items():
         extent[cs_name] = {}
+        if len(elements) > 0:
+            element_ids = [e for e in element_ids if e in elements]
 
         def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
             tmp = element.copy()
@@ -274,19 +280,21 @@ def _get_extent(
             for images_key in sdata.images:
                 for e_id in element_ids:
                     if images_key == e_id:
-                        if not isinstance(sdata.images[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.images[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
                         else:
-                            pass
+                            img = Image2DModel.parse(sdata.images[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(img, cs_name)
 
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
                 for e_id in element_ids:
                     if labels_key == e_id:
-                        if not isinstance(sdata.labels[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.labels[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
                         else:
-                            pass
+                            label = Labels2DModel.parse(sdata.labels[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(label, cs_name)
 
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
@@ -309,11 +317,13 @@ def _get_extent(
 
                         # Split by Point and Polygon:
                         tmp_points = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
+                            sdata.shapes[e_id]["geometry"].apply(
+                                lambda geom: (geom.geom_type == "Point" and not geom.is_empty)
+                            )
                         ]
                         tmp_polygons = sdata.shapes[e_id][
                             sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"]
+                                lambda geom: (geom.geom_type in ["Polygon", "MultiPolygon"] and not geom.is_empty)
                             )
                         ]
 
@@ -452,7 +462,7 @@ class CmapParams:
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: _Normalize | None = None,
+    norm: Normalize | Sequence[Normalize] | None = None,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -477,31 +487,37 @@ class OutlineParams:
     """Cmap params."""
 
     outline: bool
-    gap_size: float
-    gap_color: str
-    bg_size: float
-    bg_color: str | tuple[float, ...]
+    outline_color: str | list[float]
+    linewidth: float
 
 
 def _set_outline(
     size: float,
     outline: bool = False,
-    outline_width: tuple[float, float] = (0.3, 0.05),
-    outline_color: tuple[str, str] = ("#0000000ff", "#ffffffff"),  # black, white
+    outline_width: float = 1.5,
+    outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    bg_width, gap_width = outline_width
-    point = np.sqrt(size)
-    gap_size = (point + (point * gap_width) * 2) ** 2
-    bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
-    # the default black and white colors can be changes using the contour_config parameter
-    bg_color, gap_color = outline_color
+    # Type checks for outline_width
+    if isinstance(outline_width, int):
+        outline_width = float(outline_width)
+    if not isinstance(outline_width, float):
+        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
+    if outline_width == 0.0:
+        outline = False
+    if outline_width < 0.0:
+        logging.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
+        outline_width = (-1) * outline_width
+
+    # the default black and white colors can be changed using the contour_config parameter
+    if (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
+        outline_color = matplotlib.colors.to_hex(outline_color)
 
     if outline:
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, gap_size, gap_color, bg_size, bg_color)
+    return OutlineParams(outline, outline_color, outline_width)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
@@ -592,8 +608,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
 
 def _normalize(
     img: xr.DataArray,
-    pmin: float = 3.0,
-    pmax: float = 99.8,
+    pmin: float | None = 3.0,
+    pmax: float | None = 99.8,
     eps: float = 1e-20,
     clip: bool = False,
     name: str = "normed",
@@ -607,9 +623,9 @@ def _normalize(
     dataarray
         A xarray DataArray with an image field.
     pmin
-        Lower quantile (min value) used to perform qunatile normalization.
+        Lower quantile (min value) used to perform quantile normalization.
     pmax
-        Upper quantile (max value) used to perform qunatile normalization.
+        Upper quantile (max value) used to perform quantile normalization.
     eps
         Epsilon float added to prevent 0 division.
     clip
@@ -620,9 +636,12 @@ def _normalize(
     xr.DataArray
         A min-max normalized image.
     """
-    perc = np.percentile(img, [pmin, pmax], axis=(1, 2)).T
+    pmin = pmin or 0.0
+    pmax = pmax or 100.0
 
-    norm = (img - np.expand_dims(perc[:, 0], (1, 2))) / (np.expand_dims(perc[:, 1] - perc[:, 0], (1, 2)) + eps)
+    perc = np.percentile(img, [pmin, pmax])
+
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
 
     if clip:
         norm = np.clip(norm, 0, 1)
@@ -630,7 +649,11 @@ def _normalize(
     return norm
 
 
-def _get_colors_for_categorical_obs(categories: Sequence[str | int], palette: Palette_t = None) -> list[str]:
+def _get_colors_for_categorical_obs(
+    categories: Sequence[str | int],
+    palette: ListedColormap | str | None = None,
+    alpha: float = 1.0,
+) -> list[str]:
     """
     Return a list of colors for a categorical observation.
 
@@ -647,27 +670,42 @@ def _get_colors_for_categorical_obs(categories: Sequence[str | int], palette: Pa
     -------
     None
     """
-    length = len(categories)
+    len_cat = len(categories)
 
     # check if default matplotlib palette has enough colors
     if palette is None:
-        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= length:
+        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
-            palette = [next(cc)["color"] for _ in range(length)]
+            palette = [next(cc)["color"] for _ in range(len_cat)]
         else:
-            if length <= 20:
+            if len_cat <= 20:
                 palette = default_20
-            elif length <= 28:
+            elif len_cat <= 28:
                 palette = default_28
-            elif length <= len(default_102):  # 103 colors
+            elif len_cat <= len(default_102):  # 103 colors
                 palette = default_102
             else:
-                palette = ["grey" for _ in range(length)]
+                palette = ["grey" for _ in range(len_cat)]
                 logging.info(
                     "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
                 )
 
-    return palette[:length]  # type: ignore[return-value]
+    # otherwise, single chanels turn out grey
+    color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
+
+    if isinstance(palette, str):
+        cmap = plt.get_cmap(palette)
+        palette = [to_hex(x) for x in cmap(color_idx, alpha=alpha)]
+    elif isinstance(palette, list):
+        palette = [to_hex(x) for x in palette]
+    elif isinstance(palette, ListedColormap):
+        palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
+    elif isinstance(palette, LinearSegmentedColormap):
+        palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
+    else:
+        raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+
+    return palette[:len_cat]  # type: ignore[return-value]
 
 
 def _set_color_source_vec(
@@ -676,8 +714,8 @@ def _set_color_source_vec(
     use_raw: bool | None = None,
     alt_var: str | None = None,
     layer: str | None = None,
-    groups: _SeqStr | None = None,
-    palette: Palette_t = None,
+    groups: Sequence[str] | str | None = None,
+    palette: ListedColormap | str | None = None,
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
@@ -772,7 +810,7 @@ def _get_palette(
     categories: Sequence[Any],
     adata: AnnData | None = None,
     cluster_key: None | str = None,
-    palette: Palette_t = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
     if adata is not None and palette is None:
@@ -848,7 +886,7 @@ def _decorate_axs(
     adata: AnnData,
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
-    palette: Palette_t = None,
+    palette: ListedColormap | str | None = None,
     alpha: float = 1.0,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     legend_fontsize: int | float | _FontSize | None = None,
@@ -1175,3 +1213,17 @@ def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatc
             patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
 
     return patches
+
+
+def _mpl_ax_contains_elements(ax: Axes) -> bool:
+    """Check if any objects have been plotted on the axes object.
+
+    While extracting the extent, we need to know if the axes object has just been
+    initialised and therefore has extent (0, 1), (0,1) or if it has been plotted on
+    and therefore has a different extent.
+
+    Based on: https://stackoverflow.com/a/71966295
+    """
+    return (
+        len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
+    )
