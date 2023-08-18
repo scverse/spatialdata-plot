@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
+-   Legend order is now deterministic (#143)
+
 ## [0.0.4] - 2023-08-11
 
 ### Fixed

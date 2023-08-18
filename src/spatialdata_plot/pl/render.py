@@ -233,7 +233,8 @@ def _render_shapes(
 
     cax = ax.add_collection(_cax)
 
-    palette = ListedColormap(set(color_vector)) if render_params.palette is None else render_params.palette
+    # Using dict.fromkeys here since set returns in arbitrary order
+    palette = ListedColormap(dict.fromkeys(color_vector)) if render_params.palette is None else render_params.palette
 
     _ = _decorate_axs(
         ax=ax,

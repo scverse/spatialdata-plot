@@ -805,8 +805,7 @@ def _map_color_seg(
 
     if seg_boundaries:
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
-        seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
-        return seg_bound
+        return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
 
     return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
@@ -847,11 +846,11 @@ def _get_palette(
 
     if isinstance(palette, str):
         cmap = plt.get_cmap(palette)
-        palette = [to_hex(x) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
     elif isinstance(palette, ListedColormap):
-        palette = [to_hex(x) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
+        cmap = palette
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+    palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
 
     return dict(zip(categories, palette))
 
