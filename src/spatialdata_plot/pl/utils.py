@@ -10,10 +10,13 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 import matplotlib
+import matplotlib.patches as mpatches
+import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
+import shapely
 import spatial_image
 import spatialdata as sd
 import xarray as xr
@@ -299,7 +302,7 @@ def _get_extent(
                     if shapes_key == e_id:
 
                         def get_point_bb(
-                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 1
+                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 0
                         ) -> Point:
                             x, y = point.coords[0]
                             if method == "topleft":
@@ -346,7 +349,12 @@ def _get_extent(
                         del tmp_points
                         del tmp_polygons
 
-                        extent[cs_name][e_id] = x_dims + y_dims
+                        xmin = np.min(x_dims)
+                        xmax = np.max(x_dims)
+                        ymin = np.min(y_dims)
+                        ymax = np.max(y_dims)
+
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
@@ -1164,6 +1172,51 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
+    # https://stackoverflow.com/a/21922058
+
+    for geom in mp.geoms:
+        if geom.geom_type == "Polygon":
+            exterior_coords = geom.exterior.coords[:]
+            interior_coords = []
+            for interior in geom.interiors:
+                interior_coords += interior.coords[:]
+        elif geom.geom_type == "MultiPolygon":
+            exterior_coords = []
+            interior_coords = []
+            for part in geom:
+                epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
+                exterior_coords += epc["exterior_coords"]
+                interior_coords += epc["interior_coords"]
+        else:
+            raise ValueError("Unhandled geometry type: " + repr(geom.type))
+
+    return interior_coords, exterior_coords
+
+
+def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
+    # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
+
+    patches = []
+    for geom in mp.geoms:
+        if len(geom.interiors) == 0:
+            # polygon has no holes
+            patches += [mpatches.Polygon(geom.exterior.coords, closed=True)]
+        else:
+            inside, outside = _split_multipolygon_into_outer_and_inner(mp)
+            if len(inside) > 0:
+                codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
+                codes[0] = mpath.Path.MOVETO
+                all_codes = np.concatenate((codes, codes))
+                vertices = np.concatenate((outside, inside[::-1]))
+            else:
+                all_codes = []
+                vertices = np.concatenate(outside)
+            patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
+
+    return patches
 
 
 def _mpl_ax_contains_elements(ax: Axes) -> bool:

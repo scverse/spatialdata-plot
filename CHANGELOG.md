@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
+-   Multipolygons are now handled correctly (#93)
+
 ### Fixed
 
 -   Legend order is now deterministic (#143)

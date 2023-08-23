@@ -1,8 +1,12 @@
+import anndata
 import geopandas as gpd
 import matplotlib
+import pandas as pd
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData
+from spatialdata.models import ShapesModel, TableModel
 
 from tests.conftest import PlotTester, PlotTesterMeta
 
@@ -57,3 +61,31 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_render_circles_with_specified_outline_width(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(elements="blobs_circles", outline=True, outline_width=3.0).pl.show()
+
+    def test_plot_can_render_multipolygons(self):
+        def _make_multi():
+            hole = MultiPolygon(
+                [(((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)), [((0.2, 0.2), (0.2, 0.8), (0.8, 0.8), (0.8, 0.2))])]
+            )
+            overlap = MultiPolygon(
+                [
+                    Polygon([(2.0, 0.0), (2.0, 0.8), (2.8, 0.8), (2.8, 0.0)]),
+                    Polygon([(2.2, 0.2), (2.2, 1.0), (3.0, 1.0), (3.0, 0.2)]),
+                ]
+            )
+            poly = Polygon([(4.0, 0.0), (4.0, 1.0), (5.0, 1.0), (5.0, 0.0)])
+            circ = Point(6.0, 0.5)
+            polygon_series = gpd.GeoSeries([hole, overlap, poly, circ])
+            cell_polygon_table = gpd.GeoDataFrame(geometry=polygon_series)
+            sd_polygons = ShapesModel.parse(cell_polygon_table)
+            sd_polygons.loc[:, "radius"] = [None, None, None, 0.3]
+
+            return sd_polygons
+
+        sdata = SpatialData(shapes={"p": _make_multi()})
+        adata = anndata.AnnData(pd.DataFrame({"p": ["hole", "overlap", "square", "circle"]}))
+        adata.obs.loc[:, "region"] = "p"
+        adata.obs.loc[:, "val"] = [1, 2, 3, 4]
+        table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
+        sdata.table = table
+        sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
