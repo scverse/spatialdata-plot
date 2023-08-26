@@ -38,7 +38,6 @@ from spatialdata_plot.pl.utils import (
     _FontSize,
     _FontWeight,
     _get_cs_contents,
-    _get_extent,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
@@ -590,15 +589,20 @@ class PlotAccessor:
                         [params.elements] if isinstance(params.elements, str) else params.elements
                     )
 
-        extent = _get_extent(
-            sdata=sdata,
-            has_images="render_images" in render_cmds,
-            has_labels="render_labels" in render_cmds,
-            has_points="render_points" in render_cmds,
-            has_shapes="render_shapes" in render_cmds,
-            elements=elements_to_be_rendered,
-            coordinate_systems=coordinate_systems,
-        )
+        extent = {}
+        for cs in coordinate_systems:
+            ex = sd._core.data_extent.get_extent(
+                sdata,
+                coordinate_system=cs,
+                has_images="render_images" in render_cmds,
+                has_labels="render_labels" in render_cmds,
+                has_points="render_points" in render_cmds,
+                has_shapes="render_shapes" in render_cmds,
+                elements=elements_to_be_rendered,
+            )
+            # get min and max values for x and y axes
+            ex = (ex[0][ex[2].index("x")], ex[1][ex[2].index("x")], ex[0][ex[2].index("y")], ex[1][ex[2].index("y")])
+            extent[cs] = ex
 
         # Use extent to filter out coordinate system without the relevant elements
         valid_cs = []
