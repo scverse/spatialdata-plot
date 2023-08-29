@@ -104,7 +104,7 @@ class ImageRenderParams:
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | str | None = None
     alpha: float = 1.0
-    quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8)  # defaults from CSBDeep
+    quantiles_for_norm: tuple[float | None, float | None] = (None, None)
 
 
 @dataclass
