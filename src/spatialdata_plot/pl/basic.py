@@ -306,7 +306,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
-        quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8),  # defaults from CSBDeep
+        quantiles_for_norm: tuple[float | None, float | None] = (None, None),
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
