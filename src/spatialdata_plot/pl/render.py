@@ -162,15 +162,15 @@ def _render_shapes(
             else:
                 outline_c = None
 
-            return PatchCollection(
-                patches,
-                snap=False,
-                # zorder=4,
-                lw=1.5,
-                facecolor=fill_c,
-                edgecolor=outline_c,
-                **kwargs,
-            )
+        return PatchCollection(
+            patches,
+            snap=False,
+            # zorder=4,
+            lw=render_params.outline_params.linewidth,
+            facecolor=fill_c,
+            edgecolor=outline_c,
+            **kwargs,
+        )
 
         norm = copy(render_params.cmap_params.norm)
 
