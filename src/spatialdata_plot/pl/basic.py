@@ -23,20 +23,22 @@ from spatialdata._logging import logger as logg
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
-    ImageRenderParams,
-    LabelsRenderParams,
-    PointsRenderParams,
-    ShapesRenderParams,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from spatialdata_plot.pl.utils import (
+from spatialdata_plot.pl.render_params import (
     CmapParams,
+    ImageRenderParams,
+    LabelsRenderParams,
     LegendParams,
+    PointsRenderParams,
+    ShapesRenderParams,
     _FontSize,
     _FontWeight,
+)
+from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
@@ -147,7 +149,6 @@ class PlotAccessor:
         outline: bool = False,
         outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
-        alt_var: str | None = None,
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
@@ -178,8 +179,6 @@ class PlotAccessor:
             Width of the border.
         outline_color
             Color of the border.
-        alt_var
-            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
@@ -219,7 +218,6 @@ class PlotAccessor:
             color=color,
             groups=groups,
             outline_params=outline_params,
-            alt_var=alt_var,
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
@@ -381,7 +379,6 @@ class PlotAccessor:
         groups: str | Sequence[str] | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        alt_var: str | None = None,
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
@@ -409,8 +406,6 @@ class PlotAccessor:
             entire segment, see :func:`skimage.morphology.erosion`.
         outline
             Whether to plot boundaries around segmentation masks.
-        alt_var
-            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
@@ -452,7 +447,6 @@ class PlotAccessor:
             groups=groups,
             contour_px=contour_px,
             outline=outline,
-            alt_var=alt_var,
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
@@ -667,15 +661,15 @@ class PlotAccessor:
                         # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
-                    if sdata.table is not None and isinstance(params.color, str):
-                        colors = sc.get.obs_df(sdata.table, params.color)
-                        if is_categorical_dtype(colors):
-                            _maybe_set_colors(
-                                source=sdata.table,
-                                target=sdata.table,
-                                key=params.color,
-                                palette=params.palette,
-                            )
+                    # if sdata.table is not None and isinstance(params.color, str):
+                    #     colors = sc.get.obs_df(sdata.table, params.color)
+                    #     if is_categorical_dtype(colors):
+                    #         _maybe_set_colors(
+                    #             source=sdata.table,
+                    #             target=sdata.table,
+                    #             key=params.color,
+                    #             palette=params.palette,
+                    #         )
                     _render_shapes(
                         sdata=sdata,
                         render_params=params,
@@ -728,6 +722,7 @@ class PlotAccessor:
                 else:
                     t = cs
                 ax.set_title(t)
+                ax.set_aspect("equal")
 
             if any(
                 [
