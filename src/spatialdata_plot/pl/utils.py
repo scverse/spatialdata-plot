@@ -613,8 +613,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
 
 def _normalize(
     img: xr.DataArray,
-    pmin: float | None = 3.0,
-    pmax: float | None = 99.8,
+    pmin: float | None = None,
+    pmax: float | None = None,
     eps: float = 1e-20,
     clip: bool = False,
     name: str = "normed",
