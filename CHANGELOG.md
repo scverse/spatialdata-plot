@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 -   Multipolygons are now handled correctly (#93)
+-   Can now plot columns from GeoDataFrame (#149)
 
 ### Fixed
 
