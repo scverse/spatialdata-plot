@@ -185,7 +185,7 @@ def _get_collection_shape(
     Args:
     - shapes (list[GeoDataFrame]): List of geometrical shapes.
     - c: Color parameter.
-    - s (float): Size of the shape.
+    - s (float): Scale of the shape.
     - norm: Normalization for the color map.
     - fill_alpha (float, optional): Opacity for the fill color.
     - outline_alpha (float, optional): Opacity for the outline.
@@ -241,21 +241,30 @@ def _get_collection_shape(
         geom = row["geometry"]
         if geom.geom_type == "Polygon":
             row = row.to_dict()
-            row["geometry"] = mplp.Polygon(geom.exterior.coords, closed=True)
+            coords = np.array(geom.exterior.coords)
+            centroid = np.mean(coords, axis=0)
+            scaled_coords = [(centroid + (np.array(coord) - centroid) * s).tolist() for coord in geom.exterior.coords]
+            row["geometry"] = mplp.Polygon(scaled_coords, closed=True)
             assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
             rows.append(row)
 
         elif geom.geom_type == "MultiPolygon":
-            mp = _make_patch_from_multipolygon(geom)
-            for _, m in enumerate(mp):
+            # mp = _make_patch_from_multipolygon(geom)
+            for polygon in geom.geoms:
                 mp_copy = row.to_dict()
-                mp_copy["geometry"] = m
+                coords = np.array(polygon.exterior.coords)
+                centroid = np.mean(coords, axis=0)
+                scaled_coords = [(centroid + (coord - centroid) * s).tolist() for coord in coords]
+                mp_copy["geometry"] = mplp.Polygon(scaled_coords, closed=True)
                 assign_fill_and_outline_to_row(shapes, fill_c, outline_c, mp_copy, idx)
                 rows.append(mp_copy)
 
         elif geom.geom_type == "Point":
             row = row.to_dict()
-            row["geometry"] = mplp.Circle((geom.x, geom.y), radius=row["radius"])
+            scaled_radius = row["radius"] * s
+            row["geometry"] = mplp.Circle(
+                (geom.x, geom.y), radius=scaled_radius
+            )  # Circle is always scaled from its center
             assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
             rows.append(row)
 

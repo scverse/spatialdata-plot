@@ -97,3 +97,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             elements="blobs_polygons",
             color="value",
         ).pl.show()
+
+    def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(elements="blobs_circles", scale=0.5).pl.show()

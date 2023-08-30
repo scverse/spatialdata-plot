@@ -77,7 +77,7 @@ class ShapesRenderParams:
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
-    size: float = 1.0
+    scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
 
 

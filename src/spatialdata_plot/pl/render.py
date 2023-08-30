@@ -102,7 +102,7 @@ def _render_shapes(
         shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
         _cax = _get_collection_shape(
             shapes=shapes,
-            s=render_params.size,
+            s=render_params.scale,
             c=color_vector,
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
