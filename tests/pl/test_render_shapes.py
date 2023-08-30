@@ -89,3 +89,12 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
         sdata.table = table
         sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
+        
+    def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
+                
+        blob = sdata_blobs
+        blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
+        blob.pl.render_shapes(
+            elements="blobs_polygons",
+            color="value",
+        ).pl.show()
