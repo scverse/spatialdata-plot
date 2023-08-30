@@ -576,7 +576,6 @@ def _prepare_cmap_norm(
 
 
 def _set_outline(
-    size: float,
     outline: bool = False,
     outline_width: float = 1.5,
     outline_color: str | list[float] = "#0000000ff",  # black, white
