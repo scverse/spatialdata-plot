@@ -46,3 +46,8 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_images(
             elements="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]
         ).pl.show()
+
+    def test_plot_can_normalize_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            elements="blobs_image", quantiles_for_norm=(5, 90)
+        ).pl.show()
