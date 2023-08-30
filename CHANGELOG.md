@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning][].
 -   Legend order is now deterministic (#143)
 -   Images no longer normalised by default (#150)
 
-
 ## [0.0.4] - 2023-08-11
 
 ### Fixed
