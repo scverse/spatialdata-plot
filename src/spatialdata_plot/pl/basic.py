@@ -145,7 +145,7 @@ class PlotAccessor:
         elements: str | list[str] | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
-        size: float = 1.0,
+        scale: float = 1.0,
         outline: bool = False,
         outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
@@ -171,7 +171,7 @@ class PlotAccessor:
         groups
             For discrete annotation in ``color``, select which values
             to plot (other values are set to NAs).
-        size
+        scale
             Value to scale circles, if present.
         outline
             If `True`, a thin border around points/shapes is plotted.
@@ -212,11 +212,12 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
-        outline_params = _set_outline(size, outline, outline_width, outline_color)
+        outline_params = _set_outline(outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
             elements=elements,
             color=color,
             groups=groups,
+            scale=scale,
             outline_params=outline_params,
             layer=layer,
             cmap_params=cmap_params,
