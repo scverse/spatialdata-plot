@@ -85,7 +85,15 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata = SpatialData(shapes={"p": _make_multi()})
         adata = anndata.AnnData(pd.DataFrame({"p": ["hole", "overlap", "square", "circle"]}))
         adata.obs.loc[:, "region"] = "p"
-        adata.obs.loc[:, "val"] = [1, 2, 3, 4]
+        adata.obs.loc[:, "val"] = [0, 1, 2, 3]
         table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
         sdata.table = table
         sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
+
+    def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
+        blob = sdata_blobs
+        blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
+        blob.pl.render_shapes(
+            elements="blobs_polygons",
+            color="value",
+        ).pl.show()

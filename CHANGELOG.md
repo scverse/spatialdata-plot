@@ -8,15 +8,17 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.0.5] -tbd
+## [0.1.0] - tbd
 
 ### Added
 
 -   Multipolygons are now handled correctly (#93)
+-   Can now plot columns from GeoDataFrame (#149)
 
 ### Fixed
 
 -   Legend order is now deterministic (#143)
+-   Images no longer normalised by default (#150)
 
 ## [0.0.4] - 2023-08-11
 
