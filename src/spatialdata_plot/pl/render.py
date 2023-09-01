@@ -116,9 +116,12 @@ def _render_shapes(
         cax = ax.add_collection(_cax)
 
         # Using dict.fromkeys here since set returns in arbitrary order
-        palette = (
-            ListedColormap(dict.fromkeys(color_vector)) if render_params.palette is None else render_params.palette
-        )
+        # remove the color of NaN values, else it might be assigned to a category
+        # order of color in the palette should agree to order of occurence
+        if color_source_vector is None:
+            palette = ListedColormap(dict.fromkeys(color_vector))
+        else:
+            palette = ListedColormap(dict.fromkeys(color_vector[~color_source_vector.isnull()]))
 
         # print(len(set(color_vector)) == 1)
         # print(set(color_source_vector[0]) == to_hex(render_params.cmap_params.na_color))

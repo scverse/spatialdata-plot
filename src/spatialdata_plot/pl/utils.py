@@ -841,8 +841,9 @@ def _set_color_source_vec(
 
         if groups is not None:
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
+            categories = groups
 
-        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
+        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories, palette)))
         # color_map = _get_palette(
         #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
         # )
@@ -1004,7 +1005,9 @@ def _decorate_axs(
 
         # Adding legends
         if is_categorical_dtype(color_source_vector):
-            clusters = color_source_vector.categories
+            # order of clusters should agree to palette order
+            clusters = color_source_vector.unique()
+            clusters = clusters[~clusters.isnull()]
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )
