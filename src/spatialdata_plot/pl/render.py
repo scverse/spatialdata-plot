@@ -121,7 +121,7 @@ def _render_shapes(
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
-            palette = ListedColormap(dict.fromkeys(color_vector[~color_source_vector.isnull()]))
+            palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
         # print(len(set(color_vector)) == 1)
         # print(set(color_source_vector[0]) == to_hex(render_params.cmap_params.na_color))
