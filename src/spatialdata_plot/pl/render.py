@@ -90,11 +90,9 @@ def _render_shapes(
             alpha=render_params.fill_alpha,
         )
 
-    
         # Sets the limits of the colorbar to the values instead of [0, 1]
         if not norm:
             _cax.set_clim(min(color_vector), max(color_vector))
-        
 
         # color_source_vector is None when the values aren't categorical
         if color_source_vector is None and render_params.transfunc is not None:
