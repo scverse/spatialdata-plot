@@ -90,12 +90,10 @@ def _render_shapes(
             alpha=render_params.fill_alpha,
         )
 
-        # Sets the limits of the colorbar to the values instead of [0, 1]
-        if not norm:
-            _cax.set_clim(min(color_vector), max(color_vector))
+        values_are_categorical = color_source_vector is not None
 
         # color_source_vector is None when the values aren't categorical
-        if color_source_vector is None and render_params.transfunc is not None:
+        if values_are_categorical and render_params.transfunc is not None:
             color_vector = render_params.transfunc(color_vector)
 
         norm = copy(render_params.cmap_params.norm)
@@ -117,6 +115,10 @@ def _render_shapes(
             # **kwargs,
         )
 
+        # Sets the limits of the colorbar to the values instead of [0, 1]
+        if not norm and not values_are_categorical:
+            _cax.set_clim(min(color_vector), max(color_vector))
+
         cax = ax.add_collection(_cax)
 
         # Using dict.fromkeys here since set returns in arbitrary order
@@ -124,8 +126,6 @@ def _render_shapes(
             ListedColormap(dict.fromkeys(color_vector)) if render_params.palette is None else render_params.palette
         )
 
-        # print(len(set(color_vector)) == 1)
-        # print(set(color_source_vector[0]) == to_hex(render_params.cmap_params.na_color))
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
@@ -194,7 +194,7 @@ def _render_points(
                     key=render_params.color,
                     palette=render_params.palette,
                 )
-        # print(p)
+
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,

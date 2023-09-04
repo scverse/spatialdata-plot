@@ -564,7 +564,7 @@ def _get_scalebar(
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: Normalize | Sequence[Normalize] | None = None,
+    norm: Normalize | bool = False,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     vmin: float | None = None,
     vmax: float | None = None,
@@ -576,6 +576,8 @@ def _prepare_cmap_norm(
 
     if isinstance(norm, Normalize):
         pass  # TODO
+    elif not norm:
+        pass
     elif vcenter is None:
         norm = Normalize(vmin=vmin, vmax=vmax)
     else:

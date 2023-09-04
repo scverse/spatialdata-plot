@@ -152,7 +152,7 @@ class PlotAccessor:
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
-        norm: bool | Normalize = True,
+        norm: bool | Normalize = False,
         na_color: str | tuple[float, ...] | None = "lightgrey",
         outline_alpha: float = 1.0,
         fill_alpha: float = 1.0,
