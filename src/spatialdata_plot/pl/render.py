@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Union
 
+import dask
 import geopandas as gpd
 import matplotlib
 import numpy as np
@@ -18,6 +19,7 @@ from scanpy._settings import settings as sc_settings
 from spatialdata.models import (
     Image2DModel,
     Labels2DModel,
+    PointsModel,
 )
 
 from spatialdata_plot._logging import logger
@@ -57,6 +59,12 @@ def _render_shapes(
 ) -> None:
     elements = render_params.elements
 
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
@@ -68,7 +76,6 @@ def _render_shapes(
         elements = list(sdata_filt.shapes.keys())
 
     for e in elements:
-        # shapes = [sdata.shapes[e] for e in elements]
         shapes = sdata.shapes[e]
         n_shapes = sum([len(s) for s in shapes])
 
@@ -99,7 +106,15 @@ def _render_shapes(
         if len(color_vector) == 0:
             color_vector = [render_params.cmap_params.na_color]
 
+        # filter by `groups`
+        if render_params.groups is not None and color_source_vector is not None:
+            mask = color_source_vector.isin(render_params.groups)
+            shapes = shapes[mask]
+            shapes = shapes.reset_index()
+            color_source_vector = color_source_vector[mask]
+            color_vector = color_vector[mask]
         shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
@@ -158,6 +173,12 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     elements = render_params.elements
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -177,6 +198,14 @@ def _render_points(
             color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
             coords.extend(color)
 
+        points = points[coords].compute()
+        # points[color[0]].cat.set_categories(render_params.groups, inplace=True)
+        if render_params.groups is not None:
+            points = points[points[color].isin(render_params.groups).values]
+            points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
+        points = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[e] = PointsModel.parse(points)
+
         point_df = points[coords].compute()
 
         # we construct an anndata to hack the plotting functions
@@ -193,7 +222,6 @@ def _render_points(
                     key=render_params.color,
                     palette=render_params.palette,
                 )
-        # print(p)
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
@@ -414,6 +442,12 @@ def _render_labels(
 ) -> None:
     elements = render_params.elements
 
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
@@ -440,7 +474,7 @@ def _render_labels(
 
             table = sdata.table[sdata.table.obs[region_key].isin([label_key])]
 
-            # get isntance id based on subsetted table
+            # get instance id based on subsetted table
             instance_id = table.obs[instance_key].values
 
         # get color vector (categorical or continuous)
