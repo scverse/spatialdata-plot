@@ -4,6 +4,7 @@ import matplotlib
 import pandas as pd
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from matplotlib.colors import ListedColormap
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData
 from spatialdata.models import ShapesModel, TableModel
@@ -100,3 +101,23 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(elements="blobs_circles", scale=0.5).pl.show()
+
+    def test_plot_can_plot_with_group_arg(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
+        sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = sdata_blobs.shapes["blobs_polygons"]["cluster"].astype(
+            "category"
+        )
+
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"]).pl.show()
+
+    def test_plot_can_plot_with_group_and_palette(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
+        sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = sdata_blobs.shapes["blobs_polygons"]["cluster"].astype(
+            "category"
+        )
+
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cluster", groups=["c2", "c1"], palette=ListedColormap(["green", "yellow"])
+        ).pl.show()
