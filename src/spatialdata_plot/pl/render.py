@@ -208,7 +208,7 @@ def _render_points(
             points = points[points[color].isin(render_params.groups).values]
             points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
         points = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[e] = PointsModel.parse(points)
+        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
         point_df = points[coords].compute()
 
