@@ -4,11 +4,11 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Union
 
+import dask
 import geopandas as gpd
 import matplotlib
 import numpy as np
 import pandas as pd
-import dask
 import scanpy as sc
 import spatial_image
 import spatialdata as sd
@@ -182,7 +182,7 @@ def _render_points(
         points = points[coords].compute()
         points[color[0]].cat.set_categories(render_params.groups, inplace=True)
         points = points[points[color].isin(render_params.groups).values]
-        
+
         points = dask.dataframe.from_pandas(points, npartitions=1)
         sdata_filt.points[e] = PointsModel.parse(points)
 
