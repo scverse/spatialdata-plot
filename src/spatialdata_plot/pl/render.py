@@ -8,6 +8,7 @@ import geopandas as gpd
 import matplotlib
 import numpy as np
 import pandas as pd
+import dask
 import scanpy as sc
 import spatial_image
 import spatialdata as sd
@@ -18,6 +19,7 @@ from scanpy._settings import settings as sc_settings
 from spatialdata.models import (
     Image2DModel,
     Labels2DModel,
+    PointsModel,
 )
 
 from spatialdata_plot._logging import logger
@@ -155,6 +157,10 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    if isinstance(render_params.groups, str):
+        render_params.groups = [render_params.groups]
+    if not all(isinstance(g, str) for g in render_params.groups):
+        raise TypeError("All groups must be strings.")
     elements = render_params.elements
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -173,6 +179,12 @@ def _render_points(
         if render_params.color is not None:
             color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
             coords.extend(color)
+        points = points[coords].compute()
+        points[color[0]].cat.set_categories(render_params.groups, inplace=True)
+        points = points[points[color].isin(render_params.groups).values]
+        
+        points = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[e] = PointsModel.parse(points)
 
         point_df = points[coords].compute()
 
@@ -190,7 +202,6 @@ def _render_points(
                     key=render_params.color,
                     palette=render_params.palette,
                 )
-        # print(p)
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,

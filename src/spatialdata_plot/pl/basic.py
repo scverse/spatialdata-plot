@@ -203,6 +203,7 @@ class PlotAccessor:
         -------
         None
         """
+
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
