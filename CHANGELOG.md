@@ -12,14 +12,15 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
--   Multipolygons are now handled correctly (#93)
 -   Can now scale shapes (#152)
 -   Can now plot columns from GeoDataFrame (#149)
 
 ### Fixed
 
+-   Multipolygons are now handled correctly (#93)
 -   Legend order is now deterministic (#143)
 -   Images no longer normalised by default (#150)
+-   Colorbar no longer autoscales to [0, 1] (#155)
 
 ## [0.0.4] - 2023-08-11
 
