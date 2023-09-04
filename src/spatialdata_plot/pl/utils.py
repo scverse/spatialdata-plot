@@ -3,26 +3,38 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
-from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
 
 import matplotlib
+import matplotlib.patches as mpatches
+import matplotlib.patches as mplp
+import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
+import shapely
 import spatial_image
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import Colormap, LinearSegmentedColormap, ListedColormap, Normalize, TwoSlopeNorm, to_rgba
+from matplotlib.colors import (
+    ColorConverter,
+    Colormap,
+    LinearSegmentedColormap,
+    ListedColormap,
+    Normalize,
+    TwoSlopeNorm,
+    to_rgba,
+)
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
@@ -37,40 +49,24 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import transform
+from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import (
-    Image2DModel,
-)
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 from spatialdata.transformations import get_transformation
 
+from spatialdata_plot.pl.render_params import (
+    CmapParams,
+    FigParams,
+    OutlineParams,
+    ScalebarParams,
+    ShapesRenderParams,
+    _FontSize,
+    _FontWeight,
+)
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
-_FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
-_FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
-
 to_hex = partial(colors.to_hex, keep_alpha=True)
-
-
-@dataclass
-class FigParams:
-    """Figure params."""
-
-    fig: Figure
-    ax: Axes
-    num_panels: int
-    axs: Sequence[Axes] | None = None
-    title: str | Sequence[str] | None = None
-    ax_labels: Sequence[str] | None = None
-    frameon: bool | None = None
-
-
-@dataclass
-class ScalebarParams:
-    """Scalebar params."""
-
-    scalebar_dx: Sequence[float] | None = None
-    scalebar_units: Sequence[str] | None = None
 
 
 def _prepare_params_plot(
@@ -171,6 +167,117 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
         cs_contents["has_shapes"] = cs_contents["has_shapes"].astype("bool")
 
     return cs_contents
+
+
+def _get_collection_shape(
+    shapes: list[GeoDataFrame],
+    c: Any,
+    s: float,
+    norm: Any,
+    render_params: ShapesRenderParams,
+    fill_alpha: None | float = None,
+    outline_alpha: None | float = None,
+    **kwargs: Any,
+) -> PatchCollection:
+    """
+    Get a PatchCollection for rendering given geometries with specified colors and outlines.
+
+    Args:
+    - shapes (list[GeoDataFrame]): List of geometrical shapes.
+    - c: Color parameter.
+    - s (float): Scale of the shape.
+    - norm: Normalization for the color map.
+    - fill_alpha (float, optional): Opacity for the fill color.
+    - outline_alpha (float, optional): Opacity for the outline.
+    - **kwargs: Additional keyword arguments.
+
+    Returns
+    -------
+    - PatchCollection: Collection of patches for rendering.
+    """
+    cmap = kwargs["cmap"]
+
+    try:
+        # fails when numeric
+        fill_c = ColorConverter().to_rgba_array(c)
+    except ValueError:
+        if norm is None:
+            c = cmap(c)
+        else:
+            norm = colors.Normalize(vmin=min(c), vmax=max(c))
+            c = cmap(norm(c))
+
+    fill_c = ColorConverter().to_rgba_array(c)
+    fill_c[..., -1] = render_params.fill_alpha
+
+    if render_params.outline_params.outline:
+        outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
+        outline_c[..., -1] = render_params.outline_alpha
+        outline_c = outline_c.tolist()
+    else:
+        outline_c = [None]
+    outline_c = outline_c * fill_c.shape[0]
+
+    shapes_df = pd.DataFrame(shapes, copy=True)
+
+    # remove empty points/polygons
+    shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
+
+    rows = []
+
+    def assign_fill_and_outline_to_row(
+        shapes: list[GeoDataFrame], fill_c: list[Any], outline_c: list[Any], row: pd.Series, idx: int
+    ) -> None:
+        if len(shapes) > 1 and len(fill_c) == 1:
+            row["fill_c"] = fill_c
+            row["outline_c"] = outline_c
+        else:
+            row["fill_c"] = fill_c[idx]
+            row["outline_c"] = outline_c[idx]
+
+    # Match colors to the geometry, potentially expanding the row in case of
+    # multipolygons
+    for idx, row in shapes_df.iterrows():
+        geom = row["geometry"]
+        if geom.geom_type == "Polygon":
+            row = row.to_dict()
+            coords = np.array(geom.exterior.coords)
+            centroid = np.mean(coords, axis=0)
+            scaled_coords = [(centroid + (np.array(coord) - centroid) * s).tolist() for coord in geom.exterior.coords]
+            row["geometry"] = mplp.Polygon(scaled_coords, closed=True)
+            assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
+            rows.append(row)
+
+        elif geom.geom_type == "MultiPolygon":
+            # mp = _make_patch_from_multipolygon(geom)
+            for polygon in geom.geoms:
+                mp_copy = row.to_dict()
+                coords = np.array(polygon.exterior.coords)
+                centroid = np.mean(coords, axis=0)
+                scaled_coords = [(centroid + (coord - centroid) * s).tolist() for coord in coords]
+                mp_copy["geometry"] = mplp.Polygon(scaled_coords, closed=True)
+                assign_fill_and_outline_to_row(shapes, fill_c, outline_c, mp_copy, idx)
+                rows.append(mp_copy)
+
+        elif geom.geom_type == "Point":
+            row = row.to_dict()
+            scaled_radius = row["radius"] * s
+            row["geometry"] = mplp.Circle(
+                (geom.x, geom.y), radius=scaled_radius
+            )  # Circle is always scaled from its center
+            assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
+            rows.append(row)
+
+    patches = pd.DataFrame(rows)
+
+    return PatchCollection(
+        patches["geometry"].values.tolist(),
+        snap=False,
+        lw=render_params.outline_params.linewidth,
+        facecolor=patches["fill_c"],
+        edgecolor=None if all(outline is None for outline in outline_c) else outline_c,
+        **kwargs,
+    )
 
 
 def _get_extent(
@@ -279,19 +386,21 @@ def _get_extent(
             for images_key in sdata.images:
                 for e_id in element_ids:
                     if images_key == e_id:
-                        if not isinstance(sdata.images[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.images[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
                         else:
-                            pass
+                            img = Image2DModel.parse(sdata.images[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(img, cs_name)
 
         if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
             for labels_key in sdata.labels:
                 for e_id in element_ids:
                     if labels_key == e_id:
-                        if not isinstance(sdata.labels[e_id], msi.multiscale_spatial_image.MultiscaleSpatialImage):
+                        if isinstance(sdata.labels[e_id], spatial_image.SpatialImage):
                             extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
                         else:
-                            pass
+                            label = Labels2DModel.parse(sdata.labels[e_id]["scale0"].ds.to_array().squeeze(axis=0))
+                            extent[cs_name][e_id] = _get_extent_after_transformations(label, cs_name)
 
         if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
             for shapes_key in sdata.shapes:
@@ -299,7 +408,7 @@ def _get_extent(
                     if shapes_key == e_id:
 
                         def get_point_bb(
-                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 1
+                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 0
                         ) -> Point:
                             x, y = point.coords[0]
                             if method == "topleft":
@@ -314,11 +423,13 @@ def _get_extent(
 
                         # Split by Point and Polygon:
                         tmp_points = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(lambda geom: geom.geom_type == "Point")
+                            sdata.shapes[e_id]["geometry"].apply(
+                                lambda geom: (geom.geom_type == "Point" and not geom.is_empty)
+                            )
                         ]
                         tmp_polygons = sdata.shapes[e_id][
                             sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: geom.geom_type in ["Polygon", "MultiPolygon"]
+                                lambda geom: (geom.geom_type in ["Polygon", "MultiPolygon"] and not geom.is_empty)
                             )
                         ]
 
@@ -344,7 +455,12 @@ def _get_extent(
                         del tmp_points
                         del tmp_polygons
 
-                        extent[cs_name][e_id] = x_dims + y_dims
+                        xmin = np.min(x_dims)
+                        xmax = np.max(x_dims)
+                        ymin = np.min(y_dims)
+                        ymax = np.max(y_dims)
+
+                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
 
                         transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
                         transformations = _flatten_transformation_sequence(transformations)
@@ -446,15 +562,6 @@ def _get_scalebar(
     return _scalebar_dx, _scalebar_units
 
 
-@dataclass
-class CmapParams:
-    """Cmap params."""
-
-    cmap: Colormap
-    norm: Normalize
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0)
-
-
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: Normalize | Sequence[Normalize] | None = None,
@@ -477,29 +584,24 @@ def _prepare_cmap_norm(
     return CmapParams(cmap, norm, na_color)
 
 
-@dataclass
-class OutlineParams:
-    """Cmap params."""
-
-    outline: bool
-    outline_color: str | list[float]
-    gap_size: float
-    bg_size: float
-
-
 def _set_outline(
-    size: float,
     outline: bool = False,
-    outline_width: tuple[float, float] = (0.3, 0.05),
+    outline_width: float = 1.5,
     outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    bg_width, gap_width = outline_width
-    point = np.sqrt(size)
-    gap_size = (point + (point * gap_width) * 2) ** 2
-    bg_size = (np.sqrt(gap_size) + (point * bg_width) * 2) ** 2
-    # the default black and white colors can be changes using the contour_config parameter
+    # Type checks for outline_width
+    if isinstance(outline_width, int):
+        outline_width = float(outline_width)
+    if not isinstance(outline_width, float):
+        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
+    if outline_width == 0.0:
+        outline = False
+    if outline_width < 0.0:
+        logging.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
+        outline_width = (-1) * outline_width
 
+    # the default black and white colors can be changed using the contour_config parameter
     if (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
         outline_color = matplotlib.colors.to_hex(outline_color)
 
@@ -507,7 +609,7 @@ def _set_outline(
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, outline_color, gap_size, bg_size)
+    return OutlineParams(outline, outline_color, outline_width)
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
@@ -598,8 +700,8 @@ def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "vi
 
 def _normalize(
     img: xr.DataArray,
-    pmin: float | None = 3.0,
-    pmax: float | None = 99.8,
+    pmin: float | None = None,
+    pmax: float | None = None,
     eps: float = 1e-20,
     clip: bool = False,
     name: str = "normed",
@@ -699,10 +801,10 @@ def _get_colors_for_categorical_obs(
 
 
 def _set_color_source_vec(
-    adata: AnnData,
+    sdata: sd.SpatialData,
+    element: SpatialElement | None,
     value_to_plot: str | None,
-    use_raw: bool | None = None,
-    alt_var: str | None = None,
+    element_name: list[str] | str | None = None,
     layer: str | None = None,
     groups: Sequence[str] | str | None = None,
     palette: ListedColormap | str | None = None,
@@ -710,39 +812,54 @@ def _set_color_source_vec(
     alpha: float = 1.0,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
-        color = np.full(adata.n_obs, to_hex(na_color))
+        color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
-    if alt_var is not None and value_to_plot not in adata.obs and value_to_plot not in adata.var_names:
-        value_to_plot = adata.var_names[adata.var[alt_var] == value_to_plot][0]
-    if use_raw and value_to_plot not in adata.obs:
-        color_source_vector = adata.raw.obs_vector(value_to_plot)
-    else:
-        color_source_vector = adata.obs_vector(value_to_plot, layer=layer)
+    # Figure out where to get the color from
+    origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+    if len(origins) > 1:
+        raise ValueError(
+            f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
+        )
 
-    if not is_categorical_dtype(color_source_vector):
-        return None, color_source_vector, False
+    if len(origins) == 1:
+        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+        color_source_vector = vals[value_to_plot]
 
-    color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-    categories = color_source_vector.categories
+        # if all([isinstance(x, str) for x in color_source_vector]):
+        #     raise TypeError(
+        #         f"Color key '{value_to_plot}' for element '{element_name}' has string values, "
+        #         f"but should be numerical or categorical."
+        #     )
 
-    if groups is not None:
-        color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
+        # numerical case, return early
+        if not is_categorical_dtype(color_source_vector):
+            return None, color_source_vector, False
 
-    color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
-    # color_map = _get_palette(
-    #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
-    # )
-    if color_map is None:
-        raise ValueError("Unable to create color palette.")
+        color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
+        categories = color_source_vector.categories
 
-    # do not rename categories, as colors need not be unique
-    color_vector = color_source_vector.map(color_map)
-    if color_vector.isna().any():
-        color_vector = color_vector.add_categories([to_hex(na_color)])
-        color_vector = color_vector.fillna(to_hex(na_color))
+        if groups is not None:
+            color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
 
-    return color_source_vector, color_vector, True
+        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
+        # color_map = _get_palette(
+        #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
+        # )
+        if color_map is None:
+            raise ValueError("Unable to create color palette.")
+
+        # do not rename categories, as colors need not be unique
+        color_vector = color_source_vector.map(color_map)
+        if color_vector.isna().any():
+            color_vector = color_vector.add_categories([to_hex(na_color)])
+            color_vector = color_vector.fillna(to_hex(na_color))
+
+        return color_source_vector, color_vector, True
+
+    logging.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
+    color = np.full(sdata.table.n_obs, to_hex(na_color))
+    return color, color, False
 
 
 def _map_color_seg(
@@ -790,8 +907,7 @@ def _map_color_seg(
 
     if seg_boundaries:
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
-        seg_bound = np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
-        return seg_bound
+        return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
 
     return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
@@ -832,11 +948,11 @@ def _get_palette(
 
     if isinstance(palette, str):
         cmap = plt.get_cmap(palette)
-        palette = [to_hex(x) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
     elif isinstance(palette, ListedColormap):
-        palette = [to_hex(x) for x in palette(np.linspace(0, 1, len_cat), alpha=alpha)]
+        cmap = palette
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+    palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
 
     return dict(zip(categories, palette))
 
@@ -855,18 +971,6 @@ def _maybe_set_colors(
         if isinstance(palette, ListedColormap):  # `scanpy` requires it
             palette = cycler(color=palette.colors)
         add_colors_for_categorical_sample_annotation(target, key=key, force_update_colors=True, palette=palette)
-
-
-@dataclass
-class LegendParams:
-    """Legend params."""
-
-    legend_fontsize: int | float | _FontSize | None = None
-    legend_fontweight: int | _FontWeight = "bold"
-    legend_loc: str | None = "right margin"
-    legend_fontoutline: int | None = None
-    na_in_legend: bool = True
-    colorbar: bool = True
 
 
 def _decorate_axs(
@@ -1158,6 +1262,51 @@ def _robust_transform(element: Any, cs: str) -> Any:
         raise ValueError("Unable to transform element.") from e
 
     return element
+
+
+def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
+    # https://stackoverflow.com/a/21922058
+
+    for geom in mp.geoms:
+        if geom.geom_type == "Polygon":
+            exterior_coords = geom.exterior.coords[:]
+            interior_coords = []
+            for interior in geom.interiors:
+                interior_coords += interior.coords[:]
+        elif geom.geom_type == "MultiPolygon":
+            exterior_coords = []
+            interior_coords = []
+            for part in geom:
+                epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
+                exterior_coords += epc["exterior_coords"]
+                interior_coords += epc["interior_coords"]
+        else:
+            raise ValueError("Unhandled geometry type: " + repr(geom.type))
+
+    return interior_coords, exterior_coords
+
+
+def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
+    # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
+
+    patches = []
+    for geom in mp.geoms:
+        if len(geom.interiors) == 0:
+            # polygon has no holes
+            patches += [mpatches.Polygon(geom.exterior.coords, closed=True)]
+        else:
+            inside, outside = _split_multipolygon_into_outer_and_inner(mp)
+            if len(inside) > 0:
+                codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
+                codes[0] = mpath.Path.MOVETO
+                all_codes = np.concatenate((codes, codes))
+                vertices = np.concatenate((outside, inside[::-1]))
+            else:
+                all_codes = []
+                vertices = np.concatenate(outside)
+            patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
+
+    return patches
 
 
 def _mpl_ax_contains_elements(ax: Axes) -> bool:

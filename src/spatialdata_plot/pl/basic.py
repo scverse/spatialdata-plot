@@ -23,20 +23,22 @@ from spatialdata._logging import logger as logg
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
-    ImageRenderParams,
-    LabelsRenderParams,
-    PointsRenderParams,
-    ShapesRenderParams,
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from spatialdata_plot.pl.utils import (
+from spatialdata_plot.pl.render_params import (
     CmapParams,
+    ImageRenderParams,
+    LabelsRenderParams,
     LegendParams,
+    PointsRenderParams,
+    ShapesRenderParams,
     _FontSize,
     _FontWeight,
+)
+from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_extent,
     _maybe_set_colors,
@@ -143,11 +145,10 @@ class PlotAccessor:
         elements: str | list[str] | None = None,
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
-        size: float = 1.0,
+        scale: float = 1.0,
         outline: bool = False,
-        outline_width: tuple[float, float] = (0.3, 0.05),
+        outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
-        alt_var: str | None = None,
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
@@ -170,7 +171,7 @@ class PlotAccessor:
         groups
             For discrete annotation in ``color``, select which values
             to plot (other values are set to NAs).
-        size
+        scale
             Value to scale circles, if present.
         outline
             If `True`, a thin border around points/shapes is plotted.
@@ -178,8 +179,6 @@ class PlotAccessor:
             Width of the border.
         outline_color
             Color of the border.
-        alt_var
-            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
@@ -195,6 +194,11 @@ class PlotAccessor:
         kwargs
             Additional arguments to be passed to cmap and norm.
 
+        Notes
+        -----
+            Empty geometries will be removed at the time of plotting.
+            An ``outline_width`` of 0.0 leads to no border being plotted.
+
         Returns
         -------
         None
@@ -208,13 +212,13 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
-        outline_params = _set_outline(size, outline, outline_width, outline_color)
+        outline_params = _set_outline(outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
             elements=elements,
             color=color,
             groups=groups,
+            scale=scale,
             outline_params=outline_params,
-            alt_var=alt_var,
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
@@ -301,7 +305,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
-        quantiles_for_norm: tuple[float | None, float | None] = (3.0, 99.8),  # defaults from CSBDeep
+        quantiles_for_norm: tuple[float | None, float | None] = (None, None),
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -376,7 +380,6 @@ class PlotAccessor:
         groups: str | Sequence[str] | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        alt_var: str | None = None,
         layer: str | None = None,
         palette: ListedColormap | str | None = None,
         cmap: Colormap | str | None = None,
@@ -404,8 +407,6 @@ class PlotAccessor:
             entire segment, see :func:`skimage.morphology.erosion`.
         outline
             Whether to plot boundaries around segmentation masks.
-        alt_var
-            Which column to use in :attr:`anndata.AnnData.var` to select alternative ``var_name``.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
@@ -447,7 +448,6 @@ class PlotAccessor:
             groups=groups,
             contour_px=contour_px,
             outline=outline,
-            alt_var=alt_var,
             layer=layer,
             cmap_params=cmap_params,
             palette=palette,
@@ -534,7 +534,7 @@ class PlotAccessor:
                 render_cmds[cmd] = params
 
         if len(render_cmds.keys()) == 0:
-            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow().")
+            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
 
         if title is not None:
             if isinstance(title, str):
@@ -662,15 +662,6 @@ class PlotAccessor:
                         # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
-                    if sdata.table is not None and isinstance(params.color, str):
-                        colors = sc.get.obs_df(sdata.table, params.color)
-                        if is_categorical_dtype(colors):
-                            _maybe_set_colors(
-                                source=sdata.table,
-                                target=sdata.table,
-                                key=params.color,
-                                palette=params.palette,
-                            )
                     _render_shapes(
                         sdata=sdata,
                         render_params=params,
@@ -723,6 +714,7 @@ class PlotAccessor:
                 else:
                     t = cs
                 ax.set_title(t)
+                ax.set_aspect("equal")
 
             if any(
                 [

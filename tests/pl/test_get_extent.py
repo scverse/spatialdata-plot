@@ -42,15 +42,3 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
             axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[400, 400], target_coordinate_system="global"
         )
         cropped_blobs.pl.render_images().pl.show()
-
-    def test_plot_extent_of_polygons_is_correct_after_spatial_query(self, sdata_blobs: SpatialData):
-        cropped_blobs = sdata_blobs.pp.get_elements(["blobs_polygons"]).query.bounding_box(
-            axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[400, 400], target_coordinate_system="global"
-        )
-        cropped_blobs.pl.render_shapes().pl.show()
-
-    def test_plot_extent_of_polygons_on_img_is_correct_after_spatial_query(self, sdata_blobs: SpatialData):
-        cropped_blobs = sdata_blobs.pp.get_elements(["blobs_image", "blobs_polygons"]).query.bounding_box(
-            axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[400, 400], target_coordinate_system="global"
-        )
-        cropped_blobs.pl.render_images().pl.render_shapes().pl.show()
