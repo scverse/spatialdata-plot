@@ -1,7 +1,6 @@
 import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
-from matplotlib.colors import ListedColormap
 from spatialdata import SpatialData
 
 from tests.conftest import PlotTester, PlotTesterMeta
@@ -24,9 +23,10 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(elements="blobs_points").pl.show()
 
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(color="genes", groups="b", palette=ListedColormap(["orange"])).pl.show()
+        sdata_blobs.pl.render_points(color="genes", groups="b", palette=["orange"]).pl.show()
 
-    def test_plot_can_color_by_palette(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(
-            color="genes", groups=["a", "b"], palette=ListedColormap(["lightgreen", "darkblue"])
-        ).pl.show()
+    def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(color="genes", groups=["a", "b"], palette=["lightgreen", "darkblue"]).pl.show()
+
+    def test_plot_coloring_with_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(color="genes", cmap="rainbow").pl.show()

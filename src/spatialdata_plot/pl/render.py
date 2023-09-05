@@ -95,6 +95,7 @@ def _render_shapes(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         values_are_categorical = color_source_vector is not None
@@ -236,6 +237,7 @@ def _render_points(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         # color_source_vector is None when the values aren't categorical
@@ -258,6 +260,11 @@ def _render_points(
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
+            if color_source_vector is None:
+                palette = ListedColormap(dict.fromkeys(color_vector))
+            else:
+                palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
@@ -265,7 +272,7 @@ def _render_points(
                 adata=adata,
                 value_to_plot=render_params.color,
                 color_source_vector=color_source_vector,
-                palette=render_params.palette,
+                palette=palette,
                 alpha=render_params.alpha,
                 na_color=render_params.cmap_params.na_color,
                 legend_fontsize=legend_params.legend_fontsize,
@@ -493,6 +500,7 @@ def _render_labels(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:

@@ -14,7 +14,7 @@ from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, ListedColormap, Normalize
+from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
@@ -150,7 +150,7 @@ class PlotAccessor:
         outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
         layer: str | None = None,
-        palette: ListedColormap | str | None = None,
+        palette: str | list[str] | None = None,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         na_color: str | tuple[float, ...] | None = "lightgrey",
@@ -235,7 +235,7 @@ class PlotAccessor:
         color: str | None = None,
         groups: str | Sequence[str] | None = None,
         size: float = 1.0,
-        palette: ListedColormap | str | None = None,
+        palette: str | list[str] | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -303,7 +303,7 @@ class PlotAccessor:
         cmap: list[Colormap] | list[str] | Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        palette: ListedColormap | str | None = None,
+        palette: str | list[str] | None = None,
         alpha: float = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] = (None, None),
         **kwargs: Any,
@@ -381,7 +381,7 @@ class PlotAccessor:
         contour_px: int = 3,
         outline: bool = False,
         layer: str | None = None,
-        palette: ListedColormap | str | None = None,
+        palette: str | list[str] | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
