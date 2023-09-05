@@ -182,8 +182,9 @@ class PlotAccessor:
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette
-            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
-            Must contain valid color names.
+            Palette for discrete annotations. List of valid color names that should be used
+            for the categories (all or as specified by `groups`). For a single category,
+            a valid color name can be given as string.
         cmap
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             If no palette is given and `color` refers to a categorical, the colors are
@@ -261,8 +262,9 @@ class PlotAccessor:
         size
             Value to scale points.
         palette
-            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
-            Must contain valid color names.
+            Palette for discrete annotations. List of valid color names that should be used
+            for the categories (all or as specified by `groups`). For a single category,
+            a valid color name can be given as string.
         cmap
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             If no palette is given and `color` refers to a categorical, the colors are
