@@ -45,7 +45,6 @@ from spatialdata_plot.pl.utils import (
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
     _prepare_params_plot,
-    _robust_transform,
     _set_outline,
     save_fig,
 )
@@ -277,6 +276,7 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
+
         cmap_params = _prepare_cmap_norm(
             cmap=cmap,
             norm=norm,
@@ -628,25 +628,7 @@ class PlotAccessor:
         # go through tree
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
-            # properly transform all elements to the current coordinate system
-            members = cs_contents.query(f"cs == '{cs}'")
-
-            if members["has_images"].values[0]:
-                for key in sdata.images:
-                    sdata.images[key] = _robust_transform(sdata.images[key], cs)
-
-            if members["has_labels"].values[0]:
-                for key in sdata.labels:
-                    sdata.labels[key] = _robust_transform(sdata.labels[key], cs)
-
-            if members["has_points"].values[0]:
-                for key in sdata.points:
-                    sdata.points[key] = _robust_transform(sdata.points[key], cs)
-
-            if members["has_shapes"].values[0]:
-                for key in sdata.shapes:
-                    sdata.shapes[key] = _robust_transform(sdata.shapes[key], cs)
-
+            cs_contents.query(f"cs == '{cs}'")
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
 
             for cmd, params in render_cmds.items():
@@ -659,7 +641,6 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
-                        # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     _render_shapes(
@@ -739,5 +720,4 @@ class PlotAccessor:
         # https://stackoverflow.com/a/64523765
         if not hasattr(sys, "ps1"):
             plt.show()
-
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
