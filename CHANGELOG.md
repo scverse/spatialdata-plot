@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning][].
 -   Multipolygons are now handled correctly (#93)
 -   Legend order is now deterministic (#143)
 -   Images no longer normalised by default (#150)
--   Shapes can be colored by categorical variable with the `group` and `palette` arguments (#153)
+-   Filtering of shapes and points using the `groups` argument is now possible, coloring by palette and cmap arguments works for shapes and points (#153)
 -   Colorbar no longer autoscales to [0, 1] (#155)
 
 ## [0.0.4] - 2023-08-11
