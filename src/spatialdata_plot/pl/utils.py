@@ -792,8 +792,6 @@ def _get_colors_for_categorical_obs(
     color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
 
     if isinstance(palette, str):
-        # cmap = plt.get_cmap(palette)
-        # palette = [to_hex(x) for x in cmap(color_idx, alpha=alpha)]
         palette = [to_hex(palette)]
     elif isinstance(palette, list):
         palette = [to_hex(x) for x in palette]
