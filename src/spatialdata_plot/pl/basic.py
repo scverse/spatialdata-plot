@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
-from spatialdata._logging import logger as logg
+from spatialdata._core.operations.rasterize import rasterize
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -40,7 +40,9 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
+    _get_elements_to_rasterize,
     _get_extent,
+    _get_valid_cs,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
@@ -585,24 +587,34 @@ class PlotAccessor:
                         [params.elements] if isinstance(params.elements, str) else params.elements
                     )
 
-        extent = _get_extent(
+        # filter out cs without relevant elements
+        coordinate_systems = _get_valid_cs(
             sdata=sdata,
-            has_images="render_images" in render_cmds,
-            has_labels="render_labels" in render_cmds,
-            has_points="render_points" in render_cmds,
-            has_shapes="render_shapes" in render_cmds,
-            elements=elements_to_be_rendered,
             coordinate_systems=coordinate_systems,
+            render_images="render_images" in render_cmds,
+            render_labels="render_labels" in render_cmds,
+            render_points="render_points" in render_cmds,
+            render_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
         )
 
+        # extent = _get_extent(
+        #     sdata=sdata,
+        #     has_images="render_images" in render_cmds,
+        #     has_labels="render_labels" in render_cmds,
+        #     has_points="render_points" in render_cmds,
+        #     has_shapes="render_shapes" in render_cmds,
+        #     elements=elements_to_be_rendered,
+        #     coordinate_systems=coordinate_systems,
+        # )
         # Use extent to filter out coordinate system without the relevant elements
-        valid_cs = []
-        for cs in coordinate_systems:
-            if cs in extent:
-                valid_cs.append(cs)
-            else:
-                logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
-        coordinate_systems = valid_cs
+        # valid_cs = []
+        # for cs in coordinate_systems:
+        #     if cs in extent:
+        #         valid_cs.append(cs)
+        #     else:
+        #         logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+        # coordinate_systems = valid_cs
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
@@ -628,6 +640,15 @@ class PlotAccessor:
         # go through tree
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
+            # TODO: adapt rasterization
+            to_rasterize = _get_elements_to_rasterize(sdata, cs)
+            if len(to_rasterize) > 0:
+                for el in to_rasterize:
+                    rasterized = rasterize(sdata[el], ("y", "x"), [0, 0], [512, 512], cs, target_unit_to_pixels=0.08)
+                    # TODO: change!!! look at labels
+                    if el == "blobs_multiscale_image":
+                        sdata.images[el] = rasterized
+
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
 
@@ -659,7 +680,6 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
-                        # extent=extent[cs],
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     _render_shapes(
@@ -724,6 +744,15 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
+                extent = _get_extent(
+                    sdata=sdata,
+                    has_images="render_images" in render_cmds,
+                    has_labels="render_labels" in render_cmds,
+                    has_points="render_points" in render_cmds,
+                    has_shapes="render_shapes" in render_cmds,
+                    elements=elements_to_be_rendered,
+                    coordinate_systems=cs,
+                )
                 # If the axis already has limits, only expand them but not overwrite
                 x_min = min(x_min_orig, extent[cs][0]) - pad_extent
                 x_max = max(x_max_orig, extent[cs][1]) + pad_extent

@@ -38,6 +38,7 @@ from matplotlib.colors import (
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
+from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
@@ -348,9 +349,12 @@ def _get_extent(
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
 
-            if len(transformations) == 1 and isinstance(
-                transformations[0], sd.transformations.transformations.Identity
-            ):
+            if (
+                len(transformations) == 1
+                and isinstance(transformations[0], sd.transformations.transformations.Identity)
+            ) or (
+                1 == 1
+            ):  # TODO: find different solution for this (aka new get_extent shouldn't have this problem anyways)
                 result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
             else:
@@ -1323,3 +1327,58 @@ def _mpl_ax_contains_elements(ax: Axes) -> bool:
     return (
         len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
     )
+
+
+def _get_valid_cs(
+    sdata: sd.SpatialData,
+    coordinate_systems: Sequence[str],
+    render_images: bool,
+    render_labels: bool,
+    render_points: bool,
+    render_shapes: bool,
+    elements: list[str],
+) -> Sequence[str]:
+    """Get names of the valid coordinate systems.
+
+    Valid cs are cs that contain elements to be rendered:
+    1. In case the user specified elements:
+        all cs that contain at least one of those elements
+    2. Else:
+        all cs that contain at least one element that should
+        be rendered (depending on whether images/points/labels/...
+        should be rendered)
+    """
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    valid_cs = []
+    for cs in coordinate_systems:
+        if (len(elements) > 0 and any(e in elements for e in cs_mapping[cs])) or (
+            len(elements) == 0
+            and (
+                (len(sdata.images.keys()) > 0 and render_images)
+                or (len(sdata.labels.keys()) > 0 and render_labels)
+                or (len(sdata.points.keys()) > 0 and render_points)
+                or (len(sdata.shapes.keys()) > 0 and render_shapes)
+            )
+        ):  # not nice, but ruff wants it (SIM114)
+            valid_cs.append(cs)
+        else:
+            logging.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+    return valid_cs
+
+
+def _get_elements_to_rasterize(
+    sdata: sd.SpatialData,
+    coordinate_system: str,
+) -> list[str]:
+    """Test which SpatialData elements need to be rasterized.
+
+    Given a coordinate system, test if there are MultiscaleSpatialImage objects
+    Their names are returned.
+    """
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    elements = cs_mapping[coordinate_system]
+    to_rasterize = []
+    for e in elements:
+        if isinstance(sdata[e], MultiscaleSpatialImage):
+            to_rasterize.append(e)
+    return to_rasterize

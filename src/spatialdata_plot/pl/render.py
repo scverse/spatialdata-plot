@@ -272,8 +272,9 @@ def _render_images(
     images = [sdata.images[e] for e in elements]
     for img, img_key in zip(images, elements):
         if not isinstance(img, spatial_image.SpatialImage):
+            logger.warning(f"Unrasterized multi-scale image '{img_key}' in _render_images. Using scale0.")
             img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
+            # logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
 
         if render_params.channel is None:
             channels = img.coords["c"].values
