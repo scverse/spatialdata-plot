@@ -349,12 +349,9 @@ def _get_extent(
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
 
-            if (
-                len(transformations) == 1
-                and isinstance(transformations[0], sd.transformations.transformations.Identity)
-            ) or (
-                1 == 1
-            ):  # TODO: find different solution for this (aka new get_extent shouldn't have this problem anyways)
+            if len(transformations) == 1 and isinstance(
+                transformations[0], sd.transformations.transformations.Identity
+            ):
                 result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
             else:
@@ -1175,11 +1172,18 @@ def _translate_image(
         shifts[axis] = int(translation.translation[idx])
 
     img = image.values.copy()
+    # for yx images (important for rasterized MultiscaleImages as labels)
+    # TODO: this doesn't work as it should yet... no errors but blank image in the end
+    expanded_dims = False
+    if len(img.shape) == 2:
+        img = np.expand_dims(img, axis=0)
+        expanded_dims = True
+
     shifted_channels = []
 
     # split channels, shift axes individually, them recombine
-    if len(image.shape) == 3:
-        for c in range(image.shape[0]):
+    if len(img.shape) == 3:
+        for c in range(img.shape[0]):
             channel = img[c, :, :]
 
             # iterates over [x, y]
@@ -1199,11 +1203,15 @@ def _translate_image(
 
             shifted_channels.append(channel)
 
-    return Image2DModel.parse(
+    result = Image2DModel.parse(
         np.array(shifted_channels),
         dims=["c", "y", "x"],
         transformations=image.attrs["transform"],
     )
+    if expanded_dims:
+        # undo the dimension expansion from before
+        result = result[0, :, :]
+    return result
 
 
 def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
@@ -1369,6 +1377,7 @@ def _get_valid_cs(
 def _get_elements_to_rasterize(
     sdata: sd.SpatialData,
     coordinate_system: str,
+    elements_to_be_rendered: list[str],
 ) -> list[str]:
     """Test which SpatialData elements need to be rasterized.
 
@@ -1379,6 +1388,8 @@ def _get_elements_to_rasterize(
     elements = cs_mapping[coordinate_system]
     to_rasterize = []
     for e in elements:
-        if isinstance(sdata[e], MultiscaleSpatialImage):
+        if (e in elements_to_be_rendered or len(elements_to_be_rendered) == 0) and isinstance(
+            sdata[e], MultiscaleSpatialImage
+        ):
             to_rasterize.append(e)
     return to_rasterize

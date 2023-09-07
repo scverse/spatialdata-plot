@@ -640,14 +640,46 @@ class PlotAccessor:
         # go through tree
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
-            # TODO: adapt rasterization
-            to_rasterize = _get_elements_to_rasterize(sdata, cs)
-            if len(to_rasterize) > 0:
-                for el in to_rasterize:
-                    rasterized = rasterize(sdata[el], ("y", "x"), [0, 0], [512, 512], cs, target_unit_to_pixels=0.08)
-                    # TODO: change!!! look at labels
-                    if el == "blobs_multiscale_image":
-                        sdata.images[el] = rasterized
+
+            # TODO: adapt this to the new get_extent
+            extent = _get_extent(
+                sdata=sdata,
+                has_images="render_images" in render_cmds,
+                has_labels="render_labels" in render_cmds,
+                has_points="render_points" in render_cmds,
+                has_shapes="render_shapes" in render_cmds,
+                elements=elements_to_be_rendered,
+                coordinate_systems=cs,
+            )
+
+            # rasterize MultiscaleSpatialImage objects
+            to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
+            for el in to_rasterize:
+                # TODO: add option for the user to select a specific scale (or use auto)
+                # TODO: for 3rd and 4th argument, we need the min and max extent of scale0 of the MultiscaleImage
+                # (for y and x axis). I tried with smaller values but then we don't get the full image.
+                # TODO: target_unit_to_pixels argument: determines resolution. I think 1 is original/highest possible
+                # resolution, so values > 1 don't make sense. values < 1 lead to lower resolution. Question: for `auto`
+                # mode, which value is best? probably needs to be determined heuristically. E.g. for
+                # visium_associated_xenium_io: I would choose 0.1
+                rasterized = rasterize(
+                    sdata[el],
+                    ("y", "x"),
+                    [extent[cs][2], extent[cs][0]],
+                    [extent[cs][3], extent[cs][1]],
+                    cs,
+                    target_unit_to_pixels=0.1,
+                )
+                # TODO: print message about which element was rasterized with logger?
+                if el in sdata.images:
+                    sdata.images[el] = rasterized
+                elif el in sdata.labels:
+                    sdata.labels[el] = rasterized
+                else:
+                    raise ValueError(
+                        f"{el} seems to be a MultiscaleImage but is not in labels or images. "
+                        "Rasterization of points or shapes is currently not intended or supported."
+                    )
 
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
@@ -744,15 +776,6 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
-                extent = _get_extent(
-                    sdata=sdata,
-                    has_images="render_images" in render_cmds,
-                    has_labels="render_labels" in render_cmds,
-                    has_points="render_points" in render_cmds,
-                    has_shapes="render_shapes" in render_cmds,
-                    elements=elements_to_be_rendered,
-                    coordinate_systems=cs,
-                )
                 # If the axis already has limits, only expand them but not overwrite
                 x_min = min(x_min_orig, extent[cs][0]) - pad_extent
                 x_max = max(x_max_orig, extent[cs][1]) + pad_extent
