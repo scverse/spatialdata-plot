@@ -94,6 +94,9 @@ def _prepare_params_plot(
 ) -> tuple[FigParams, ScalebarParams]:
     # len(list(itertools.product(*iter_panels)))
 
+    # if isinstance(ax, Axes):
+    #     ax = [ax]
+
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
     figsize = rcParams["figure.figsize"] if figsize is None else figsize

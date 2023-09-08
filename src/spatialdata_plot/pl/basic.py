@@ -210,6 +210,8 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
+        if isinstance(elements, str):
+            elements = [elements]
         outline_params = _set_outline(outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
             elements=elements,
@@ -282,6 +284,8 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
+        if isinstance(elements, str):
+            elements = [elements]
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
             elements=elements,
             color=color,
@@ -361,6 +365,8 @@ class PlotAccessor:
                 **kwargs,
             )
 
+        if isinstance(elements, str):
+            elements = [elements]
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
             elements=elements,
             channel=channel,
@@ -441,6 +447,8 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
+        if isinstance(elements, str):
+            elements = [elements]
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
             elements=elements,
             color=color,
@@ -594,6 +602,7 @@ class PlotAccessor:
             wants_labels = False
             wants_points = False
             wants_shapes = False
+            wanted_elements = []
 
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and has_images:
@@ -607,6 +616,8 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_images = True
+                    wanted_images = list(params.elements if params.elements is not None else sdata.images.keys())
+                    wanted_elements += wanted_images
 
                 elif cmd == "render_shapes" and has_shapes:
                     _render_shapes(
@@ -619,6 +630,8 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_shapes = True
+                    wanted_shapes = list(params.elements if params.elements is not None else sdata.shapes.keys())
+                    wanted_elements += wanted_shapes
 
                 elif cmd == "render_points" and has_points:
                     _render_points(
@@ -631,6 +644,8 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_points = True
+                    wanted_points = list(params.elements if params.elements is not None else sdata.points.keys())
+                    wanted_elements += wanted_points
 
                 elif cmd == "render_labels" and has_labels:
                     if sdata.table is not None and isinstance(params.color, str):
@@ -652,6 +667,8 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_labels = True
+                    wanted_labels = list(params.elements if params.elements is not None else sdata.labels.keys())
+                    wanted_elements += wanted_labels
 
                 if title is not None:
                     if len(title) == 1:
@@ -673,6 +690,7 @@ class PlotAccessor:
                 has_labels=has_labels and wants_labels,
                 has_points=has_points and wants_points,
                 has_shapes=has_shapes and wants_shapes,
+                elements=wanted_elements,
             )
             cs_x_min, cs_x_max = extent["x"]
             cs_y_min, cs_y_max = extent["y"]
