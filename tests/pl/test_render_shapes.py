@@ -108,3 +108,17 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_colorbar_can_be_normalised(self, sdata_blobs: SpatialData):
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=True).pl.show()
+
+    def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
+        # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
+        blob = SpatialData.from_elements_dict(
+            {
+                "blobs_circles": sdata_blobs.shapes["blobs_circles"],
+                "blobs_multipolygons": sdata_blobs.shapes["blobs_multipolygons"],
+                "blobs_polygons": sdata_blobs.shapes["blobs_polygons"],
+            }
+        )
+        cropped_blob = blob.query.bounding_box(
+            axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[300, 300], target_coordinate_system="global"
+        )
+        cropped_blob.pl.render_shapes().pl.show()
