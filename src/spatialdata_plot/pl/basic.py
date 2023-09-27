@@ -647,7 +647,7 @@ class PlotAccessor:
             sdata = self._copy()
 
             # TODO: adapt this to the new get_extent
-            # we only need the extent of scale0 as input for rasterize (3rd & 4th argument)
+            # we need the extent of scale0 as input for rasterize (3rd & 4th argument)
             extent = _get_extent(
                 sdata=sdata,
                 has_images="render_images" in render_cmds,
@@ -665,10 +665,10 @@ class PlotAccessor:
                 if scale is not None and scale in available_scales:
                     # user selected a valid scale
                     if el in sdata.images:
-                        spatial_image = Image2DModel.parse(sdata[el][scale].ds.to_array().squeeze(axis=0))
+                        spatial_image = Image2DModel.parse(sdata[el][scale].image)
                     else:
                         # multi-scale contains labels
-                        spatial_image = Labels2DModel.parse(sdata[el][scale].ds.to_array().squeeze(axis=0))
+                        spatial_image = Labels2DModel.parse(sdata[el][scale].image)
                 else:
                     # multi-scale image should be rasterized
                     if scale is not None:
@@ -694,17 +694,6 @@ class PlotAccessor:
                         f"{el} seems to be a MultiscaleImage but is not in labels or images. "
                         "Rasterization of points or shapes is currently not intended or supported."
                     )
-
-            # TODO: Needed for when e.g. scale="scale2" Adapt to new get_extent...
-            extent = _get_extent(
-                sdata=sdata,
-                has_images="render_images" in render_cmds,
-                has_labels="render_labels" in render_cmds,
-                has_points="render_points" in render_cmds,
-                has_shapes="render_shapes" in render_cmds,
-                elements=elements_to_be_rendered,
-                coordinate_systems=cs,
-            )
 
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
