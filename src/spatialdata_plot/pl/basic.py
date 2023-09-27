@@ -20,8 +20,10 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.operations.rasterize import rasterize
+from spatialdata.models import Image2DModel, Labels2DModel
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -482,6 +484,8 @@ class PlotAccessor:
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
         save: None | str | Path = None,
+        scale: str | None = None,
+        target_unit_to_pixels: float = 0.1,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -497,6 +501,13 @@ class PlotAccessor:
             Width of each subplot. Default is 4.
         height :
             Height of each subplot. Default is 3.
+        scale :
+            Name of the scale to select from multi-scale images.
+            If None, the multi-scale images are rasterized.
+        target_unit_to_pixels :
+            Factor determining the final resolution during rasterization of multi-scale images.
+            1 corresponds to the maximum possible resolution, the closer the value is to 0, the
+            lower the resolution becomes.
 
         Returns
         -------
@@ -598,23 +609,17 @@ class PlotAccessor:
             elements=elements_to_be_rendered,
         )
 
-        # extent = _get_extent(
-        #     sdata=sdata,
-        #     has_images="render_images" in render_cmds,
-        #     has_labels="render_labels" in render_cmds,
-        #     has_points="render_points" in render_cmds,
-        #     has_shapes="render_shapes" in render_cmds,
-        #     elements=elements_to_be_rendered,
-        #     coordinate_systems=coordinate_systems,
-        # )
-        # Use extent to filter out coordinate system without the relevant elements
-        # valid_cs = []
-        # for cs in coordinate_systems:
-        #     if cs in extent:
-        #         valid_cs.append(cs)
-        #     else:
-        #         logg.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
-        # coordinate_systems = valid_cs
+        # check target_unit_to_pixels for problematic values
+        if target_unit_to_pixels > 1:
+            logger.warning(
+                f"target_unit_to_pixels set to 1 since given {target_unit_to_pixels} > 1 which doesn't make sense."
+            )
+            target_unit_to_pixels = 1
+        elif target_unit_to_pixels <= 0:
+            logger.warning(
+                f"target_unit_to_pixels set to 0.1 since given {target_unit_to_pixels} <= 0 which doesn't make sense."
+            )
+            target_unit_to_pixels = 0.1
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
@@ -642,6 +647,7 @@ class PlotAccessor:
             sdata = self._copy()
 
             # TODO: adapt this to the new get_extent
+            # we only need the extent of scale0 as input for rasterize (3rd & 4th argument)
             extent = _get_extent(
                 sdata=sdata,
                 has_images="render_images" in render_cmds,
@@ -655,31 +661,50 @@ class PlotAccessor:
             # rasterize MultiscaleSpatialImage objects
             to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
             for el in to_rasterize:
-                # TODO: add option for the user to select a specific scale (or use auto)
-                # TODO: for 3rd and 4th argument, we need the min and max extent of scale0 of the MultiscaleImage
-                # (for y and x axis). I tried with smaller values but then we don't get the full image.
-                # TODO: target_unit_to_pixels argument: determines resolution. I think 1 is original/highest possible
-                # resolution, so values > 1 don't make sense. values < 1 lead to lower resolution. Question: for `auto`
-                # mode, which value is best? probably needs to be determined heuristically. E.g. for
-                # visium_associated_xenium_io: I would choose 0.1
-                rasterized = rasterize(
-                    sdata[el],
-                    ("y", "x"),
-                    [extent[cs][2], extent[cs][0]],
-                    [extent[cs][3], extent[cs][1]],
-                    cs,
-                    target_unit_to_pixels=0.1,
-                )
-                # TODO: print message about which element was rasterized with logger?
+                available_scales = [leaf.name for leaf in sdata[el].leaves]
+                if scale is not None and scale in available_scales:
+                    # user selected a valid scale
+                    if el in sdata.images:
+                        spatial_image = Image2DModel.parse(sdata[el][scale].ds.to_array().squeeze(axis=0))
+                    else:
+                        # multi-scale contains labels
+                        spatial_image = Labels2DModel.parse(sdata[el][scale].ds.to_array().squeeze(axis=0))
+                else:
+                    # multi-scale image should be rasterized
+                    if scale is not None:
+                        logger.warning(f"Scale {scale} doesn't exist for {el}, it is instead rasterized.")
+                    spatial_image = rasterize(
+                        sdata[el],
+                        ("y", "x"),
+                        [extent[cs][2], extent[cs][0]],
+                        [extent[cs][3], extent[cs][1]],
+                        cs,
+                        target_unit_to_pixels=target_unit_to_pixels,
+                    )
+                    logger.info(
+                        f"Multi-scale image {el} was rasterized with target_unit_to_pixels = {target_unit_to_pixels}."
+                    )
+
                 if el in sdata.images:
-                    sdata.images[el] = rasterized
+                    sdata.images[el] = spatial_image
                 elif el in sdata.labels:
-                    sdata.labels[el] = rasterized
+                    sdata.labels[el] = spatial_image
                 else:
                     raise ValueError(
                         f"{el} seems to be a MultiscaleImage but is not in labels or images. "
                         "Rasterization of points or shapes is currently not intended or supported."
                     )
+
+            # TODO: Needed for when e.g. scale="scale2" Adapt to new get_extent...
+            extent = _get_extent(
+                sdata=sdata,
+                has_images="render_images" in render_cmds,
+                has_labels="render_labels" in render_cmds,
+                has_points="render_points" in render_cmds,
+                has_shapes="render_shapes" in render_cmds,
+                elements=elements_to_be_rendered,
+                coordinate_systems=cs,
+            )
 
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")

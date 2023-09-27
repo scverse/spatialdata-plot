@@ -16,7 +16,6 @@ from matplotlib.colors import ListedColormap, Normalize
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata.models import (
-    Image2DModel,
     Labels2DModel,
 )
 
@@ -270,11 +269,11 @@ def _render_images(
         elements = list(sdata_filt.images.keys())
 
     images = [sdata.images[e] for e in elements]
-    for img, img_key in zip(images, elements):
-        if not isinstance(img, spatial_image.SpatialImage):
-            logger.warning(f"Unrasterized multi-scale image '{img_key}' in _render_images. Using scale0.")
-            img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
-            # logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
+    # for img, img_key in zip(images, elements):
+    for img in images:
+        # if not isinstance(img, spatial_image.SpatialImage):
+        #     img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
+        #     # logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
 
         if render_params.channel is None:
             channels = img.coords["c"].values

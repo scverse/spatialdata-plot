@@ -1203,15 +1203,17 @@ def _translate_image(
 
             shifted_channels.append(channel)
 
-    result = Image2DModel.parse(
+    if expanded_dims:
+        return Labels2DModel.parse(
+            np.array(shifted_channels[0]),
+            dims=["y", "x"],
+            transformations=image.attrs["transform"],
+        )
+    return Image2DModel.parse(
         np.array(shifted_channels),
         dims=["c", "y", "x"],
         transformations=image.attrs["transform"],
     )
-    if expanded_dims:
-        # undo the dimension expansion from before
-        result = result[0, :, :]
-    return result
 
 
 def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
