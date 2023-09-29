@@ -601,7 +601,7 @@ class PlotAccessor:
                 elements=elements_to_be_rendered,
             )
             # get min and max values for x and y axes
-            ex = (ex[0][ex[2].index("x")], ex[1][ex[2].index("x")], ex[0][ex[2].index("y")], ex[1][ex[2].index("y")])
+            ex = (ex["x"][0], ex["x"][1], ex["y"][0], ex["y"][1])
             extent[cs] = ex
 
         # Use extent to filter out coordinate system without the relevant elements
