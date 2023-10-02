@@ -20,6 +20,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
+from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -591,6 +592,7 @@ class PlotAccessor:
         cs_contents = _get_cs_contents(sdata)
 
         # go through tree
+
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
             _, has_images, has_labels, has_points, has_shapes = (
@@ -616,8 +618,14 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_images = True
-                    wanted_images = list(params.elements if params.elements is not None else sdata.images.keys())
-                    wanted_elements += wanted_images
+                    wanted_images = params.elements if params.elements is not None else list(sdata.images.keys())
+                    wanted_elements.extend(
+                        [
+                            image
+                            for image in wanted_images
+                            if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
+                        ]
+                    )
 
                 elif cmd == "render_shapes" and has_shapes:
                     _render_shapes(
@@ -630,8 +638,14 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_shapes = True
-                    wanted_shapes = list(params.elements if params.elements is not None else sdata.shapes.keys())
-                    wanted_elements += wanted_shapes
+                    wanted_shapes = params.elements if params.elements is not None else list(sdata.shapes.keys())
+                    wanted_elements.extend(
+                        [
+                            shape
+                            for shape in wanted_shapes
+                            if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
+                        ]
+                    )
 
                 elif cmd == "render_points" and has_points:
                     _render_points(
@@ -644,8 +658,14 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_points = True
-                    wanted_points = list(params.elements if params.elements is not None else sdata.points.keys())
-                    wanted_elements += wanted_points
+                    wanted_points = params.elements if params.elements is not None else list(sdata.points.keys())
+                    wanted_elements.extend(
+                        [
+                            point
+                            for point in wanted_points
+                            if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
+                        ]
+                    )
 
                 elif cmd == "render_labels" and has_labels:
                     if sdata.table is not None and isinstance(params.color, str):
@@ -667,19 +687,24 @@ class PlotAccessor:
                         legend_params=legend_params,
                     )
                     wants_labels = True
-                    wanted_labels = list(params.elements if params.elements is not None else sdata.labels.keys())
-                    wanted_elements += wanted_labels
+                    wanted_labels = params.elements if params.elements is not None else list(sdata.labels.keys())
+                    wanted_elements.extend(
+                        [
+                            label
+                            for label in wanted_labels
+                            if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
+                        ]
+                    )
 
-                if title is not None:
-                    if len(title) == 1:
-                        t = title[0]
-                    else:
-                        try:
-                            t = title[i]
-                        except IndexError as e:
-                            raise IndexError("The number of titles must match the number of coordinate systems.") from e
-                else:
+                if title is None:
                     t = cs
+                elif len(title) == 1:
+                    t = title[0]
+                else:
+                    try:
+                        t = title[i]
+                    except IndexError as e:
+                        raise IndexError("The number of titles must match the number of coordinate systems.") from e
                 ax.set_title(t)
                 ax.set_aspect("equal")
 
