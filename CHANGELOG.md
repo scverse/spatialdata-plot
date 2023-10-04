@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.1.0] - tbd
 
+## [0.0.5] - 2023-10-02
+
 ### Added
 
 -   Can now scale shapes (#152)
