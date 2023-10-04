@@ -571,6 +571,7 @@ def _prepare_cmap_norm(
     vcenter: float | None = None,
     **kwargs: Any,
 ) -> CmapParams:
+    is_default = cmap is None
     cmap = copy(matplotlib.colormaps[rcParams["image.cmap"] if cmap is None else cmap])
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
@@ -583,7 +584,7 @@ def _prepare_cmap_norm(
     else:
         norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
-    return CmapParams(cmap, norm, na_color)
+    return CmapParams(cmap, norm, na_color, is_default)
 
 
 def _set_outline(
@@ -745,8 +746,9 @@ def _normalize(
 
 def _get_colors_for_categorical_obs(
     categories: Sequence[str | int],
-    palette: ListedColormap | str | None = None,
+    palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
+    cmap_params: CmapParams | None = None,
 ) -> list[str]:
     """
     Return a list of colors for a categorical observation.
@@ -768,7 +770,9 @@ def _get_colors_for_categorical_obs(
 
     # check if default matplotlib palette has enough colors
     if palette is None:
-        if len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
+        if cmap_params is not None and not cmap_params.is_default:
+            palette = cmap_params.cmap
+        elif len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
             palette = [next(cc)["color"] for _ in range(len_cat)]
         else:
@@ -784,12 +788,11 @@ def _get_colors_for_categorical_obs(
                     "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
                 )
 
-    # otherwise, single chanels turn out grey
+    # otherwise, single channels turn out grey
     color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
 
     if isinstance(palette, str):
-        cmap = plt.get_cmap(palette)
-        palette = [to_hex(x) for x in cmap(color_idx, alpha=alpha)]
+        palette = [to_hex(palette)]
     elif isinstance(palette, list):
         palette = [to_hex(x) for x in palette]
     elif isinstance(palette, ListedColormap):
@@ -797,7 +800,7 @@ def _get_colors_for_categorical_obs(
     elif isinstance(palette, LinearSegmentedColormap):
         palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
     else:
-        raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+        raise TypeError(f"Palette is {type(palette)} but should be string or list.")
 
     return palette[:len_cat]  # type: ignore[return-value]
 
@@ -809,9 +812,10 @@ def _set_color_source_vec(
     element_name: list[str] | str | None = None,
     layer: str | None = None,
     groups: Sequence[str] | str | None = None,
-    palette: ListedColormap | str | None = None,
+    palette: str | list[str] | None = None,
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
+    cmap_params: CmapParams | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
@@ -836,6 +840,11 @@ def _set_color_source_vec(
 
         # numerical case, return early
         if not is_categorical_dtype(color_source_vector):
+            if palette is not None:
+                logging.warning(
+                    "Ignoring categorical palette which is given for a continuous variable. "
+                    "Consider using `cmap` to pass a ColorMap."
+                )
             return None, color_source_vector, False
 
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
@@ -843,8 +852,9 @@ def _set_color_source_vec(
 
         if groups is not None:
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
+            categories = groups
 
-        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories)))
+        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories, palette, cmap_params=cmap_params)))
         # color_map = _get_palette(
         #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
         # )
@@ -918,7 +928,7 @@ def _get_palette(
     categories: Sequence[Any],
     adata: AnnData | None = None,
     cluster_key: None | str = None,
-    palette: ListedColormap | str | None = None,
+    palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
     if adata is not None and palette is None:
@@ -949,11 +959,13 @@ def _get_palette(
         return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
 
     if isinstance(palette, str):
-        cmap = plt.get_cmap(palette)
+        cmap = ListedColormap([palette])
+    elif isinstance(palette, list):
+        cmap = ListedColormap(palette)
     elif isinstance(palette, ListedColormap):
         cmap = palette
     else:
-        raise TypeError(f"Palette is {type(palette)} but should be string or `ListedColormap`.")
+        raise TypeError(f"Palette is {type(palette)} but should be string or list.")
     palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
 
     return dict(zip(categories, palette))
@@ -970,6 +982,8 @@ def _maybe_set_colors(
             raise KeyError("Unable to copy the palette when there was other explicitly specified.")
         target.uns[color_key] = source.uns[color_key]
     except KeyError:
+        if isinstance(palette, str):
+            palette = ListedColormap([palette])
         if isinstance(palette, ListedColormap):  # `scanpy` requires it
             palette = cycler(color=palette.colors)
         add_colors_for_categorical_sample_annotation(target, key=key, force_update_colors=True, palette=palette)
@@ -982,7 +996,7 @@ def _decorate_axs(
     adata: AnnData,
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
-    palette: ListedColormap | str | None = None,
+    palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
     legend_fontsize: int | float | _FontSize | None = None,
@@ -1006,7 +1020,9 @@ def _decorate_axs(
 
         # Adding legends
         if is_categorical_dtype(color_source_vector):
-            clusters = color_source_vector.categories
+            # order of clusters should agree to palette order
+            clusters = color_source_vector.unique()
+            clusters = clusters[~clusters.isnull()]
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )

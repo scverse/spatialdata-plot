@@ -101,6 +101,26 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(elements="blobs_circles", scale=0.5).pl.show()
 
+    def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
+        sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = sdata_blobs.shapes["blobs_polygons"]["cluster"].astype(
+            "category"
+        )
+
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups="c1").pl.show()
+
+    def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
+        sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = sdata_blobs.shapes["blobs_polygons"]["cluster"].astype(
+            "category"
+        )
+
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cluster", groups=["c2", "c1"], palette=["green", "yellow"]
+        ).pl.show()
+
     def test_plot_colorbar_respects_input_limits(self, sdata_blobs: SpatialData):
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"]).pl.show()

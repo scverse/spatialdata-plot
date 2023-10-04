@@ -19,6 +19,7 @@ class CmapParams:
     cmap: Colormap
     norm: Normalize
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0)
+    is_default: bool = True
 
 
 @dataclass

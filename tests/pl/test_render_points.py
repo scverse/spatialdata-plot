@@ -21,3 +21,12 @@ _ = spatialdata_plot
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(elements="blobs_points").pl.show()
+
+    def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(color="genes", groups="b", palette="orange").pl.show()
+
+    def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(color="genes", groups=["a", "b"], palette=["lightgreen", "darkblue"]).pl.show()
+
+    def test_plot_coloring_with_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(color="genes", cmap="rainbow").pl.show()
