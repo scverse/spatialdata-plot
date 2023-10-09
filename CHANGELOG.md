@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.1.0] - tbd
 
+## [0.0.5] - 2023-10-02
+
 ### Added
 
 -   Can now scale shapes (#152)
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning][].
 -   Multipolygons are now handled correctly (#93)
 -   Legend order is now deterministic (#143)
 -   Images no longer normalised by default (#150)
+-   Filtering of shapes and points using the `groups` argument is now possible, coloring by palette and cmap arguments works for shapes and points (#153)
 -   Colorbar no longer autoscales to [0, 1] (#155)
 -   Plotting shapes after a spatial query is now possible (#163)
 
