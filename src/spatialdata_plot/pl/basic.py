@@ -661,6 +661,15 @@ class PlotAccessor:
             # rasterize MultiscaleSpatialImage objects
             to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
             for el in to_rasterize:
+                # TODO: use instead of rasterization here
+                # _multiscale_to_spatial_image(
+                #     sdata[el],
+                #     fig_params.fig.dpi,
+                #     fig_params.fig.get_size_inches()[0],
+                #     fig_params.fig.get_size_inches()[1],
+                #     el not in sdata.images,
+                # )
+
                 available_scales = [leaf.name for leaf in sdata[el].leaves]
                 if scale is not None and scale in available_scales:
                     # user selected a valid scale

@@ -49,6 +49,7 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
+from spatial_image import SpatialImage
 from spatialdata import transform
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
@@ -1376,6 +1377,7 @@ def _get_valid_cs(
     return valid_cs
 
 
+# TODO: delete
 def _get_elements_to_rasterize(
     sdata: sd.SpatialData,
     coordinate_system: str,
@@ -1395,3 +1397,57 @@ def _get_elements_to_rasterize(
         ):
             to_rasterize.append(e)
     return to_rasterize
+
+
+def _multiscale_to_spatial_image(
+    multiscale_image: MultiscaleSpatialImage,
+    dpi: float,
+    width: float,
+    height: float,
+    is_label: bool = False,
+) -> SpatialImage:
+    """Extract the SpatialImage to be rendered from a multiscale image.
+
+    From the `MultiscaleSpatialImage`, the scale that fits the given image size and dpi most is selected
+    and returned. In case the lowest resolution is still too high, a rasterization step is added.
+
+    Parameters
+    ----------
+    multiscale_image
+        `MultiscaleSpatialImage` that should be rendered
+    dpi
+        dpi of the target image
+    width
+        width of the target image in inches
+    height
+        height of the target image in inches
+    is_label
+        When True, the multiscale image contains labels which don't contain the `c` dimension
+
+    Returns
+    -------
+    SpatialImage
+        To be rendered, extracted from the MultiscaleSpatialImage respecting the dpi and size of the target image.
+    """
+    scales = [leaf.name for leaf in multiscale_image.leaves]
+    x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
+    y_dims = [multiscale_image[scale].dims["y"] for scale in scales]
+
+    optimal_x = width * dpi
+    optimal_y = height * dpi
+
+    # get scale where the dimensions are closest to the optimal values. When x and y disagree: take lower resolution
+    # optimal_index_x = min([abs(x_dims[i] - optimal_x) for i in range(len(x_dims))])
+    optimal_index_x = min(range(len(x_dims)), key=lambda i: abs(x_dims[i] - optimal_x))
+    # optimal_index_y = min([abs(x_dims[i] - optimal_y) for i in range(len(y_dims))])
+    optimal_index_y = min(range(len(y_dims)), key=lambda i: abs(y_dims[i] - optimal_y))
+    # TODO: threshold 300 okay?
+    if x_dims[optimal_index_x] - optimal_x > 300 or y_dims[optimal_index_y] - optimal_y > 300:
+        # TODO: add rasterization step
+        pass
+    # TODO: disagreeing x and y behavior okay?
+    optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
+
+    if is_label:
+        return Labels2DModel.parse(multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0))
+    return Image2DModel.parse(multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0))
