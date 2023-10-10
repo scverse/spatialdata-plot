@@ -148,6 +148,9 @@ def _render_shapes(
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
+            # necessary in case different shapes elements are annotated with one table
+            if color_source_vector is not None:
+                color_source_vector = color_source_vector.remove_unused_categories()
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
