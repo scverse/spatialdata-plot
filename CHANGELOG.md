@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning][].
 -   Images no longer normalised by default (#150)
 -   Filtering of shapes and points using the `groups` argument is now possible, coloring by palette and cmap arguments works for shapes and points (#153)
 -   Colorbar no longer autoscales to [0, 1] (#155)
+-   Plotting shapes after a spatial query is now possible (#163)
 
 ## [0.0.4] - 2023-08-11
 

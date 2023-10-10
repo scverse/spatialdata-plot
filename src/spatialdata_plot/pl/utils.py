@@ -223,6 +223,9 @@ def _get_collection_shape(
     # remove empty points/polygons
     shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
 
+    # reset index of shapes_df for case of spatial query
+    shapes_df = shapes_df.reset_index()
+
     rows = []
 
     def assign_fill_and_outline_to_row(

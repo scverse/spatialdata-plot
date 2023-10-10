@@ -1,6 +1,7 @@
 import anndata
 import geopandas as gpd
 import matplotlib
+import numpy as np
 import pandas as pd
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
@@ -128,3 +129,128 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_colorbar_can_be_normalised(self, sdata_blobs: SpatialData):
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=True).pl.show()
+
+    def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
+        # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
+        blob = SpatialData.from_elements_dict(
+            {
+                "blobs_circles": sdata_blobs.shapes["blobs_circles"],
+                "blobs_multipolygons": sdata_blobs.shapes["blobs_multipolygons"],
+                "blobs_polygons": sdata_blobs.shapes["blobs_polygons"],
+            }
+        )
+        cropped_blob = blob.query.bounding_box(
+            axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[300, 300], target_coordinate_system="global"
+        )
+        cropped_blob.pl.render_shapes().pl.show()
+
+    def test_plot_can_plot_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
+        new_table = sdata_blobs.table.copy()
+        sdata_blobs.table.obs["region"] = "blobs_circles"
+        new_table = sdata_blobs.table[:5]
+        new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        new_table.obs["instance_id"] = np.array(range(5))
+
+        new_table.obs["annotation"] = ["a", "b", "c", "d", "e"]
+        new_table.obs["annotation"] = new_table.obs["annotation"].astype("category")
+
+        del sdata_blobs.table
+        sdata_blobs.table = new_table
+
+        # random permutation of table and shapes
+        sdata_blobs.table.obs = sdata_blobs.table.obs.sample(frac=1, random_state=83)
+        temp = sdata_blobs["blobs_circles"].sample(frac=1, random_state=47)
+        del sdata_blobs.shapes["blobs_circles"]
+        sdata_blobs["blobs_circles"] = temp
+
+        sdata_blobs.pl.render_shapes("blobs_circles", color="annotation").pl.show()
+
+    def test_plot_can_plot_queried_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
+        new_table = sdata_blobs.table.copy()
+        sdata_blobs.table.obs["region"] = "blobs_circles"
+        new_table = sdata_blobs.table[:5]
+        new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        new_table.obs["instance_id"] = np.array(range(5))
+
+        new_table.obs["annotation"] = ["a", "b", "c", "d", "e"]
+        new_table.obs["annotation"] = new_table.obs["annotation"].astype("category")
+
+        del sdata_blobs.table
+        sdata_blobs.table = new_table
+
+        # random permutation of table and shapes
+        sdata_blobs.table.obs = sdata_blobs.table.obs.sample(frac=1, random_state=83)
+        temp = sdata_blobs["blobs_circles"].sample(frac=1, random_state=47)
+        del sdata_blobs.shapes["blobs_circles"]
+        sdata_blobs["blobs_circles"] = temp
+
+        # subsetting the data
+        sdata_cropped = sdata_blobs.query.bounding_box(
+            axes=("x", "y"),
+            min_coordinate=[100, 150],
+            max_coordinate=[400, 250],
+            target_coordinate_system="global",
+            filter_table=True,
+        )
+
+        # workaround for bug that should be gone in later versions
+        del sdata_cropped.images["blobs_multiscale_image"]
+        del sdata_cropped.labels["blobs_labels"]
+        del sdata_cropped.labels["blobs_multiscale_labels"]
+
+        sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.show()
+
+    def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
+        new_table = sdata_blobs.table.copy()
+        sdata_blobs.table.obs["region"] = "blobs_circles"
+        new_table = sdata_blobs.table[:10]
+        new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
+        new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
+
+        new_table.obs.loc[5 * [False] + 5 * [True], "region"] = "blobs_polygons"
+        new_table.obs["annotation"] = ["a", "b", "c", "d", "e", "v", "w", "x", "y", "z"]
+        new_table.obs["annotation"] = new_table.obs["annotation"].astype("category")
+
+        del sdata_blobs.table
+        sdata_blobs.table = new_table
+
+        sdata_blobs.pl.render_shapes(["blobs_circles", "blobs_polygons"], color="annotation").pl.show()
+
+    def test_plot_can_color_two_queried_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
+        new_table = sdata_blobs.table.copy()
+        sdata_blobs.table.obs["region"] = "blobs_circles"
+        new_table = sdata_blobs.table[:10]
+        new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
+        new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
+
+        new_table.obs.loc[5 * [False] + 5 * [True], "region"] = "blobs_polygons"
+        new_table.obs["annotation"] = ["a", "b", "c", "d", "e", "v", "w", "x", "y", "z"]
+        new_table.obs["annotation"] = new_table.obs["annotation"].astype("category")
+
+        del sdata_blobs.table
+        sdata_blobs.table = new_table
+
+        # random permutation of table and shapes
+        sdata_blobs.table.obs = sdata_blobs.table.obs.sample(frac=1, random_state=83)
+        temp = sdata_blobs["blobs_circles"].sample(frac=1, random_state=47)
+        del sdata_blobs.shapes["blobs_circles"]
+        sdata_blobs["blobs_circles"] = temp
+        temp = sdata_blobs["blobs_polygons"].sample(frac=1, random_state=71)
+        del sdata_blobs.shapes["blobs_polygons"]
+        sdata_blobs["blobs_polygons"] = temp
+
+        # subsetting the data
+        sdata_cropped = sdata_blobs.query.bounding_box(
+            axes=("x", "y"),
+            min_coordinate=[100, 150],
+            max_coordinate=[350, 300],
+            target_coordinate_system="global",
+            filter_table=True,
+        )
+
+        # workaround for bug that should be gone in later versions
+        del sdata_cropped.images["blobs_multiscale_image"]
+        del sdata_cropped.labels["blobs_labels"]
+        del sdata_cropped.labels["blobs_multiscale_labels"]
+
+        sdata_cropped.pl.render_shapes(["blobs_circles", "blobs_polygons"], color="annotation").pl.show()
