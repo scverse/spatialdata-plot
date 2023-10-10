@@ -105,6 +105,7 @@ class ImageRenderParams:
     palette: ListedColormap | str | None = None
     alpha: float = 1.0
     quantiles_for_norm: tuple[float | None, float | None] = (None, None)
+    scale: str | None = None
 
 
 @dataclass
@@ -122,3 +123,4 @@ class LabelsRenderParams:
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None
+    scale: str | None = None

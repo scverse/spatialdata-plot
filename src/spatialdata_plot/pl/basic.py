@@ -19,11 +19,8 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
-from spatialdata._core.operations.rasterize import rasterize
-from spatialdata.models import Image2DModel, Labels2DModel
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -42,7 +39,6 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
-    _get_elements_to_rasterize,
     _get_extent,
     _get_valid_cs,
     _maybe_set_colors,
@@ -310,6 +306,7 @@ class PlotAccessor:
         palette: ListedColormap | str | None = None,
         alpha: float = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] = (None, None),
+        scale: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -332,6 +329,8 @@ class PlotAccessor:
             Alpha value for the shapes.
         quantiles_for_norm
             Tuple of (pmin, pmax) which will be used for quantile normalization.
+        scale
+            Specific scale out of multiscale images to be plotted. If None, a scale is chosen heuristically
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -373,6 +372,7 @@ class PlotAccessor:
             palette=palette,
             alpha=alpha,
             quantiles_for_norm=quantiles_for_norm,
+            scale=scale,
         )
 
         return sdata
@@ -391,6 +391,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float = 1.0,
         fill_alpha: float = 0.3,
+        scale: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -423,6 +424,8 @@ class PlotAccessor:
             Color to be used for NAs values, if present.
         alpha
             Alpha value for the labels.
+        scale
+            Specific scale out of multiscale labels to be plotted. If None, a scale is chosen heuristically
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -458,6 +461,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
+            scale=scale,
         )
 
         return sdata
@@ -484,8 +488,6 @@ class PlotAccessor:
         ax: Axes | Sequence[Axes] | None = None,
         return_ax: bool = False,
         save: None | str | Path = None,
-        scale: str | None = None,
-        target_unit_to_pixels: float = 0.1,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -501,13 +503,6 @@ class PlotAccessor:
             Width of each subplot. Default is 4.
         height :
             Height of each subplot. Default is 3.
-        scale :
-            Name of the scale to select from multi-scale images.
-            If None, the multi-scale images are rasterized.
-        target_unit_to_pixels :
-            Factor determining the final resolution during rasterization of multi-scale images.
-            1 corresponds to the maximum possible resolution, the closer the value is to 0, the
-            lower the resolution becomes.
 
         Returns
         -------
@@ -609,18 +604,6 @@ class PlotAccessor:
             elements=elements_to_be_rendered,
         )
 
-        # check target_unit_to_pixels for problematic values
-        if target_unit_to_pixels > 1:
-            logger.warning(
-                f"target_unit_to_pixels set to 1 since given {target_unit_to_pixels} > 1 which doesn't make sense."
-            )
-            target_unit_to_pixels = 1
-        elif target_unit_to_pixels <= 0:
-            logger.warning(
-                f"target_unit_to_pixels set to 0.1 since given {target_unit_to_pixels} <= 0 which doesn't make sense."
-            )
-            target_unit_to_pixels = 0.1
-
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
             num_panels=len(coordinate_systems),
@@ -646,63 +629,51 @@ class PlotAccessor:
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
 
-            # TODO: adapt this to the new get_extent
-            # we need the extent of scale0 as input for rasterize (3rd & 4th argument)
-            extent = _get_extent(
-                sdata=sdata,
-                has_images="render_images" in render_cmds,
-                has_labels="render_labels" in render_cmds,
-                has_points="render_points" in render_cmds,
-                has_shapes="render_shapes" in render_cmds,
-                elements=elements_to_be_rendered,
-                coordinate_systems=cs,
-            )
+            # # rasterize MultiscaleSpatialImage objects
+            # to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
+            # for el in to_rasterize:
+            #     # TODO: use instead of rasterization here
+            #     # _multiscale_to_spatial_image(
+            #     #     sdata[el],
+            #     #     fig_params.fig.dpi,
+            #     #     fig_params.fig.get_size_inches()[0],
+            #     #     fig_params.fig.get_size_inches()[1],
+            #     #     el not in sdata.images,
+            #     # )
 
-            # rasterize MultiscaleSpatialImage objects
-            to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
-            for el in to_rasterize:
-                # TODO: use instead of rasterization here
-                # _multiscale_to_spatial_image(
-                #     sdata[el],
-                #     fig_params.fig.dpi,
-                #     fig_params.fig.get_size_inches()[0],
-                #     fig_params.fig.get_size_inches()[1],
-                #     el not in sdata.images,
-                # )
+            #     available_scales = [leaf.name for leaf in sdata[el].leaves]
+            #     if scale is not None and scale in available_scales:
+            #         # user selected a valid scale
+            #         if el in sdata.images:
+            #             spatial_image = Image2DModel.parse(sdata[el][scale].image)
+            #         else:
+            #             # multi-scale contains labels
+            #             spatial_image = Labels2DModel.parse(sdata[el][scale].image)
+            #     else:
+            #         # multi-scale image should be rasterized
+            #         if scale is not None:
+            #             logger.warning(f"Scale {scale} doesn't exist for {el}, it is instead rasterized.")
+            #         spatial_image = rasterize(
+            #             sdata[el],
+            #             ("y", "x"),
+            #             [extent[cs][2], extent[cs][0]],
+            #             [extent[cs][3], extent[cs][1]],
+            #             cs,
+            #             target_unit_to_pixels=target_unit_to_pixels,
+            #         )
+            #         logger.info(
+            #             f"Multi-scale image {el} was rasterized with target_unit_to_pixels = {target_unit_to_pixels}."
+            #         )
 
-                available_scales = [leaf.name for leaf in sdata[el].leaves]
-                if scale is not None and scale in available_scales:
-                    # user selected a valid scale
-                    if el in sdata.images:
-                        spatial_image = Image2DModel.parse(sdata[el][scale].image)
-                    else:
-                        # multi-scale contains labels
-                        spatial_image = Labels2DModel.parse(sdata[el][scale].image)
-                else:
-                    # multi-scale image should be rasterized
-                    if scale is not None:
-                        logger.warning(f"Scale {scale} doesn't exist for {el}, it is instead rasterized.")
-                    spatial_image = rasterize(
-                        sdata[el],
-                        ("y", "x"),
-                        [extent[cs][2], extent[cs][0]],
-                        [extent[cs][3], extent[cs][1]],
-                        cs,
-                        target_unit_to_pixels=target_unit_to_pixels,
-                    )
-                    logger.info(
-                        f"Multi-scale image {el} was rasterized with target_unit_to_pixels = {target_unit_to_pixels}."
-                    )
-
-                if el in sdata.images:
-                    sdata.images[el] = spatial_image
-                elif el in sdata.labels:
-                    sdata.labels[el] = spatial_image
-                else:
-                    raise ValueError(
-                        f"{el} seems to be a MultiscaleImage but is not in labels or images. "
-                        "Rasterization of points or shapes is currently not intended or supported."
-                    )
+            #     if el in sdata.images:
+            #         sdata.images[el] = spatial_image
+            #     elif el in sdata.labels:
+            #         sdata.labels[el] = spatial_image
+            #     else:
+            #         raise ValueError(
+            #             f"{el} seems to be a MultiscaleImage but is not in labels or images. "
+            #             "Rasterization of points or shapes is currently not intended or supported."
+            #         )
 
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
@@ -799,6 +770,16 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
+                # TODO: adapt this to the new get_extent
+                extent = _get_extent(
+                    sdata=sdata,
+                    has_images="render_images" in render_cmds,
+                    has_labels="render_labels" in render_cmds,
+                    has_points="render_points" in render_cmds,
+                    has_shapes="render_shapes" in render_cmds,
+                    elements=elements_to_be_rendered,
+                    coordinate_systems=cs,
+                )
                 # If the axis already has limits, only expand them but not overwrite
                 x_min = min(x_min_orig, extent[cs][0]) - pad_extent
                 x_max = max(x_max_orig, extent[cs][1]) + pad_extent
