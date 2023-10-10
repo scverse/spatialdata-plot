@@ -6,6 +6,7 @@
 [![Documentation][badge-docs]][link-docs]
 [![Codecov][badge-codecov]][link-codecov]
 [![Documentation][badge-pypi]][link-pypi]
+[![DOI](https://zenodo.org/badge/588223127.svg)](https://zenodo.org/badge/latestdoi/588223127)
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test_and_deploy.yaml?branch=main
 [link-tests]: https://github.com/scverse/spatialdata-plot/actions/workflows/test.yml

@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Union
 
+import dask
 import geopandas as gpd
 import matplotlib
 import numpy as np
@@ -55,6 +56,12 @@ def _render_shapes(
 ) -> None:
     elements = render_params.elements
 
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
@@ -66,7 +73,6 @@ def _render_shapes(
         elements = list(sdata_filt.shapes.keys())
 
     for e in elements:
-        # shapes = [sdata.shapes[e] for e in elements]
         shapes = sdata.shapes[e]
         n_shapes = sum([len(s) for s in shapes])
 
@@ -86,6 +92,7 @@ def _render_shapes(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         values_are_categorical = color_source_vector is not None
@@ -99,7 +106,15 @@ def _render_shapes(
         if len(color_vector) == 0:
             color_vector = [render_params.cmap_params.na_color]
 
+        # filter by `groups`
+        if render_params.groups is not None and color_source_vector is not None:
+            mask = color_source_vector.isin(render_params.groups)
+            shapes = shapes[mask]
+            shapes = shapes.reset_index()
+            color_source_vector = color_source_vector[mask]
+            color_vector = color_vector[mask]
         shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
@@ -120,13 +135,19 @@ def _render_shapes(
         cax = ax.add_collection(_cax)
 
         # Using dict.fromkeys here since set returns in arbitrary order
-        palette = (
-            ListedColormap(dict.fromkeys(color_vector)) if render_params.palette is None else render_params.palette
-        )
+        # remove the color of NaN values, else it might be assigned to a category
+        # order of color in the palette should agree to order of occurence
+        if color_source_vector is None:
+            palette = ListedColormap(dict.fromkeys(color_vector))
+        else:
+            palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
+            # necessary in case different shapes elements are annotated with one table
+            if color_source_vector is not None:
+                color_source_vector = color_source_vector.remove_unused_categories()
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
@@ -157,6 +178,12 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     elements = render_params.elements
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -175,6 +202,14 @@ def _render_points(
         if render_params.color is not None:
             color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
             coords.extend(color)
+
+        points = points[coords].compute()
+        # points[color[0]].cat.set_categories(render_params.groups, inplace=True)
+        if render_params.groups is not None:
+            points = points[points[color].isin(render_params.groups).values]
+            points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
+        points = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
         point_df = points[coords].compute()
 
@@ -202,6 +237,7 @@ def _render_points(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         # color_source_vector is None when the values aren't categorical
@@ -224,6 +260,11 @@ def _render_points(
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
+            if color_source_vector is None:
+                palette = ListedColormap(dict.fromkeys(color_vector))
+            else:
+                palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
@@ -231,7 +272,7 @@ def _render_points(
                 adata=adata,
                 value_to_plot=render_params.color,
                 color_source_vector=color_source_vector,
-                palette=render_params.palette,
+                palette=palette,
                 alpha=render_params.alpha,
                 na_color=render_params.cmap_params.na_color,
                 legend_fontsize=legend_params.legend_fontsize,
@@ -427,6 +468,12 @@ def _render_labels(
 ) -> None:
     elements = render_params.elements
 
+    if render_params.groups is not None:
+        if isinstance(render_params.groups, str):
+            render_params.groups = [render_params.groups]
+        if not all(isinstance(g, str) for g in render_params.groups):
+            raise TypeError("All groups must be strings.")
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
@@ -482,6 +529,7 @@ def _render_labels(
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
+            cmap_params=render_params.cmap_params,
         )
 
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
