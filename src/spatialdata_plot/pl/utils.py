@@ -354,7 +354,9 @@ def _get_extent(
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
 
-            if len(transformations) == 1 and isinstance(transformations[0], sd.transformations.transformations.Identity):
+            if len(transformations) == 1 and isinstance(
+                transformations[0], sd.transformations.transformations.Identity
+            ):
                 result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
             else:
