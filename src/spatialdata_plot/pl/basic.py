@@ -19,6 +19,7 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
+from spatialdata._core.data_extent import get_extent
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -39,7 +40,6 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
-    _get_extent,
     _get_valid_cs,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
@@ -640,7 +640,6 @@ class PlotAccessor:
             # # rasterize MultiscaleSpatialImage objects
             # to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
             # for el in to_rasterize:
-            #     # TODO: use instead of rasterization here
             #     # _multiscale_to_spatial_image(
             #     #     sdata[el],
             #     #     fig_params.fig.dpi,
@@ -778,21 +777,20 @@ class PlotAccessor:
                     cs_contents.query(f"cs == '{cs}'")["has_shapes"][0],
                 ]
             ):
-                # TODO: adapt this to the new get_extent
-                extent = _get_extent(
-                    sdata=sdata,
+                extent = get_extent(
+                    sdata,
+                    coordinate_system=cs,
                     has_images="render_images" in render_cmds,
                     has_labels="render_labels" in render_cmds,
                     has_points="render_points" in render_cmds,
                     has_shapes="render_shapes" in render_cmds,
                     elements=elements_to_be_rendered,
-                    coordinate_systems=cs,
                 )
                 # If the axis already has limits, only expand them but not overwrite
-                x_min = min(x_min_orig, extent[cs][0]) - pad_extent
-                x_max = max(x_max_orig, extent[cs][1]) + pad_extent
-                y_min = min(y_min_orig, extent[cs][2]) - pad_extent
-                y_max = max(y_max_orig, extent[cs][3]) + pad_extent
+                x_min = min(x_min_orig, extent["x"][0]) - pad_extent
+                x_max = max(x_max_orig, extent["x"][1]) + pad_extent
+                y_min = min(y_min_orig, extent["y"][0]) - pad_extent
+                y_max = max(y_max_orig, extent["y"][1]) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 

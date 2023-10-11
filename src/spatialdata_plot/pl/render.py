@@ -16,6 +16,7 @@ from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
+from spatialdata.models import PointsModel
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
