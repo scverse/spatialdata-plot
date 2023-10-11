@@ -56,7 +56,7 @@ from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-from spatialdata.transformations import get_transformation
+from spatialdata.transformations import Identity, Scale, get_transformation
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -354,9 +354,7 @@ def _get_extent(
             transformations = get_transformation(tmp, to_coordinate_system=cs_name)
             transformations = _flatten_transformation_sequence(transformations)
 
-            if len(transformations) == 1 and isinstance(
-                transformations[0], sd.transformations.transformations.Identity
-            ):
+            if len(transformations) == 1 and isinstance(transformations[0], sd.transformations.transformations.Identity):
                 result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
 
             else:
@@ -1456,14 +1454,18 @@ def _rasterize_if_necessary(
     target_x_dims = dpi * width
 
     # TODO: when do we want to rasterize?
-    do_rasterization = y_dims > target_y_dims or x_dims > target_x_dims
+    do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
+    if x_dims < 2000 and y_dims < 2000:
+        do_rasterization = False
 
     if do_rasterization:
         # TODO: do we want min here?
-        target_unit_to_pixels = min(width / x_dims, height / y_dims)
+        target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
         image = rasterize(
             image, ("y", "x"), [0, 0], [y_dims, x_dims], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
         )
+        image = _robust_transform(image, coordinate_system)
+        logging.info(f"Rasterization (target_unit_to_pixels = {target_unit_to_pixels}) to improve performance.")
 
     return image
 
@@ -1473,6 +1475,7 @@ def _multiscale_to_spatial_image(
     dpi: float,
     width: float,
     height: float,
+    coordinate_system: str,
     scale: str | None = None,
     is_label: bool = False,
 ) -> SpatialImage:
@@ -1491,6 +1494,8 @@ def _multiscale_to_spatial_image(
         width of the target image in inches
     height
         height of the target image in inches
+    coordinate_system
+        name of the coordinate system the image belongs to
     scale
         specific scale that the user chose, if None the heuristic is used
     is_label
@@ -1514,13 +1519,25 @@ def _multiscale_to_spatial_image(
         optimal_x = width * dpi
         optimal_y = height * dpi
 
-        # get scale where the dimensions are closest to the optimal values. When x and y disagree: take lower resolution
+        # get scale where the dimensions are closest to the optimal values
+        # TODO: when in between, always pick higher resolution (downscaled afterwards)
         optimal_index_x = min(range(len(x_dims)), key=lambda i: abs(x_dims[i] - optimal_x))
         optimal_index_y = min(range(len(y_dims)), key=lambda i: abs(y_dims[i] - optimal_y))
 
-        # TODO: disagreeing x and y behavior okay? min or max? Maybe pick middle?
-        optimal_scale = scales[max(optimal_index_x, optimal_index_y)]
+        # pick the scale with higher resolution. Will still be downscaled
+        optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
 
-    if is_label:
-        return Labels2DModel.parse(multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0))
-    return Image2DModel.parse(multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0))
+    image = multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0)
+    image = Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
+
+    # Bring image to the original scale again
+    y_scale = multiscale_image[optimal_scale]["y"].values[1] - multiscale_image[optimal_scale]["y"].values[0]
+    x_scale = multiscale_image[optimal_scale]["x"].values[1] - multiscale_image[optimal_scale]["x"].values[0]
+
+    image.transform[coordinate_system] = sd.transformations.Sequence(
+        [
+            Scale([y_scale, x_scale], ("y", "x")),
+            Identity(),
+        ]
+    )
+    return _robust_transform(image, coordinate_system)

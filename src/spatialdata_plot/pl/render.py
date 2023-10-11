@@ -295,6 +295,7 @@ def _render_images(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    do_rasterization: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -310,6 +311,7 @@ def _render_images(
         elements = list(sdata_filt.images.keys())
 
     images = [sdata.images[e] for e in elements]
+
     for img in images:
         # get best scale out of multiscale image
         if isinstance(img, MultiscaleSpatialImage):
@@ -318,16 +320,18 @@ def _render_images(
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
                 scale=render_params.scale,
             )
         # rasterize spatial image if necessary to speed up performance
-        img = _rasterize_if_necessary(
-            image=img,
-            dpi=fig_params.fig.dpi,
-            width=fig_params.fig.get_size_inches()[0],
-            height=fig_params.fig.get_size_inches()[1],
-            coordinate_system=coordinate_system,
-        )
+        if do_rasterization:
+            img = _rasterize_if_necessary(
+                image=img,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
+            )
 
         if render_params.channel is None:
             channels = img.coords["c"].values
@@ -466,6 +470,7 @@ def _render_labels(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    do_rasterization: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -495,17 +500,19 @@ def _render_labels(
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
                 scale=render_params.scale,
+                is_label=True,
             )
         # rasterize spatial image if necessary to speed up performance
-        # TODO: skip this when isinstance(render_params.scale, str)???
-        label = _rasterize_if_necessary(
-            image=label,
-            dpi=fig_params.fig.dpi,
-            width=fig_params.fig.get_size_inches()[0],
-            height=fig_params.fig.get_size_inches()[1],
-            coordinate_system=coordinate_system,
-        )
+        if do_rasterization:
+            label = _rasterize_if_necessary(
+                image=label,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
+            )
 
         if sdata.table is None:
             instance_id = np.unique(label)

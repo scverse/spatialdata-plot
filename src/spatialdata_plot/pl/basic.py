@@ -637,51 +637,6 @@ class PlotAccessor:
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
 
-            # # rasterize MultiscaleSpatialImage objects
-            # to_rasterize = _get_elements_to_rasterize(sdata, cs, elements_to_be_rendered)
-            # for el in to_rasterize:
-            #     # _multiscale_to_spatial_image(
-            #     #     sdata[el],
-            #     #     fig_params.fig.dpi,
-            #     #     fig_params.fig.get_size_inches()[0],
-            #     #     fig_params.fig.get_size_inches()[1],
-            #     #     el not in sdata.images,
-            #     # )
-
-            #     available_scales = [leaf.name for leaf in sdata[el].leaves]
-            #     if scale is not None and scale in available_scales:
-            #         # user selected a valid scale
-            #         if el in sdata.images:
-            #             spatial_image = Image2DModel.parse(sdata[el][scale].image)
-            #         else:
-            #             # multi-scale contains labels
-            #             spatial_image = Labels2DModel.parse(sdata[el][scale].image)
-            #     else:
-            #         # multi-scale image should be rasterized
-            #         if scale is not None:
-            #             logger.warning(f"Scale {scale} doesn't exist for {el}, it is instead rasterized.")
-            #         spatial_image = rasterize(
-            #             sdata[el],
-            #             ("y", "x"),
-            #             [extent[cs][2], extent[cs][0]],
-            #             [extent[cs][3], extent[cs][1]],
-            #             cs,
-            #             target_unit_to_pixels=target_unit_to_pixels,
-            #         )
-            #         logger.info(
-            #             f"Multi-scale image {el} was rasterized with target_unit_to_pixels = {target_unit_to_pixels}."
-            #         )
-
-            #     if el in sdata.images:
-            #         sdata.images[el] = spatial_image
-            #     elif el in sdata.labels:
-            #         sdata.labels[el] = spatial_image
-            #     else:
-            #         raise ValueError(
-            #             f"{el} seems to be a MultiscaleImage but is not in labels or images. "
-            #             "Rasterization of points or shapes is currently not intended or supported."
-            #         )
-
             # properly transform all elements to the current coordinate system
             members = cs_contents.query(f"cs == '{cs}'")
 
@@ -713,6 +668,8 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
+                        # TODO: this is wrong somehow
+                        do_rasterization=not (isinstance(params.scale, str) and dpi is not None),
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     _render_shapes(
@@ -754,6 +711,7 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
+                        do_rasterization=not (isinstance(params.scale, str) and dpi is not None),
                     )
 
                 if title is not None:
