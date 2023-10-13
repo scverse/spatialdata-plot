@@ -119,6 +119,10 @@ def _prepare_params_plot(
         axs = None
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
+        elif isinstance(ax, Axes):
+            fig = ax.get_figure()
+            fig.set_dpi(dpi)
+            fig.set_size_inches(figsize)
 
     # set scalebar
     if scalebar_dx is not None:
