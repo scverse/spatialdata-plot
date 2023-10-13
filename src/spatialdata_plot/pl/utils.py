@@ -50,7 +50,6 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatial_image import SpatialImage
-from spatialdata import transform
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging

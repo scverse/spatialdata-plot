@@ -18,8 +18,6 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata.models import (
-    Image2DModel,
-    Labels2DModel,
     PointsModel,
 )
 from spatialdata.transformations import (

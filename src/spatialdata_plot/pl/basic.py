@@ -41,7 +41,6 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
-    _get_valid_cs,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
