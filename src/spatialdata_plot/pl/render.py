@@ -379,7 +379,7 @@ def _render_images(
             raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
         # prepare transformations
-        trans = get_transformation(sdata.images[e], get_all=True)[coordinate_system]
+        trans = get_transformation(img, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
@@ -560,7 +560,7 @@ def _render_labels(
             # get instance id based on subsetted table
             instance_id = table.obs[instance_key].values
 
-        trans = get_transformation(sdata.labels[e], get_all=True)[coordinate_system]
+        trans = get_transformation(label, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
@@ -568,7 +568,7 @@ def _render_labels(
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
-            element=sdata_filt.labels[e],
+            element=label,
             element_name=e,
             value_to_plot=render_params.color,
             layer=render_params.layer,

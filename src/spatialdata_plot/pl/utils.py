@@ -118,6 +118,7 @@ def _prepare_params_plot(
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
         elif isinstance(ax, Axes):
+            # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
             fig.set_dpi(dpi)
             fig.set_size_inches(figsize)
@@ -1138,9 +1139,10 @@ def _rasterize_if_necessary(
         image = rasterize(
             image, ("y", "x"), [0, 0], [y_dims, x_dims], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
         )
-        # TODO: ???
-        # image = _robust_transform(image, coordinate_system)
-        logging.info(f"Rasterization (target_unit_to_pixels = {target_unit_to_pixels}) to improve performance.")
+        logging.info(
+            f"Performed rasterization (with target_unit_to_pixels = {round(target_unit_to_pixels, 2)}) "
+            "to improve performance."
+        )
 
     return image
 
@@ -1215,12 +1217,5 @@ def _multiscale_to_spatial_image(
     # TODO: are there cases with > 1 data variable?
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
-    y_coords = image.coords["y"]
-    x_coords = image.coords["x"]
-    image = Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
 
-    image.coords["y"] = y_coords
-    image.coords["x"] = x_coords
-
-    # return _robust_transform(image, coordinate_system)
-    return image
+    return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
