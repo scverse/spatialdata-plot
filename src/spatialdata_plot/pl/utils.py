@@ -6,7 +6,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -44,7 +44,7 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Polygon
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -55,8 +55,7 @@ from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-from spatialdata.transformations import get_transformation
+from spatialdata.models import Image2DModel, SpatialElement
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -95,8 +94,6 @@ def _prepare_params_plot(
     scalebar_dx: float | Sequence[float] | None = None,
     scalebar_units: str | Sequence[str] | None = None,
 ) -> tuple[FigParams, ScalebarParams]:
-    # len(list(itertools.product(*iter_panels)))
-
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
     figsize = rcParams["figure.figsize"] if figsize is None else figsize
@@ -106,14 +103,16 @@ def _prepare_params_plot(
             num_panels=num_panels, hspace=hspace, wspace=wspace, ncols=ncols, dpi=dpi, figsize=figsize
         )
         axs: None | Sequence[Axes] = [plt.subplot(grid[c]) for c in range(num_panels)]
-    elif num_panels > 1 and ax is not None:
-        if len(ax) != num_panels:
+    elif num_panels > 1:
+        if not isinstance(ax, Sequence):
+            raise TypeError(f"Expected `ax` to be a `Sequence`, but got {type(ax).__name__}")
+        if ax is not None and len(ax) != num_panels:
             raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
         if fig is None:
             raise ValueError(
                 f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
             )
-        assert isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
+        assert ax is None or isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
         axs = ax
     else:
         axs = None
@@ -148,10 +147,10 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
 
     for cs_name, element_ids in cs_mapping.items():
         # determine if coordinate system has the respective elements
-        cs_has_images = bool(any((e in sdata.images) for e in element_ids))
-        cs_has_labels = bool(any((e in sdata.labels) for e in element_ids))
-        cs_has_points = bool(any((e in sdata.points) for e in element_ids))
-        cs_has_shapes = bool(any((e in sdata.shapes) for e in element_ids))
+        cs_has_images = any(e in sdata.images for e in element_ids)
+        cs_has_labels = any(e in sdata.labels for e in element_ids)
+        cs_has_points = any(e in sdata.points for e in element_ids)
+        cs_has_shapes = any(e in sdata.shapes for e in element_ids)
 
         cs_contents = pd.concat(
             [
@@ -290,242 +289,6 @@ def _get_collection_shape(
     )
 
 
-def _get_extent(
-    sdata: sd.SpatialData,
-    coordinate_systems: Sequence[str] | str | None = None,
-    has_images: bool = True,
-    has_labels: bool = True,
-    has_points: bool = True,
-    has_shapes: bool = True,
-    elements: Iterable[Any] | None = None,
-    share_extent: bool = False,
-) -> dict[str, tuple[int, int, int, int]]:
-    """Return the extent of all elements in their respective coordinate systems.
-
-    Parameters
-    ----------
-    sdata
-        The sd.SpatialData object to retrieve the extent from
-    has_images
-        Flag indicating whether to consider images when calculating the extent
-    has_labels
-        Flag indicating whether to consider labels when calculating the extent
-    has_points
-        Flag indicating whether to consider points when calculating the extent
-    has_shapes
-        Flag indicating whether to consider shapes when calculating the extent
-    elements
-        Optional list of element names to be considered. When None, all are used.
-    share_extent
-        Flag indicating whether to use the same extent for all coordinate systems
-
-    Returns
-    -------
-    A dict of tuples with the shape (xmin, xmax, ymin, ymax). The keys of the
-        dict are the coordinate_system keys.
-
-    """
-    extent: dict[str, dict[str, Sequence[int]]] = {}
-    cs_mapping = _get_coordinate_system_mapping(sdata)
-    cs_contents = _get_cs_contents(sdata)
-
-    if elements is None:  # to shut up ruff
-        elements = []
-
-    if not isinstance(elements, list):
-        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
-
-    if coordinate_systems is not None:
-        if isinstance(coordinate_systems, str):
-            coordinate_systems = [coordinate_systems]
-        cs_contents = cs_contents[cs_contents["cs"].isin(coordinate_systems)]
-        cs_mapping = {k: v for k, v in cs_mapping.items() if k in coordinate_systems}
-
-    for cs_name, element_ids in cs_mapping.items():
-        extent[cs_name] = {}
-        if len(elements) > 0:
-            element_ids = [e for e in element_ids if e in elements]
-
-        def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
-            tmp = element.copy()
-            if len(tmp.shape) == 3:
-                x_idx = 2
-                y_idx = 1
-            elif len(tmp.shape) == 2:
-                x_idx = 1
-                y_idx = 0
-
-            transformations = get_transformation(tmp, to_coordinate_system=cs_name)
-            transformations = _flatten_transformation_sequence(transformations)
-
-            if len(transformations) == 1 and isinstance(
-                transformations[0], sd.transformations.transformations.Identity
-            ):
-                result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
-
-            else:
-                origin = {
-                    "x": 0,
-                    "y": 0,
-                }
-                for t in transformations:
-                    if isinstance(t, sd.transformations.transformations.Translation):
-                        tmp = _translate_image(image=tmp, translation=t)
-
-                        for idx, ax in enumerate(t.axes):
-                            origin["x"] += t.translation[idx] if ax == "x" else 0
-                            origin["y"] += t.translation[idx] if ax == "y" else 0
-
-                    else:
-                        tmp = transform(tmp, t)
-
-                        if isinstance(t, sd.transformations.transformations.Scale):
-                            for idx, ax in enumerate(t.axes):
-                                origin["x"] *= t.scale[idx] if ax == "x" else 1
-                                origin["y"] *= t.scale[idx] if ax == "y" else 1
-
-                        elif isinstance(t, sd.transformations.transformations.Affine):
-                            pass
-
-                result = (origin["x"], tmp.shape[x_idx], origin["y"], tmp.shape[y_idx])
-
-            del tmp
-            return result
-
-        if has_images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
-            for images_key in sdata.images:
-                for e_id in element_ids:
-                    if images_key == e_id:
-                        if isinstance(sdata.images[e_id], spatial_image.SpatialImage):
-                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
-                        else:
-                            img = Image2DModel.parse(sdata.images[e_id]["scale0"].ds.to_array().squeeze(axis=0))
-                            extent[cs_name][e_id] = _get_extent_after_transformations(img, cs_name)
-
-        if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
-            for labels_key in sdata.labels:
-                for e_id in element_ids:
-                    if labels_key == e_id:
-                        if isinstance(sdata.labels[e_id], spatial_image.SpatialImage):
-                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
-                        else:
-                            label = Labels2DModel.parse(sdata.labels[e_id]["scale0"].ds.to_array().squeeze(axis=0))
-                            extent[cs_name][e_id] = _get_extent_after_transformations(label, cs_name)
-
-        if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
-            for shapes_key in sdata.shapes:
-                for e_id in element_ids:
-                    if shapes_key == e_id:
-
-                        def get_point_bb(
-                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 0
-                        ) -> Point:
-                            x, y = point.coords[0]
-                            if method == "topleft":
-                                point_bb = Point(x - radius - buffer, y - radius - buffer)
-                            else:
-                                point_bb = Point(x + radius + buffer, y + radius + buffer)
-
-                            return point_bb
-
-                        y_dims = []
-                        x_dims = []
-
-                        # Split by Point and Polygon:
-                        tmp_points = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: (geom.geom_type == "Point" and not geom.is_empty)
-                            )
-                        ]
-                        tmp_polygons = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: (geom.geom_type in ["Polygon", "MultiPolygon"] and not geom.is_empty)
-                            )
-                        ]
-
-                        if not tmp_points.empty:
-                            tmp_points["point_topleft"] = tmp_points.apply(
-                                lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
-                                axis=1,
-                            )
-                            tmp_points["point_bottomright"] = tmp_points.apply(
-                                lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
-                                axis=1,
-                            )
-                            xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp_points["point_topleft"].total_bounds
-                            xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
-                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
-                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
-
-                        if not tmp_polygons.empty:
-                            xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
-                            y_dims += [ymin, ymax]
-                            x_dims += [xmin, xmax]
-
-                        del tmp_points
-                        del tmp_polygons
-
-                        xmin = np.min(x_dims)
-                        xmax = np.max(x_dims)
-                        ymin = np.min(y_dims)
-                        ymax = np.max(y_dims)
-
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
-
-                        transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
-                        transformations = _flatten_transformation_sequence(transformations)
-
-                        for t in transformations:
-                            if isinstance(t, sd.transformations.transformations.Translation):
-                                for idx, ax in enumerate(t.axes):
-                                    extent[cs_name][e_id][0] += t.translation[idx] if ax == "x" else 0  # type: ignore
-                                    extent[cs_name][e_id][1] += t.translation[idx] if ax == "x" else 0  # type: ignore
-                                    extent[cs_name][e_id][2] += t.translation[idx] if ax == "y" else 0  # type: ignore
-                                    extent[cs_name][e_id][3] += t.translation[idx] if ax == "y" else 0  # type: ignore
-
-                            else:
-                                if isinstance(t, sd.transformations.transformations.Scale):
-                                    for idx, ax in enumerate(t.axes):
-                                        extent[cs_name][e_id][1] *= t.scale[idx] if ax == "x" else 1  # type: ignore
-                                        extent[cs_name][e_id][3] *= t.scale[idx] if ax == "y" else 1  # type: ignore
-
-                                elif isinstance(t, sd.transformations.transformations.Affine):
-                                    pass
-
-        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-            for points_key in sdata.points:
-                for e_id in element_ids:
-                    if points_key == e_id:
-                        tmp = sdata.points[points_key]
-                        xmin = tmp["x"].min().compute()
-                        xmax = tmp["x"].max().compute()
-                        ymin = tmp["y"].min().compute()
-                        ymax = tmp["y"].max().compute()
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
-
-    cswise_extent = {}
-    for cs_name, cs_contents in extent.items():
-        if len(cs_contents) > 0:
-            xmin = min([v[0] for v in cs_contents.values()])
-            xmax = max([v[1] for v in cs_contents.values()])
-            ymin = min([v[2] for v in cs_contents.values()])
-            ymax = max([v[3] for v in cs_contents.values()])
-            cswise_extent[cs_name] = (xmin, xmax, ymin, ymax)
-
-    if share_extent:
-        global_extent = {}
-        if len(cs_contents) > 0:
-            xmin = min([v[0] for v in cswise_extent.values()])
-            xmax = max([v[1] for v in cswise_extent.values()])
-            ymin = min([v[2] for v in cswise_extent.values()])
-            ymax = max([v[3] for v in cswise_extent.values()])
-            for cs_name in cswise_extent:
-                global_extent[cs_name] = (xmin, xmax, ymin, ymax)
-        return global_extent
-
-    return cswise_extent
-
-
 def _panel_grid(
     num_panels: int,
     hspace: float,
@@ -585,10 +348,8 @@ def _prepare_cmap_norm(
     cmap = copy(matplotlib.colormaps[rcParams["image.cmap"] if cmap is None else cmap])
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
-    if isinstance(norm, Normalize):
+    if isinstance(norm, Normalize) or not norm:
         pass  # TODO
-    elif not norm:
-        pass
     elif vcenter is None:
         norm = Normalize(vmin=vmin, vmax=vmax)
     else:
@@ -605,17 +366,17 @@ def _set_outline(
 ) -> OutlineParams:
     # Type checks for outline_width
     if isinstance(outline_width, int):
-        outline_width = float(outline_width)
+        outline_width = outline_width
     if not isinstance(outline_width, float):
         raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
     if outline_width == 0.0:
         outline = False
     if outline_width < 0.0:
         logging.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
-        outline_width = (-1) * outline_width
+        outline_width *= -1
 
     # the default black and white colors can be changed using the contour_config parameter
-    if (len(outline_color) == 3 or len(outline_color) == 4) and all(isinstance(c, float) for c in outline_color):
+    if len(outline_color) in {3, 4} and all(isinstance(c, float) for c in outline_color):
         outline_color = matplotlib.colors.to_hex(outline_color)
 
     if outline:
@@ -785,18 +546,15 @@ def _get_colors_for_categorical_obs(
         elif len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
             palette = [next(cc)["color"] for _ in range(len_cat)]
+        elif len_cat <= 20:
+            palette = default_20
+        elif len_cat <= 28:
+            palette = default_28
+        elif len_cat <= len(default_102):  # 103 colors
+            palette = default_102
         else:
-            if len_cat <= 20:
-                palette = default_20
-            elif len_cat <= 28:
-                palette = default_28
-            elif len_cat <= len(default_102):  # 103 colors
-                palette = default_102
-            else:
-                palette = ["grey" for _ in range(len_cat)]
-                logging.info(
-                    "input has more than 103 categories. Uniform " "'grey' color will be used for all categories."
-                )
+            palette = ["grey" for _ in range(len_cat)]
+            logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
 
     # otherwise, single channels turn out grey
     color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
@@ -1052,12 +810,6 @@ def _decorate_axs(
             # TODO: na_in_legend should have some effect here
             plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
 
-    # if img is not None:
-    #     ax.imshow(img, cmap=img_cmap, alpha=img_alpha)
-    # else:
-    #     ax.set_aspect("equal")
-    #     ax.invert_yaxis()
-
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
         ax.add_artist(scalebar)
@@ -1191,11 +943,7 @@ def _translate_image(
     image: spatial_image.SpatialImage,
     translation: sd.transformations.transformations.Translation,
 ) -> spatial_image.SpatialImage:
-    shifts: dict[str, int] = {}
-
-    for idx, axis in enumerate(translation.axes):
-        shifts[axis] = int(translation.translation[idx])
-
+    shifts: dict[str, int] = {axis: int(translation.translation[idx]) for idx, axis in enumerate(translation.axes)}
     img = image.values.copy()
     # for yx images (important for rasterized MultiscaleImages as labels)
     # TODO: this doesn't work as it should yet? no errors but blank image in the end
@@ -1248,81 +996,24 @@ def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
     return [list(ls.coords) for ls in linestrings]
 
 
-def _flatten_transformation_sequence(
-    transformation_sequence: list[sd.transformations.transformations.Sequence],
-) -> list[sd.transformations.transformations.Sequence]:
-    if isinstance(transformation_sequence, sd.transformations.transformations.Sequence):
-        transformations = list(transformation_sequence.transformations)
-        found_bottom_of_tree = False
-        while not found_bottom_of_tree:
-            if all(not isinstance(t, sd.transformations.transformations.Sequence) for t in transformations):
-                found_bottom_of_tree = True
-            else:
-                for idx, t in enumerate(transformations):
-                    if isinstance(t, sd.transformations.transformations.Sequence):
-                        transformations.pop(idx)
-                        transformations += t.transformations
-
-        return transformations
-
-    if isinstance(transformation_sequence, sd.transformations.transformations.BaseTransformation):
-        return [transformation_sequence]
-
-    raise TypeError("Parameter 'transformation_sequence' must be a Sequence.")
-
-
-def _robust_transform(element: Any, cs: str) -> Any:
-    try:
-        transformations = get_transformation(element, get_all=True)
-        if cs not in transformations:
-            return element
-        transformations = transformations[cs]
-        transformations = _flatten_transformation_sequence(transformations)
-        for _, t in enumerate(transformations):
-            if isinstance(t, sd.transformations.transformations.Translation):
-                element = _translate_image(image=element, translation=t)
-
-            elif isinstance(t, sd.transformations.transformations.Affine):
-                # edge case, waiting for Luca to decompose affine into components
-                # element = transform(element, t)
-                # new_transformations = get_transformation(element, get_all=True)
-                # new_transformations = new_transformations[cs]
-                # new_transformations = _flatten_transformation_sequence(new_transformations)
-                # seq = new_transformations[:len(new_transformations) - len(transformations)]
-                # seq = sd.transformations.Sequence(seq)
-                # set_transformation(element, seq, to_coordinate_system=cs)
-                # element = _robust_transform(element, cs)
-                # print(element.shape)
-                pass
-
-            else:
-                element = transform(element, t)
-
-    except ValueError as e:
-        # hack, talk to Luca
-        raise ValueError("Unable to transform element.") from e
-
-    return element
-
-
 def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
     # https://stackoverflow.com/a/21922058
 
     for geom in mp.geoms:
-        if geom.geom_type == "Polygon":
-            exterior_coords = geom.exterior.coords[:]
-            interior_coords = []
-            for interior in geom.interiors:
-                interior_coords += interior.coords[:]
-        elif geom.geom_type == "MultiPolygon":
+        if geom.geom_type == "MultiPolygon":
             exterior_coords = []
             interior_coords = []
             for part in geom:
                 epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
                 exterior_coords += epc["exterior_coords"]
                 interior_coords += epc["interior_coords"]
+        elif geom.geom_type == "Polygon":
+            exterior_coords = geom.exterior.coords[:]
+            interior_coords = []
+            for interior in geom.interiors:
+                interior_coords += interior.coords[:]
         else:
-            raise ValueError("Unhandled geometry type: " + repr(geom.type))
+            raise ValueError(f"Unhandled geometry type: {repr(geom.type)}")
 
     return interior_coords, exterior_coords
 
