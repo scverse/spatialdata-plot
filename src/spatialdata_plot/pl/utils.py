@@ -6,7 +6,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -43,17 +43,15 @@ from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Polygon
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import transform
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-from spatialdata.transformations import get_transformation
+from spatialdata.models import Image2DModel, SpatialElement
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -280,242 +278,6 @@ def _get_collection_shape(
         edgecolor=None if all(outline is None for outline in outline_c) else outline_c,
         **kwargs,
     )
-
-
-def _get_extent(
-    sdata: sd.SpatialData,
-    coordinate_systems: Sequence[str] | str | None = None,
-    has_images: bool = True,
-    has_labels: bool = True,
-    has_points: bool = True,
-    has_shapes: bool = True,
-    elements: Iterable[Any] | None = None,
-    share_extent: bool = False,
-) -> dict[str, tuple[int, int, int, int]]:
-    """Return the extent of all elements in their respective coordinate systems.
-
-    Parameters
-    ----------
-    sdata
-        The sd.SpatialData object to retrieve the extent from
-    has_images
-        Flag indicating whether to consider images when calculating the extent
-    has_labels
-        Flag indicating whether to consider labels when calculating the extent
-    has_points
-        Flag indicating whether to consider points when calculating the extent
-    has_shapes
-        Flag indicating whether to consider shapes when calculating the extent
-    elements
-        Optional list of element names to be considered. When None, all are used.
-    share_extent
-        Flag indicating whether to use the same extent for all coordinate systems
-
-    Returns
-    -------
-    A dict of tuples with the shape (xmin, xmax, ymin, ymax). The keys of the
-        dict are the coordinate_system keys.
-
-    """
-    extent: dict[str, dict[str, Sequence[int]]] = {}
-    cs_mapping = _get_coordinate_system_mapping(sdata)
-    cs_contents = _get_cs_contents(sdata)
-
-    if elements is None:  # to shut up ruff
-        elements = []
-
-    if not isinstance(elements, list):
-        raise ValueError(f"Invalid type of `elements`: {type(elements)}, expected `list`.")
-
-    if coordinate_systems is not None:
-        if isinstance(coordinate_systems, str):
-            coordinate_systems = [coordinate_systems]
-        cs_contents = cs_contents[cs_contents["cs"].isin(coordinate_systems)]
-        cs_mapping = {k: v for k, v in cs_mapping.items() if k in coordinate_systems}
-
-    for cs_name, element_ids in cs_mapping.items():
-        extent[cs_name] = {}
-        if len(elements) > 0:
-            element_ids = [e for e in element_ids if e in elements]
-
-        def _get_extent_after_transformations(element: Any, cs_name: str) -> Sequence[int]:
-            tmp = element.copy()
-            if len(tmp.shape) == 3:
-                x_idx = 2
-                y_idx = 1
-            elif len(tmp.shape) == 2:
-                x_idx = 1
-                y_idx = 0
-
-            transformations = get_transformation(tmp, to_coordinate_system=cs_name)
-            transformations = _flatten_transformation_sequence(transformations)
-
-            if len(transformations) == 1 and isinstance(
-                transformations[0], sd.transformations.transformations.Identity
-            ):
-                result = (0, tmp.shape[x_idx], 0, tmp.shape[y_idx])
-
-            else:
-                origin = {
-                    "x": 0,
-                    "y": 0,
-                }
-                for t in transformations:
-                    if isinstance(t, sd.transformations.transformations.Translation):
-                        tmp = _translate_image(image=tmp, translation=t)
-
-                        for idx, ax in enumerate(t.axes):
-                            origin["x"] += t.translation[idx] if ax == "x" else 0
-                            origin["y"] += t.translation[idx] if ax == "y" else 0
-
-                    else:
-                        tmp = transform(tmp, t)
-
-                        if isinstance(t, sd.transformations.transformations.Scale):
-                            for idx, ax in enumerate(t.axes):
-                                origin["x"] *= t.scale[idx] if ax == "x" else 1
-                                origin["y"] *= t.scale[idx] if ax == "y" else 1
-
-                        elif isinstance(t, sd.transformations.transformations.Affine):
-                            pass
-
-                result = (origin["x"], tmp.shape[x_idx], origin["y"], tmp.shape[y_idx])
-
-            del tmp
-            return result
-
-        if has_images and cs_contents.query(f"cs == '{cs_name}'")["has_images"][0]:
-            for images_key in sdata.images:
-                for e_id in element_ids:
-                    if images_key == e_id:
-                        if isinstance(sdata.images[e_id], spatial_image.SpatialImage):
-                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.images[e_id], cs_name)
-                        else:
-                            img = Image2DModel.parse(sdata.images[e_id]["scale0"].ds.to_array().squeeze(axis=0))
-                            extent[cs_name][e_id] = _get_extent_after_transformations(img, cs_name)
-
-        if has_labels and cs_contents.query(f"cs == '{cs_name}'")["has_labels"][0]:
-            for labels_key in sdata.labels:
-                for e_id in element_ids:
-                    if labels_key == e_id:
-                        if isinstance(sdata.labels[e_id], spatial_image.SpatialImage):
-                            extent[cs_name][e_id] = _get_extent_after_transformations(sdata.labels[e_id], cs_name)
-                        else:
-                            label = Labels2DModel.parse(sdata.labels[e_id]["scale0"].ds.to_array().squeeze(axis=0))
-                            extent[cs_name][e_id] = _get_extent_after_transformations(label, cs_name)
-
-        if has_shapes and cs_contents.query(f"cs == '{cs_name}'")["has_shapes"][0]:
-            for shapes_key in sdata.shapes:
-                for e_id in element_ids:
-                    if shapes_key == e_id:
-
-                        def get_point_bb(
-                            point: Point, radius: int, method: Literal["topleft", "bottomright"], buffer: int = 0
-                        ) -> Point:
-                            x, y = point.coords[0]
-                            if method == "topleft":
-                                point_bb = Point(x - radius - buffer, y - radius - buffer)
-                            else:
-                                point_bb = Point(x + radius + buffer, y + radius + buffer)
-
-                            return point_bb
-
-                        y_dims = []
-                        x_dims = []
-
-                        # Split by Point and Polygon:
-                        tmp_points = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: (geom.geom_type == "Point" and not geom.is_empty)
-                            )
-                        ]
-                        tmp_polygons = sdata.shapes[e_id][
-                            sdata.shapes[e_id]["geometry"].apply(
-                                lambda geom: (geom.geom_type in ["Polygon", "MultiPolygon"] and not geom.is_empty)
-                            )
-                        ]
-
-                        if not tmp_points.empty:
-                            tmp_points["point_topleft"] = tmp_points.apply(
-                                lambda row: get_point_bb(row["geometry"], row["radius"], "topleft"),
-                                axis=1,
-                            )
-                            tmp_points["point_bottomright"] = tmp_points.apply(
-                                lambda row: get_point_bb(row["geometry"], row["radius"], "bottomright"),
-                                axis=1,
-                            )
-                            xmin_tl, ymin_tl, xmax_tl, ymax_tl = tmp_points["point_topleft"].total_bounds
-                            xmin_br, ymin_br, xmax_br, ymax_br = tmp_points["point_bottomright"].total_bounds
-                            y_dims += [min(ymin_tl, ymin_br), max(ymax_tl, ymax_br)]
-                            x_dims += [min(xmin_tl, xmin_br), max(xmax_tl, xmax_br)]
-
-                        if not tmp_polygons.empty:
-                            xmin, ymin, xmax, ymax = tmp_polygons.total_bounds
-                            y_dims += [ymin, ymax]
-                            x_dims += [xmin, xmax]
-
-                        del tmp_points
-                        del tmp_polygons
-
-                        xmin = np.min(x_dims)
-                        xmax = np.max(x_dims)
-                        ymin = np.min(y_dims)
-                        ymax = np.max(y_dims)
-
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
-
-                        transformations = get_transformation(sdata.shapes[e_id], to_coordinate_system=cs_name)
-                        transformations = _flatten_transformation_sequence(transformations)
-
-                        for t in transformations:
-                            if isinstance(t, sd.transformations.transformations.Translation):
-                                for idx, ax in enumerate(t.axes):
-                                    extent[cs_name][e_id][0] += t.translation[idx] if ax == "x" else 0  # type: ignore
-                                    extent[cs_name][e_id][1] += t.translation[idx] if ax == "x" else 0  # type: ignore
-                                    extent[cs_name][e_id][2] += t.translation[idx] if ax == "y" else 0  # type: ignore
-                                    extent[cs_name][e_id][3] += t.translation[idx] if ax == "y" else 0  # type: ignore
-
-                            else:
-                                if isinstance(t, sd.transformations.transformations.Scale):
-                                    for idx, ax in enumerate(t.axes):
-                                        extent[cs_name][e_id][1] *= t.scale[idx] if ax == "x" else 1  # type: ignore
-                                        extent[cs_name][e_id][3] *= t.scale[idx] if ax == "y" else 1  # type: ignore
-
-                                elif isinstance(t, sd.transformations.transformations.Affine):
-                                    pass
-
-        if has_points and cs_contents.query(f"cs == '{cs_name}'")["has_points"][0]:
-            for points_key in sdata.points:
-                for e_id in element_ids:
-                    if points_key == e_id:
-                        tmp = sdata.points[points_key]
-                        xmin = tmp["x"].min().compute()
-                        xmax = tmp["x"].max().compute()
-                        ymin = tmp["y"].min().compute()
-                        ymax = tmp["y"].max().compute()
-                        extent[cs_name][e_id] = [xmin, xmax, ymin, ymax]
-
-    cswise_extent = {}
-    for cs_name, cs_contents in extent.items():
-        if len(cs_contents) > 0:
-            xmin = min(v[0] for v in cs_contents.values())
-            xmax = max(v[1] for v in cs_contents.values())
-            ymin = min(v[2] for v in cs_contents.values())
-            ymax = max(v[3] for v in cs_contents.values())
-            cswise_extent[cs_name] = (xmin, xmax, ymin, ymax)
-
-    if share_extent:
-        global_extent = {}
-        if len(cs_contents) > 0:
-            xmin = min(v[0] for v in cswise_extent.values())
-            xmax = max(v[1] for v in cswise_extent.values())
-            ymin = min(v[2] for v in cswise_extent.values())
-            ymax = max(v[3] for v in cswise_extent.values())
-            for cs_name in cswise_extent:
-                global_extent[cs_name] = (xmin, xmax, ymin, ymax)
-        return global_extent
-
-    return cswise_extent
 
 
 def _panel_grid(
@@ -1210,29 +972,6 @@ def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
     linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
 
     return [list(ls.coords) for ls in linestrings]
-
-
-def _flatten_transformation_sequence(
-    transformation_sequence: list[sd.transformations.transformations.Sequence],
-) -> list[sd.transformations.transformations.Sequence]:
-    if isinstance(transformation_sequence, sd.transformations.transformations.Sequence):
-        transformations = list(transformation_sequence.transformations)
-        found_bottom_of_tree = False
-        while not found_bottom_of_tree:
-            if all(not isinstance(t, sd.transformations.transformations.Sequence) for t in transformations):
-                found_bottom_of_tree = True
-            else:
-                for idx, t in enumerate(transformations):
-                    if isinstance(t, sd.transformations.transformations.Sequence):
-                        transformations.pop(idx)
-                        transformations += t.transformations
-
-        return transformations
-
-    if isinstance(transformation_sequence, sd.transformations.transformations.BaseTransformation):
-        return [transformation_sequence]
-
-    raise TypeError("Parameter 'transformation_sequence' must be a Sequence.")
 
 
 def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
