@@ -668,8 +668,7 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
-                        # TODO: this is wrong somehow
-                        do_rasterization=not (isinstance(params.scale, str) and dpi is not None),
+                        do_rasterization=not isinstance(params.scale, str) or dpi is not None,
                     )
                 elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:
                     _render_shapes(

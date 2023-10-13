@@ -56,7 +56,7 @@ from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-from spatialdata.transformations import Identity, Scale, get_transformation
+from spatialdata.transformations import get_transformation
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -1198,7 +1198,7 @@ def _translate_image(
 
     img = image.values.copy()
     # for yx images (important for rasterized MultiscaleImages as labels)
-    # TODO: this doesn't work as it should yet... no errors but blank image in the end
+    # TODO: this doesn't work as it should yet? no errors but blank image in the end
     expanded_dims = False
     if len(img.shape) == 2:
         img = np.expand_dims(img, axis=0)
@@ -1401,28 +1401,6 @@ def _get_valid_cs(
     return valid_cs
 
 
-# TODO: delete?
-def _get_elements_to_rasterize(
-    sdata: sd.SpatialData,
-    coordinate_system: str,
-    elements_to_be_rendered: list[str],
-) -> list[str]:
-    """Test which SpatialData elements need to be rasterized.
-
-    Given a coordinate system, test if there are MultiscaleSpatialImage objects
-    Their names are returned.
-    """
-    cs_mapping = _get_coordinate_system_mapping(sdata)
-    elements = cs_mapping[coordinate_system]
-    to_rasterize = []
-    for e in elements:
-        if (e in elements_to_be_rendered or len(elements_to_be_rendered) == 0) and isinstance(
-            sdata[e], MultiscaleSpatialImage
-        ):
-            to_rasterize.append(e)
-    return to_rasterize
-
-
 def _rasterize_if_necessary(
     image: SpatialImage, dpi: float, width: float, height: float, coordinate_system: str
 ) -> SpatialImage:
@@ -1522,28 +1500,36 @@ def _multiscale_to_spatial_image(
         x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
         y_dims = [multiscale_image[scale].dims["y"] for scale in scales]
 
+        # ensure that lists are sorted
+        order = np.argsort(x_dims)
+        scales = [scales[i] for i in order]
+        x_dims = [x_dims[i] for i in order]
+        y_dims = [y_dims[i] for i in order]
+
         optimal_x = width * dpi
         optimal_y = height * dpi
 
-        # get scale where the dimensions are closest to the optimal values
-        # TODO: when in between, always pick higher resolution (downscaled afterwards)
-        optimal_index_x = min(range(len(x_dims)), key=lambda i: abs(x_dims[i] - optimal_x))
-        optimal_index_y = min(range(len(y_dims)), key=lambda i: abs(y_dims[i] - optimal_y))
+        # get scale where the dimensions are close to the optimal values
+        # when possible, pick higher resolution (worst case: downscaled afterwards)
+        optimal_index_y = np.searchsorted(y_dims, optimal_y)
+        if optimal_index_y == len(y_dims):
+            optimal_index_y -= 1
+        optimal_index_x = np.searchsorted(x_dims, optimal_x)
+        if optimal_index_x == len(x_dims):
+            optimal_index_x -= 1
 
-        # pick the scale with higher resolution. Will still be downscaled
+        # pick the scale with higher resolution (worst case: downscaled afterwards)
         optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
 
-    image = multiscale_image[optimal_scale].ds.to_array().squeeze(axis=0)
+    # TODO: are there cases with > 1 data variable?
+    data_var_keys = list(multiscale_image[optimal_scale].data_vars)
+    image = multiscale_image[optimal_scale][data_var_keys[0]]
+    y_coords = image.coords["y"]
+    x_coords = image.coords["x"]
     image = Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
 
-    # Bring image to the original scale again
-    y_scale = multiscale_image[optimal_scale]["y"].values[1] - multiscale_image[optimal_scale]["y"].values[0]
-    x_scale = multiscale_image[optimal_scale]["x"].values[1] - multiscale_image[optimal_scale]["x"].values[0]
+    image.coords["y"] = y_coords
+    image.coords["x"] = x_coords
 
-    image.transform[coordinate_system] = sd.transformations.Sequence(
-        [
-            Scale([y_scale, x_scale], ("y", "x")),
-            Identity(),
-        ]
-    )
-    return _robust_transform(image, coordinate_system)
+    # return _robust_transform(image, coordinate_system)
+    return image
