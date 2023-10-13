@@ -332,9 +332,8 @@ def _render_images(
     if elements is None:
         elements = list(sdata_filt.images.keys())
 
-    images = [sdata.images[e] for e in elements]
-
-    for img in images:
+    for e in elements:
+        img = sdata.images[e]
         # get best scale out of multiscale image
         if isinstance(img, MultiscaleSpatialImage):
             img = _multiscale_to_spatial_image(
@@ -526,9 +525,8 @@ def _render_labels(
     if elements is None:
         elements = list(sdata_filt.labels.keys())
 
-    labels = [sdata.labels[e] for e in elements]
-
-    for label, label_key in zip(labels, elements):
+    for e in elements:
+        label = sdata_filt.labels[e]
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
             label = _multiscale_to_spatial_image(

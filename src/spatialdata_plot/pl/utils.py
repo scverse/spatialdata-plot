@@ -54,7 +54,7 @@ from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, SpatialElement
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -1138,7 +1138,8 @@ def _rasterize_if_necessary(
         image = rasterize(
             image, ("y", "x"), [0, 0], [y_dims, x_dims], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
         )
-        image = _robust_transform(image, coordinate_system)
+        # TODO: ???
+        # image = _robust_transform(image, coordinate_system)
         logging.info(f"Rasterization (target_unit_to_pixels = {target_unit_to_pixels}) to improve performance.")
 
     return image
