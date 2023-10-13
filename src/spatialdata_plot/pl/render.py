@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections import abc
 from copy import copy
 from typing import Union
 
 import dask
 import geopandas as gpd
 import matplotlib
+import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -20,6 +21,9 @@ from spatialdata.models import (
     Image2DModel,
     Labels2DModel,
     PointsModel,
+)
+from spatialdata.transformations import (
+    get_transformation,
 )
 
 from spatialdata_plot._logging import logger
@@ -45,7 +49,7 @@ from spatialdata_plot.pl.utils import (
 )
 from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
-_Normalize = Union[Normalize, Sequence[Normalize]]
+_Normalize = Union[Normalize, abc.Sequence[Normalize]]
 
 
 def _render_shapes(
@@ -136,6 +140,14 @@ def _render_shapes(
             _cax.set_clim(min(color_vector), max(color_vector))
 
         cax = ax.add_collection(_cax)
+
+        # Apply the transformation to the PatchCollection's paths
+        trans = get_transformation(sdata_filt.shapes[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans)
+
+        for path in _cax.get_paths():
+            path.vertices = trans.transform(path.vertices)
 
         # Using dict.fromkeys here since set returns in arbitrary order
         # remove the color of NaN values, else it might be assigned to a category
@@ -260,6 +272,14 @@ def _render_points(
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
+
+        trans = get_transformation(sdata.points[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans)
+
+        for path in _cax.get_paths():
+            path.vertices = trans.transform(path.vertices)
+
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
@@ -311,11 +331,11 @@ def _render_images(
     if elements is None:
         elements = list(sdata_filt.images.keys())
 
-    images = [sdata.images[e] for e in elements]
-    for img, img_key in zip(images, elements):
+    for e in elements:
+        img = sdata.images[e]
         if not isinstance(img, spatial_image.SpatialImage):
             img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{img_key}'.")
+            logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{e}'.")
 
         if render_params.channel is None:
             channels = img.coords["c"].values
@@ -341,6 +361,12 @@ def _render_images(
         if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
             raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
+        # prepare transformations
+        trans = get_transformation(sdata.images[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans)
+        trans_data = trans + ax.transData
+
         # 1) Image has only 1 channel
         if n_channels == 1 and not isinstance(render_params.cmap_params, list):
             layer = img.sel(c=channels).squeeze()
@@ -358,11 +384,12 @@ def _render_images(
             else:
                 cmap = _get_linear_colormap([render_params.palette], "k")[0]
 
-            ax.imshow(
+            im = ax.imshow(
                 layer,  # get rid of the channel dimension
                 cmap=cmap,
                 alpha=render_params.alpha,
             )
+            im.set_transform(trans_data)
 
         # 2) Image has any number of channels but 1
         else:
@@ -387,7 +414,11 @@ def _render_images(
 
             # 2A) Image has 3 channels, no palette/cmap info -> use RGB
             if n_channels == 3 and render_params.palette is None and not got_multiple_cmaps:
-                ax.imshow(np.stack([layers[c] for c in channels], axis=-1), alpha=render_params.alpha)
+                im = ax.imshow(
+                    np.stack([layers[c] for c in channels], axis=-1),
+                    alpha=render_params.alpha,
+                )
+                im.set_transform(trans_data)
 
             # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
             elif render_params.palette is None and not got_multiple_cmaps:
@@ -405,10 +436,11 @@ def _render_images(
                 # Remove alpha channel so we can overwrite it from render_params.alpha
                 colored = colored[:, :, :3]
 
-                ax.imshow(
+                im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
                 )
+                im.set_transform(trans_data)
 
             # 2C) Image has n channels and palette info
             elif render_params.palette is not None and not got_multiple_cmaps:
@@ -423,10 +455,11 @@ def _render_images(
                 # Remove alpha channel so we can overwrite it from render_params.alpha
                 colored = colored[:, :, :3]
 
-                ax.imshow(
+                im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
                 )
+                im.set_transform(trans_data)
 
             elif render_params.palette is None and got_multiple_cmaps:
                 channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
@@ -437,10 +470,11 @@ def _render_images(
                 # Remove alpha channel so we can overwrite it from render_params.alpha
                 colored = colored[:, :, :3]
 
-                ax.imshow(
+                im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
                 )
+                im.set_transform(trans_data)
 
             elif render_params.palette is not None and got_multiple_cmaps:
                 raise ValueError("If 'palette' is provided, 'cmap' must be None.")
@@ -473,12 +507,11 @@ def _render_labels(
     if elements is None:
         elements = list(sdata_filt.labels.keys())
 
-    labels = [sdata.labels[e] for e in elements]
-
-    for label, label_key in zip(labels, elements):
+    for e in elements:
+        label = sdata_filt.labels[e]
         if not isinstance(label, spatial_image.SpatialImage):
             label = Labels2DModel.parse(label["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning(f"Multi-scale labels not yet supported, using scale0 of multi-scale label '{label_key}'.")
+            logger.warning(f"Multi-scale labels not yet supported, using scale0 of multi-scale label '{e}'.")
 
         if sdata.table is None:
             instance_id = np.unique(label)
@@ -487,16 +520,21 @@ def _render_labels(
             instance_key = _get_instance_key(sdata)
             region_key = _get_region_key(sdata)
 
-            table = sdata.table[sdata.table.obs[region_key].isin([label_key])]
+            table = sdata.table[sdata.table.obs[region_key].isin([e])]
 
             # get instance id based on subsetted table
             instance_id = table.obs[instance_key].values
 
+        trans = get_transformation(sdata.labels[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans)
+        trans_data = trans + ax.transData
+
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
-            element=sdata_filt.labels[label_key],
-            element_name=label_key,
+            element=sdata_filt.labels[e],
+            element_name=e,
             value_to_plot=render_params.color,
             layer=render_params.layer,
             groups=render_params.groups,
@@ -526,8 +564,8 @@ def _render_labels(
                 norm=render_params.cmap_params.norm if not categorical else None,
                 alpha=render_params.fill_alpha,
                 origin="lower",
-                # zorder=3,
             )
+            _cax.set_transform(trans_data)
             cax = ax.add_image(_cax)
 
             # Then overlay the contour
@@ -549,8 +587,8 @@ def _render_labels(
                 norm=render_params.cmap_params.norm if not categorical else None,
                 alpha=render_params.outline_alpha,
                 origin="lower",
-                # zorder=4,
             )
+            _cax.set_transform(trans_data)
             cax = ax.add_image(_cax)
 
         else:
@@ -573,8 +611,8 @@ def _render_labels(
                 norm=render_params.cmap_params.norm if not categorical else None,
                 alpha=render_params.fill_alpha,
                 origin="lower",
-                # zorder=4,
             )
+            _cax.set_transform(trans_data)
             cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
