@@ -121,7 +121,7 @@ def _prepare_params_plot(
             # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
             fig.set_dpi(dpi)
-            fig.set_size_inches(figsize)
+            # fig.set_size_inches(figsize)
 
     # set scalebar
     if scalebar_dx is not None:
@@ -946,7 +946,6 @@ def _translate_image(
     shifts: dict[str, int] = {axis: int(translation.translation[idx]) for idx, axis in enumerate(translation.axes)}
     img = image.values.copy()
     # for yx images (important for rasterized MultiscaleImages as labels)
-    # TODO: this doesn't work as it should yet? no errors but blank image in the end
     expanded_dims = False
     if len(img.shape) == 2:
         img = np.expand_dims(img, axis=0)
@@ -1214,7 +1213,7 @@ def _multiscale_to_spatial_image(
         # pick the scale with higher resolution (worst case: downscaled afterwards)
         optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
 
-    # TODO: are there cases with > 1 data variable?
+    # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
 
