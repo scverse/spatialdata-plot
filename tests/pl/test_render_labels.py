@@ -21,3 +21,13 @@ _ = spatialdata_plot
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_labels(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(elements="blobs_labels").pl.show()
+
+    def test_plot_can_render_multiscale_labels(self, sdata_blobs: SpatialData):
+        sdata_blobs.table.obs["region"] = "blobs_multiscale_labels"
+        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        sdata_blobs.pl.render_labels("blobs_multiscale_labels").pl.show()
+
+    def test_plot_can_render_given_scale_of_multiscale_labels(self, sdata_blobs: SpatialData):
+        sdata_blobs.table.obs["region"] = "blobs_multiscale_labels"
+        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        sdata_blobs.pl.render_labels("blobs_multiscale_labels", scale="scale1").pl.show()

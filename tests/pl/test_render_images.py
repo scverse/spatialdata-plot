@@ -49,3 +49,9 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_normalize_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", quantiles_for_norm=(5, 90)).pl.show()
+
+    def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_multiscale_image").pl.show()
+
+    def test_plot_can_render_given_scale_of_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_multiscale_image", scale="scale2").pl.show()

@@ -341,7 +341,6 @@ def _render_images(
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
-                coordinate_system=coordinate_system,
                 scale=render_params.scale,
             )
         # rasterize spatial image if necessary to speed up performance
@@ -534,7 +533,6 @@ def _render_labels(
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
-                coordinate_system=coordinate_system,
                 scale=render_params.scale,
                 is_label=True,
             )

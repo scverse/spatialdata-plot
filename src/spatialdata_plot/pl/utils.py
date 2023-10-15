@@ -121,7 +121,6 @@ def _prepare_params_plot(
             # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
             fig.set_dpi(dpi)
-            # fig.set_size_inches(figsize)
 
     # set scalebar
     if scalebar_dx is not None:
@@ -1127,7 +1126,7 @@ def _rasterize_if_necessary(
     target_y_dims = dpi * height
     target_x_dims = dpi * width
 
-    # TODO: when do we want to rasterize?
+    # TODO: when exactly do we want to rasterize?
     do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
     if x_dims < 2000 and y_dims < 2000:
         do_rasterization = False
@@ -1151,7 +1150,6 @@ def _multiscale_to_spatial_image(
     dpi: float,
     width: float,
     height: float,
-    coordinate_system: str,
     scale: str | None = None,
     is_label: bool = False,
 ) -> SpatialImage:
@@ -1170,8 +1168,6 @@ def _multiscale_to_spatial_image(
         width of the target image in inches
     height
         height of the target image in inches
-    coordinate_system
-        name of the coordinate system the image belongs to
     scale
         specific scale that the user chose, if None the heuristic is used
     is_label
