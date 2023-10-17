@@ -342,7 +342,13 @@ class PlotAccessor:
         quantiles_for_norm
             Tuple of (pmin, pmax) which will be used for quantile normalization.
         scale
-            Specific scale out of multiscale images to be plotted. If None, a scale is chosen heuristically
+            Influences the resolution of the rendering. There are three possibilities for setting this parameter:
+                1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
+                is selected before the rasterization step.
+                2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
+                (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
+                3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
+                with the highest resolution is selected. This can lead to long computing times for large images!
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -439,7 +445,13 @@ class PlotAccessor:
         alpha
             Alpha value for the labels.
         scale
-            Specific scale out of multiscale labels to be plotted. If None, a scale is chosen heuristically
+            Influences the resolution of the rendering. There are three possibilities for setting this parameter:
+                1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
+                is selected before the rasterization step.
+                2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
+                (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
+                3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
+                with the highest resolution is selected. This can lead to long computing times for large images!
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -624,6 +636,9 @@ class PlotAccessor:
 
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and has_images:
+                    do_rasterization = (params.scale is None) or (
+                        isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                    )
                     _render_images(
                         sdata=sdata,
                         render_params=params,
@@ -632,7 +647,7 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
-                        do_rasterization=not isinstance(params.scale, str) or dpi is not None,
+                        do_rasterization=do_rasterization,
                     )
                     wants_images = True
                     wanted_images = params.elements if params.elements is not None else list(sdata.images.keys())
@@ -694,6 +709,9 @@ class PlotAccessor:
                                 key=params.color,
                                 palette=params.palette,
                             )
+                    do_rasterization = (params.scale is None) or (
+                        isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                    )
                     _render_labels(
                         sdata=sdata,
                         render_params=params,
@@ -702,7 +720,7 @@ class PlotAccessor:
                         fig_params=fig_params,
                         scalebar_params=scalebar_params,
                         legend_params=legend_params,
-                        do_rasterization=not (isinstance(params.scale, str) and dpi is not None),
+                        do_rasterization=do_rasterization,
                     )
                     wants_labels = True
                     wanted_labels = params.elements if params.elements is not None else list(sdata.labels.keys())

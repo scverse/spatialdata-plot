@@ -1179,15 +1179,17 @@ def _multiscale_to_spatial_image(
         To be rendered, extracted from the MultiscaleSpatialImage respecting the dpi and size of the target image.
     """
     scales = [leaf.name for leaf in multiscale_image.leaves]
+    x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
+    y_dims = [multiscale_image[scale].dims["y"] for scale in scales]
 
     if isinstance(scale, str):
-        if scale not in scales:
-            raise ValueError(f"Scale {scale} does not exist. Please select one of {scales}!")
+        if scale not in scales and scale != "full":
+            raise ValueError(f'Scale {scale} does not exist. Please select one of {scales} or set scale = "full"!')
         optimal_scale = scale
+        if scale == "full":
+            # use scale with highest resolution
+            optimal_scale = scales[np.argmax(x_dims)]
     else:
-        x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
-        y_dims = [multiscale_image[scale].dims["y"] for scale in scales]
-
         # ensure that lists are sorted
         order = np.argsort(x_dims)
         scales = [scales[i] for i in order]
