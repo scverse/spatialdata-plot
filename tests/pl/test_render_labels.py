@@ -1,6 +1,8 @@
+import dask.array as da
 import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
 from tests.conftest import PlotTester, PlotTesterMeta
@@ -31,3 +33,29 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.table.obs["region"] = "blobs_multiscale_labels"
         sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         sdata_blobs.pl.render_labels("blobs_multiscale_labels", scale="scale1").pl.show()
+
+    def test_plot_can_do_rasterization(self, sdata_blobs: SpatialData):
+        temp = sdata_blobs["blobs_labels"].data.copy()
+        temp = da.concatenate([temp] * 6, axis=0)
+        temp = da.concatenate([temp] * 6, axis=1)
+        img = to_spatial_image(temp, dims=("y", "x"))
+        img.attrs["transform"] = sdata_blobs["blobs_labels"].transform
+        sdata_blobs["blobs_giant_labels"] = img
+
+        sdata_blobs.table.obs["region"] = "blobs_giant_labels"
+        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
+
+        sdata_blobs.pl.render_labels("blobs_giant_labels").pl.show()
+
+    def test_plot_can_stop_rasterization_with_scale_full(self, sdata_blobs: SpatialData):
+        temp = sdata_blobs["blobs_labels"].data.copy()
+        temp = da.concatenate([temp] * 6, axis=0)
+        temp = da.concatenate([temp] * 6, axis=1)
+        img = to_spatial_image(temp, dims=("y", "x"))
+        img.attrs["transform"] = sdata_blobs["blobs_labels"].transform
+        sdata_blobs["blobs_giant_labels"] = img
+
+        sdata_blobs.table.obs["region"] = "blobs_giant_labels"
+        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
+
+        sdata_blobs.pl.render_labels("blobs_giant_labels", scale="full").pl.show()
