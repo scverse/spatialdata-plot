@@ -636,68 +636,68 @@ class PlotAccessor:
 
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and has_images:
-                    do_rasterization = (params.scale is None) or (
-                        isinstance(params.scale, str) and params.scale != "full" and dpi is not None
-                    )
-                    _render_images(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                        do_rasterization=do_rasterization,
-                    )
                     wants_images = True
                     wanted_images = params.elements if params.elements is not None else list(sdata.images.keys())
-                    wanted_elements.extend(
-                        [
-                            image
-                            for image in wanted_images
-                            if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
-                        ]
-                    )
+                    wanted_images_on_this_cs = [
+                        image
+                        for image in wanted_images
+                        if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_images_on_this_cs)
+                    if len(wanted_images_on_this_cs) > 0:
+                        do_rasterization = (params.scale is None) or (
+                            isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                        )
+                        _render_images(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            do_rasterization=do_rasterization,
+                        )
 
                 elif cmd == "render_shapes" and has_shapes:
-                    _render_shapes(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_shapes = True
                     wanted_shapes = params.elements if params.elements is not None else list(sdata.shapes.keys())
-                    wanted_elements.extend(
-                        [
-                            shape
-                            for shape in wanted_shapes
-                            if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
-                        ]
-                    )
+                    wanted_shapes_on_this_cs = [
+                        shape
+                        for shape in wanted_shapes
+                        if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_shapes_on_this_cs)
+                    if len(wanted_shapes_on_this_cs) > 0:
+                        _render_shapes(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                        )
 
                 elif cmd == "render_points" and has_points:
-                    _render_points(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_points = True
                     wanted_points = params.elements if params.elements is not None else list(sdata.points.keys())
-                    wanted_elements.extend(
-                        [
-                            point
-                            for point in wanted_points
-                            if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
-                        ]
-                    )
+                    wanted_points_on_this_cs = [
+                        point
+                        for point in wanted_points
+                        if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_points_on_this_cs)
+                    if len(wanted_points_on_this_cs) > 0:
+                        _render_points(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                        )
 
                 elif cmd == "render_labels" and has_labels:
                     if sdata.table is not None and isinstance(params.color, str):
@@ -709,28 +709,28 @@ class PlotAccessor:
                                 key=params.color,
                                 palette=params.palette,
                             )
-                    do_rasterization = (params.scale is None) or (
-                        isinstance(params.scale, str) and params.scale != "full" and dpi is not None
-                    )
-                    _render_labels(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                        do_rasterization=do_rasterization,
-                    )
                     wants_labels = True
                     wanted_labels = params.elements if params.elements is not None else list(sdata.labels.keys())
-                    wanted_elements.extend(
-                        [
-                            label
-                            for label in wanted_labels
-                            if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
-                        ]
-                    )
+                    wanted_labels_on_this_cs = [
+                        label
+                        for label in wanted_labels
+                        if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_labels_on_this_cs)
+                    if len(wanted_labels_on_this_cs) > 0:
+                        do_rasterization = (params.scale is None) or (
+                            isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                        )
+                        _render_labels(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            do_rasterization=do_rasterization,
+                        )
 
                 if title is None:
                     t = cs
