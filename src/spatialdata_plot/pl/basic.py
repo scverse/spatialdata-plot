@@ -41,6 +41,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
+    _get_valid_cs,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
@@ -595,6 +596,42 @@ class PlotAccessor:
         for cs in coordinate_systems:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
+
+        # Check if user specified only certain elements to be plotted
+        cs_contents = _get_cs_contents(sdata)
+        elements_to_be_rendered = []
+        for cmd, params in render_cmds.items():
+            if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:  # noqa: SIM102
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+
+        # filter out cs without relevant elements
+        coordinate_systems = _get_valid_cs(
+            sdata=sdata,
+            coordinate_systems=coordinate_systems,
+            render_images="render_images" in render_cmds,
+            render_labels="render_labels" in render_cmds,
+            render_points="render_points" in render_cmds,
+            render_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
+        )
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
