@@ -683,7 +683,9 @@ class PlotAccessor:
                     wanted_elements.extend(wanted_images_on_this_cs)
                     if len(wanted_images_on_this_cs) > 0:
                         do_rasterization = (params.scale is None) or (
-                            isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                            isinstance(params.scale, str)
+                            and params.scale != "full"
+                            and (dpi is not None or figsize is not None)
                         )
                         _render_images(
                             sdata=sdata,
@@ -756,7 +758,9 @@ class PlotAccessor:
                     wanted_elements.extend(wanted_labels_on_this_cs)
                     if len(wanted_labels_on_this_cs) > 0:
                         do_rasterization = (params.scale is None) or (
-                            isinstance(params.scale, str) and params.scale != "full" and dpi is not None
+                            isinstance(params.scale, str)
+                            and params.scale != "full"
+                            and (dpi is not None or figsize is not None)
                         )
                         _render_labels(
                             sdata=sdata,
