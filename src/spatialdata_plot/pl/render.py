@@ -17,6 +17,7 @@ from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
+from spatialdata._core.data_extent import get_extent
 from spatialdata.models import (
     PointsModel,
 )
@@ -334,6 +335,7 @@ def _render_images(
 
     for e in elements:
         img = sdata.images[e]
+        extent = get_extent(img)
         # get best scale out of multiscale image
         if isinstance(img, MultiscaleSpatialImage):
             img = _multiscale_to_spatial_image(
@@ -351,6 +353,7 @@ def _render_images(
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
                 coordinate_system=coordinate_system,
+                extent=extent,
             )
 
         if render_params.channel is None:
@@ -526,6 +529,7 @@ def _render_labels(
 
     for e in elements:
         label = sdata_filt.labels[e]
+        extent = get_extent(label)
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
             label = _multiscale_to_spatial_image(
@@ -544,6 +548,7 @@ def _render_labels(
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
                 coordinate_system=coordinate_system,
+                extent=extent,
             )
 
         if sdata.table is None:

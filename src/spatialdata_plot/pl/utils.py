@@ -1091,7 +1091,12 @@ def _get_valid_cs(
 
 
 def _rasterize_if_necessary(
-    image: SpatialImage, dpi: float, width: float, height: float, coordinate_system: str
+    image: SpatialImage,
+    dpi: float,
+    width: float,
+    height: float,
+    coordinate_system: str,
+    extent: dict[str, tuple[float, float]],
 ) -> SpatialImage:
     """Ensure fast rendering by adapting the resolution if necessary.
 
@@ -1109,6 +1114,9 @@ def _rasterize_if_necessary(
         Height (in inches) of the figure
     coordinate_system
         name of the coordinate system the image belongs to
+    extent
+        extent of the (full size) image. Must be a dict containing a tuple with min and
+        max extent for the keys "x" and "y".
 
     Returns
     -------
@@ -1135,7 +1143,12 @@ def _rasterize_if_necessary(
         # TODO: do we want min here?
         target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
         image = rasterize(
-            image, ("y", "x"), [0, 0], [y_dims, x_dims], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
+            image,
+            ("y", "x"),
+            [extent["y"][0], extent["x"][0]],
+            [extent["y"][1], extent["x"][1]],
+            coordinate_system,
+            target_unit_to_pixels=target_unit_to_pixels,
         )
         logging.info(
             f"Performed rasterization (with target_unit_to_pixels = {round(target_unit_to_pixels, 2)}) "
@@ -1214,5 +1227,7 @@ def _multiscale_to_spatial_image(
     # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
+
+    logging.info(f"Using scale {optimal_scale} from multi-scale image.")
 
     return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
