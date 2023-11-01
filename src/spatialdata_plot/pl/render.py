@@ -335,7 +335,7 @@ def _render_images(
 
     for e in elements:
         img = sdata.images[e]
-        extent = get_extent(img)
+        extent = get_extent(img, coordinate_system=coordinate_system)
         # get best scale out of multiscale image
         if isinstance(img, MultiscaleSpatialImage):
             img = _multiscale_to_spatial_image(
@@ -529,7 +529,7 @@ def _render_labels(
 
     for e in elements:
         label = sdata_filt.labels[e]
-        extent = get_extent(label)
+        extent = get_extent(label, coordinate_system=coordinate_system)
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
             label = _multiscale_to_spatial_image(
