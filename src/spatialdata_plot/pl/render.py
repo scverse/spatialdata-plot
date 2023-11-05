@@ -318,7 +318,7 @@ def _render_images(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
-    do_rasterization: bool,
+    rasterize: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -333,20 +333,23 @@ def _render_images(
     if elements is None:
         elements = list(sdata_filt.images.keys())
 
-    for e in elements:
+    for i, e in enumerate(elements):
         img = sdata.images[e]
         extent = get_extent(img, coordinate_system=coordinate_system)
+        scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+
         # get best scale out of multiscale image
         if isinstance(img, MultiscaleSpatialImage):
             img = _multiscale_to_spatial_image(
                 multiscale_image=img,
+                element=e,
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
-                scale=render_params.scale,
+                scale=scale,
             )
         # rasterize spatial image if necessary to speed up performance
-        if do_rasterization:
+        if rasterize:
             img = _rasterize_if_necessary(
                 image=img,
                 dpi=fig_params.fig.dpi,
@@ -507,7 +510,7 @@ def _render_labels(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
-    do_rasterization: bool,
+    rasterize: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -527,21 +530,24 @@ def _render_labels(
     if elements is None:
         elements = list(sdata_filt.labels.keys())
 
-    for e in elements:
+    for i, e in enumerate(elements):
         label = sdata_filt.labels[e]
         extent = get_extent(label, coordinate_system=coordinate_system)
+        scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
             label = _multiscale_to_spatial_image(
                 multiscale_image=label,
+                element=e,
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
-                scale=render_params.scale,
+                scale=scale,
                 is_label=True,
             )
         # rasterize spatial image if necessary to speed up performance
-        if do_rasterization:
+        if rasterize:
             label = _rasterize_if_necessary(
                 image=label,
                 dpi=fig_params.fig.dpi,

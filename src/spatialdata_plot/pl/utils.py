@@ -1160,6 +1160,7 @@ def _rasterize_if_necessary(
 
 def _multiscale_to_spatial_image(
     multiscale_image: MultiscaleSpatialImage,
+    element: str,
     dpi: float,
     width: float,
     height: float,
@@ -1175,6 +1176,8 @@ def _multiscale_to_spatial_image(
     ----------
     multiscale_image
         `MultiscaleSpatialImage` that should be rendered
+    element
+        name of the multiscale image
     dpi
         dpi of the target image
     width
@@ -1228,6 +1231,6 @@ def _multiscale_to_spatial_image(
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
 
-    logging.info(f"Using scale {optimal_scale} from multi-scale image.")
+    logging.info(f"Using scale '{optimal_scale}' from multi-scale image '{element}'.")
 
     return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)

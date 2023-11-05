@@ -319,7 +319,7 @@ class PlotAccessor:
         palette: str | list[str] | None = None,
         alpha: float = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] = (None, None),
-        scale: str | None = None,
+        scale: str | list[str] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -343,13 +343,14 @@ class PlotAccessor:
         quantiles_for_norm
             Tuple of (pmin, pmax) which will be used for quantile normalization.
         scale
-            Influences the resolution of the rendering. There are three possibilities for setting this parameter:
+            Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
                 is selected before the rasterization step.
                 2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
                 (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
+                4) List that is matched to the list of elements (can contain `None`, scale names or "full").
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -412,7 +413,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float = 1.0,
         fill_alpha: float = 0.3,
-        scale: str | None = None,
+        scale: str | list[str] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -446,13 +447,14 @@ class PlotAccessor:
         alpha
             Alpha value for the labels.
         scale
-            Influences the resolution of the rendering. There are three possibilities for setting this parameter:
+            Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
                 is selected before the rasterization step.
                 2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
                 (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
+                4) List that is matched to the list of elements (can contain `None`, scale names or "full").
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -682,7 +684,7 @@ class PlotAccessor:
                     ]
                     wanted_elements.extend(wanted_images_on_this_cs)
                     if len(wanted_images_on_this_cs) > 0:
-                        do_rasterization = (params.scale is None) or (
+                        rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
                             and params.scale != "full"
                             and (dpi is not None or figsize is not None)
@@ -695,7 +697,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
-                            do_rasterization=do_rasterization,
+                            rasterize=rasterize,
                         )
 
                 elif cmd == "render_shapes" and has_shapes:
@@ -757,7 +759,7 @@ class PlotAccessor:
                     ]
                     wanted_elements.extend(wanted_labels_on_this_cs)
                     if len(wanted_labels_on_this_cs) > 0:
-                        do_rasterization = (params.scale is None) or (
+                        rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
                             and params.scale != "full"
                             and (dpi is not None or figsize is not None)
@@ -770,7 +772,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
-                            do_rasterization=do_rasterization,
+                            rasterize=rasterize,
                         )
 
                 if title is None:
