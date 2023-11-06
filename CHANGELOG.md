@@ -8,13 +8,13 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.1.1] - tbd
+## [0.1.0] - tbd
 
 ### Added
 
 ### Fixed
 
-## [0.1.0] - 2023-11-06
+## [0.0.6] - 2023-11-06
 
 ### Added
 
