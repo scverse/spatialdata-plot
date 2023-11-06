@@ -8,15 +8,17 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.1.0] - tbd
+## [0.1.1] - tbd
+
+### Added
+
+### Fixed
+
+## [0.1.0] - 2023-11-06
 
 ### Added
 
 -   Pushed `get_extent` functionality upstream to `spatialdata` (#162)
-
-### Fixed
-
--
 
 ## [0.0.5] - 2023-10-02
 
