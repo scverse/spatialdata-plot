@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--
+## [0.0.6] - 2023-11-06
+
+### Added
+
+-   Pushed `get_extent` functionality upstream to `spatialdata` (#162)
 
 ## [0.0.5] - 2023-10-02
 
