@@ -525,15 +525,22 @@ class PlotAccessor:
 
         Parameters
         ----------
+        coordinate_systems :
+            Name(s) of the coordinate system(s) to be plotted. If None, all coordinate systems are plotted.
+            If a coordinate system doesn't contain any relevant elements (as specified in the render_* calls),
+            it is automatically not plotted.
+        figsize :
+            Size of the figure (width, height) in inches. The size of the actual canvas may deviate from this,
+            depending on the dpi! In matplotlib, the actual figure size (in pixels) is dpi * figsize.
+            If None, the default of matlotlib is used (6.4, 4.8)
+        dpi :
+            Resolution of the plot in dots per inch (as in matplotlib).
+            If None, the default of matplotlib is used (100.0).
         ax :
             Matplotlib axes object to plot on. If None, a new figure is created.
             Works only if there is one image in the SpatialData object.
         ncols :
             Number of columns in the figure. Default is 4.
-        width :
-            Width of each subplot. Default is 4.
-        height :
-            Height of each subplot. Default is 3.
 
         Returns
         -------
