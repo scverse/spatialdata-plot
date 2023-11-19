@@ -1150,10 +1150,6 @@ def _rasterize_if_necessary(
             coordinate_system,
             target_unit_to_pixels=target_unit_to_pixels,
         )
-        logging.info(
-            f"Performed rasterization (with target_unit_to_pixels = {round(target_unit_to_pixels, 2)}) "
-            "to improve performance."
-        )
 
     return image
 
@@ -1230,7 +1226,5 @@ def _multiscale_to_spatial_image(
     # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
-
-    logging.info(f"Using scale '{optimal_scale}' from multi-scale image '{element}'.")
 
     return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
