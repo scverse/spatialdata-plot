@@ -38,6 +38,7 @@ from matplotlib.colors import (
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
+from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scanpy import settings
@@ -48,10 +49,12 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
+from spatial_image import SpatialImage
+from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
 from spatialdata._logging import logger as logging
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, SpatialElement
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -114,6 +117,11 @@ def _prepare_params_plot(
         axs = None
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
+        elif isinstance(ax, Axes):
+            # needed for rasterization if user provides Axes object
+            fig = ax.get_figure()
+            fig.set_dpi(dpi)
+
     # set scalebar
     if scalebar_dx is not None:
         scalebar_dx, scalebar_units = _get_scalebar(scalebar_dx, scalebar_units, num_panels)
@@ -936,11 +944,17 @@ def _translate_image(
 ) -> spatial_image.SpatialImage:
     shifts: dict[str, int] = {axis: int(translation.translation[idx]) for idx, axis in enumerate(translation.axes)}
     img = image.values.copy()
+    # for yx images (important for rasterized MultiscaleImages as labels)
+    expanded_dims = False
+    if len(img.shape) == 2:
+        img = np.expand_dims(img, axis=0)
+        expanded_dims = True
+
     shifted_channels = []
 
     # split channels, shift axes individually, them recombine
-    if len(image.shape) == 3:
-        for c in range(image.shape[0]):
+    if len(img.shape) == 3:
+        for c in range(img.shape[0]):
             channel = img[c, :, :]
 
             # iterates over [x, y]
@@ -960,6 +974,12 @@ def _translate_image(
 
             shifted_channels.append(channel)
 
+    if expanded_dims:
+        return Labels2DModel.parse(
+            np.array(shifted_channels[0]),
+            dims=["y", "x"],
+            transformations=image.attrs["transform"],
+        )
     return Image2DModel.parse(
         np.array(shifted_channels),
         dims=["c", "y", "x"],
@@ -1031,3 +1051,180 @@ def _mpl_ax_contains_elements(ax: Axes) -> bool:
     return (
         len(ax.lines) > 0 or len(ax.collections) > 0 or len(ax.images) > 0 or len(ax.patches) > 0 or len(ax.tables) > 0
     )
+
+
+def _get_valid_cs(
+    sdata: sd.SpatialData,
+    coordinate_systems: Sequence[str],
+    render_images: bool,
+    render_labels: bool,
+    render_points: bool,
+    render_shapes: bool,
+    elements: list[str],
+) -> Sequence[str]:
+    """Get names of the valid coordinate systems.
+
+    Valid cs are cs that contain elements to be rendered:
+    1. In case the user specified elements:
+        all cs that contain at least one of those elements
+    2. Else:
+        all cs that contain at least one element that should
+        be rendered (depending on whether images/points/labels/...
+        should be rendered)
+    """
+    cs_mapping = _get_coordinate_system_mapping(sdata)
+    valid_cs = []
+    for cs in coordinate_systems:
+        if (len(elements) > 0 and any(e in elements for e in cs_mapping[cs])) or (
+            len(elements) == 0
+            and (
+                (len(sdata.images.keys()) > 0 and render_images)
+                or (len(sdata.labels.keys()) > 0 and render_labels)
+                or (len(sdata.points.keys()) > 0 and render_points)
+                or (len(sdata.shapes.keys()) > 0 and render_shapes)
+            )
+        ):  # not nice, but ruff wants it (SIM114)
+            valid_cs.append(cs)
+        else:
+            logging.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+    return valid_cs
+
+
+def _rasterize_if_necessary(
+    image: SpatialImage,
+    dpi: float,
+    width: float,
+    height: float,
+    coordinate_system: str,
+    extent: dict[str, tuple[float, float]],
+) -> SpatialImage:
+    """Ensure fast rendering by adapting the resolution if necessary.
+
+    A SpatialImage is prepared for plotting. To improve performance, large images are rasterized.
+
+    Parameters
+    ----------
+    image
+        Input spatial image that should be rendered
+    dpi
+        Resolution of the figure
+    width
+        Width (in inches) of the figure
+    height
+        Height (in inches) of the figure
+    coordinate_system
+        name of the coordinate system the image belongs to
+    extent
+        extent of the (full size) image. Must be a dict containing a tuple with min and
+        max extent for the keys "x" and "y".
+
+    Returns
+    -------
+    SpatialImage
+        Spatial image ready for rendering
+    """
+    has_c_dim = len(image.shape) == 3
+    if has_c_dim:
+        y_dims = image.shape[1]
+        x_dims = image.shape[2]
+    else:
+        y_dims = image.shape[0]
+        x_dims = image.shape[1]
+
+    target_y_dims = dpi * height
+    target_x_dims = dpi * width
+
+    # TODO: when exactly do we want to rasterize?
+    do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
+    if x_dims < 2000 and y_dims < 2000:
+        do_rasterization = False
+
+    if do_rasterization:
+        # TODO: do we want min here?
+        target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
+        image = rasterize(
+            image,
+            ("y", "x"),
+            [extent["y"][0], extent["x"][0]],
+            [extent["y"][1], extent["x"][1]],
+            coordinate_system,
+            target_unit_to_pixels=target_unit_to_pixels,
+        )
+
+    return image
+
+
+def _multiscale_to_spatial_image(
+    multiscale_image: MultiscaleSpatialImage,
+    element: str,
+    dpi: float,
+    width: float,
+    height: float,
+    scale: str | None = None,
+    is_label: bool = False,
+) -> SpatialImage:
+    """Extract the SpatialImage to be rendered from a multiscale image.
+
+    From the `MultiscaleSpatialImage`, the scale that fits the given image size and dpi most is selected
+    and returned. In case the lowest resolution is still too high, a rasterization step is added.
+
+    Parameters
+    ----------
+    multiscale_image
+        `MultiscaleSpatialImage` that should be rendered
+    element
+        name of the multiscale image
+    dpi
+        dpi of the target image
+    width
+        width of the target image in inches
+    height
+        height of the target image in inches
+    scale
+        specific scale that the user chose, if None the heuristic is used
+    is_label
+        When True, the multiscale image contains labels which don't contain the `c` dimension
+
+    Returns
+    -------
+    SpatialImage
+        To be rendered, extracted from the MultiscaleSpatialImage respecting the dpi and size of the target image.
+    """
+    scales = [leaf.name for leaf in multiscale_image.leaves]
+    x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
+    y_dims = [multiscale_image[scale].dims["y"] for scale in scales]
+
+    if isinstance(scale, str):
+        if scale not in scales and scale != "full":
+            raise ValueError(f'Scale {scale} does not exist. Please select one of {scales} or set scale = "full"!')
+        optimal_scale = scale
+        if scale == "full":
+            # use scale with highest resolution
+            optimal_scale = scales[np.argmax(x_dims)]
+    else:
+        # ensure that lists are sorted
+        order = np.argsort(x_dims)
+        scales = [scales[i] for i in order]
+        x_dims = [x_dims[i] for i in order]
+        y_dims = [y_dims[i] for i in order]
+
+        optimal_x = width * dpi
+        optimal_y = height * dpi
+
+        # get scale where the dimensions are close to the optimal values
+        # when possible, pick higher resolution (worst case: downscaled afterwards)
+        optimal_index_y = np.searchsorted(y_dims, optimal_y)
+        if optimal_index_y == len(y_dims):
+            optimal_index_y -= 1
+        optimal_index_x = np.searchsorted(x_dims, optimal_x)
+        if optimal_index_x == len(x_dims):
+            optimal_index_x -= 1
+
+        # pick the scale with higher resolution (worst case: downscaled afterwards)
+        optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
+
+    # NOTE: problematic if there are cases with > 1 data variable
+    data_var_keys = list(multiscale_image[optimal_scale].data_vars)
+    image = multiscale_image[optimal_scale][data_var_keys[0]]
+
+    return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)

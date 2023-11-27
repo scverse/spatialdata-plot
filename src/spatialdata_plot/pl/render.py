@@ -11,15 +11,14 @@ import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatial_image
 import spatialdata as sd
 from anndata import AnnData
 from matplotlib.colors import ListedColormap, Normalize
+from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
+from spatialdata._core.data_extent import get_extent
 from spatialdata.models import (
-    Image2DModel,
-    Labels2DModel,
     PointsModel,
 )
 from spatialdata.transformations import (
@@ -43,7 +42,9 @@ from spatialdata_plot.pl.utils import (
     _get_linear_colormap,
     _map_color_seg,
     _maybe_set_colors,
+    _multiscale_to_spatial_image,
     _normalize,
+    _rasterize_if_necessary,
     _set_color_source_vec,
     to_hex,
 )
@@ -317,6 +318,7 @@ def _render_images(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    rasterize: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -331,11 +333,31 @@ def _render_images(
     if elements is None:
         elements = list(sdata_filt.images.keys())
 
-    for e in elements:
+    for i, e in enumerate(elements):
         img = sdata.images[e]
-        if not isinstance(img, spatial_image.SpatialImage):
-            img = Image2DModel.parse(img["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning(f"Multi-scale images not yet supported, using scale0 of multi-scale image '{e}'.")
+        extent = get_extent(img, coordinate_system=coordinate_system)
+        scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+
+        # get best scale out of multiscale image
+        if isinstance(img, MultiscaleSpatialImage):
+            img = _multiscale_to_spatial_image(
+                multiscale_image=img,
+                element=e,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                scale=scale,
+            )
+        # rasterize spatial image if necessary to speed up performance
+        if rasterize:
+            img = _rasterize_if_necessary(
+                image=img,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
+                extent=extent,
+            )
 
         if render_params.channel is None:
             channels = img.coords["c"].values
@@ -362,7 +384,7 @@ def _render_images(
             raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
         # prepare transformations
-        trans = get_transformation(sdata.images[e], get_all=True)[coordinate_system]
+        trans = get_transformation(img, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
@@ -488,6 +510,7 @@ def _render_labels(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    rasterize: bool,
 ) -> None:
     elements = render_params.elements
 
@@ -507,11 +530,32 @@ def _render_labels(
     if elements is None:
         elements = list(sdata_filt.labels.keys())
 
-    for e in elements:
+    for i, e in enumerate(elements):
         label = sdata_filt.labels[e]
-        if not isinstance(label, spatial_image.SpatialImage):
-            label = Labels2DModel.parse(label["scale0"].ds.to_array().squeeze(axis=0))
-            logger.warning(f"Multi-scale labels not yet supported, using scale0 of multi-scale label '{e}'.")
+        extent = get_extent(label, coordinate_system=coordinate_system)
+        scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+
+        # get best scale out of multiscale label
+        if isinstance(label, MultiscaleSpatialImage):
+            label = _multiscale_to_spatial_image(
+                multiscale_image=label,
+                element=e,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                scale=scale,
+                is_label=True,
+            )
+        # rasterize spatial image if necessary to speed up performance
+        if rasterize:
+            label = _rasterize_if_necessary(
+                image=label,
+                dpi=fig_params.fig.dpi,
+                width=fig_params.fig.get_size_inches()[0],
+                height=fig_params.fig.get_size_inches()[1],
+                coordinate_system=coordinate_system,
+                extent=extent,
+            )
 
         if sdata.table is None:
             instance_id = np.unique(label)
@@ -525,7 +569,7 @@ def _render_labels(
             # get instance id based on subsetted table
             instance_id = table.obs[instance_key].values
 
-        trans = get_transformation(sdata.labels[e], get_all=True)[coordinate_system]
+        trans = get_transformation(label, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
@@ -533,7 +577,7 @@ def _render_labels(
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
-            element=sdata_filt.labels[e],
+            element=label,
             element_name=e,
             value_to_plot=render_params.color,
             layer=render_params.layer,
