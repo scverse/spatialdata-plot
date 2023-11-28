@@ -643,7 +643,7 @@ class PlotAccessor:
         )
 
         # catch error in ruff-friendly way
-        if ax is not None: # we'll generate matching number then
+        if ax is not None:  # we'll generate matching number then
             n_ax = 1 if isinstance(ax, Axes) else len(ax)
             if len(coordinate_systems) != n_ax:
                 raise ValueError(
