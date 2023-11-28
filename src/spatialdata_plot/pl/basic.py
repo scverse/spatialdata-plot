@@ -642,6 +642,14 @@ class PlotAccessor:
             elements=elements_to_be_rendered,
         )
 
+        # catch error in ruff-friendly way
+        n_ax = 1 if isinstance(ax, Axes) or ax is None else len(ax)
+        if len(coordinate_systems) != n_ax:
+            raise ValueError(
+                f"Mismatch between number of matplotlib axes objects ({n_ax}) "
+                "and number of coordinate systems ({len(coordinate_systems)})."
+            )
+
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
             num_panels=len(coordinate_systems),
