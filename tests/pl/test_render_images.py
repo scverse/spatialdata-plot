@@ -24,8 +24,11 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
 
-    def test_plot_can_pass_cmap_to_render_images(self, sdata_blobs: SpatialData):
+    def test_plot_can_pass_cmap_name_to_render_images(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", cmap="seismic").pl.show()
+
+    def test_plot_can_pass_cmap_object_to_render_images(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_image", cmap=matplotlib.colormaps["seismic"]).pl.show()
 
     def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", channel=0).pl.show()

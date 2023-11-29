@@ -344,7 +344,12 @@ def _prepare_cmap_norm(
     **kwargs: Any,
 ) -> CmapParams:
     is_default = cmap is None
-    cmap = copy(matplotlib.colormaps[rcParams["image.cmap"] if cmap is None else cmap])
+    if cmap is None:
+        cmap = rcParams["image.cmap"]
+    if isinstance(cmap, str):
+        cmap = matplotlib.colormaps[cmap]
+
+    cmap = copy(cmap)
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if isinstance(norm, Normalize) or not norm:
