@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning][].
 -   Multiscale image handling: user can specify a scale, else the best scale is selected automatically given the figure size and dpi (#164)
 -   Large images are automatically rasterized to speed up performance (#164)
 -   Added better error message for mismatch in cs and ax number (#185)
+-   Can now stack render commands (#190, #192)
 
 ### Fixed
 
