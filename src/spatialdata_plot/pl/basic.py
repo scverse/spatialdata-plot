@@ -362,8 +362,8 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        if channel is None and cmap is None:
-            cmap = "brg"
+        # if channel is None and cmap is None:
+        #     cmap = "brg"
 
         cmap_params: list[CmapParams] | CmapParams
         if isinstance(cmap, list):
