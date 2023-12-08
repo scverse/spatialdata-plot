@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--
+-   Now dropping index when plotting shapes after spatial query (#177)
 
 ## [0.0.5] - 2023-10-02
 
