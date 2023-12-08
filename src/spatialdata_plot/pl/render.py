@@ -220,7 +220,6 @@ def _render_points(
             coords.extend(color)
 
         points = points[coords].compute()
-        # points[color[0]].cat.set_categories(render_params.groups, inplace=True)
         if render_params.groups is not None:
             points = points[points[color].isin(render_params.groups).values]
             points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
@@ -260,6 +259,10 @@ def _render_points(
         if color_source_vector is None and render_params.transfunc is not None:
             color_vector = render_params.transfunc(color_vector)
 
+        trans = get_transformation(sdata.points[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
         norm = copy(render_params.cmap_params.norm)
         _cax = ax.scatter(
             adata[:, 0].X.flatten(),
@@ -270,16 +273,10 @@ def _render_points(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
+            transform=trans
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
-
-        trans = get_transformation(sdata.points[e], get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-
-        for path in _cax.get_paths():
-            path.vertices = trans.transform(path.vertices)
 
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
