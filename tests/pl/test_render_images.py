@@ -80,8 +80,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_stack_render_images(self, sdata_blobs: SpatialData):
         (
-            sdata_blobs
-            .pl.render_images(elements="blobs_image", channel=0, palette="red", alpha=0.5)
+            sdata_blobs.pl.render_images(elements="blobs_image", channel=0, palette="red", alpha=0.5)
             .pl.render_images(elements="blobs_image", channel=1, palette="blue", alpha=0.5)
             .pl.show()
         )
