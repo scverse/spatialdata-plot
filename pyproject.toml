@@ -26,8 +26,6 @@ dependencies = [
     "scikit-learn",
     "scanpy",
     "matplotlib_scalebar",
-    "myst-nb",
-    "sphinx-copybutton",
 ]
 
 [project.optional-dependencies]

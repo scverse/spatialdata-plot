@@ -41,6 +41,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _get_cs_contents,
+    _get_valid_cs,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
@@ -318,6 +319,7 @@ class PlotAccessor:
         palette: str | list[str] | None = None,
         alpha: float = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] = (None, None),
+        scale: str | list[str] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -340,6 +342,15 @@ class PlotAccessor:
             Alpha value for the shapes.
         quantiles_for_norm
             Tuple of (pmin, pmax) which will be used for quantile normalization.
+        scale
+            Influences the resolution of the rendering. Possibilities for setting this parameter:
+                1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
+                is selected before the rasterization step.
+                2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
+                (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
+                3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
+                with the highest resolution is selected. This can lead to long computing times for large images!
+                4) List that is matched to the list of elements (can contain `None`, scale names or "full").
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -383,6 +394,7 @@ class PlotAccessor:
             palette=palette,
             alpha=alpha,
             quantiles_for_norm=quantiles_for_norm,
+            scale=scale,
         )
 
         return sdata
@@ -401,6 +413,7 @@ class PlotAccessor:
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float = 1.0,
         fill_alpha: float = 0.3,
+        scale: str | list[str] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -433,6 +446,15 @@ class PlotAccessor:
             Color to be used for NAs values, if present.
         alpha
             Alpha value for the labels.
+        scale
+            Influences the resolution of the rendering. Possibilities for setting this parameter:
+                1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
+                is selected before the rasterization step.
+                2) Name of one of the scales in the multiscale image to be rendered. This scale is rendered as it is
+                (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
+                3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
+                with the highest resolution is selected. This can lead to long computing times for large images!
+                4) List that is matched to the list of elements (can contain `None`, scale names or "full").
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -470,6 +492,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
+            scale=scale,
         )
 
         return sdata
@@ -502,15 +525,22 @@ class PlotAccessor:
 
         Parameters
         ----------
+        coordinate_systems :
+            Name(s) of the coordinate system(s) to be plotted. If None, all coordinate systems are plotted.
+            If a coordinate system doesn't contain any relevant elements (as specified in the render_* calls),
+            it is automatically not plotted.
+        figsize :
+            Size of the figure (width, height) in inches. The size of the actual canvas may deviate from this,
+            depending on the dpi! In matplotlib, the actual figure size (in pixels) is dpi * figsize.
+            If None, the default of matlotlib is used (6.4, 4.8)
+        dpi :
+            Resolution of the plot in dots per inch (as in matplotlib).
+            If None, the default of matplotlib is used (100.0).
         ax :
             Matplotlib axes object to plot on. If None, a new figure is created.
             Works only if there is one image in the SpatialData object.
         ncols :
             Number of columns in the figure. Default is 4.
-        width :
-            Width of each subplot. Default is 4.
-        height :
-            Height of each subplot. Default is 3.
 
         Returns
         -------
@@ -576,6 +606,51 @@ class PlotAccessor:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
+        # Check if user specified only certain elements to be plotted
+        cs_contents = _get_cs_contents(sdata)
+        elements_to_be_rendered = []
+        for cmd, params in render_cmds.items():
+            if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_shapes" and cs_contents.query(f"cs == '{cs}'")["has_shapes"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_points" and cs_contents.query(f"cs == '{cs}'")["has_points"][0]:  # noqa: SIM114
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+            elif cmd == "render_labels" and cs_contents.query(f"cs == '{cs}'")["has_labels"][0]:  # noqa: SIM102
+                if params.elements is not None:
+                    elements_to_be_rendered += (
+                        [params.elements] if isinstance(params.elements, str) else params.elements
+                    )
+
+        # filter out cs without relevant elements
+        coordinate_systems = _get_valid_cs(
+            sdata=sdata,
+            coordinate_systems=coordinate_systems,
+            render_images="render_images" in render_cmds,
+            render_labels="render_labels" in render_cmds,
+            render_points="render_points" in render_cmds,
+            render_shapes="render_shapes" in render_cmds,
+            elements=elements_to_be_rendered,
+        )
+
+        # catch error in ruff-friendly way
+        if ax is not None:  # we'll generate matching number then
+            n_ax = 1 if isinstance(ax, Axes) else len(ax)
+            if len(coordinate_systems) != n_ax:
+                raise ValueError(
+                    f"Mismatch between number of matplotlib axes objects ({n_ax}) "
+                    f"and number of coordinate systems ({len(coordinate_systems)})."
+                )
+
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
             num_panels=len(coordinate_systems),
@@ -616,64 +691,70 @@ class PlotAccessor:
 
             for cmd, params in render_cmds.items():
                 if cmd == "render_images" and has_images:
-                    _render_images(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_images = True
                     wanted_images = params.elements if params.elements is not None else list(sdata.images.keys())
-                    wanted_elements.extend(
-                        [
-                            image
-                            for image in wanted_images
-                            if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
-                        ]
-                    )
+                    wanted_images_on_this_cs = [
+                        image
+                        for image in wanted_images
+                        if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_images_on_this_cs)
+                    if len(wanted_images_on_this_cs) > 0:
+                        rasterize = (params.scale is None) or (
+                            isinstance(params.scale, str)
+                            and params.scale != "full"
+                            and (dpi is not None or figsize is not None)
+                        )
+                        _render_images(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            rasterize=rasterize,
+                        )
 
                 elif cmd == "render_shapes" and has_shapes:
-                    _render_shapes(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_shapes = True
                     wanted_shapes = params.elements if params.elements is not None else list(sdata.shapes.keys())
-                    wanted_elements.extend(
-                        [
-                            shape
-                            for shape in wanted_shapes
-                            if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
-                        ]
-                    )
+                    wanted_shapes_on_this_cs = [
+                        shape
+                        for shape in wanted_shapes
+                        if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_shapes_on_this_cs)
+                    if len(wanted_shapes_on_this_cs) > 0:
+                        _render_shapes(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                        )
 
                 elif cmd == "render_points" and has_points:
-                    _render_points(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_points = True
                     wanted_points = params.elements if params.elements is not None else list(sdata.points.keys())
-                    wanted_elements.extend(
-                        [
-                            point
-                            for point in wanted_points
-                            if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
-                        ]
-                    )
+                    wanted_points_on_this_cs = [
+                        point
+                        for point in wanted_points
+                        if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_points_on_this_cs)
+                    if len(wanted_points_on_this_cs) > 0:
+                        _render_points(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                        )
 
                 elif cmd == "render_labels" and has_labels:
                     if sdata.table is not None and isinstance(params.color, str):
@@ -685,24 +766,30 @@ class PlotAccessor:
                                 key=params.color,
                                 palette=params.palette,
                             )
-                    _render_labels(
-                        sdata=sdata,
-                        render_params=params,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                    )
                     wants_labels = True
                     wanted_labels = params.elements if params.elements is not None else list(sdata.labels.keys())
-                    wanted_elements.extend(
-                        [
-                            label
-                            for label in wanted_labels
-                            if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
-                        ]
-                    )
+                    wanted_labels_on_this_cs = [
+                        label
+                        for label in wanted_labels
+                        if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
+                    ]
+                    wanted_elements.extend(wanted_labels_on_this_cs)
+                    if len(wanted_labels_on_this_cs) > 0:
+                        rasterize = (params.scale is None) or (
+                            isinstance(params.scale, str)
+                            and params.scale != "full"
+                            and (dpi is not None or figsize is not None)
+                        )
+                        _render_labels(
+                            sdata=sdata,
+                            render_params=params,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            rasterize=rasterize,
+                        )
 
                 if title is None:
                     t = cs

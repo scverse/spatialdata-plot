@@ -1,6 +1,8 @@
+import dask.array as da
 import matplotlib
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
 from tests.conftest import PlotTester, PlotTesterMeta
@@ -49,3 +51,29 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_normalize_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", quantiles_for_norm=(5, 90)).pl.show()
+
+    def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_multiscale_image").pl.show()
+
+    def test_plot_can_render_given_scale_of_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_multiscale_image", scale="scale2").pl.show()
+
+    def test_plot_can_do_rasterization(self, sdata_blobs: SpatialData):
+        temp = sdata_blobs["blobs_image"].data.copy()
+        temp = da.concatenate([temp] * 6, axis=1)
+        temp = da.concatenate([temp] * 6, axis=2)
+        img = to_spatial_image(temp, dims=("c", "y", "x"))
+        img.attrs["transform"] = sdata_blobs["blobs_image"].transform
+        sdata_blobs["blobs_giant_image"] = img
+
+        sdata_blobs.pl.render_images("blobs_giant_image").pl.show()
+
+    def test_plot_can_stop_rasterization_with_scale_full(self, sdata_blobs: SpatialData):
+        temp = sdata_blobs["blobs_image"].data.copy()
+        temp = da.concatenate([temp] * 6, axis=1)
+        temp = da.concatenate([temp] * 6, axis=2)
+        img = to_spatial_image(temp, dims=("c", "y", "x"))
+        img.attrs["transform"] = sdata_blobs["blobs_image"].transform
+        sdata_blobs["blobs_giant_image"] = img
+
+        sdata_blobs.pl.render_images("blobs_giant_image", scale="full").pl.show()
