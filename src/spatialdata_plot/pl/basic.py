@@ -362,9 +362,6 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        if channel is None and cmap is None:
-            cmap = "brg"
-
         cmap_params: list[CmapParams] | CmapParams
         if isinstance(cmap, list):
             cmap_params = [
@@ -567,7 +564,7 @@ class PlotAccessor:
         ]
 
         # prepare rendering params
-        render_cmds = OrderedDict()
+        render_cmds = []
         for cmd, params in plotting_tree.items():
             # strip prefix from cmd and verify it's valid
             cmd = "_".join(cmd.split("_")[1:])
@@ -577,9 +574,9 @@ class PlotAccessor:
 
             if "render" in cmd:
                 # verify that rendering commands have been called before
-                render_cmds[cmd] = params
+                render_cmds.append((cmd, params))
 
-        if len(render_cmds.keys()) == 0:
+        if len(render_cmds) == 0:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
 
         if title is not None:
@@ -609,7 +606,7 @@ class PlotAccessor:
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
         elements_to_be_rendered = []
-        for cmd, params in render_cmds.items():
+        for cmd, params in render_cmds:
             if cmd == "render_images" and cs_contents.query(f"cs == '{cs}'")["has_images"][0]:  # noqa: SIM114
                 if params.elements is not None:
                     elements_to_be_rendered += (
@@ -632,13 +629,14 @@ class PlotAccessor:
                     )
 
         # filter out cs without relevant elements
+        cmds = [cmd for cmd, _ in render_cmds]
         coordinate_systems = _get_valid_cs(
             sdata=sdata,
             coordinate_systems=coordinate_systems,
-            render_images="render_images" in render_cmds,
-            render_labels="render_labels" in render_cmds,
-            render_points="render_points" in render_cmds,
-            render_shapes="render_shapes" in render_cmds,
+            render_images="render_images" in cmds,
+            render_labels="render_labels" in cmds,
+            render_points="render_points" in cmds,
+            render_shapes="render_shapes" in cmds,
             elements=elements_to_be_rendered,
         )
 
@@ -689,7 +687,7 @@ class PlotAccessor:
             wants_shapes = False
             wanted_elements = []
 
-            for cmd, params in render_cmds.items():
+            for cmd, params in render_cmds:
                 if cmd == "render_images" and has_images:
                     wants_images = True
                     wanted_images = params.elements if params.elements is not None else list(sdata.images.keys())

@@ -403,10 +403,13 @@ def _render_images(
             else:
                 cmap = _get_linear_colormap([render_params.palette], "k")[0]
 
+            # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
+            cmap._init()
+            cmap._lut[:, -1] = render_params.alpha
+
             im = ax.imshow(
-                layer,  # get rid of the channel dimension
+                layer,
                 cmap=cmap,
-                alpha=render_params.alpha,
             )
             im.set_transform(trans_data)
 
@@ -431,10 +434,29 @@ def _render_images(
                     if render_params.cmap_params[i].norm is not None:
                         layers[c] = render_params.cmap_params[i].norm(layers[c])
 
-            # 2A) Image has 3 channels, no palette/cmap info -> use RGB
-            if n_channels == 3 and render_params.palette is None and not got_multiple_cmaps:
+            # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
+            if n_channels == 3 and render_params.palette is None and not isinstance(render_params.cmap_params, list):
+                if render_params.cmap_params.is_default:  # -> use RGB
+                    stacked = np.stack([layers[c] for c in channels], axis=-1)
+                else:  # -> use given cmap for each channel
+                    channel_cmaps = [render_params.cmap_params.cmap] * n_channels
+                    # Apply cmaps to each channel, add up and normalize to [0, 1]
+                    stacked = (
+                        np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0) / n_channels
+                    )
+                    # Remove alpha channel so we can overwrite it from render_params.alpha
+                    stacked = stacked[:, :, :3]
+                    logger.warning(
+                        "One cmap was given for multiple channels and is now used for each channel. "
+                        "You're blending multiple cmaps. "
+                        "If the plot doesn't look like you expect, it might be because your "
+                        "cmaps go from a given color to 'white', and not to 'transparent'. "
+                        "Therefore, the 'white' of higher layers will overlay the lower layers. "
+                        "Consider using 'palette' instead."
+                    )
+
                 im = ax.imshow(
-                    np.stack([layers[c] for c in channels], axis=-1),
+                    stacked,
                     alpha=render_params.alpha,
                 )
                 im.set_transform(trans_data)
@@ -510,6 +532,12 @@ def _render_labels(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
+
+    if not isinstance(render_params.outline, bool):
+        raise TypeError("Parameter 'outline' must be a boolean.")
+
+    if not isinstance(render_params.contour_px, int):
+        raise TypeError("Parameter 'contour_px' must be an integer.")
 
     if render_params.groups is not None:
         if isinstance(render_params.groups, str):

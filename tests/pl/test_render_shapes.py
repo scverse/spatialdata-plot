@@ -254,3 +254,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         del sdata_cropped.labels["blobs_multiscale_labels"]
 
         sdata_cropped.pl.render_shapes(["blobs_circles", "blobs_polygons"], color="annotation").pl.show()
+
+    def test_plot_can_stack_render_shapes(self, sdata_blobs: SpatialData):
+        (
+            sdata_blobs.pl.render_shapes(elements="blobs_circles", na_color="red", fill_alpha=0.5)
+            .pl.render_shapes(elements="blobs_polygons", na_color="blue", fill_alpha=0.5)
+            .pl.show()
+        )
