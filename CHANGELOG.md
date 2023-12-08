@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   Now dropping index when plotting shapes after spatial query (#177)
+-   User can now pass Colormap objects to the cmap argument in render_images. When only one cmap is given for 3 channels, it is now applied to each channel (#188, #194)
 
 ## [0.0.6] - 2023-11-06
 
