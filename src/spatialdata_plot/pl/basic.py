@@ -153,7 +153,7 @@ class PlotAccessor:
         palette: str | list[str] | None = None,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
-        na_color: str | tuple[float, ...] | None = "lightgrey",
+        na_color: str | list[float] | None = "lightgrey",
         outline_alpha: float = 1.0,
         fill_alpha: float = 1.0,
         **kwargs: Any,
@@ -163,49 +163,55 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements
-            The name of the shapes element(s) to render. If `None`, all
-            shapes element in the `SpatialData` object will be used.
-        color
+        elements : list[str] | str | None, optional
+            The name(s) of the shapes element(s) to render. If `None`, all shapes
+            elements in the `SpatialData` object will be used.
+        color : str | None, optional
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
-        groups
-            For discrete annotation in ``color``, select which values
-            to plot (other values are set to NAs).
-        scale
+
+        groups : Sequence[str] | str | None, optional
+            For discrete annotation in `color`, select which values to plot. Other
+            values are set to NAs.
+        scale : float, default 1.0
             Value to scale circles, if present.
-        outline
-            If `True`, a thin border around points/shapes is plotted.
-        outline_width
+        outline : bool, default False
+            If `True`, a border around points/shapes is plotted.
+        outline_width : float, default 1.5
             Width of the border.
-        outline_color
-            Color of the border.
-        layer
+        outline_color : str | list[float], default "#000000ff"
+            Color of the border. Can either be a named color ("red"), a hex
+            representation ("#000000ff") or a list of floats that represent RGB/RGBA
+            values (1.0, 0.0, 0.0, 1.0).
+        layer : str | None, optional
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
-        palette
-            Palette for discrete annotations. List of valid color names that should be used
-            for the categories (all or as specified by `groups`). For a single category,
-            a valid color name can be given as string.
-        cmap
+        palette : list[str] | str | None, optional
+            Palette for discrete annotations. List of valid color names that should be
+            used for the categories. Must match the number of groups.
+        cmap : Colormap | str | None, optional
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-            If no palette is given and `color` refers to a categorical, the colors are
-            sampled from this colormap.
-        norm
-            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color
-            Color to be used for NAs values, if present.
-        alpha
-            Alpha value for the shapes.
-        kwargs
+        norm : bool | Normalize, default False
+            Colormap normalization for continuous annotations.
+        na_color : str | list[float] | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color
+            ("red"), a hex representation ("#000000ff") or a list of floats that
+            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
+            be shown.
+        outline_alpha : float, default 1.0
+            Alpha value for the outline of shapes.
+        fill_alpha : float, default 1.0
+            Alpha value for the fill of shapes.
+        **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
         Notes
         -----
-            Empty geometries will be removed at the time of plotting.
-            An ``outline_width`` of 0.0 leads to no border being plotted.
+        - Empty geometries will be removed at the time of plotting.
+        - An `outline_width` of 0.0 leads to no border being plotted.
 
         Returns
         -------
-        None
+        sd.SpatialData
+            The modified SpatialData object with the rendered shapes.
         """
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -576,7 +582,7 @@ class PlotAccessor:
                 # verify that rendering commands have been called before
                 render_cmds.append((cmd, params))
 
-        if len(render_cmds) == 0:
+        if not render_cmds:
             raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
 
         if title is not None:
@@ -697,7 +703,7 @@ class PlotAccessor:
                         if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
                     ]
                     wanted_elements.extend(wanted_images_on_this_cs)
-                    if len(wanted_images_on_this_cs) > 0:
+                    if wanted_images_on_this_cs:
                         rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
                             and params.scale != "full"
@@ -723,7 +729,7 @@ class PlotAccessor:
                         if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
                     ]
                     wanted_elements.extend(wanted_shapes_on_this_cs)
-                    if len(wanted_shapes_on_this_cs) > 0:
+                    if wanted_shapes_on_this_cs:
                         _render_shapes(
                             sdata=sdata,
                             render_params=params,
@@ -743,7 +749,7 @@ class PlotAccessor:
                         if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
                     ]
                     wanted_elements.extend(wanted_points_on_this_cs)
-                    if len(wanted_points_on_this_cs) > 0:
+                    if wanted_points_on_this_cs:
                         _render_points(
                             sdata=sdata,
                             render_params=params,
@@ -772,7 +778,7 @@ class PlotAccessor:
                         if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
                     ]
                     wanted_elements.extend(wanted_labels_on_this_cs)
-                    if len(wanted_labels_on_this_cs) > 0:
+                    if wanted_labels_on_this_cs:
                         rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
                             and params.scale != "full"
