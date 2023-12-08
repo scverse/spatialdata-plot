@@ -606,8 +606,6 @@ class PlotAccessor:
             if cs not in sdata.coordinate_systems:
                 raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
-        print(render_cmds)
-
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
         elements_to_be_rendered = []
