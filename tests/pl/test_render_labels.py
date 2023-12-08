@@ -59,3 +59,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
 
         sdata_blobs.pl.render_labels("blobs_giant_labels", scale="full").pl.show()
+
+    def test_plot_can_stack_render_labels(self, sdata_blobs: SpatialData):
+        (
+            sdata_blobs
+            .pl.render_labels(elements="blobs_labels", na_color="red", fill_alpha=1, outline_alpha=0, outline=False)
+            .pl.render_labels(
+                elements="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=10
+            )
+            .pl.show()
+        )
