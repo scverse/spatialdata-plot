@@ -111,7 +111,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
             for element_name in [f"circles_pi{i}", f"polygons_pi{i}", f"multipolygons_pi{i}", f"points_pi{i}"]:
                 set_transformation(element=sdata[element_name], transformation=rotation, to_coordinate_system=f"pi{i}")
 
-        fig, axs = plt.subplots(ncols=3, nrows=4, figsize=(7, 9))
+        _, axs = plt.subplots(ncols=3, nrows=4, figsize=(7, 9))
 
         for cs_idx, cs in enumerate(["global", "pi3", "pi4"]):
             if cs == "global":
@@ -136,7 +136,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
                 coordinate_systems=cs, ax=axs[2, cs_idx], title=""
             )
             sdata.pl.render_points(elements=points_name, size=10).pl.show(
-                coordinate_systems=cs, ax=axs[3, cs_idx], title="", pad_extent=0.05
+                coordinate_systems=cs, ax=axs[3, cs_idx], title="", pad_extent=0.02
             )
 
         plt.tight_layout()
