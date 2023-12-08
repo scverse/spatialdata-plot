@@ -406,10 +406,13 @@ def _render_images(
             else:
                 cmap = _get_linear_colormap([render_params.palette], "k")[0]
 
+            # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
+            cmap._init()
+            cmap._lut[:, -1] = render_params.alpha
+
             im = ax.imshow(
-                layer,  # get rid of the channel dimension
+                layer,
                 cmap=cmap,
-                alpha=render_params.alpha,
             )
             im.set_transform(trans_data)
 
@@ -513,6 +516,12 @@ def _render_labels(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
+
+    if not isinstance(render_params.outline, bool):
+        raise TypeError("Parameter 'outline' must be a boolean.")
+
+    if not isinstance(render_params.contour_px, int):
+        raise TypeError("Parameter 'contour_px' must be an integer.")
 
     if render_params.groups is not None:
         if isinstance(render_params.groups, str):
