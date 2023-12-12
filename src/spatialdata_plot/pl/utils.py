@@ -353,7 +353,9 @@ def _prepare_cmap_norm(
 
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
-    if isinstance(norm, Normalize) or not norm:
+    if norm is None:
+        norm = Normalize(vmin=vmin, vmax=vmax)
+    elif isinstance(norm, Normalize) or not norm:
         pass  # TODO
     elif vcenter is None:
         norm = Normalize(vmin=vmin, vmax=vmax)
