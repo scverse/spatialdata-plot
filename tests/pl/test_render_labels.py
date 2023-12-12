@@ -70,3 +70,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             )
             .pl.show()
         )
+
+    def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
