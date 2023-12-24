@@ -13,6 +13,7 @@ import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
+from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
@@ -20,6 +21,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
+from spatialdata._logger import logger
 from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
@@ -142,20 +144,20 @@ class PlotAccessor:
 
     def render_shapes(
         self,
-        elements: str | list[str] | None = None,
+        elements: Sequence[str] | str | None = None,
         color: str | None = None,
-        groups: str | Sequence[str] | None = None,
-        scale: float = 1.0,
+        fill_alpha: float = 1.0,
+        groups: Sequence[str] | str | None = None,
+        palette: list[str] | str | None = None,
+        na_color: str | list[float] | None = "lightgrey",
         outline: bool = False,
         outline_width: float = 1.5,
         outline_color: str | list[float] = "#000000ff",
+        outline_alpha: float = 1.0,
         layer: str | None = None,
-        palette: str | list[str] | None = None,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
-        na_color: str | list[float] | None = "lightgrey",
-        outline_alpha: float = 1.0,
-        fill_alpha: float = 1.0,
+        scale: float = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -163,43 +165,42 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements : list[str] | str | None, optional
+        elements : Sequence[str] | str | None, optional
             The name(s) of the shapes element(s) to render. If `None`, all shapes
             elements in the `SpatialData` object will be used.
-        color : str | None, optional
-            Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
-
+        color : Colorlike | str | None, optional
+            Can either be a color or a Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
+        fill_alpha : float, default 1.0
+            Alpha value for the fill of shapes.
         groups : Sequence[str] | str | None, optional
-            For discrete annotation in `color`, select which values to plot. Other
-            values are set to NAs.
-        scale : float, default 1.0
-            Value to scale circles, if present.
+            When using `color` and the key represents discrete labels, `groups`
+            can be used to show only a subset of them. Other values are set to NA.
+        palette : list[str] | str | None, optional
+            Palette for discrete annotations. List of valid color names that should be
+            used for the categories. Must match the number of groups.
+        na_color : str | list[float] | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color
+            ("red"), a hex representation ("#000000ff") or a list of floats that
+            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
+            be shown.
         outline : bool, default False
-            If `True`, a border around points/shapes is plotted.
+            If `True`, a border around the shape elements is plotted.
         outline_width : float, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
             Color of the border. Can either be a named color ("red"), a hex
             representation ("#000000ff") or a list of floats that represent RGB/RGBA
             values (1.0, 0.0, 0.0, 1.0).
+        outline_alpha : float, default 1.0
+            Alpha value for the outline of shapes.
         layer : str | None, optional
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
-        palette : list[str] | str | None, optional
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups.
         cmap : Colormap | str | None, optional
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
             Colormap normalization for continuous annotations.
-        na_color : str | list[float] | None, default "lightgrey"
-            Color to be used for NAs values, if present. Can either be a named color
-            ("red"), a hex representation ("#000000ff") or a list of floats that
-            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
-            be shown.
-        outline_alpha : float, default 1.0
-            Alpha value for the outline of shapes.
-        fill_alpha : float, default 1.0
-            Alpha value for the fill of shapes.
+        scale : float, default 1.0
+            Value to scale circles, if present.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
@@ -207,12 +208,113 @@ class PlotAccessor:
         -----
         - Empty geometries will be removed at the time of plotting.
         - An `outline_width` of 0.0 leads to no border being plotted.
+        - When passing a color-like to 'color', this has precendence over the potential existence as a column name.
 
         Returns
         -------
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        if elements is not None:
+            if not isinstance(elements, (Sequence, str)):
+                raise TypeError("Parameter 'elements' must be a string or a sequence of strings.")
+
+            elements = [elements] if isinstance(elements, str) else elements
+            if not all(e in self._sdata.shapes for e in elements):
+                raise ValueError(
+                    "Not all specificed elements were found, available elements are: '"
+                    + "', '".join(self._sdata.shapes.keys())
+                    + "'"
+                )
+
+        if color is not None:
+            if colors.is_color_like(color):
+                logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+                color = color
+                col_for_color = None
+
+            else:
+                if not isinstance(color, str):
+                    raise TypeError(
+                        "Parameter 'color' must be a string indicating which color "
+                        + "in sdata.table to use for coloring the shapes."
+                    )
+                col_for_color = color
+                color = None
+
+        else:
+            col_for_color = None
+
+        # we're not enforcing the existence of 'color' here since it might
+        # exist for one element in sdata.shapes, but not the others.
+        # Gets validated in _set_color_source_vec()
+
+        if not isinstance(fill_alpha, (int, float)):
+            raise TypeError("Parameter 'fill_alpha' must be numeric.")
+
+        if not fill_alpha >= 0:
+            raise ValueError("Parameter 'fill_alpha' cannot be negative.")
+
+        if groups is not None:
+            if not isinstance(groups, (Sequence, str)):
+                raise TypeError("Parameter 'groups' must be a string or a sequence of strings.")
+            groups = [groups] if isinstance(groups, str) else groups
+
+        if palette is not None:
+            if groups is None:
+                raise ValueError("When specifying 'palette', 'groups' must also be specified.")
+
+            if not isinstance(palette, (Sequence, str)):
+                raise TypeError("Parameter 'palette' must be a string or a sequence of strings.")
+
+            palette = [palette] if isinstance(palette, str) else palette
+
+            if not len(groups) == len(palette):
+                raise ValueError("The length of 'palette' and 'groups' must be the same.")
+
+        if not colors.is_color_like(na_color):
+            raise TypeError("Parameter 'na_color' must be color-like.")
+
+        if not isinstance(outline, bool):
+            raise TypeError("Parameter 'outline' must be a True or False.")
+
+        if not isinstance(outline_width, (int, float)):
+            raise TypeError("Parameter 'outline_width' must be numeric.")
+
+        if not outline_width >= 0:
+            raise ValueError("Parameter 'outline_width' cannot be negative.")
+
+        if not colors.is_color_like(outline_color):
+            raise TypeError("Parameter 'outline_color' must be color-like.")
+
+        if not isinstance(outline_width, (int, float)):
+            raise TypeError("Parameter 'outline_width' must be numeric.")
+
+        if not outline_alpha >= 0:
+            raise ValueError("Parameter 'outline_alpha' cannot be negative.")
+
+        if layer is not None and not isinstance(layer, str):
+            raise TypeError("Parameter 'layer' must be a string.")
+
+        if layer is not None and layer not in self._sdata.table.layers:
+            raise ValueError(
+                f"Could not find layer '{layer}', available layers are: '"
+                + "', '".join(self._sdata.table.layers.keys())
+                + "'"
+            )
+
+        if cmap is not None and not isinstance(cmap, (str, Colormap)):
+            raise TypeError("Parameter 'cmap' must be a mpl.Colormap or the name of one.")
+
+        if norm is not None and not isinstance(norm, (bool, Normalize)):
+            raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
+
+        if not isinstance(scale, (int, float)):
+            raise TypeError("Parameter 'scale' must be numeric.")
+
+        if scale < 0:
+            raise ValueError("Parameter 'scale' must be a positive number.")
+
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -228,6 +330,7 @@ class PlotAccessor:
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
             elements=elements,
             color=color,
+            col_for_color=col_for_color,
             groups=groups,
             scale=scale,
             outline_params=outline_params,
@@ -243,11 +346,11 @@ class PlotAccessor:
 
     def render_points(
         self,
-        elements: str | list[str] | None = None,
+        elements: list[str] | str | None = None,
         color: str | None = None,
-        groups: str | Sequence[str] | None = None,
+        groups: Sequence[str] | str | None = None,
         size: float = 1.0,
-        palette: str | list[str] | None = None,
+        palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -259,20 +362,19 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements
-            The name of the points element(s) to render. If `None`, all
-            shapes element in the `SpatialData` object will be used.
-        color
+        elements : Sequence[str] | str | None, optional
+            The name(s) of the point element(s) to render. If `None`, all point
+            elements in the `SpatialData` object will be used.
+        color : str | None, optional
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
-        groups
-            For discrete annotation in ``color``, select which values
-            to plot (other values are set to NAs).
+        groups : Sequence[str] | str | None, optional
+            When using `color` and the key represents discrete labels, `groups`
+            can be used to show only a subset of them. Other values are set to NA.
         size
             Value to scale points.
-        palette
-            Palette for discrete annotations. List of valid color names that should be used
-            for the categories (all or as specified by `groups`). For a single category,
-            a valid color name can be given as string.
+        palette : list[str] | str | None, optional
+            Palette for discrete annotations. List of valid color names that should be
+            used for the categories. Must match the number of groups.
         cmap
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             If no palette is given and `color` refers to a categorical, the colors are
@@ -317,12 +419,12 @@ class PlotAccessor:
 
     def render_images(
         self,
-        elements: str | list[str] | None = None,
+        elements: list[str] | str | None = None,
         channel: list[str] | list[int] | int | str | None = None,
         cmap: list[Colormap] | list[str] | Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-        palette: str | list[str] | None = None,
+        palette: list[str] | str | None = None,
         alpha: float = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] = (None, None),
         scale: str | list[str] | None = None,
@@ -333,9 +435,9 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements
-            The name of the image element(s) to render. If `None`, all
-            shapes elements in the `SpatialData` object will be used.
+        elements : Sequence[str] | str | None, optional
+            The name(s) of the image element(s) to render. If `None`, all image
+            elements in the `SpatialData` object will be used.
         channel
             To select which channel to plot (all by default).
         cmap
@@ -404,13 +506,13 @@ class PlotAccessor:
 
     def render_labels(
         self,
-        elements: str | list[str] | None = None,
+        elements: list[str] | str | None = None,
         color: str | None = None,
-        groups: str | Sequence[str] | None = None,
+        groups: Sequence[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
         layer: str | None = None,
-        palette: str | list[str] | None = None,
+        palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
@@ -424,14 +526,14 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements
-            The name of the labels element(s) to render. If `None`, all
-            labels elements in the `SpatialData` object will be used.
-        color
+        elements : Sequence[str] | str | None, optional
+            The name(s) of the label element(s) to render. If `None`, all label
+            elements in the `SpatialData` object will be used.
+        color : str | None, optional
             Key for annotations in :attr:`anndata.AnnData.obs` or variables/genes.
-        groups
-            For discrete annotation in ``color``, select which values
-            to plot (other values are set to NAs).
+        groups : Sequence[str] | str | None, optional
+            When using `color` and the key represents discrete labels, `groups`
+            can be used to show only a subset of them. Other values are set to NA.
         contour_px
             Draw contour of specified width for each segment. If `None`, fills
             entire segment, see :func:`skimage.morphology.erosion`.
@@ -439,8 +541,9 @@ class PlotAccessor:
             Whether to plot boundaries around segmentation masks.
         layer
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
-        palette
-            Palette for discrete annotations, see :class:`matplotlib.colors.Colormap`.
+        palette : list[str] | str | None, optional
+            Palette for discrete annotations. List of valid color names that should be
+            used for the categories. Must match the number of groups.
         cmap
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm

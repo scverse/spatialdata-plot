@@ -18,6 +18,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
+from spatialdata._logging import logger
 from spatialdata.models import (
     PointsModel,
 )
@@ -25,7 +26,6 @@ from spatialdata.transformations import (
     get_transformation,
 )
 
-from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
     FigParams,
     ImageRenderParams,
@@ -94,11 +94,11 @@ def _render_shapes(
             sdata=sdata_filt,
             element=sdata_filt.shapes[e],
             element_name=e,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.col_for_color,
             layer=render_params.layer,
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.cmap_params.na_color,
+            na_color=render_params.color or render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
         )
@@ -162,14 +162,18 @@ def _render_shapes(
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
             # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None:
+            if color_source_vector is not None and render_params.col_for_color is not None:
                 color_source_vector = color_source_vector.remove_unused_categories()
+
+            # False if user specified color-like with 'color' parameter
+            colorbar = False if render_params.col_for_color is None else legend_params.colorbar
+
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
                 fig_params=fig_params,
                 adata=table,
-                value_to_plot=render_params.color,
+                value_to_plot=render_params.col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -179,7 +183,7 @@ def _render_shapes(
                 legend_loc=legend_params.legend_loc,
                 legend_fontoutline=legend_params.legend_fontoutline,
                 na_in_legend=legend_params.na_in_legend,
-                colorbar=legend_params.colorbar,
+                colorbar=colorbar,
                 scalebar_dx=scalebar_params.scalebar_dx,
                 scalebar_units=scalebar_params.scalebar_units,
             )
