@@ -198,12 +198,6 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    if render_params.groups is not None:
-        if isinstance(render_params.groups, str):
-            render_params.groups = [render_params.groups]
-        if not all(isinstance(g, str) for g in render_params.groups):
-            raise TypeError("All groups must be strings.")
-
     elements = render_params.elements
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -219,11 +213,20 @@ def _render_points(
     for e in elements:
         points = sdata.points[e]
         coords = ["x", "y"]
-        if render_params.color is not None:
-            color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
-            coords.extend(color)
+
+        print(render_params.col_for_color, render_params.color)
+
+        col_for_color = render_params.col_for_color
+
+        if col_for_color is not None:
+            if col_for_color not in points.columns:
+                logger.warning(f"Color key '{col_for_color}' for element '{e}' not been found, using default colors.")
+            else:
+                # col_for_color = [render_params.col_for_color] if isinstance(render_params.col_for_color, str) else render_params.col_for_color
+                color = points[col_for_color].compute().values
 
         points = points[coords].compute()
+
         if render_params.groups is not None:
             points = points[points[color].isin(render_params.groups).values]
             points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
@@ -271,7 +274,7 @@ def _render_points(
         _cax = ax.scatter(
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
-            s=render_params.size,
+            s=render_params.scale,
             c=color_vector,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,

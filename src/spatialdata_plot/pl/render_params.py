@@ -90,10 +90,11 @@ class PointsRenderParams:
     cmap_params: CmapParams
     elements: str | Sequence[str] | None = None
     color: str | None = None
+    col_for_color: str | None = None
     groups: str | Sequence[str] | None = None
     palette: ListedColormap | str | None = None
     alpha: float = 1.0
-    size: float = 1.0
+    scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
 
 

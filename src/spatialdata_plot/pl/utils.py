@@ -52,7 +52,7 @@ from skimage.util import map_array
 from spatial_image import SpatialImage
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
-from spatialdata._logging import logger as logging
+from spatialdata._logging import logger
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
@@ -377,7 +377,7 @@ def _set_outline(
     if outline_width == 0.0:
         outline = False
     if outline_width < 0.0:
-        logging.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
+        logger.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
         outline_width *= -1
 
     # the default black and white colors can be changed using the contour_config parameter
@@ -559,7 +559,7 @@ def _get_colors_for_categorical_obs(
             palette = default_102
         else:
             palette = ["grey" for _ in range(len_cat)]
-            logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+            logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
     else:
         # raise error when user didn't provide the right number of colors in palette
         if isinstance(palette, list) and len(palette) != len(categories):
@@ -621,7 +621,7 @@ def _set_color_source_vec(
         # numerical case, return early
         if not is_categorical_dtype(color_source_vector):
             if palette is not None:
-                logging.warning(
+                logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
                 )
@@ -649,7 +649,7 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    logging.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
+    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
     color = np.full(sdata.table.n_obs, to_hex(na_color))
     return color, color, False
 
@@ -721,7 +721,7 @@ def _get_palette(
                 )
             return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
         except KeyError as e:
-            logging.warning(e)
+            logger.warning(e)
             return None
 
     len_cat = len(categories)
@@ -735,7 +735,7 @@ def _get_palette(
             palette = default_102
         else:
             palette = ["grey" for _ in range(len_cat)]
-            logging.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+            logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
         return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
 
     if isinstance(palette, str):
@@ -902,9 +902,9 @@ def save_fig(fig: Figure, path: str | Path, make_dir: bool = True, ext: str = "p
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            logging.debug(f"Unable to create directory `{path.parent}`. Reason: `{e}`")
+            logger.debug(f"Unable to create directory `{path.parent}`. Reason: `{e}`")
 
-    logging.debug(f"Saving figure to `{path!r}`")
+    logger.debug(f"Saving figure to `{path!r}`")
 
     kwargs.setdefault("bbox_inches", "tight")
     kwargs.setdefault("transparent", True)
@@ -1099,7 +1099,7 @@ def _get_valid_cs(
         ):  # not nice, but ruff wants it (SIM114)
             valid_cs.append(cs)
         else:
-            logging.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
+            logger.info(f"Dropping coordinate system '{cs}' since it doesn't have relevant elements.")
     return valid_cs
 
 
