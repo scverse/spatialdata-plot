@@ -20,6 +20,20 @@ def test_can_subset_to_one_or_more_images(sdata, keys, request):
 
 
 @pytest.mark.parametrize(
+    "sdata, keys",
+    [
+        ("empty", []),
+    ],
+    indirect=["sdata"]
+)
+def test_can_subset_empty_sdata(sdata, keys):
+    """Tests whether a subset of images can be selected from the sdata object."""
+    clipped_sdata = sdata.pp.get_elements(keys)
+
+    assert list(clipped_sdata.images.keys()) == ([keys] if isinstance(keys, str) else keys)
+
+
+@pytest.mark.parametrize(
     "sdata",
     [
         "test_sdata_single_image",
