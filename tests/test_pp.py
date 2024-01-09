@@ -24,7 +24,7 @@ def test_can_subset_to_one_or_more_images(sdata, keys, request):
     [
         ("empty", []),
     ],
-    indirect=["sdata"]
+    indirect=["sdata"],
 )
 def test_can_subset_empty_sdata(sdata, keys):
     """Tests whether a subset of images can be selected from the sdata object."""
