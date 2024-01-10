@@ -71,5 +71,23 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
+    def test_plot_can_render_no_fill(self, sdata_blobs: SpatialData):
+        (
+            sdata_blobs.pl.render_labels(
+                elements="blobs_labels", fill_alpha=0, outline_alpha=1, outline=True, contour_px=10
+            )
+            .pl.show()
+        )
+
+    def test_can_render_no_fill_no_outline(self, sdata_blobs: SpatialData):
+        # This passes only with outline_alpha=0
+        (
+            sdata_blobs.pl.render_labels(
+                elements="blobs_labels", fill_alpha=0,  outline=False,
+            )
+            .pl.show()
+        )
+        self.compare("Labels_can_render_no_fill_no_outline", tolerance=5)
+
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
