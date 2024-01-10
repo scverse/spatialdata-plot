@@ -81,17 +81,17 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         (
             sdata_blobs.pl.render_labels(
                 elements="blobs_labels", fill_alpha=0, outline_alpha=1, outline=True, contour_px=10
-            )
-            .pl.show()
+            ).pl.show()
         )
 
     def test_can_render_no_fill_no_outline(self, sdata_blobs: SpatialData):
         # This passes only with outline_alpha=0
         (
             sdata_blobs.pl.render_labels(
-                elements="blobs_labels", fill_alpha=0,  outline=False,
-            )
-            .pl.show()
+                elements="blobs_labels",
+                fill_alpha=0,
+                outline=False,
+            ).pl.show()
         )
         self.compare("Labels_can_render_no_fill_no_outline", tolerance=5)
 
@@ -109,9 +109,7 @@ def sdata():
         "one_label": Labels2DModel.parse(np.array([[0, 0, 1]]), dims=("y", "x")),
         "labels1": Labels2DModel.parse(np.arange(3).reshape((1, 3)), dims=("y", "x")),
         "skipped_label": Labels2DModel.parse(np.array([[0, 1, 3]]), dims=("y", "x")),
-        "no_background": Labels2DModel.parse(
-            np.arange(1, 3 + 1).reshape((1, 3)), dims=("y", "x")
-        ),
+        "no_background": Labels2DModel.parse(np.arange(1, 3 + 1).reshape((1, 3)), dims=("y", "x")),
         "box": Labels2DModel.parse(box, dims=("y", "x")),
     }
     obs = pd.DataFrame(
@@ -150,11 +148,11 @@ def sdata():
 @pytest.mark.parametrize(
     "elements",
     [
-        ["empty_labels"], # exception
-        ["one_label"], # correct
-        ["two_labels"], # incorrect, empty plot
-        ["skipped_label"], # correct (but different labels plotted with same color)
-        ["no_background"], # internal exception, incorrect plot (label values 2+3 same color)
+        ["empty_labels"],  # exception
+        ["one_label"],  # correct
+        ["two_labels"],  # incorrect, empty plot
+        ["skipped_label"],  # correct (but different labels plotted with same color)
+        ["no_background"],  # internal exception, incorrect plot (label values 2+3 same color)
     ],
 )
 def test_can_handle_different_labels_images(sdata: SpatialData, elements: list[str]):
@@ -166,26 +164,27 @@ def test_can_handle_different_labels_images(sdata: SpatialData, elements: list[s
     ("elements", "options"),
     [
         # Render nothing
-        ([], dict()), # correct
+        ([], dict()),  # correct
         # Render with defaults
-        (["two_labels"], dict()), # empty plot
+        (["two_labels"], dict()),  # empty plot
         # Render labels with color by continuous value, defaults
-        (["two_labels"], dict(color="continuous")), # empty plot
+        (["two_labels"], dict(color="continuous")),  # empty plot
         # Render labels with color by continuous value and NaN
-        (["skipped_label"], dict(color="continuous", na_color="magenta")), # exception: Not all values are color-like.
-        (["skipped_label"], dict(color="continuous", na_color=(1.0, 0.0, 1.0, 1.0))), # exception: Not all values are color-like.
+        (["skipped_label"], dict(color="continuous", na_color="magenta")),  # exception: Not all values are color-like.
+        (
+            ["skipped_label"],
+            dict(color="continuous", na_color=(1.0, 0.0, 1.0, 1.0)),
+        ),  # exception: Not all values are color-like.
         # Render labels with color by continuous value, fill alpha
-        (["two_labels"], dict(color="continuous", fill_alpha=0.0)), # empty plot
-        (["two_labels"], dict(color="continuous", fill_alpha=1.0)), # empty plot
+        (["two_labels"], dict(color="continuous", fill_alpha=0.0)),  # empty plot
+        (["two_labels"], dict(color="continuous", fill_alpha=1.0)),  # empty plot
         # Render labels with color map, defaults
-        (["two_labels"], dict(color="continuous", cmap="viridis")), # empty plot
-        (["two_labels"], dict(color="continuous", cmap=matplotlib.colormaps["plasma"])), # empty plot
+        (["two_labels"], dict(color="continuous", cmap="viridis")),  # empty plot
+        (["two_labels"], dict(color="continuous", cmap=matplotlib.colormaps["plasma"])),  # empty plot
         # Render labels with color map, with norm
         (
             ["two_labels"],
-            dict(
-                color="continuous", cmap="viridis", norm=Normalize(vmin=0.1, vmax=0.9)
-            ),
+            dict(color="continuous", cmap="viridis", norm=Normalize(vmin=0.1, vmax=0.9)),
         ),
         (["two_labels"], dict(color="continuous", cmap="viridis", vmin=0.1, vmax=0.9)),
         (
@@ -220,9 +219,7 @@ def test_can_handle_different_labels_images(sdata: SpatialData, elements: list[s
         (["no_background"], dict(color="categorical", palette="red")),
     ],
 )
-def test_can_render_labels_fill_with_options(
-    sdata: SpatialData, elements: list[str], options: dict
-):
+def test_can_render_labels_fill_with_options(sdata: SpatialData, elements: list[str], options: dict):
     sdata.pl.render_labels(elements=elements, **options).pl.show()
     # TODO: Assertions or comparison with expected image
 
@@ -231,21 +228,22 @@ def test_can_render_labels_fill_with_options(
     ("elements", "options"),
     [
         # Render outline with defaults
-        (["box"], dict(outline=True)), # correct
+        (["box"], dict(outline=True)),  # correct
         # Render outline with no fill
-        (["box"], dict(outline=True, fill_alpha=0.0)), # correct
+        (["box"], dict(outline=True, fill_alpha=0.0)),  # correct
         # Render outline with different width
         pytest.param(["box"], dict(outline=True, contour_px=0), marks=pytest.mark.xfail(reason="not supported")),
         (["box"], dict(outline=True, contour_px=1)),
-        (["box"], dict(outline=True, contour_px=5)), # incorrect, black outline 1, additonal magenta outline (apparently it depends on labels image size)
+        (
+            ["box"],
+            dict(outline=True, contour_px=5),
+        ),  # incorrect, black outline 1, additonal magenta outline (apparently it depends on labels image size)
         # Render outline with alpha
-        (["box"], dict(outline=True, outline_alpha=0.0)), # incorrect, outline shown with ~0.5 alpha
-        (["box"], dict(outline=True, outline_alpha=0.5)), # incorrect, outline shown with ~1.0 alpha
-        (["box"], dict(outline=True, outline_alpha=1.0)), # correct
+        (["box"], dict(outline=True, outline_alpha=0.0)),  # incorrect, outline shown with ~0.5 alpha
+        (["box"], dict(outline=True, outline_alpha=0.5)),  # incorrect, outline shown with ~1.0 alpha
+        (["box"], dict(outline=True, outline_alpha=1.0)),  # correct
     ],
 )
-def test_can_render_labels_outline_with_options(
-    sdata: SpatialData, elements: list[str], options: dict
-):
+def test_can_render_labels_outline_with_options(sdata: SpatialData, elements: list[str], options: dict):
     sdata.pl.render_labels(elements=elements, **options).pl.show(dpi=200)
     # TODO: Assertions or comparison with expected image
