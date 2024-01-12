@@ -20,6 +20,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
+from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._logging import logger
 from spatialdata.transformations.operations import get_transformation
 
@@ -409,6 +410,14 @@ class PlotAccessor:
                     + "', '".join(self._sdata.points.keys())
                     + "'"
                 )
+
+        if color is not None and not colors.is_color_like(color):
+            tmp_e = self._sdata.points if elements is None else elements
+            origins = [
+                _locate_value(value_key=color, sdata=self._sdata, element_name=e) for e in tmp_e
+            ]  # , element_name=element_name)
+            if not any(origins):
+                raise ValueError("The argument for 'color' is neither color-like nor in the data.")
 
         if color is None:
             col_for_color = None

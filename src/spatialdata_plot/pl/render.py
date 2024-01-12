@@ -212,50 +212,56 @@ def _render_points(
 
     for e in elements:
         points = sdata.points[e]
-
         col_for_color = render_params.col_for_color
 
+        coords = ["x", "y"]
         if col_for_color is not None:
             if col_for_color not in points.columns:
+                # no error in case there are multiple elements, but onyl some have color key
                 msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
                 logger.warning(msg)
             else:
-                color = points[col_for_color].compute().values
+                coords += [col_for_color]
 
-        coords = ["x", "y"]
         points = points[coords].compute()
-
-        if render_params.groups is not None:
-            points = points[points[color].isin(render_params.groups).values]
-            points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
-        points = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
-
-        point_df = points[coords].compute()
+        if render_params.groups is not None and col_for_color is not None:
+            points = points[points[col_for_color].isin(render_params.groups)]
 
         # we construct an anndata to hack the plotting functions
         adata = AnnData(
-            X=point_df[["x", "y"]].values, obs=point_df[coords].reset_index(), dtype=point_df[["x", "y"]].values.dtype
+            X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
         )
-        if render_params.color is not None:
-            cols = sc.get.obs_df(adata, render_params.color)
+
+        # Convert back to dask dataframe to modify sdata
+        points = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
+
+        if render_params.col_for_color is not None:
+            cols = sc.get.obs_df(adata, render_params.col_for_color)
             # maybe set color based on type
             if is_categorical_dtype(cols):
                 _maybe_set_colors(
                     source=adata,
                     target=adata,
-                    key=render_params.color,
+                    key=render_params.col_for_color,
                     palette=render_params.palette,
                 )
+
+        # when user specified a single color, we overwrite na with it
+        default_color = (
+            render_params.color
+            if render_params.col_for_color is None and render_params.color is not None
+            else render_params.cmap_params.na_color
+        )
 
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
             element_name=e,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.col_for_color,
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.cmap_params.na_color,
+            na_color=default_color,
             alpha=render_params.alpha,
             cmap_params=render_params.cmap_params,
         )
@@ -294,7 +300,7 @@ def _render_points(
                 cax=cax,
                 fig_params=fig_params,
                 adata=adata,
-                value_to_plot=render_params.color,
+                value_to_plot=render_params.col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.alpha,
