@@ -82,7 +82,7 @@ def _render_shapes(
 
     for e in elements:
         shapes = sdata.shapes[e]
-        n_shapes = sum([len(s) for s in shapes])
+        n_shapes = sum(len(s) for s in shapes)
 
         if sdata.table is None:
             table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
@@ -212,19 +212,17 @@ def _render_points(
 
     for e in elements:
         points = sdata.points[e]
-        coords = ["x", "y"]
-
-        print(render_params.col_for_color, render_params.color)
 
         col_for_color = render_params.col_for_color
 
         if col_for_color is not None:
             if col_for_color not in points.columns:
-                logger.warning(f"Color key '{col_for_color}' for element '{e}' not been found, using default colors.")
+                msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
+                logger.warning(msg)
             else:
-                # col_for_color = [render_params.col_for_color] if isinstance(render_params.col_for_color, str) else render_params.col_for_color
                 color = points[col_for_color].compute().values
 
+        coords = ["x", "y"]
         points = points[coords].compute()
 
         if render_params.groups is not None:
@@ -285,9 +283,7 @@ def _render_points(
         )
         cax = ax.add_collection(_cax)
 
-        if not (
-            len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
-        ):
+        if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
             if color_source_vector is None:
                 palette = ListedColormap(dict.fromkeys(color_vector))
             else:
@@ -636,8 +632,8 @@ def _render_labels(
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
@@ -659,14 +655,11 @@ def _render_labels(
             _cax = ax.imshow(
                 labels_contour,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.outline_alpha,
                 origin="lower",
             )
-            _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
-
         else:
             # Default: no alpha, contour = infill
             label = _map_color_seg(
@@ -683,13 +676,13 @@ def _render_labels(
             _cax = ax.imshow(
                 label,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
-            _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
+        _cax.set_transform(trans_data)
+        cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
             ax=ax,

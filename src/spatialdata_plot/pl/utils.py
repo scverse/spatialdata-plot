@@ -1068,13 +1068,13 @@ def _mpl_ax_contains_elements(ax: Axes) -> bool:
 
 def _get_valid_cs(
     sdata: sd.SpatialData,
-    coordinate_systems: Sequence[str],
+    coordinate_systems: list[str],
     render_images: bool,
     render_labels: bool,
     render_points: bool,
     render_shapes: bool,
     elements: list[str],
-) -> Sequence[str]:
+) -> list[str]:
     """Get names of the valid coordinate systems.
 
     Valid cs are cs that contain elements to be rendered:
@@ -1088,8 +1088,10 @@ def _get_valid_cs(
     cs_mapping = _get_coordinate_system_mapping(sdata)
     valid_cs = []
     for cs in coordinate_systems:
-        if (len(elements) > 0 and any(e in elements for e in cs_mapping[cs])) or (
-            len(elements) == 0
+        if (
+            elements
+            and any(e in elements for e in cs_mapping[cs])
+            or not elements
             and (
                 (len(sdata.images.keys()) > 0 and render_images)
                 or (len(sdata.labels.keys()) > 0 and render_labels)
