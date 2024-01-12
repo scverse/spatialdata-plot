@@ -440,7 +440,7 @@ class PlotAccessor:
         # exist for one element in sdata.shapes, but not the others.
         # Gets validated in _set_color_source_vec()
 
-        if not isinstance(alpha, (int, float)):
+        if not isinstance(alpha, (float, int)):
             raise TypeError("Parameter 'alpha' must be numeric.")
 
         if alpha < 0:
@@ -771,11 +771,11 @@ class PlotAccessor:
         if na_color is not None and not colors.is_color_like(na_color):
             raise ValueError("Parameter 'na_color' must be color-like.")
 
-        if not isinstance(outline_alpha, float):
-            raise TypeError("Parameter 'outline_alpha' must be a float.")
+        if not isinstance(outline_alpha, (float, int)):
+            raise TypeError("Parameter 'outline_alpha' must be numeric.")
 
-        if not isinstance(fill_alpha, float):
-            raise TypeError("Parameter 'fill_alpha' must be a float.")
+        if not isinstance(fill_alpha, (float, int)):
+            raise TypeError("Parameter 'fill_alpha' must be numeric.")
 
         if scale is not None:
             if not isinstance(scale, (list, str)):
