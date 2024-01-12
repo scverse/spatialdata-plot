@@ -18,7 +18,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
-from spatialdata._logging import logger
+from spatialdata_plot._logging import logger
 from spatialdata.models import (
     PointsModel,
 )

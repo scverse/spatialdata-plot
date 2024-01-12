@@ -52,7 +52,7 @@ from skimage.util import map_array
 from spatial_image import SpatialImage
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _locate_value, get_values
-from spatialdata._logging import logger
+from spatialdata_plot._logging import logger
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 

@@ -21,7 +21,7 @@ from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
 from spatialdata._core.query.relational_query import _locate_value
-from spatialdata._logging import logger
+from spatialdata_plot._logging import logger
 from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
