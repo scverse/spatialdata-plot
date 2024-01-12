@@ -663,7 +663,7 @@ def _render_labels(
         else:
             # Default: no alpha, contour = infill
             label = _map_color_seg(
-                seg=label,
+                seg=label.values,
                 cell_id=instance_id,
                 color_vector=color_vector,
                 color_source_vector=color_source_vector,
