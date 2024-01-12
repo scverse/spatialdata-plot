@@ -33,7 +33,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_stack_render_points(self, sdata_blobs: SpatialData):
         (
-            sdata_blobs.pl.render_points(elements="blobs_points", na_color="red", scale=30)
-            .pl.render_points(elements="blobs_points", na_color="blue", scale=10)
+            sdata_blobs.pl.render_points(elements="blobs_points", na_color="red", size=30)
+            .pl.render_points(elements="blobs_points", na_color="blue", size=10)
             .pl.show()
         )

@@ -89,33 +89,33 @@ class PlotAccessor:
 
     def _copy(
         self,
-        images: None | dict[str, SpatialImage | MultiscaleSpatialImage] = None,
-        labels: None | dict[str, SpatialImage | MultiscaleSpatialImage] = None,
-        points: None | dict[str, DaskDataFrame] = None,
-        shapes: None | dict[str, GeoDataFrame] = None,
-        table: None | AnnData = None,
+        images: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
+        labels: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
+        points: dict[str, DaskDataFrame] | None = None,
+        shapes: dict[str, GeoDataFrame] | None = None,
+        table: AnnData | None = None,
     ) -> sd.SpatialData:
         """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
         Parameters
         ----------
-        images :
+        images : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
             A dictionary containing image data to replace the images in the
             original `SpatialData` object, or `None` to keep the original
             images. Defaults to `None`.
-        labels :
+        labels : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
             A dictionary containing label data to replace the labels in the
             original `SpatialData` object, or `None` to keep the original
             labels. Defaults to `None`.
-        points :
+        points : dict[str, DaskDataFrame] | None, optional
             A dictionary containing point data to replace the points in the
             original `SpatialData` object, or `None` to keep the original
             points. Defaults to `None`.
-        shapes :
+        shapes : dict[str, GeoDataFrame] | None, optional
             A dictionary containing shape data to replace the shapes in the
             original `SpatialData` object, or `None` to keep the original
             shapes. Defaults to `None`.
-        table :
+        table : AnnData | None, optional
             A dictionary or `AnnData` object containing table data to replace
             the table in the original `SpatialData` object, or `None` to keep
             the original table. Defaults to `None`.
@@ -148,18 +148,18 @@ class PlotAccessor:
         self,
         elements: list[str] | str | None = None,
         color: str | None = None,
-        fill_alpha: float = 1.0,
+        fill_alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         outline: bool = False,
-        outline_width: float = 1.5,
+        outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
-        outline_alpha: float = 1.0,
+        outline_alpha: float | int = 1.0,
         layer: str | None = None,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
-        scale: float = 1.0,
+        scale: float | int = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -173,7 +173,7 @@ class PlotAccessor:
         color : Colorlike | str | None, optional
             Can either be a color-like or a key in :attr:`sdata.table.obs`. The latter
             can be used to color by categorical or continuous variables.
-        fill_alpha : float, default 1.0
+        fill_alpha : float | int, default 1.0
             Alpha value for the fill of shapes.
         groups : list[str] | str | None, optional
             When using `color` and the key represents discrete labels, `groups`
@@ -188,13 +188,13 @@ class PlotAccessor:
             be shown.
         outline : bool, default False
             If `True`, a border around the shape elements is plotted.
-        outline_width : float, default 1.5
+        outline_width : float | int, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
             Color of the border. Can either be a named color ("red"), a hex
             representation ("#000000ff") or a list of floats that represent RGB/RGBA
             values (1.0, 0.0, 0.0, 1.0).
-        outline_alpha : float, default 1.0
+        outline_alpha : float | int, default 1.0
             Alpha value for the outline of shapes.
         layer : str | None, optional
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
@@ -202,7 +202,7 @@ class PlotAccessor:
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
             Colormap normalization for continuous annotations.
-        scale : float, default 1.0
+        scale : float | int, default 1.0
             Value to scale circles, if present.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
@@ -251,7 +251,7 @@ class PlotAccessor:
         # exist for one element in sdata.shapes, but not the others.
         # Gets validated in _set_color_source_vec()
 
-        if not isinstance(fill_alpha, (int, float)):
+        if not isinstance(fill_alpha, (float, int)):
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
 
         if fill_alpha < 0:
@@ -280,7 +280,7 @@ class PlotAccessor:
         if not isinstance(outline, bool):
             raise TypeError("Parameter 'outline' must be a True or False.")
 
-        if not isinstance(outline_width, (int, float)):
+        if not isinstance(outline_width, (float, int)):
             raise TypeError("Parameter 'outline_width' must be numeric.")
 
         if outline_width < 0:
@@ -289,7 +289,7 @@ class PlotAccessor:
         if not colors.is_color_like(outline_color):
             raise TypeError("Parameter 'outline_color' must be color-like.")
 
-        if not isinstance(outline_alpha, (int, float)):
+        if not isinstance(outline_alpha, (float, int)):
             raise TypeError("Parameter 'outline_alpha' must be numeric.")
 
         if outline_alpha < 0:
@@ -311,7 +311,7 @@ class PlotAccessor:
         if norm is not None and not isinstance(norm, (bool, Normalize)):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
-        if not isinstance(scale, (int, float)):
+        if not isinstance(scale, (float, int)):
             raise TypeError("Parameter 'scale' must be numeric.")
 
         if scale < 0:
@@ -350,13 +350,13 @@ class PlotAccessor:
         self,
         elements: list[str] | str | None = None,
         color: str | None = None,
-        alpha: float = 1.0,
+        alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
-        scale: float = 1.0,
+        size: float | int = 1.0,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -370,7 +370,7 @@ class PlotAccessor:
         color : Colorlike | str | None, optional
             Can either be a color-like or a key in :attr:`sdata.table.obs`. The latter
             can be used to color by categorical or continuous variables.
-        alpha : float, default 1.0
+        alpha : float | int, default 1.0
             Alpha value for the points.
         groups : list[str] | str | None, optional
             When using `color` and the key represents discrete labels, `groups`
@@ -389,8 +389,8 @@ class PlotAccessor:
             refers to a categorical, the colors are sampled from this colormap.
         norm : bool | Normalize, default False
             Colormap normalization for continuous annotations.
-        scale : float, default 1.0
-            Value to scale points.
+        size : float | int, default 1.0
+            Size of the points
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -472,11 +472,11 @@ class PlotAccessor:
         if norm is not None and not isinstance(norm, (bool, Normalize)):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
-        if not isinstance(scale, (int, float)):
-            raise TypeError("Parameter 'scale' must be numeric.")
+        if not isinstance(size, (float, int)):
+            raise TypeError("Parameter 'size' must be numeric.")
 
-        if scale < 0:
-            raise ValueError("Parameter 'scale' must be a positive number.")
+        if size < 0:
+            raise ValueError("Parameter 'size' must be a positive number.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -498,7 +498,7 @@ class PlotAccessor:
             palette=palette,
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
-            scale=scale,
+            size=size,
         )
 
         return sdata
@@ -511,7 +511,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
         palette: list[str] | str | None = None,
-        alpha: float = 1.0,
+        alpha: float | int = 1.0,
         quantiles_for_norm: tuple[float | None, float | None] | None = None,
         scale: list[str] | str | None = None,
         **kwargs: Any,
@@ -536,10 +536,10 @@ class PlotAccessor:
             Applies to all channels if set.
         na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
             Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
-        alpha : float, default 1.0
-            Alpha value for the images. Must be a float between 0 and 1.
+        alpha : float | int, default 1.0
+            Alpha value for the images. Must be a numeric between 0 and 1.
         quantiles_for_norm : tuple[float | None, float | None] | None, optional
-            Optional pair of floats (pmin < pmax) which will be used for quantile normalization.
+            Optional pair of floats (pmin < pmax, 0-100) which will be used for quantile normalization.
         scale : list[str] | str | None, optional
             Influences the resolution of the rendering. Possibilities include:
                 1) `None` (default): The image is rasterized to fit the canvas size. For
@@ -592,8 +592,8 @@ class PlotAccessor:
         if palette is not None and not isinstance(palette, (list, str)):
             raise TypeError("Parameter 'palette' must be a string or a list of strings.")
 
-        if not isinstance(alpha, float):
-            raise TypeError("Parameter 'alpha' must be a float.")
+        if not isinstance(alpha, (float, int)):
+            raise TypeError("Parameter 'alpha' must be numeric.")
 
         if alpha < 0:
             raise ValueError("Parameter 'alpha' cannot be negative.")
@@ -606,9 +606,9 @@ class PlotAccessor:
             raise ValueError("Parameter 'quantiles_for_norm' must contain exactly two elements.")
         else:
             if not all(
-                isinstance(p, (float, int, type(None))) and (p is None or 0 <= p <= 1) for p in quantiles_for_norm
+                isinstance(p, (float, int, type(None))) and (p is None or 0 <= p <= 100) for p in quantiles_for_norm
             ):
-                raise TypeError("Each item in 'quantiles_for_norm' must be a float or int within [0, 1], or None.")
+                raise TypeError("Each item in 'quantiles_for_norm' must be a float or int within [0, 100], or None.")
 
             pmin, pmax = quantiles_for_norm
             if pmin is not None and pmax is not None and pmin > pmax:
@@ -670,8 +670,8 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
-        outline_alpha: float = 1.0,
-        fill_alpha: float = 0.3,
+        outline_alpha: float | int = 1.0,
+        fill_alpha: float | int = 0.3,
         scale: list[str] | str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -688,25 +688,27 @@ class PlotAccessor:
         groups : list[str] | str | None, optional
             When using `color` and the key represents discrete labels, `groups`
             can be used to show only a subset of them. Other values are set to NA.
-        contour_px
+        contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills
             entire segment, see :func:`skimage.morphology.erosion`.
-        outline
+        outline : bool, default False
             Whether to plot boundaries around segmentation masks.
-        layer
+        layer : str | None, optional
             Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette : list[str] | str | None, optional
             Palette for discrete annotations. List of valid color names that should be
             used for the categories. Must match the number of groups.
-        cmap
+        cmap : Colormap | str | None, optional
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-        norm
+        norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color
+        na_color : ColorLike | None, optional
             Color to be used for NAs values, if present.
-        alpha
+        outline_alpha : float | int, default 1.0
             Alpha value for the labels.
-        scale
+        fill_alpha : float | int, default 0.3
+            Alpha value for the labels.
+        scale : list[str] | str | None, optional
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
                 is selected before the rasterization step.
@@ -835,7 +837,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: list[str] | str | None = None,
         share_extent: bool = True,
-        pad_extent: int = 0,
+        pad_extent: int | float = 0,
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
@@ -940,8 +942,8 @@ class PlotAccessor:
         if not isinstance(share_extent, bool):
             raise TypeError("Parameter 'share_extent' must be a boolean.")
 
-        if not isinstance(pad_extent, int):
-            raise TypeError("Parameter 'pad_extent' must be an integer.")
+        if not isinstance(pad_extent, (int, float)):
+            raise TypeError("Parameter 'pad_extent' must be numeric.")
 
         if ax is not None and not isinstance(ax, (Axes, list)):
             raise TypeError("Parameter 'ax' must be a matplotlib.axes.Axes or a list of Axes.")

@@ -278,7 +278,7 @@ def _render_points(
         _cax = ax.scatter(
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
-            s=render_params.scale,
+            s=render_params.size,
             c=color_vector,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
