@@ -82,7 +82,7 @@ def _render_shapes(
 
     for e in elements:
         shapes = sdata.shapes[e]
-        n_shapes = sum([len(s) for s in shapes])
+        n_shapes = sum(len(s) for s in shapes)
 
         if sdata.table is None:
             table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
@@ -94,11 +94,11 @@ def _render_shapes(
             sdata=sdata_filt,
             element=sdata_filt.shapes[e],
             element_name=e,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.col_for_color,
             layer=render_params.layer,
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.cmap_params.na_color,
+            na_color=render_params.color or render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
         )
@@ -162,14 +162,18 @@ def _render_shapes(
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
             # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None:
+            if color_source_vector is not None and render_params.col_for_color is not None:
                 color_source_vector = color_source_vector.remove_unused_categories()
+
+            # False if user specified color-like with 'color' parameter
+            colorbar = False if render_params.col_for_color is None else legend_params.colorbar
+
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
                 fig_params=fig_params,
                 adata=table,
-                value_to_plot=render_params.color,
+                value_to_plot=render_params.col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -179,7 +183,7 @@ def _render_shapes(
                 legend_loc=legend_params.legend_loc,
                 legend_fontoutline=legend_params.legend_fontoutline,
                 na_in_legend=legend_params.na_in_legend,
-                colorbar=legend_params.colorbar,
+                colorbar=colorbar,
                 scalebar_dx=scalebar_params.scalebar_dx,
                 scalebar_units=scalebar_params.scalebar_units,
             )
@@ -194,12 +198,6 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    if render_params.groups is not None:
-        if isinstance(render_params.groups, str):
-            render_params.groups = [render_params.groups]
-        if not all(isinstance(g, str) for g in render_params.groups):
-            raise TypeError("All groups must be strings.")
-
     elements = render_params.elements
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -214,43 +212,56 @@ def _render_points(
 
     for e in elements:
         points = sdata.points[e]
+        col_for_color = render_params.col_for_color
+
         coords = ["x", "y"]
-        if render_params.color is not None:
-            color = [render_params.color] if isinstance(render_params.color, str) else render_params.color
-            coords.extend(color)
+        if col_for_color is not None:
+            if col_for_color not in points.columns:
+                # no error in case there are multiple elements, but onyl some have color key
+                msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
+                logger.warning(msg)
+            else:
+                coords += [col_for_color]
 
         points = points[coords].compute()
-        if render_params.groups is not None:
-            points = points[points[color].isin(render_params.groups).values]
-            points[color[0]] = points[color[0]].cat.set_categories(render_params.groups)
-        points = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
-
-        point_df = points[coords].compute()
+        if render_params.groups is not None and col_for_color is not None:
+            points = points[points[col_for_color].isin(render_params.groups)]
 
         # we construct an anndata to hack the plotting functions
         adata = AnnData(
-            X=point_df[["x", "y"]].values, obs=point_df[coords].reset_index(), dtype=point_df[["x", "y"]].values.dtype
+            X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
         )
-        if render_params.color is not None:
-            cols = sc.get.obs_df(adata, render_params.color)
+
+        # Convert back to dask dataframe to modify sdata
+        points = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
+
+        if render_params.col_for_color is not None:
+            cols = sc.get.obs_df(adata, render_params.col_for_color)
             # maybe set color based on type
             if is_categorical_dtype(cols):
                 _maybe_set_colors(
                     source=adata,
                     target=adata,
-                    key=render_params.color,
+                    key=render_params.col_for_color,
                     palette=render_params.palette,
                 )
+
+        # when user specified a single color, we overwrite na with it
+        default_color = (
+            render_params.color
+            if render_params.col_for_color is None and render_params.color is not None
+            else render_params.cmap_params.na_color
+        )
 
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
             element_name=e,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.col_for_color,
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.cmap_params.na_color,
+            na_color=default_color,
             alpha=render_params.alpha,
             cmap_params=render_params.cmap_params,
         )
@@ -278,9 +289,7 @@ def _render_points(
         )
         cax = ax.add_collection(_cax)
 
-        if not (
-            len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
-        ):
+        if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
             if color_source_vector is None:
                 palette = ListedColormap(dict.fromkeys(color_vector))
             else:
@@ -291,7 +300,7 @@ def _render_points(
                 cax=cax,
                 fig_params=fig_params,
                 adata=adata,
-                value_to_plot=render_params.color,
+                value_to_plot=render_params.col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.alpha,
@@ -629,8 +638,8 @@ def _render_labels(
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
@@ -652,14 +661,11 @@ def _render_labels(
             _cax = ax.imshow(
                 labels_contour,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.outline_alpha,
                 origin="lower",
             )
-            _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
-
         else:
             # Default: no alpha, contour = infill
             label = _map_color_seg(
@@ -676,13 +682,13 @@ def _render_labels(
             _cax = ax.imshow(
                 label,
                 rasterized=True,
-                cmap=render_params.cmap_params.cmap if not categorical else None,
-                norm=render_params.cmap_params.norm if not categorical else None,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
-            _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
+        _cax.set_transform(trans_data)
+        cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
             ax=ax,

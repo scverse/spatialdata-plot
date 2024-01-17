@@ -72,6 +72,7 @@ class ShapesRenderParams:
     outline_params: OutlineParams
     elements: str | Sequence[str] | None = None
     color: str | None = None
+    col_for_color: str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
     layer: str | None = None
@@ -89,6 +90,7 @@ class PointsRenderParams:
     cmap_params: CmapParams
     elements: str | Sequence[str] | None = None
     color: str | None = None
+    col_for_color: str | None = None
     groups: str | Sequence[str] | None = None
     palette: ListedColormap | str | None = None
     alpha: float = 1.0
