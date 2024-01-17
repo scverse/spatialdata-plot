@@ -17,13 +17,14 @@ and this project adheres to [Semantic Versioning][].
 -   Added better error message for mismatch in cs and ax number (#185)
 -   Beter test coverage for correct plotting of elements after transformation (#198)
 -   Can now stack render commands (#190, #192)
+-   The `color` argument in render_shapes/points now accepts actual colors as well (#199)
+-   Input arguments are now evaulated for their types in basic.py (#199)
 
 ### Fixed
 
 -   Now dropping index when plotting shapes after spatial query (#177)
 -   Points are now being correctly rotated (#198)
 -   User can now pass Colormap objects to the cmap argument in render_images. When only one cmap is given for 3 channels, it is now applied to each channel (#188, #194)
--   Labels can now be colored by a continuous variable without setting `norm` (#201)
 
 ## [0.0.6] - 2023-11-06
 
