@@ -37,3 +37,6 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             .pl.render_points(elements="blobs_points", na_color="blue", size=10)
             .pl.show()
         )
+
+    def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(elements="blobs_points", color="red").pl.show()

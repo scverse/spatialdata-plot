@@ -615,7 +615,7 @@ class PlotAccessor:
                 raise ValueError("The first number in 'quantiles_for_norm' must not be smaller than the second.")
 
         if scale is not None and not isinstance(scale, (list, str)):
-            raise TypeError("Parameter 'scale' must be a string or a list of strings.")
+            raise TypeError("If specified, parameter 'scale' must be a string or a list of strings.")
 
         if isinstance(scale, list) and not all(isinstance(s, str) for s in scale):
             raise TypeError("Each item in 'scale' list must be a string.")
@@ -705,9 +705,9 @@ class PlotAccessor:
         na_color : ColorLike | None, optional
             Color to be used for NAs values, if present.
         outline_alpha : float | int, default 1.0
-            Alpha value for the labels.
+            Alpha value for the outline of the labels.
         fill_alpha : float | int, default 0.3
-            Alpha value for the labels.
+            Alpha value for the fill of the labels.
         scale : list[str] | str | None, optional
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -779,7 +779,7 @@ class PlotAccessor:
 
         if scale is not None:
             if not isinstance(scale, (list, str)):
-                raise TypeError("Parameter 'scale' must be a string or a list of strings.")
+                raise TypeError("If specified, parameter 'scale' must be a string or a list of strings.")
             scale = [scale] if isinstance(scale, str) else scale
             if not all(isinstance(s, str) for s in scale):
                 raise TypeError("All items in 'scale' list must be strings.")

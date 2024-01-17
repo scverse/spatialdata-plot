@@ -261,3 +261,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             .pl.render_shapes(elements="blobs_polygons", na_color="blue", fill_alpha=0.5)
             .pl.show()
         )
+
+    def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
+        (
+            sdata_blobs.pl.render_shapes(elements="blobs_circles", color="red")
+            .pl.show()
+        )
