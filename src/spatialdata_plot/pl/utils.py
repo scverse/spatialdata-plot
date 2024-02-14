@@ -707,7 +707,7 @@ def _map_color_seg(
 
 
 def _get_palette(
-    categories: Sequence[Any],
+    categories: pd.Categorical,
     adata: AnnData | None = None,
     cluster_key: None | str = None,
     palette: ListedColormap | str | list[str] | None = None,
@@ -804,8 +804,8 @@ def _decorate_axs(
         # Adding legends
         if is_categorical_dtype(color_source_vector):
             # order of clusters should agree to palette order
-            clusters = color_source_vector.unique()
-            clusters = clusters[~clusters.isnull()]
+            clusters: pd.Categorical = color_source_vector.unique()
+            clusters: pd.Categorical = clusters[~clusters.isnull()]
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )
