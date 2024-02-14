@@ -804,8 +804,8 @@ def _decorate_axs(
         # Adding legends
         if is_categorical_dtype(color_source_vector):
             # order of clusters should agree to palette order
-            clusters: pd.Categorical = color_source_vector.unique()
-            clusters: pd.Categorical = clusters[~clusters.isnull()]
+            clusters_unique: pd.Categorical = color_source_vector.unique()
+            clusters: pd.Categorical = clusters_unique[~clusters_unique.isnull()]
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )
