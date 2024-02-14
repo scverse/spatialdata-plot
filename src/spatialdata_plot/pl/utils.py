@@ -713,6 +713,7 @@ def _get_palette(
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
+    categories = categories.categories
     if adata is not None and palette is None:
         try:
             palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
