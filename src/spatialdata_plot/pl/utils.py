@@ -598,7 +598,7 @@ def _set_color_source_vec(
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
     cmap_params: CmapParams | None = None,
-    table_name: str = "table"
+    table_name: str = "table",
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]

@@ -18,10 +18,7 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
-from spatialdata.models import (
-    PointsModel,
-    get_table_keys
-)
+from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     get_transformation,
 )
@@ -49,7 +46,6 @@ from spatialdata_plot.pl.utils import (
     _set_color_source_vec,
     to_hex,
 )
-from spatialdata_plot.pp.utils import _get_instance_key, _get_region_key
 
 _Normalize = Union[Normalize, abc.Sequence[Normalize]]
 
@@ -104,7 +100,7 @@ def _render_shapes(
             na_color=render_params.color or render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
-            table_name=table_name
+            table_name=table_name,
         )
 
         values_are_categorical = color_source_vector is not None
@@ -269,7 +265,7 @@ def _render_points(
             na_color=default_color,
             alpha=render_params.alpha,
             cmap_params=render_params.cmap_params,
-            table_name=table_name
+            table_name=table_name,
         )
 
         # color_source_vector is None when the values aren't categorical
@@ -625,7 +621,7 @@ def _render_labels(
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
-            table_name=table_name
+            table_name=table_name,
         )
 
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
