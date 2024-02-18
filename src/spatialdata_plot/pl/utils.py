@@ -598,20 +598,21 @@ def _set_color_source_vec(
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
     cmap_params: CmapParams | None = None,
+    table_name: str = "table"
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
     # Figure out where to get the color from
-    origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+    origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     if len(origins) > 1:
         raise ValueError(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
         )
 
     if len(origins) == 1:
-        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name)
+        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
         color_source_vector = vals[value_to_plot]
 
         # if all([isinstance(x, str) for x in color_source_vector]):
@@ -652,7 +653,7 @@ def _set_color_source_vec(
         return color_source_vector, color_vector, True
 
     logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    color = np.full(sdata.table.n_obs, to_hex(na_color))
+    color = np.full(sdata[table_name].n_obs, to_hex(na_color))
     return color, color, False
 
 

@@ -93,7 +93,7 @@ class PlotAccessor:
         labels: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
         points: dict[str, DaskDataFrame] | None = None,
         shapes: dict[str, GeoDataFrame] | None = None,
-        table: AnnData | None = None,
+        table: dict[str, AnnData] | None = None,
     ) -> sd.SpatialData:
         """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
@@ -115,7 +115,7 @@ class PlotAccessor:
             A dictionary containing shape data to replace the shapes in the
             original `SpatialData` object, or `None` to keep the original
             shapes. Defaults to `None`.
-        table : AnnData | None, optional
+        table : dict[str, AnnData] | None, optional
             A dictionary or `AnnData` object containing table data to replace
             the table in the original `SpatialData` object, or `None` to keep
             the original table. Defaults to `None`.
@@ -138,7 +138,7 @@ class PlotAccessor:
             labels=self._sdata.labels if labels is None else labels,
             points=self._sdata.points if points is None else points,
             shapes=self._sdata.shapes if shapes is None else shapes,
-            table=self._sdata.table if table is None else table,
+            table=self._sdata.tables if table is None else table,
         )
         sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
 
@@ -160,6 +160,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
+        table_name: str = "table",
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -342,6 +343,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
+            table_name=table_name,
         )
 
         return sdata
@@ -357,6 +359,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
+        table_name: str = "table",
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -414,7 +417,7 @@ class PlotAccessor:
         if color is not None and not colors.is_color_like(color):
             tmp_e = self._sdata.points if elements is None else elements
             origins = [
-                _locate_value(value_key=color, sdata=self._sdata, element_name=e) for e in tmp_e
+                _locate_value(value_key=color, sdata=self._sdata, element_name=e, table_name=table_name) for e in tmp_e
             ]  # , element_name=element_name)
             if not any(origins):
                 raise ValueError("The argument for 'color' is neither color-like nor in the data.")
@@ -499,6 +502,7 @@ class PlotAccessor:
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
             size=size,
+            table_name=table_name,
         )
 
         return sdata
@@ -673,6 +677,7 @@ class PlotAccessor:
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
         scale: list[str] | str | None = None,
+        table_name: str = "table",
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -786,8 +791,8 @@ class PlotAccessor:
 
         if (
             color is not None
-            and color not in self._sdata.table.obs.columns
-            and color not in self._sdata.table.var_names
+            and color not in self._sdata[table_name].obs.columns
+            and color not in self._sdata[table_name].var_names
         ):
             raise ValueError(f"'{color}' is not a valid table column.")
 
@@ -815,6 +820,7 @@ class PlotAccessor:
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
             scale=scale,
+            table_name=table_name,
         )
 
         return sdata

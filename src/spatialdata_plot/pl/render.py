@@ -20,6 +20,7 @@ from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
 from spatialdata.models import (
     PointsModel,
+    get_table_keys
 )
 from spatialdata.transformations import (
     get_transformation,
@@ -63,6 +64,7 @@ def _render_shapes(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
+    table_name = render_params.table_name
 
     if render_params.groups is not None:
         if isinstance(render_params.groups, str):
@@ -72,7 +74,7 @@ def _render_shapes(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.table is not None,
+        filter_table=sdata.get(table_name) is not None,
     )
     if isinstance(elements, str):
         elements = [elements]
@@ -84,10 +86,11 @@ def _render_shapes(
         shapes = sdata.shapes[e]
         n_shapes = sum(len(s) for s in shapes)
 
-        if sdata.table is None:
+        if sdata.get(table_name) is None:
             table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
         else:
-            table = sdata.table[sdata.table.obs[_get_region_key(sdata)].isin([e])]
+            _, region_key, _ = get_table_keys(sdata[table_name])
+            table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, _ = _set_color_source_vec(
@@ -101,6 +104,7 @@ def _render_shapes(
             na_color=render_params.color or render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
+            table_name=table_name
         )
 
         values_are_categorical = color_source_vector is not None
@@ -199,10 +203,11 @@ def _render_points(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
+    table_name = render_params.table_name
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.table is not None,
+        filter_table=sdata[table_name] is not None,
     )
     if isinstance(elements, str):
         elements = [elements]
@@ -264,6 +269,7 @@ def _render_points(
             na_color=default_color,
             alpha=render_params.alpha,
             cmap_params=render_params.cmap_params,
+            table_name=table_name
         )
 
         # color_source_vector is None when the values aren't categorical
@@ -541,6 +547,7 @@ def _render_labels(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
+    table_name = render_params.table_name
 
     if not isinstance(render_params.outline, bool):
         raise TypeError("Parameter 'outline' must be a boolean.")
@@ -556,7 +563,7 @@ def _render_labels(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.table is not None,
+        filter_table=sdata[table_name] is not None,
     )
     if isinstance(elements, str):
         elements = [elements]
@@ -591,14 +598,12 @@ def _render_labels(
                 extent=extent,
             )
 
-        if sdata.table is None:
+        if sdata[table_name] is None:
             instance_id = np.unique(label)
             table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
         else:
-            instance_key = _get_instance_key(sdata)
-            region_key = _get_region_key(sdata)
-
-            table = sdata.table[sdata.table.obs[region_key].isin([e])]
+            regions, region_key, instance_key = get_table_keys(sdata[table_name])
+            table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
             # get instance id based on subsetted table
             instance_id = table.obs[instance_key].values
@@ -620,6 +625,7 @@ def _render_labels(
             na_color=render_params.cmap_params.na_color,
             alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
+            table_name=table_name
         )
 
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
