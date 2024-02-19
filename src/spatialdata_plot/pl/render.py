@@ -203,7 +203,7 @@ def _render_points(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata[table_name] is not None,
+        filter_table=sdata.get(table_name) is not None,
     )
     if isinstance(elements, str):
         elements = [elements]
