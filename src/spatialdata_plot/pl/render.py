@@ -559,7 +559,7 @@ def _render_labels(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata[table_name] is not None,
+        filter_table=sdata.get(table_name) is not None,
     )
     if isinstance(elements, str):
         elements = [elements]
@@ -594,7 +594,7 @@ def _render_labels(
                 extent=extent,
             )
 
-        if sdata[table_name] is None:
+        if sdata.get(table_name) is None:
             instance_id = np.unique(label)
             table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
         else:
