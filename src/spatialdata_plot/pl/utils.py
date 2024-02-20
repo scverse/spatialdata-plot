@@ -1256,6 +1256,22 @@ def _get_elements_to_be_rendered(
     cs_contents: pd.DataFrame,
     cs: str,
 ) -> list[str]:
+    """
+    Get the names of the elements to be rendered in the plot.
+
+    Parameters
+    ----------
+    render_cmds
+        List of tuples containing the commands and their respective parameters.
+    cs_contents
+        The dataframe indicating for each coordinate system which SpatialElements it contains.
+    cs
+        The name of the coordinate system to query cs_contents for.
+
+    Returns
+    -------
+    List of names of the SpatialElements to be rendered in the plot.
+    """
     elements_to_be_rendered: list[str] = []
     render_cmds_map = {
         "render_images": "has_images",
