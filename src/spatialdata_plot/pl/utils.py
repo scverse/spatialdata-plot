@@ -59,7 +59,10 @@ from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     FigParams,
+    ImageRenderParams,
+    LabelsRenderParams,
     OutlineParams,
+    PointsRenderParams,
     ScalebarParams,
     ShapesRenderParams,
     _FontSize,
@@ -1246,3 +1249,25 @@ def _multiscale_to_spatial_image(
     image = multiscale_image[optimal_scale][data_var_keys[0]]
 
     return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
+
+
+def _get_elements_to_be_rendered(
+    render_cmds: list[tuple[str, ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams]],
+    cs_contents: pd.DataFrame,
+    cs: str,
+) -> list[str]:
+    elements_to_be_rendered: list[str] = []
+    render_cmds_map = {
+        "render_images": "has_images",
+        "render_shapes": "has_shapes",
+        "render_points": "has_points",
+        "render_labels": "has_labels",
+    }
+
+    cs_query = cs_contents.query(f"cs == '{cs}'")
+
+    for cmd, params in render_cmds:
+        key = render_cmds_map.get(cmd)
+        if key and cs_query[key][0] and params.elements is not None:
+            elements_to_be_rendered += [params.elements] if isinstance(params.elements, str) else params.elements
+    return elements_to_be_rendered
