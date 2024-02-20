@@ -51,7 +51,7 @@ from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatial_image import SpatialImage
 from spatialdata._core.operations.rasterize import rasterize
-from spatialdata._core.query.relational_query import _locate_value, get_values
+from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, get_values
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
@@ -601,7 +601,7 @@ def _set_color_source_vec(
     na_color: str | tuple[float, ...] | None = None,
     alpha: float = 1.0,
     cmap_params: CmapParams | None = None,
-    table_name: str = "table",
+    table_name: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
@@ -1287,3 +1287,27 @@ def _get_elements_to_be_rendered(
         if key and cs_query[key][0] and params.elements is not None:
             elements_to_be_rendered += [params.elements] if isinstance(params.elements, str) else params.elements
     return elements_to_be_rendered
+
+
+def _set_params_table_name(sdata, params, wanted_elements_on_this_cs):
+    if not params.table_name:
+        table_names = set()
+        for spatial_element_name in wanted_elements_on_this_cs:
+            table_names.update(_get_element_annotators(sdata, spatial_element_name))
+
+    if params.color is not None:
+        # Check whether we have multiple color columns, none or just 1 in case we can set the table name
+        color_tables = []
+        for table_name in table_names:
+            if params.color in sdata[table_name].obs.columns or params.color in sdata[table_name].var_names:
+                color_tables.append(table_name)
+        if len(color_tables) == 0:
+            raise ValueError(
+                f"'{params.color}' is not a valid table column in any of the tables annotating the element ..."
+            )
+        if len(color_tables) > 1:
+            raise ValueError(
+                f"Multiple tables contain a column '{params.color}`. Please pass on table_name" f"as argument."
+            )
+        params.table_name = color_tables[0]
+    return params

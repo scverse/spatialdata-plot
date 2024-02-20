@@ -50,6 +50,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _set_params_table_name,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -678,7 +679,7 @@ class PlotAccessor:
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
         scale: list[str] | str | None = None,
-        table_name: str = "table",
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -790,12 +791,12 @@ class PlotAccessor:
             if not all(isinstance(s, str) for s in scale):
                 raise TypeError("All items in 'scale' list must be strings.")
 
-        if (
-            color is not None
-            and color not in self._sdata[table_name].obs.columns
-            and color not in self._sdata[table_name].var_names
-        ):
-            raise ValueError(f"'{color}' is not a valid table column.")
+        # if (
+        #     color is not None
+        #     and color not in self._sdata[table_name].obs.columns
+        #     and color not in self._sdata[table_name].var_names
+        # ):
+        #     raise ValueError(f"'{color}' is not a valid table column.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -1145,15 +1146,6 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_labels" and has_labels:
-                    if sdata.table is not None and isinstance(params.color, str):
-                        colors = sc.get.obs_df(sdata.table, params.color)
-                        if is_categorical_dtype(colors):
-                            _maybe_set_colors(
-                                source=sdata.table,
-                                target=sdata.table,
-                                key=params.color,
-                                palette=params.palette,
-                            )
                     wants_labels = True
                     wanted_labels = params.elements if params.elements is not None else list(sdata.labels.keys())
                     wanted_labels_on_this_cs = [
@@ -1162,7 +1154,20 @@ class PlotAccessor:
                         if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
                     ]
                     wanted_elements.extend(wanted_labels_on_this_cs)
+
                     if wanted_labels_on_this_cs:
+                        params = _set_params_table_name(sdata, params, wanted_labels_on_this_cs)
+
+                    if isinstance(params.color, str):
+                        colors = sc.get.obs_df(sdata[params.table_name], params.color)
+                        if is_categorical_dtype(colors):
+                            _maybe_set_colors(
+                                source=sdata[params.table_name],
+                                target=sdata[params.table_name],
+                                key=params.color,
+                                palette=params.palette,
+                            )
+
                         rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
                             and params.scale != "full"
