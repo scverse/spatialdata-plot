@@ -596,7 +596,7 @@ def _render_labels(
 
         if sdata.get(table_name) is None:
             instance_id = np.unique(label)
-            table = AnnData(None, obs=pd.DataFrame(index=np.arange(len(instance_id))))
+            table = None
         else:
             regions, region_key, instance_key = get_table_keys(sdata[table_name])
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
