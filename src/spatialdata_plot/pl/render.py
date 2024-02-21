@@ -72,8 +72,6 @@ def _render_shapes(
         coordinate_system=coordinate_system,
         filter_table=sdata.get(table_name) is not None,
     )
-    if isinstance(elements, str):
-        elements = [elements]
 
     if elements is None:
         elements = list(sdata_filt.shapes.keys())
@@ -204,8 +202,6 @@ def _render_points(
         coordinate_system=coordinate_system,
         filter_table=sdata.get(table_name) is not None,
     )
-    if isinstance(elements, str):
-        elements = [elements]
 
     if elements is None:
         elements = list(sdata_filt.points.keys())
@@ -333,9 +329,6 @@ def _render_images(
         coordinate_system=coordinate_system,
         filter_table=sdata.table is not None,
     )
-
-    if isinstance(elements, str):
-        elements = [elements]
 
     if elements is None:
         elements = list(sdata_filt.images.keys())
@@ -560,8 +553,6 @@ def _render_labels(
         coordinate_system=coordinate_system,
         filter_table=sdata.get(table_name) is not None,
     )
-    if isinstance(elements, str):
-        elements = [elements]
 
     if elements is None:
         elements = list(sdata_filt.labels.keys())
