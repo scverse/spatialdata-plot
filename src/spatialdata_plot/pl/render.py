@@ -412,7 +412,7 @@ def _render_images(
             if render_params.palette is None:
                 cmap = render_params.cmap_params.cmap  # type: ignore[attr-defined]
             else:
-                cmap = _get_linear_colormap([render_params.palette], "k")[0]
+                cmap = _get_linear_colormap(render_params.palette, "k")[0]  # type: ignore[arg-type]
 
             # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
             cmap._init()

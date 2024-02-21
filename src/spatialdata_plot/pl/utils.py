@@ -6,7 +6,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -71,6 +71,8 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
+
+ColorLike = Union[tuple[float, ...], str]
 
 
 def _prepare_params_plot(
@@ -1289,7 +1291,11 @@ def _get_elements_to_be_rendered(
     return elements_to_be_rendered
 
 
-def _set_params_table_name(sdata, params, wanted_elements_on_this_cs):
+def _set_params_table_name(
+    sdata: sd.SpatialData,
+    params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    wanted_elements_on_this_cs: list[str],
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     if not params.table_name:
         table_names = set()
         for spatial_element_name in wanted_elements_on_this_cs:
@@ -1334,7 +1340,7 @@ def _validate_show_parameters(
     ax: list[Axes] | Axes | None,
     return_ax: bool,
     save: str | Path | None,
-):
+) -> None:
     if coordinate_systems is not None and not isinstance(coordinate_systems, (list, str)):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
 
@@ -1411,3 +1417,170 @@ def _validate_show_parameters(
 
     if save is not None and not isinstance(save, (str, Path)):
         raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
+
+
+def _validate_render_params(
+    element_type: str,
+    sdata: sd.SpatialData,
+    alpha: float | int | None = None,
+    channel: list[str] | list[int] | str | int | None = None,
+    cmap: list[Colormap] | Colormap | str | None = None,
+    color: str | None = None,
+    contour_px: int | None = None,
+    elements: list[str] | str | None = None,
+    fill_alpha: float | int | None = None,
+    groups: list[str] | str | None = None,
+    layer: str | None = None,
+    na_color: ColorLike | None = None,
+    norm: Normalize | bool | None = None,
+    outline: bool | None = None,
+    outline_alpha: float | int | None = None,
+    outline_color: str | list[float] | None = None,
+    outline_width: float | int | None = None,
+    palette: list[str] | str | None = None,
+    quantiles_for_norm: tuple[float | None, float | None] | None = None,
+    scale: float | int | list[str] | str | None = None,
+    size: float | int | None = None,
+) -> dict[str, Any]:
+    params_dict: dict[str, Any] = {}
+    if elements is not None:
+        if not isinstance(elements, (list, str)):
+            raise TypeError("Parameter 'elements' must be a string or a list of strings.")
+
+        elements = [elements] if isinstance(elements, str) else elements
+        sdata_elements = eval(f"sdata.{element_type}")  # noqa: PGH001
+        if any(e not in sdata_elements for e in elements):
+            raise ValueError(
+                f"Not all specified {element_type} elements were found. Available elements are: "
+                f"`{'`, `'.join(sdata_elements.keys())}`"
+            )
+    params_dict["elements"] = elements
+
+    if groups is not None and element_type != "images":
+        if not isinstance(groups, (list, str)):
+            raise TypeError("Parameter 'groups' must be a string or a list of strings.")
+        groups = [groups] if isinstance(groups, str) else groups
+        if not all(isinstance(g, str) for g in groups):
+            raise TypeError("All items in 'groups' list must be strings.")
+    params_dict["groups"] = groups
+
+    if palette is not None:
+        if not isinstance(palette, (list, str)):
+            raise TypeError("Parameter 'palette' must be a string or a list of strings.")
+
+        palette = [palette] if isinstance(palette, str) else palette
+
+        if not all(isinstance(p, str) for p in palette):
+            raise TypeError("All items in 'palette' list must be strings.")
+
+        if element_type in ["shapes", "points"]:
+            if groups is None:
+                raise ValueError("When specifying 'palette', 'groups' must also be specified.")
+            if len(groups) != len(palette):
+                raise ValueError("The length of 'palette' and 'groups' must be the same.")
+    params_dict["palette"] = palette
+
+    if cmap is not None:
+        if element_type == "images":
+            if not isinstance(cmap, (list, Colormap, str)):
+                raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
+            if isinstance(cmap, list) and not all(isinstance(c, (Colormap, str)) for c in cmap):
+                raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
+        else:
+            if not isinstance(cmap, (str, Colormap)):
+                raise TypeError("Parameter 'cmap' must be a mpl.Colormap or the name of one.")
+
+    if norm is not None:
+        if element_type in ["shapes", "points"] and not isinstance(norm, (bool, Normalize)):
+            raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
+        if element_type in ["images", "labels"] and not isinstance(norm, Normalize):
+            raise TypeError("Parameter 'norm' must be of type Normalize.")
+
+    if scale is not None:
+        if element_type in ["images", "labels"]:
+            if not isinstance(scale, (list, str)):
+                raise TypeError("If specified, parameter 'scale' must be a string or a list of strings.")
+            scale = [scale] if isinstance(scale, str) else scale
+            if not all(isinstance(s, str) for s in scale):
+                raise TypeError("All items in 'scale' list must be strings.")
+        elif element_type == "shapes":
+            if not isinstance(scale, (float, int)):
+                raise TypeError("Parameter 'scale' must be numeric.")
+            if scale < 0:
+                raise ValueError("Parameter 'scale' must be a positive number.")
+    params_dict["scale"] = scale
+
+    if na_color is not None and not colors.is_color_like(na_color):
+        raise ValueError("Parameter 'na_color' must be color-like.")
+
+    if element_type in ["labels", "shapes"]:
+        if not isinstance(outline, bool):
+            raise TypeError("Parameter 'outline' must be a boolean.")
+
+        if not isinstance(fill_alpha, (float, int)):
+            raise TypeError("Parameter 'fill_alpha' must be numeric.")
+        if fill_alpha < 0:
+            raise ValueError("Parameter 'fill_alpha' cannot be negative.")
+
+        if layer is not None:
+            if not isinstance(layer, str):
+                raise TypeError("Parameter 'layer' must be a string.")
+            if layer not in sdata.table.layers:
+                raise ValueError(
+                    f"Could not find layer '{layer}', available layers are: '"
+                    + "', '".join(sdata.table.layers.keys())
+                    + "'"
+                )
+
+    if element_type == "shapes":
+        if not isinstance(outline_width, (float, int)):
+            raise TypeError("Parameter 'outline_width' must be numeric.")
+        if outline_width < 0:
+            raise ValueError("Parameter 'outline_width' cannot be negative.")
+
+        if not colors.is_color_like(outline_color):
+            raise TypeError("Parameter 'outline_color' must be color-like.")
+
+    if element_type == "points":
+        if not isinstance(size, (float, int)):
+            raise TypeError("Parameter 'size' must be numeric.")
+        if size < 0:
+            raise ValueError("Parameter 'size' must be a positive number.")
+
+    if element_type == "labels":
+        if not isinstance(contour_px, int):
+            raise TypeError("Parameter 'contour_px' must be an integer.")
+        if not isinstance(outline_alpha, (float, int)):
+            raise TypeError("Parameter 'outline_alpha' must be numeric.")
+        if color is not None and not isinstance(color, str):
+            raise TypeError("Parameter 'color' must be a string.")
+
+    if alpha is not None and element_type in ["images", "points"]:
+        if not isinstance(alpha, (float, int)):
+            raise TypeError("Parameter 'alpha' must be numeric.")
+        if alpha < 0:
+            raise ValueError("Parameter 'alpha' cannot be negative.")
+
+    if element_type == "images":
+        if channel is not None and not isinstance(channel, (list, str, int)):
+            raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
+        if isinstance(channel, list) and not all(isinstance(c, (str, int)) for c in channel):
+            raise TypeError("Each item in 'channel' list must be a string or an integer.")
+
+        if quantiles_for_norm is None:
+            quantiles_for_norm = (None, None)
+        elif not isinstance(quantiles_for_norm, (list, tuple)):
+            raise TypeError("Parameter 'quantiles_for_norm' must be a list or tuple of floats, or None.")
+        elif len(quantiles_for_norm) != 2:
+            raise ValueError("Parameter 'quantiles_for_norm' must contain exactly two elements.")
+        else:
+            if not all(
+                isinstance(p, (float, int, type(None))) and (p is None or 0 <= p <= 100) for p in quantiles_for_norm
+            ):
+                raise TypeError("Each item in 'quantiles_for_norm' must be a float or int within [0, 100], or None.")
+
+            pmin, pmax = quantiles_for_norm
+            if pmin is not None and pmax is not None and pmin > pmax:
+                raise ValueError("The first number in 'quantiles_for_norm' must not be smaller than the second.")
+        params_dict["quantiles_for_norm"] = quantiles_for_norm
+    return params_dict

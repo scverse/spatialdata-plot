@@ -51,6 +51,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_params_plot,
     _set_outline,
     _set_params_table_name,
+    _validate_render_params,
     _validate_show_parameters,
     save_fig,
 )
@@ -222,18 +223,23 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
-        if elements is not None:
-            if not isinstance(elements, (list, str)):
-                raise TypeError("Parameter 'elements' must be a string or a list of strings.")
-
-            elements = [elements] if isinstance(elements, str) else elements
-            if any(e not in self._sdata.shapes for e in elements):
-                raise ValueError(
-                    "Not all specificed elements were found, available elements are: '"
-                    + "', '".join(self._sdata.shapes.keys())
-                    + "'"
-                )
-
+        params_dict = _validate_render_params(
+            "shapes",
+            self._sdata,
+            elements=elements,
+            fill_alpha=fill_alpha,
+            groups=groups,
+            palette=palette,
+            na_color=na_color,
+            outline=outline,
+            outline_alpha=outline_alpha,
+            outline_color=outline_color,
+            outline_width=outline_width,
+            layer=layer,
+            cmap=cmap,
+            norm=norm,
+            scale=scale,
+        )
         if color is None:
             col_for_color = None
 
@@ -255,72 +261,6 @@ class PlotAccessor:
         # exist for one element in sdata.shapes, but not the others.
         # Gets validated in _set_color_source_vec()
 
-        if not isinstance(fill_alpha, (float, int)):
-            raise TypeError("Parameter 'fill_alpha' must be numeric.")
-
-        if fill_alpha < 0:
-            raise ValueError("Parameter 'fill_alpha' cannot be negative.")
-
-        if groups is not None:
-            if not isinstance(groups, (list, str)):
-                raise TypeError("Parameter 'groups' must be a string or a list of strings.")
-            groups = [groups] if isinstance(groups, str) else groups
-
-        if palette is not None:
-            if groups is None:
-                raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-
-            if not isinstance(palette, (list, str)):
-                raise TypeError("Parameter 'palette' must be a string or a list of strings.")
-
-            palette = [palette] if isinstance(palette, str) else palette
-
-            if len(groups) != len(palette):
-                raise ValueError("The length of 'palette' and 'groups' must be the same.")
-
-        if not colors.is_color_like(na_color):
-            raise TypeError("Parameter 'na_color' must be color-like.")
-
-        if not isinstance(outline, bool):
-            raise TypeError("Parameter 'outline' must be a True or False.")
-
-        if not isinstance(outline_width, (float, int)):
-            raise TypeError("Parameter 'outline_width' must be numeric.")
-
-        if outline_width < 0:
-            raise ValueError("Parameter 'outline_width' cannot be negative.")
-
-        if not colors.is_color_like(outline_color):
-            raise TypeError("Parameter 'outline_color' must be color-like.")
-
-        if not isinstance(outline_alpha, (float, int)):
-            raise TypeError("Parameter 'outline_alpha' must be numeric.")
-
-        if outline_alpha < 0:
-            raise ValueError("Parameter 'outline_alpha' cannot be negative.")
-
-        if layer is not None and not isinstance(layer, str):
-            raise TypeError("Parameter 'layer' must be a string.")
-
-        if layer is not None and layer not in self._sdata.table.layers:
-            raise ValueError(
-                f"Could not find layer '{layer}', available layers are: '"
-                + "', '".join(self._sdata.table.layers.keys())
-                + "'"
-            )
-
-        if cmap is not None and not isinstance(cmap, (str, Colormap)):
-            raise TypeError("Parameter 'cmap' must be a mpl.Colormap or the name of one.")
-
-        if norm is not None and not isinstance(norm, (bool, Normalize)):
-            raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
-
-        if not isinstance(scale, (float, int)):
-            raise TypeError("Parameter 'scale' must be numeric.")
-
-        if scale < 0:
-            raise ValueError("Parameter 'scale' must be a positive number.")
-
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -334,15 +274,15 @@ class PlotAccessor:
             elements = [elements]
         outline_params = _set_outline(outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
-            elements=elements,
+            elements=params_dict["elements"],
             color=color,
             col_for_color=col_for_color,
-            groups=groups,
+            groups=params_dict["groups"],
             scale=scale,
             outline_params=outline_params,
             layer=layer,
             cmap_params=cmap_params,
-            palette=palette,
+            palette=params_dict["palette"],
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
@@ -405,17 +345,18 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
-        if elements is not None:
-            if not isinstance(elements, (list, str)):
-                raise TypeError("Parameter 'elements' must be a string or a list of strings.")
-
-            elements = [elements] if isinstance(elements, str) else elements
-            if any(e not in self._sdata.points for e in elements):
-                raise ValueError(
-                    "Not all specificed elements were found, available elements are: '"
-                    + "', '".join(self._sdata.points.keys())
-                    + "'"
-                )
+        params_dict = _validate_render_params(
+            "points",
+            self._sdata,
+            elements=elements,
+            alpha=alpha,
+            groups=groups,
+            palette=palette,
+            na_color=na_color,
+            cmap=cmap,
+            norm=norm,
+            size=size,
+        )
 
         if color is not None and not colors.is_color_like(color):
             tmp_e = self._sdata.points if elements is None else elements
@@ -446,44 +387,6 @@ class PlotAccessor:
         # exist for one element in sdata.shapes, but not the others.
         # Gets validated in _set_color_source_vec()
 
-        if not isinstance(alpha, (float, int)):
-            raise TypeError("Parameter 'alpha' must be numeric.")
-
-        if alpha < 0:
-            raise ValueError("Parameter 'alpha' cannot be negative.")
-
-        if groups is not None:
-            if not isinstance(groups, (list, str)):
-                raise TypeError("Parameter 'groups' must be a string or a list of strings.")
-            groups = [groups] if isinstance(groups, str) else groups
-
-        if palette is not None:
-            if groups is None:
-                raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-
-            if not isinstance(palette, (list, str)):
-                raise TypeError("Parameter 'palette' must be a string or a list of strings.")
-
-            palette = [palette] if isinstance(palette, str) else palette
-
-            if len(groups) != len(palette):
-                raise ValueError("The length of 'palette' and 'groups' must be the same.")
-
-        if not colors.is_color_like(na_color):
-            raise TypeError("Parameter 'na_color' must be color-like.")
-
-        if cmap is not None and not isinstance(cmap, (str, Colormap)):
-            raise TypeError("Parameter 'cmap' must be a mpl.Colormap or the name of one.")
-
-        if norm is not None and not isinstance(norm, (bool, Normalize)):
-            raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
-
-        if not isinstance(size, (float, int)):
-            raise TypeError("Parameter 'size' must be numeric.")
-
-        if size < 0:
-            raise ValueError("Parameter 'size' must be a positive number.")
-
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -496,12 +399,12 @@ class PlotAccessor:
         )
 
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
-            elements=elements,
+            elements=params_dict["elements"],
             color=color,
             col_for_color=col_for_color,
-            groups=groups,
+            groups=params_dict["groups"],
             cmap_params=cmap_params,
-            palette=palette,
+            palette=params_dict["palette"],
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
             size=size,
@@ -566,67 +469,19 @@ class PlotAccessor:
         sd.SpatialData
             The SpatialData object with the rendered images.
         """
-        if elements is not None:
-            if not isinstance(elements, (list, str)):
-                raise TypeError("Parameter 'elements' must be a string or a list of strings.")
-
-            elements = [elements] if isinstance(elements, str) else elements
-            if any(e not in self._sdata.images for e in elements):
-                raise ValueError(
-                    "Not all specificed elements were found, available elements are: '"
-                    + "', '".join(self._sdata.images.keys())
-                    + "'"
-                )
-
-        if channel is not None and not isinstance(channel, (list, str, int)):
-            raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
-
-        if isinstance(channel, list) and not all(isinstance(c, (str, int)) for c in channel):
-            raise TypeError("Each item in 'channel' list must be a string or an integer.")
-
-        if cmap is not None and not isinstance(cmap, (list, Colormap, str)):
-            raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
-
-        if isinstance(cmap, list) and not all(isinstance(c, (Colormap, str)) for c in cmap):
-            raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
-
-        if norm is not None and not isinstance(norm, Normalize):
-            raise TypeError("Parameter 'norm' must be of type Normalize.")
-
-        if na_color is not None and not colors.is_color_like(na_color):
-            raise ValueError("Parameter 'na_color' must be color-like.")
-
-        if palette is not None and not isinstance(palette, (list, str)):
-            raise TypeError("Parameter 'palette' must be a string or a list of strings.")
-
-        if not isinstance(alpha, (float, int)):
-            raise TypeError("Parameter 'alpha' must be numeric.")
-
-        if alpha < 0:
-            raise ValueError("Parameter 'alpha' cannot be negative.")
-
-        if quantiles_for_norm is None:
-            quantiles_for_norm = (None, None)
-        elif not isinstance(quantiles_for_norm, (list, tuple)):
-            raise TypeError("Parameter 'quantiles_for_norm' must be a list or tuple of floats, or None.")
-        elif len(quantiles_for_norm) != 2:
-            raise ValueError("Parameter 'quantiles_for_norm' must contain exactly two elements.")
-        else:
-            if not all(
-                isinstance(p, (float, int, type(None))) and (p is None or 0 <= p <= 100) for p in quantiles_for_norm
-            ):
-                raise TypeError("Each item in 'quantiles_for_norm' must be a float or int within [0, 100], or None.")
-
-            pmin, pmax = quantiles_for_norm
-            if pmin is not None and pmax is not None and pmin > pmax:
-                raise ValueError("The first number in 'quantiles_for_norm' must not be smaller than the second.")
-
-        if scale is not None and not isinstance(scale, (list, str)):
-            raise TypeError("If specified, parameter 'scale' must be a string or a list of strings.")
-
-        if isinstance(scale, list) and not all(isinstance(s, str) for s in scale):
-            raise TypeError("Each item in 'scale' list must be a string.")
-
+        params_dict = _validate_render_params(
+            "images",
+            self._sdata,
+            elements=elements,
+            channel=channel,
+            alpha=alpha,
+            palette=palette,
+            na_color=na_color,
+            cmap=cmap,
+            norm=norm,
+            scale=scale,
+            quantiles_for_norm=quantiles_for_norm,
+        )
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -651,16 +506,14 @@ class PlotAccessor:
                 **kwargs,
             )
 
-        if isinstance(elements, str):
-            elements = [elements]
         sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
-            elements=elements,
+            elements=params_dict["elements"],
             channel=channel,
             cmap_params=cmap_params,
-            palette=palette,
+            palette=params_dict["palette"],
             alpha=alpha,
-            quantiles_for_norm=quantiles_for_norm,
-            scale=scale,
+            quantiles_for_norm=params_dict["quantiles_for_norm"],
+            scale=params_dict["scale"],
         )
 
         return sdata
@@ -732,72 +585,23 @@ class PlotAccessor:
         -------
         None
         """
-        if elements is not None:
-            if not isinstance(elements, (list, str)):
-                raise TypeError("Parameter 'elements' must be a string or a list of strings.")
-
-            elements = [elements] if isinstance(elements, str) else elements
-            if any(e not in self._sdata.labels for e in elements):
-                raise ValueError(
-                    "Not all specificed elements were found, available elements are: '"
-                    + "', '".join(self._sdata.labels.keys())
-                    + "'"
-                )
-
-        if color is not None and not isinstance(color, str):
-            raise TypeError("Parameter 'color' must be a string.")
-
-        if groups is not None:
-            if not isinstance(groups, (list, str)):
-                raise TypeError("Parameter 'groups' must be a string or a list of strings.")
-            groups = [groups] if isinstance(groups, str) else groups
-            if not all(isinstance(g, str) for g in groups):
-                raise TypeError("All items in 'groups' list must be strings.")
-
-        if not isinstance(contour_px, int):
-            raise TypeError("Parameter 'contour_px' must be an integer.")
-
-        if not isinstance(outline, bool):
-            raise TypeError("Parameter 'outline' must be a boolean.")
-
-        if layer is not None and not isinstance(layer, str):
-            raise TypeError("Parameter 'layer' must be a string.")
-
-        if palette is not None:
-            if not isinstance(palette, (list, str)):
-                raise TypeError("Parameter 'palette' must be a string or a list of strings.")
-            palette = [palette] if isinstance(palette, str) else palette
-            if not all(isinstance(p, str) for p in palette):
-                raise TypeError("All items in 'palette' list must be strings.")
-
-        if cmap is not None and not isinstance(cmap, (Colormap, str)):
-            raise TypeError("Parameter 'cmap' must be a Colormap or a string.")
-
-        if norm is not None and not isinstance(norm, Normalize):
-            raise TypeError("Parameter 'norm' must be of type Normalize.")
-
-        if na_color is not None and not colors.is_color_like(na_color):
-            raise ValueError("Parameter 'na_color' must be color-like.")
-
-        if not isinstance(outline_alpha, (float, int)):
-            raise TypeError("Parameter 'outline_alpha' must be numeric.")
-
-        if not isinstance(fill_alpha, (float, int)):
-            raise TypeError("Parameter 'fill_alpha' must be numeric.")
-
-        if scale is not None:
-            if not isinstance(scale, (list, str)):
-                raise TypeError("If specified, parameter 'scale' must be a string or a list of strings.")
-            scale = [scale] if isinstance(scale, str) else scale
-            if not all(isinstance(s, str) for s in scale):
-                raise TypeError("All items in 'scale' list must be strings.")
-
-        # if (
-        #     color is not None
-        #     and color not in self._sdata[table_name].obs.columns
-        #     and color not in self._sdata[table_name].var_names
-        # ):
-        #     raise ValueError(f"'{color}' is not a valid table column.")
+        params_dict = _validate_render_params(
+            "labels",
+            self._sdata,
+            elements=elements,
+            cmap=cmap,
+            color=color,
+            contour_px=contour_px,
+            fill_alpha=fill_alpha,
+            groups=groups,
+            layer=layer,
+            na_color=na_color,
+            norm=norm,
+            outline=outline,
+            outline_alpha=outline_alpha,
+            palette=palette,
+            scale=scale,
+        )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -808,24 +612,21 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
-        if isinstance(elements, str):
-            elements = [elements]
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
-            elements=elements,
+            elements=params_dict["elements"],
             color=color,
-            groups=groups,
+            groups=params_dict["groups"],
             contour_px=contour_px,
             outline=outline,
             layer=layer,
             cmap_params=cmap_params,
-            palette=palette,
+            palette=params_dict["palette"],
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
-            scale=scale,
+            scale=params_dict["scale"],
             table_name=table_name,
         )
-
         return sdata
 
     def show(
