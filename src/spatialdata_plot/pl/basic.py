@@ -886,7 +886,28 @@ class PlotAccessor:
                 "Please specify what to plot using the 'render_*' functions before calling 'show()`."
             ) from e
 
-        _validate_show_parameters(coordinate_systems, legend_fontsize, legend_fontweight, legend_loc, legend_fontoutline,na_in_legend, colorbar, wspace, hspace, ncols, frameon, figsize, dpi, fig, title, share_extent, pad_extent, ax, return_ax, save)
+        _validate_show_parameters(
+            coordinate_systems,
+            legend_fontsize,
+            legend_fontweight,
+            legend_loc,
+            legend_fontoutline,
+            na_in_legend,
+            colorbar,
+            wspace,
+            hspace,
+            ncols,
+            frameon,
+            figsize,
+            dpi,
+            fig,
+            title,
+            share_extent,
+            pad_extent,
+            ax,
+            return_ax,
+            save,
+        )
 
         sdata = self._copy()
 
