@@ -597,7 +597,6 @@ def _set_color_source_vec(
     element: SpatialElement | None,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
-    layer: str | None = None,
     groups: Sequence[str] | str | None = None,
     palette: str | list[str] | None = None,
     na_color: str | tuple[float, ...] | None = None,
@@ -620,12 +619,6 @@ def _set_color_source_vec(
         vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
         color_source_vector = vals[value_to_plot]
 
-        # if all([isinstance(x, str) for x in color_source_vector]):
-        #     raise TypeError(
-        #         f"Color key '{value_to_plot}' for element '{element_name}' has string values, "
-        #         f"but should be numerical or categorical."
-        #     )
-
         # numerical case, return early
         if not is_categorical_dtype(color_source_vector):
             if palette is not None:
@@ -643,9 +636,7 @@ def _set_color_source_vec(
             categories = groups
 
         color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories, palette, cmap_params=cmap_params)))
-        # color_map = _get_palette(
-        #     adata=adata, cluster_key=value_to_plot, categories=categories, palette=palette, alpha=alpha
-        # )
+
         if color_map is None:
             raise ValueError("Unable to create color palette.")
 
@@ -1430,7 +1421,6 @@ def _validate_render_params(
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
     groups: list[str] | str | None = None,
-    layer: str | None = None,
     na_color: ColorLike | None = None,
     norm: Normalize | bool | None = None,
     outline: bool | None = None,
@@ -1521,16 +1511,6 @@ def _validate_render_params(
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
         if fill_alpha < 0:
             raise ValueError("Parameter 'fill_alpha' cannot be negative.")
-
-        if layer is not None:
-            if not isinstance(layer, str):
-                raise TypeError("Parameter 'layer' must be a string.")
-            if layer not in sdata.table.layers:
-                raise ValueError(
-                    f"Could not find layer '{layer}', available layers are: '"
-                    + "', '".join(sdata.table.layers.keys())
-                    + "'"
-                )
 
     if element_type == "shapes":
         if not isinstance(outline_width, (float, int)):

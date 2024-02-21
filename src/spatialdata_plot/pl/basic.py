@@ -160,7 +160,6 @@ class PlotAccessor:
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
         outline_alpha: float | int = 1.0,
-        layer: str | None = None,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
@@ -201,8 +200,6 @@ class PlotAccessor:
             values (1.0, 0.0, 0.0, 1.0).
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of shapes.
-        layer : str | None, optional
-            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         cmap : Colormap | str | None, optional
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
@@ -235,7 +232,6 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             outline_color=outline_color,
             outline_width=outline_width,
-            layer=layer,
             cmap=cmap,
             norm=norm,
             scale=scale,
@@ -280,7 +276,6 @@ class PlotAccessor:
             groups=params_dict["groups"],
             scale=scale,
             outline_params=outline_params,
-            layer=layer,
             cmap_params=cmap_params,
             palette=params_dict["palette"],
             outline_alpha=outline_alpha,
@@ -525,7 +520,6 @@ class PlotAccessor:
         groups: list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        layer: str | None = None,
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -554,8 +548,6 @@ class PlotAccessor:
             entire segment, see :func:`skimage.morphology.erosion`.
         outline : bool, default False
             Whether to plot boundaries around segmentation masks.
-        layer : str | None, optional
-            Key in :attr:`anndata.AnnData.layers` or `None` for :attr:`anndata.AnnData.X`.
         palette : list[str] | str | None, optional
             Palette for discrete annotations. List of valid color names that should be
             used for the categories. Must match the number of groups.
@@ -594,7 +586,6 @@ class PlotAccessor:
             contour_px=contour_px,
             fill_alpha=fill_alpha,
             groups=groups,
-            layer=layer,
             na_color=na_color,
             norm=norm,
             outline=outline,
@@ -618,7 +609,6 @@ class PlotAccessor:
             groups=params_dict["groups"],
             contour_px=contour_px,
             outline=outline,
-            layer=layer,
             cmap_params=cmap_params,
             palette=params_dict["palette"],
             outline_alpha=outline_alpha,

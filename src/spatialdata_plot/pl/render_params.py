@@ -75,7 +75,6 @@ class ShapesRenderParams:
     col_for_color: str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
-    layer: str | None = None
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
@@ -123,7 +122,6 @@ class LabelsRenderParams:
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
     outline: bool = False
-    layer: str | None = None
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
