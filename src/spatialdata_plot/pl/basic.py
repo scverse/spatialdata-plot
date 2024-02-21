@@ -51,6 +51,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_params_plot,
     _set_outline,
     _set_params_table_name,
+    _validate_show_parameters,
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
@@ -361,7 +362,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
-        table_name: str = "table",
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -885,82 +886,7 @@ class PlotAccessor:
                 "Please specify what to plot using the 'render_*' functions before calling 'show()`."
             ) from e
 
-        if coordinate_systems is not None and not isinstance(coordinate_systems, (list, str)):
-            raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
-
-        font_weights = ["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
-        if legend_fontweight is not None and (
-            not isinstance(legend_fontweight, (int, str))
-            or (isinstance(legend_fontweight, str) and legend_fontweight not in font_weights)
-        ):
-            readable_font_weights = ", ".join(font_weights[:-1]) + ", or " + font_weights[-1]
-            raise TypeError(
-                "Parameter 'legend_fontweight' must be an integer or one of",
-                f"the following strings: {readable_font_weights}.",
-            )
-
-        font_sizes = ["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
-
-        if legend_fontsize is not None and (
-            not isinstance(legend_fontsize, (int, float, str))
-            or (isinstance(legend_fontsize, str) and legend_fontsize not in font_sizes)
-        ):
-            readable_font_sizes = ", ".join(font_sizes[:-1]) + ", or " + font_sizes[-1]
-            raise TypeError(
-                "Parameter 'legend_fontsize' must be an integer, a float, or ",
-                f"one of the following strings: {readable_font_sizes}.",
-            )
-
-        if legend_loc is not None and not isinstance(legend_loc, str):
-            raise TypeError("Parameter 'legend_loc' must be a string.")
-
-        if legend_fontoutline is not None and not isinstance(legend_fontoutline, int):
-            raise TypeError("Parameter 'legend_fontoutline' must be an integer.")
-
-        if not isinstance(na_in_legend, bool):
-            raise TypeError("Parameter 'na_in_legend' must be a boolean.")
-
-        if not isinstance(colorbar, bool):
-            raise TypeError("Parameter 'colorbar' must be a boolean.")
-
-        if wspace is not None and not isinstance(wspace, float):
-            raise TypeError("Parameter 'wspace' must be a float.")
-
-        if not isinstance(hspace, float):
-            raise TypeError("Parameter 'hspace' must be a float.")
-
-        if not isinstance(ncols, int):
-            raise TypeError("Parameter 'ncols' must be an integer.")
-
-        if frameon is not None and not isinstance(frameon, bool):
-            raise TypeError("Parameter 'frameon' must be a boolean.")
-
-        if figsize is not None and not isinstance(figsize, tuple):
-            raise TypeError("Parameter 'figsize' must be a tuple of two floats.")
-
-        if dpi is not None and not isinstance(dpi, int):
-            raise TypeError("Parameter 'dpi' must be an integer.")
-
-        if fig is not None and not isinstance(fig, Figure):
-            raise TypeError("Parameter 'fig' must be a matplotlib.figure.Figure.")
-
-        if title is not None and not isinstance(title, (list, str)):
-            raise TypeError("Parameter 'title' must be a string or a list of strings.")
-
-        if not isinstance(share_extent, bool):
-            raise TypeError("Parameter 'share_extent' must be a boolean.")
-
-        if not isinstance(pad_extent, (int, float)):
-            raise TypeError("Parameter 'pad_extent' must be numeric.")
-
-        if ax is not None and not isinstance(ax, (Axes, list)):
-            raise TypeError("Parameter 'ax' must be a matplotlib.axes.Axes or a list of Axes.")
-
-        if not isinstance(return_ax, bool):
-            raise TypeError("Parameter 'return_ax' must be a boolean.")
-
-        if save is not None and not isinstance(save, (str, Path)):
-            raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
+        _validate_show_parameters(coordinate_systems, legend_fontsize, legend_fontweight, legend_loc, legend_fontoutline,na_in_legend, colorbar, wspace, hspace, ncols, frameon, figsize, dpi, fig, title, share_extent, pad_extent, ax, return_ax, save)
 
         sdata = self._copy()
 
