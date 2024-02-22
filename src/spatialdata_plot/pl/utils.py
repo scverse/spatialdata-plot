@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import warnings
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
@@ -53,7 +55,7 @@ from spatial_image import SpatialImage
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, get_values
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, TableModel
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -600,7 +602,6 @@ def _set_color_source_vec(
     groups: Sequence[str] | str | None = None,
     palette: str | list[str] | None = None,
     na_color: str | tuple[float, ...] | None = None,
-    alpha: float = 1.0,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
@@ -1170,7 +1171,6 @@ def _rasterize_if_necessary(
 
 def _multiscale_to_spatial_image(
     multiscale_image: MultiscaleSpatialImage,
-    element: str,
     dpi: float,
     width: float,
     height: float,
@@ -1186,8 +1186,6 @@ def _multiscale_to_spatial_image(
     ----------
     multiscale_image
         `MultiscaleSpatialImage` that should be rendered
-    element
-        name of the multiscale image
     dpi
         dpi of the target image
     width
@@ -1282,31 +1280,93 @@ def _get_elements_to_be_rendered(
     return elements_to_be_rendered
 
 
-def _set_params_table_name(
+def _create_initial_element_table_mapping(
     sdata: sd.SpatialData,
     params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
-    wanted_elements_on_this_cs: list[str],
+    render_elements: list[str],
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    if not params.table_name:
-        table_names = set()
-        for spatial_element_name in wanted_elements_on_this_cs:
-            table_names.update(_get_element_annotators(sdata, spatial_element_name))
+    """
+    Create the initial element to tables mapping based on what elements are rendered and table names are specified.
 
+    Parameters
+    ----------
+    sdata
+        The SpatialData object
+    params
+        The render parameters for rendering elements.
+    render_elements
+        The list of names of SpatialElements to be rendered.
+
+    Returns
+    -------
+    The updated render parameters.
+    """
+    element_table_mapping = defaultdict(set)
+    if not params.element_table_mapping:
+        for element_name in render_elements:
+            element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
+    else:
+        table_names = (
+            [params.element_table_mapping]
+            if isinstance(params.element_table_mapping, str)
+            else params.element_table_mapping
+        )
+        if len(table_names) == 1:
+            for element_name in render_elements:
+                if element_name in sdata[table_names[0]].uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY]:
+                    element_table_mapping[element_name] = {table_names[0]}
+                else:
+                    element_table_mapping[element_name] = {}
+                    warnings.warn(f"{element_name} is not annotated by {table_names[0]}.", UserWarning, stacklevel=2)
+
+        if len(table_names) != 1:
+            assert len(render_elements) == len(
+                table_names
+            ), "If specifying a list of table names, the length must be equal to number of elements to be plotted"
+            for index, table_name in enumerate(table_names):
+                element = render_elements[index]
+                if element not in sdata[table_name].uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY]:
+                    warnings.warn(
+                        f"The element '{element}' is not annotated by table '{table_name}'", UserWarning, stacklevel=2
+                    )
+                element_table_mapping[element].add(table_name)
+    params.element_table_mapping = element_table_mapping
+    return params
+
+
+def _update_element_table_mapping_colors(sdata, params, render_elements):
+    element_table_mapping = params.element_table_mapping
     if params.color is not None:
-        # Check whether we have multiple color columns, none or just 1 in case we can set the table name
-        color_tables = []
-        for table_name in table_names:
-            if params.color in sdata[table_name].obs.columns or params.color in sdata[table_name].var_names:
-                color_tables.append(table_name)
-        if len(color_tables) == 0:
-            raise ValueError(
-                f"'{params.color}' is not a valid table column in any of the tables annotating the element ..."
-            )
-        if len(color_tables) > 1:
-            raise ValueError(
-                f"Multiple tables contain a column '{params.color}`. Please pass on table_name" f"as argument."
-            )
-        params.table_name = color_tables[0]
+        params.color = [params.color] if isinstance(params.color, str) else params.color
+
+        # If one color column check presence for each table annotating the specific element
+        if len(params.color) == 1:
+            for element_name in render_elements:
+                for table_name in element_table_mapping[element_name].copy():
+                    if (
+                        params.color[0] not in sdata[table_name].obs.columns
+                        and params.color[0] not in sdata[table_name].var_names
+                    ):
+                        element_table_mapping[element_name].remove(table_name)
+        if len(params.color) > 1:
+            assert len(params.color) == len(
+                render_elements
+            ), "Either one color should be given or the length should be equal to the number of elements being plotted."
+            for index, element_name in enumerate(render_elements):
+                for table_name in element_table_mapping[element_name].copy():
+                    if (
+                        params.color[index] not in sdata[table_name].obs.columns
+                        or params.color[index] not in sdata[table_name].var_names
+                    ):
+                        element_table_mapping[element_name].remove(table_name)
+
+        # We only want one table containing the color column per element
+        for element_name, table_set in element_table_mapping.items():
+            if len(table_set) > 1:
+                raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
+            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+
+        params.element_table_mapping = element_table_mapping
     return params
 
 
@@ -1532,8 +1592,16 @@ def _validate_render_params(
             raise TypeError("Parameter 'contour_px' must be an integer.")
         if not isinstance(outline_alpha, (float, int)):
             raise TypeError("Parameter 'outline_alpha' must be numeric.")
-        if color is not None and not isinstance(color, str):
-            raise TypeError("Parameter 'color' must be a string.")
+        if color is not None and not isinstance(color, (str, list)):
+            raise TypeError("Parameter 'color' must be a string or list of strings.")
+        if isinstance(color, list):
+            if not all(isinstance(c, str) for c in color):
+                raise TypeError("Each item in 'color' must be a string")
+            if elements is not None and (len(color) != 1 or len(color) != len(elements)):
+                raise TypeError(
+                    f"Only provide 1 value for color or provide 1 color for each `{element_type}` being"
+                    "tried to plot in a list"
+                )
 
     if alpha is not None and element_type in ["images", "points"]:
         if not isinstance(alpha, (float, int)):

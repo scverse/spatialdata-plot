@@ -535,7 +535,7 @@ def _render_labels(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
-    table_name = render_params.table_name
+    element_table_mapping = render_params.element_table_mapping
 
     if not isinstance(render_params.outline, bool):
         raise TypeError("Parameter 'outline' must be a boolean.")
@@ -551,7 +551,7 @@ def _render_labels(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.get(table_name) is not None,
+        filter_table=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:
@@ -566,7 +566,6 @@ def _render_labels(
         if isinstance(label, MultiscaleSpatialImage):
             label = _multiscale_to_spatial_image(
                 multiscale_image=label,
-                element=e,
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
@@ -584,7 +583,8 @@ def _render_labels(
                 extent=extent,
             )
 
-        if sdata.get(table_name) is None:
+        table_name = element_table_mapping.get(e)
+        if table_name is None:
             instance_id = np.unique(label)
             table = None
         else:
@@ -604,11 +604,10 @@ def _render_labels(
             sdata=sdata_filt,
             element=label,
             element_name=e,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.color[i],
             groups=render_params.groups,
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
-            alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
         )

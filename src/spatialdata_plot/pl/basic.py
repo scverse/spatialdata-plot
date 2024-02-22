@@ -7,6 +7,7 @@ from typing import Any, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
@@ -17,7 +18,6 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from pandas.api.types import is_categorical_dtype
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
 from spatialdata._core.query.relational_query import _locate_value
@@ -42,6 +42,7 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 from spatialdata_plot.pl.utils import (
+    _create_initial_element_table_mapping,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
@@ -50,7 +51,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _set_params_table_name,
+    _update_element_table_mapping_colors,
     _validate_render_params,
     _validate_show_parameters,
     save_fig,
@@ -163,7 +164,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
-        table_name: str = "table",
+        table_name: list[str] | str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -281,7 +282,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
-            table_name=table_name,
+            element_table_mapping=table_name,
         )
 
         return sdata
@@ -297,7 +298,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
-        table_name: str | None = None,
+        table_name: list[str] | str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -403,7 +404,7 @@ class PlotAccessor:
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
             size=size,
-            table_name=table_name,
+            element_table_mapping=table_name,
         )
 
         return sdata
@@ -516,7 +517,7 @@ class PlotAccessor:
     def render_labels(
         self,
         elements: list[str] | str | None = None,
-        color: str | None = None,
+        color: list[str] | str | None = None,
         groups: list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
@@ -527,7 +528,7 @@ class PlotAccessor:
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
         scale: list[str] | str | None = None,
-        table_name: str | None = None,
+        table_name: list[str] | str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -615,7 +616,7 @@ class PlotAccessor:
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
             scale=params_dict["scale"],
-            table_name=table_name,
+            element_table_mapping=table_name,
         )
         return sdata
 
@@ -894,17 +895,28 @@ class PlotAccessor:
                     wanted_elements.extend(wanted_labels_on_this_cs)
 
                     if wanted_labels_on_this_cs:
-                        params = _set_params_table_name(sdata, params, wanted_labels_on_this_cs)
+                        # Create element to table mapping and check whether specified color columns are in tables.
+                        params = _create_initial_element_table_mapping(sdata, params, wanted_labels_on_this_cs)
+                        params = _update_element_table_mapping_colors(sdata, params, wanted_labels_on_this_cs)
 
-                    if isinstance(params.color, str):
-                        colors = sc.get.obs_df(sdata[params.table_name], params.color)
-                        if is_categorical_dtype(colors):
-                            _maybe_set_colors(
-                                source=sdata[params.table_name],
-                                target=sdata[params.table_name],
-                                key=params.color,
-                                palette=params.palette,
-                            )
+                    if isinstance(params.color, list):
+                        element_table_mapping = params.element_table_mapping
+                        params.color = (
+                            [params.color[0] if value is not None else None for value in element_table_mapping.values()]
+                            if len(params.color) == 1
+                            else params.color
+                        )
+                        for index, table in enumerate(params.element_table_mapping.values()):
+                            if table is None:
+                                continue
+                            colors = sc.get.obs_df(sdata[table], params.color[index])
+                            if isinstance(colors, pd.CategoricalDtype):
+                                _maybe_set_colors(
+                                    source=sdata[table],
+                                    target=sdata[table],
+                                    key=params.color[index],
+                                    palette=params.palette,
+                                )
 
                         rasterize = (params.scale is None) or (
                             isinstance(params.scale, str)
