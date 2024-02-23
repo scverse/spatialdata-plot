@@ -13,18 +13,15 @@ import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
-from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
-from spatialdata._core.query.relational_query import _locate_value
 from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -52,6 +49,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_params_plot,
     _set_outline,
     _update_element_table_mapping_colors,
+    _update_element_table_mapping_points_shapes_colors,
     _validate_render_params,
     _validate_show_parameters,
     save_fig,
@@ -207,6 +205,10 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         scale : float | int, default 1.0
             Value to scale circles, if present.
+        table_name:
+            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
+            length must be equal to the number of spatial elements being plotted.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
@@ -228,6 +230,7 @@ class PlotAccessor:
             fill_alpha=fill_alpha,
             groups=groups,
             palette=palette,
+            color=color,
             na_color=na_color,
             outline=outline,
             outline_alpha=outline_alpha,
@@ -237,26 +240,6 @@ class PlotAccessor:
             norm=norm,
             scale=scale,
         )
-        if color is None:
-            col_for_color = None
-
-        elif colors.is_color_like(color):
-            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-            color = color
-            col_for_color = None
-
-        else:
-            if not isinstance(color, str):
-                raise TypeError(
-                    "Parameter 'color' must be a string indicating which color "
-                    + "in sdata.table to use for coloring the shapes."
-                )
-            col_for_color = color
-            color = None
-
-        # we're not enforcing the existence of 'color' here since it might
-        # exist for one element in sdata.shapes, but not the others.
-        # Gets validated in _set_color_source_vec()
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -267,13 +250,12 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
-        if isinstance(elements, str):
-            elements = [elements]
+
         outline_params = _set_outline(outline, outline_width, outline_color)
         sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
             elements=params_dict["elements"],
-            color=color,
-            col_for_color=col_for_color,
+            color=params_dict["color"],
+            col_for_color=params_dict["col_for_color"],
             groups=params_dict["groups"],
             scale=scale,
             outline_params=outline_params,
@@ -290,7 +272,7 @@ class PlotAccessor:
     def render_points(
         self,
         elements: list[str] | str | None = None,
-        color: str | None = None,
+        color: list[str] | str | None = None,
         alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
@@ -333,6 +315,10 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         size : float | int, default 1.0
             Size of the points
+        table_name:
+            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
+            length must be equal to the number of spatial elements being plotted.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -346,6 +332,7 @@ class PlotAccessor:
             self._sdata,
             elements=elements,
             alpha=alpha,
+            color=color,
             groups=groups,
             palette=palette,
             na_color=na_color,
@@ -353,35 +340,6 @@ class PlotAccessor:
             norm=norm,
             size=size,
         )
-
-        if color is not None and not colors.is_color_like(color):
-            tmp_e = self._sdata.points if elements is None else elements
-            origins = [
-                _locate_value(value_key=color, sdata=self._sdata, element_name=e, table_name=table_name) for e in tmp_e
-            ]  # , element_name=element_name)
-            if not any(origins):
-                raise ValueError("The argument for 'color' is neither color-like nor in the data.")
-
-        if color is None:
-            col_for_color = None
-
-        elif colors.is_color_like(color):
-            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-            color = color
-            col_for_color = None
-
-        else:
-            if not isinstance(color, str):
-                raise TypeError(
-                    "Parameter 'color' must be a string indicating which color "
-                    + "in sdata.table to use for coloring the shapes."
-                )
-            col_for_color = color
-            color = None
-
-        # we're not enforcing the existence of 'color' here since it might
-        # exist for one element in sdata.shapes, but not the others.
-        # Gets validated in _set_color_source_vec()
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -396,8 +354,8 @@ class PlotAccessor:
 
         sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
             elements=params_dict["elements"],
-            color=color,
-            col_for_color=col_for_color,
+            color=params_dict["color"],
+            col_for_color=params_dict["col_for_color"],
             groups=params_dict["groups"],
             cmap_params=cmap_params,
             palette=params_dict["palette"],
@@ -852,6 +810,12 @@ class PlotAccessor:
                         for shape in wanted_shapes
                         if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
                     ]
+                    if wanted_shapes_on_this_cs:
+                        params = _create_initial_element_table_mapping(sdata, params, wanted_shapes_on_this_cs)
+                        params = _update_element_table_mapping_points_shapes_colors(
+                            sdata, params, wanted_shapes_on_this_cs
+                        )
+
                     wanted_elements.extend(wanted_shapes_on_this_cs)
                     if wanted_shapes_on_this_cs:
                         _render_shapes(
@@ -872,6 +836,13 @@ class PlotAccessor:
                         for point in wanted_points
                         if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
                     ]
+
+                    if wanted_points_on_this_cs:
+                        params = _create_initial_element_table_mapping(sdata, params, wanted_points_on_this_cs)
+                        params = _update_element_table_mapping_points_shapes_colors(
+                            sdata, params, wanted_points_on_this_cs
+                        )
+
                     wanted_elements.extend(wanted_points_on_this_cs)
                     if wanted_points_on_this_cs:
                         _render_points(
