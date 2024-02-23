@@ -60,7 +60,7 @@ def _render_shapes(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
-    table_name = render_params.table_name
+    table_name = render_params.element_table_mapping
 
     if render_params.groups is not None:
         if isinstance(render_params.groups, str):
@@ -95,7 +95,6 @@ def _render_shapes(
             groups=render_params.groups,
             palette=render_params.palette,
             na_color=render_params.color or render_params.cmap_params.na_color,
-            alpha=render_params.fill_alpha,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
         )
@@ -196,7 +195,7 @@ def _render_points(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
-    table_name = render_params.table_name
+    table_name = render_params.element_table_mapping
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -258,7 +257,6 @@ def _render_points(
             groups=render_params.groups,
             palette=render_params.palette,
             na_color=default_color,
-            alpha=render_params.alpha,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
         )
@@ -342,7 +340,6 @@ def _render_images(
         if isinstance(img, MultiscaleSpatialImage):
             img = _multiscale_to_spatial_image(
                 multiscale_image=img,
-                element=e,
                 dpi=fig_params.fig.dpi,
                 width=fig_params.fig.get_size_inches()[0],
                 height=fig_params.fig.get_size_inches()[1],
