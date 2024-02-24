@@ -15,7 +15,6 @@ import spatialdata as sd
 from anndata import AnnData
 from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
 from spatialdata.models import PointsModel, get_table_keys
@@ -78,7 +77,6 @@ def _render_shapes(
 
     for index, e in enumerate(elements):
         shapes = sdata.shapes[e]
-        n_shapes = sum(len(s) for s in shapes)
 
         table_name = element_table_mapping.get(e)
         if table_name is None:
@@ -95,7 +93,7 @@ def _render_shapes(
             value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.color[index] or render_params.cmap_params.na_color[index],
+            na_color=render_params.color[index] or render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
         )
