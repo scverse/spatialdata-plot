@@ -386,7 +386,7 @@ def _set_outline(
     if outline_width == 0.0:
         outline = False
     if outline_width < 0.0:
-        logger.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1)*outline_width}")
+        logger.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1) * outline_width}")
         outline_width *= -1
 
     # the default black and white colors can be changed using the contour_config parameter
@@ -621,7 +621,7 @@ def _set_color_source_vec(
         color_source_vector = vals[value_to_plot]
 
         # numerical case, return early
-        if not is_categorical_dtype(color_source_vector):
+        if not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             if palette is not None:
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
@@ -666,7 +666,7 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    if is_categorical_dtype(color_vector):
+    if isinstance(color_vector.dtype, pd.CategoricalDtype):
         if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
@@ -773,9 +773,9 @@ def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
     fig_params: FigParams,
-    adata: AnnData,
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
+    adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
     na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
@@ -799,7 +799,7 @@ def _decorate_axs(
             path_effect = []
 
         # Adding legends
-        if is_categorical_dtype(color_source_vector):
+        if isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             # order of clusters should agree to palette order
             clusters = color_source_vector.unique()
             clusters = clusters[~clusters.isnull()]
@@ -1002,7 +1002,7 @@ def _translate_image(
 
 def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
     b = polygon.boundary.coords
-    linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
+    linestrings = [LineString(b[k: k + 2]) for k in range(len(b) - 1)]
 
     return [list(ls.coords) for ls in linestrings]
 
@@ -1093,11 +1093,11 @@ def _get_valid_cs(
             and any(e in elements for e in cs_mapping[cs])
             or not elements
             and (
-                (len(sdata.images.keys()) > 0 and render_images)
-                or (len(sdata.labels.keys()) > 0 and render_labels)
-                or (len(sdata.points.keys()) > 0 and render_points)
-                or (len(sdata.shapes.keys()) > 0 and render_shapes)
-            )
+            (len(sdata.images.keys()) > 0 and render_images)
+            or (len(sdata.labels.keys()) > 0 and render_labels)
+            or (len(sdata.points.keys()) > 0 and render_points)
+            or (len(sdata.shapes.keys()) > 0 and render_shapes)
+        )
         ):  # not nice, but ruff wants it (SIM114)
             valid_cs.append(cs)
         else:
@@ -1334,7 +1334,7 @@ def _create_initial_element_table_mapping(
     return params
 
 
-def _update_element_table_mapping_colors(sdata, params, render_elements):
+def _update_element_table_mapping_label_colors(sdata, params, render_elements):
     element_table_mapping = params.element_table_mapping
     if params.color is not None:
         params.color = [params.color] if isinstance(params.color, str) else params.color
@@ -1367,6 +1367,60 @@ def _update_element_table_mapping_colors(sdata, params, render_elements):
             element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
         params.element_table_mapping = element_table_mapping
+    return params
+
+
+def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_elements):
+    element_table_mapping = params.element_table_mapping
+    if len(params.color) == 1:
+        color = params.color[0]
+        col_color = params.col_for_color[0]
+        # This means that we are dealing with colors that are color like
+        if color is not None:
+            params.color = [color] * len(render_elements)
+            params.col_for_color = [None] * len(render_elements)
+        else:
+            if col_color is not None:
+                params.color = [None] * len(render_elements)
+                params.col_for_color = []
+                for element_name in render_elements:
+                    for table_name in element_table_mapping[element_name].copy():
+                        if (
+                            col_color not in sdata[table_name].obs.columns
+                            and col_color not in sdata[table_name].var_names
+                            and col_color not in sdata[element_name].columns
+                        ):
+                            element_table_mapping[element_name].remove(table_name)
+                            params.col_for_color.append(None)
+                        else:
+                            params.col_for_color.append(col_color)
+            else:
+                params.col_for_color = [None] * len(render_elements)
+    else:
+        assert len(params.color) == len(render_elements), f"The number of given colors and elements to render is not equal. Either provide one color or a list with one color for each element."
+        for index, color in enumerate(params.color):
+            if color is None:
+                element_name = render_elements[index]
+                col_color = params.col_for_color[index]
+                for table_name in element_table_mapping[element_name].copy():
+                    if (
+                        col_color not in sdata[table_name].obs.columns
+                        and col_color not in sdata[table_name].var_names
+                        and col_color not in sdata[element_name].columns
+                    ):
+                        element_table_mapping[element_name].remove(table_name)
+    for index, element_name in enumerate(render_elements):
+        # We only want one table value per element and only when there is a color column in the table
+        if params.col_for_color[index] is not None:
+            table_set = element_table_mapping[element_name]
+            if len(table_set) != 1:
+                raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
+            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+            if element_table_mapping[element_name] is None:
+                warnings.warn(f"No table found with color column {params.col_for_color[index]} to render {element_name}")
+        else:
+            element_table_mapping[element_name] = None
+    params.element_table_mapping = element_table_mapping
     return params
 
 
@@ -1580,6 +1634,42 @@ def _validate_render_params(
 
         if not colors.is_color_like(outline_color):
             raise TypeError("Parameter 'outline_color' must be color-like.")
+
+    if element_type in ["points", "shapes"]:
+        if color is not None:
+            if not isinstance(color, list):
+                if colors.is_color_like(color):
+                    logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+                    color = [color]
+                    col_for_color = [None]
+                else:
+                    if not isinstance(color, str):
+                        raise TypeError(
+                            "Parameter 'color' must be a string indicating which color "
+                            + "in sdata.table to use for coloring the shapes."
+                        )
+                    col_for_color = [color]
+                    color = [None]
+            else:
+                col_for_color = []
+                for index, c in enumerate(color):
+                    if colors.is_color_like(c):
+                        logger.info(f"Value `{c}` in list 'color' appears to be a color, using it as such.")
+                        color[index] = c
+                        col_for_color.append(None)
+                    else:
+                        if not isinstance(c, str):
+                            raise TypeError(
+                                f"Value `{c}` in list Parameter 'color' must be a string indicating which color "
+                                + "in sdata.table to use for coloring the shapes or should be color-like."
+                            )
+                        col_for_color.append(c)
+                        color[index] = None
+        else:
+            color = [color]
+            col_for_color = [None]
+        params_dict["color"] = color
+        params_dict["col_for_color"] = col_for_color
 
     if element_type == "points":
         if not isinstance(size, (float, int)):

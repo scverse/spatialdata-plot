@@ -60,7 +60,7 @@ def _render_shapes(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
-    table_name = render_params.element_table_mapping
+    element_table_mapping = render_params.element_table_mapping
 
     if render_params.groups is not None:
         if isinstance(render_params.groups, str):
@@ -70,18 +70,19 @@ def _render_shapes(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.get(table_name) is not None,
+        filter_table=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:
         elements = list(sdata_filt.shapes.keys())
 
-    for e in elements:
+    for index, e in enumerate(elements):
         shapes = sdata.shapes[e]
         n_shapes = sum(len(s) for s in shapes)
 
-        if sdata.get(table_name) is None:
-            table = AnnData(None, obs=pd.DataFrame(index=pd.Index(np.arange(n_shapes), dtype=str)))
+        table_name = element_table_mapping.get(e)
+        if table_name is None:
+            table = None
         else:
             _, region_key, _ = get_table_keys(sdata[table_name])
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
@@ -91,10 +92,10 @@ def _render_shapes(
             sdata=sdata_filt,
             element=sdata_filt.shapes[e],
             element_name=e,
-            value_to_plot=render_params.col_for_color,
+            value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups,
             palette=render_params.palette,
-            na_color=render_params.color or render_params.cmap_params.na_color,
+            na_color=render_params.color[index] or render_params.cmap_params.na_color[index],
             cmap_params=render_params.cmap_params,
             table_name=table_name,
         )
@@ -158,18 +159,18 @@ def _render_shapes(
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
             # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None and render_params.col_for_color is not None:
+            if color_source_vector is not None and render_params.col_for_color[index] is not None:
                 color_source_vector = color_source_vector.remove_unused_categories()
 
             # False if user specified color-like with 'color' parameter
-            colorbar = False if render_params.col_for_color is None else legend_params.colorbar
+            colorbar = False if render_params.col_for_color[index] is None else legend_params.colorbar
 
             _ = _decorate_axs(
                 ax=ax,
                 cax=cax,
                 fig_params=fig_params,
                 adata=table,
-                value_to_plot=render_params.col_for_color,
+                value_to_plot=render_params.col_for_color[index],
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -195,19 +196,20 @@ def _render_points(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
-    table_name = render_params.element_table_mapping
+    element_table_mapping = render_params.element_table_mapping
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.get(table_name) is not None,
+        filter_table=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:
         elements = list(sdata_filt.points.keys())
 
-    for e in elements:
+    for index, e in enumerate(elements):
         points = sdata.points[e]
-        col_for_color = render_params.col_for_color
+        col_for_color = render_params.col_for_color[index]
+        table_name = element_table_mapping.get(e)
 
         coords = ["x", "y"]
         if col_for_color is not None:
@@ -231,21 +233,21 @@ def _render_points(
         points = dask.dataframe.from_pandas(points, npartitions=1)
         sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
-        if render_params.col_for_color is not None:
-            cols = sc.get.obs_df(adata, render_params.col_for_color)
+        if col_for_color is not None:
+            cols = sc.get.obs_df(adata, col_for_color)
             # maybe set color based on type
-            if is_categorical_dtype(cols):
+            if isinstance(cols.dtype, pd.CategoricalDtype):
                 _maybe_set_colors(
                     source=adata,
                     target=adata,
-                    key=render_params.col_for_color,
+                    key=col_for_color,
                     palette=render_params.palette,
                 )
 
         # when user specified a single color, we overwrite na with it
         default_color = (
-            render_params.color
-            if render_params.col_for_color is None and render_params.color is not None
+            render_params.color[index]
+            if col_for_color is None and render_params.color[index] is not None
             else render_params.cmap_params.na_color
         )
 
@@ -253,7 +255,7 @@ def _render_points(
             sdata=sdata_filt,
             element=points,
             element_name=e,
-            value_to_plot=render_params.col_for_color,
+            value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups,
             palette=render_params.palette,
             na_color=default_color,
