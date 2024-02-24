@@ -42,7 +42,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib_scalebar.scalebar import ScaleBar
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
-from pandas.api.types import CategoricalDtype, is_categorical_dtype
+from pandas.api.types import CategoricalDtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
@@ -1002,7 +1002,7 @@ def _translate_image(
 
 def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
     b = polygon.boundary.coords
-    linestrings = [LineString(b[k: k + 2]) for k in range(len(b) - 1)]
+    linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
 
     return [list(ls.coords) for ls in linestrings]
 
@@ -1093,11 +1093,11 @@ def _get_valid_cs(
             and any(e in elements for e in cs_mapping[cs])
             or not elements
             and (
-            (len(sdata.images.keys()) > 0 and render_images)
-            or (len(sdata.labels.keys()) > 0 and render_labels)
-            or (len(sdata.points.keys()) > 0 and render_points)
-            or (len(sdata.shapes.keys()) > 0 and render_shapes)
-        )
+                (len(sdata.images.keys()) > 0 and render_images)
+                or (len(sdata.labels.keys()) > 0 and render_labels)
+                or (len(sdata.points.keys()) > 0 and render_points)
+                or (len(sdata.shapes.keys()) > 0 and render_shapes)
+            )
         ):  # not nice, but ruff wants it (SIM114)
             valid_cs.append(cs)
         else:
@@ -1397,7 +1397,9 @@ def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_e
             else:
                 params.col_for_color = [None] * len(render_elements)
     else:
-        assert len(params.color) == len(render_elements), f"The number of given colors and elements to render is not equal. Either provide one color or a list with one color for each element."
+        assert len(params.color) == len(
+            render_elements
+        ), "The number of given colors and elements to render is not equal. Either provide one color or a list with one color for each element."
         for index, color in enumerate(params.color):
             if color is None:
                 element_name = render_elements[index]
@@ -1417,7 +1419,9 @@ def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_e
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
             element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
             if element_table_mapping[element_name] is None:
-                warnings.warn(f"No table found with color column {params.col_for_color[index]} to render {element_name}")
+                warnings.warn(
+                    f"No table found with color column {params.col_for_color[index]} to render {element_name}"
+                )
         else:
             element_table_mapping[element_name] = None
     params.element_table_mapping = element_table_mapping
