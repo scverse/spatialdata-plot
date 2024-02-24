@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import sys
 from collections import OrderedDict
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Union
-from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -49,10 +49,11 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _update_element_table_mapping_label_colors,
     _validate_colors_element_table_mapping_points_shapes,
     _validate_render_params,
     _validate_show_parameters,
-    save_fig, _update_element_table_mapping_label_colors,
+    save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
 
@@ -780,7 +781,9 @@ class PlotAccessor:
                 params_copy = deepcopy(params)
                 if cmd == "render_images" and has_images:
                     wants_images = True
-                    wanted_images = params_copy.elements if params_copy.elements is not None else list(sdata.images.keys())
+                    wanted_images = (
+                        params_copy.elements if params_copy.elements is not None else list(sdata.images.keys())
+                    )
                     wanted_images_on_this_cs = [
                         image
                         for image in wanted_images
@@ -806,14 +809,18 @@ class PlotAccessor:
 
                 elif cmd == "render_shapes" and has_shapes:
                     wants_shapes = True
-                    wanted_shapes = params_copy.elements if params_copy.elements is not None else list(sdata.shapes.keys())
+                    wanted_shapes = (
+                        params_copy.elements if params_copy.elements is not None else list(sdata.shapes.keys())
+                    )
                     wanted_shapes_on_this_cs = [
                         shape
                         for shape in wanted_shapes
                         if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
                     ]
                     if wanted_shapes_on_this_cs:
-                        params_copy = _create_initial_element_table_mapping(sdata, params_copy, wanted_shapes_on_this_cs)
+                        params_copy = _create_initial_element_table_mapping(
+                            sdata, params_copy, wanted_shapes_on_this_cs
+                        )
                         params_copy = _validate_colors_element_table_mapping_points_shapes(
                             sdata, params_copy, wanted_shapes_on_this_cs
                         )
@@ -832,7 +839,9 @@ class PlotAccessor:
 
                 elif cmd == "render_points" and has_points:
                     wants_points = True
-                    wanted_points = params_copy.elements if params_copy.elements is not None else list(sdata.points.keys())
+                    wanted_points = (
+                        params_copy.elements if params_copy.elements is not None else list(sdata.points.keys())
+                    )
                     wanted_points_on_this_cs = [
                         point
                         for point in wanted_points
@@ -840,7 +849,9 @@ class PlotAccessor:
                     ]
 
                     if wanted_points_on_this_cs:
-                        params_copy = _create_initial_element_table_mapping(sdata, params_copy, wanted_points_on_this_cs)
+                        params_copy = _create_initial_element_table_mapping(
+                            sdata, params_copy, wanted_points_on_this_cs
+                        )
                         params_copy = _validate_colors_element_table_mapping_points_shapes(
                             sdata, params_copy, wanted_points_on_this_cs
                         )
@@ -859,7 +870,9 @@ class PlotAccessor:
 
                 elif cmd == "render_labels" and has_labels:
                     wants_labels = True
-                    wanted_labels = params_copy.elements if params_copy.elements is not None else list(sdata.labels.keys())
+                    wanted_labels = (
+                        params_copy.elements if params_copy.elements is not None else list(sdata.labels.keys())
+                    )
                     wanted_labels_on_this_cs = [
                         label
                         for label in wanted_labels
@@ -869,13 +882,20 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         # Create element to table mapping and check whether specified color columns are in tables.
-                        params_copy = _create_initial_element_table_mapping(sdata, params_copy, wanted_labels_on_this_cs)
-                        params_copy = _update_element_table_mapping_label_colors(sdata, params_copy, wanted_labels_on_this_cs)
+                        params_copy = _create_initial_element_table_mapping(
+                            sdata, params_copy, wanted_labels_on_this_cs
+                        )
+                        params_copy = _update_element_table_mapping_label_colors(
+                            sdata, params_copy, wanted_labels_on_this_cs
+                        )
 
                     if isinstance(params_copy.color, list):
                         element_table_mapping = params_copy.element_table_mapping
                         params_copy.color = (
-                            [params_copy.color[0] if value is not None else None for value in element_table_mapping.values()]
+                            [
+                                params_copy.color[0] if value is not None else None
+                                for value in element_table_mapping.values()
+                            ]
                             if len(params_copy.color) == 1
                             else params_copy.color
                         )

@@ -15,7 +15,6 @@ import spatialdata as sd
 from anndata import AnnData
 from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
 from spatialdata.models import PointsModel, get_table_keys
