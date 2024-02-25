@@ -621,7 +621,7 @@ def _set_color_source_vec(
         color_source_vector = vals[value_to_plot]
 
         # numerical case, return early
-        if not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
+        if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             if palette is not None:
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
@@ -666,7 +666,7 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    if isinstance(color_vector.dtype, pd.CategoricalDtype):
+    if color_vector is not None and isinstance(color_vector.dtype, pd.CategoricalDtype):
         if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
@@ -799,7 +799,7 @@ def _decorate_axs(
             path_effect = []
 
         # Adding legends
-        if isinstance(color_source_vector.dtype, pd.CategoricalDtype):
+        if color_source_vector is not None and isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             # order of clusters should agree to palette order
             clusters = color_source_vector.unique()
             clusters = clusters[~clusters.isnull()]
@@ -1395,11 +1395,13 @@ def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_e
                         else:
                             params.col_for_color.append(col_color)
             else:
+                params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
     else:
-        assert len(params.color) == len(
-            render_elements
-        ), "The number of given colors and elements to render is not equal. Either provide one color or a list with one color for each element."
+        assert len(params.color) == len(render_elements), (
+            "The number of given colors and elements to render is not equal. "
+            "Either provide one color or a list with one color for each element."
+        )
         for index, color in enumerate(params.color):
             if color is None:
                 element_name = render_elements[index]
@@ -1420,7 +1422,9 @@ def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_e
             element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
             if element_table_mapping[element_name] is None:
                 warnings.warn(
-                    f"No table found with color column {params.col_for_color[index]} to render {element_name}"
+                    f"No table found with color column {params.col_for_color[index]} to render {element_name}",
+                    UserWarning,
+                    stacklevel=2,
                 )
         else:
             element_table_mapping[element_name] = None

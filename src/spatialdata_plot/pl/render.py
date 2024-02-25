@@ -682,7 +682,7 @@ def _render_labels(
             cax=cax,
             fig_params=fig_params,
             adata=table,
-            value_to_plot=render_params.color,
+            value_to_plot=render_params.color[i],
             color_source_vector=color_source_vector,
             palette=render_params.palette,
             alpha=render_params.fill_alpha,
