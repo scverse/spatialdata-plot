@@ -61,12 +61,6 @@ def _render_shapes(
     elements = render_params.elements
     element_table_mapping = render_params.element_table_mapping
 
-    if render_params.groups is not None:
-        if isinstance(render_params.groups, str):
-            render_params.groups = [render_params.groups]
-        if not all(isinstance(g, str) for g in render_params.groups):
-            raise TypeError("All groups must be strings.")
-
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_table=any(value is not None for value in element_table_mapping.values()),
@@ -533,18 +527,6 @@ def _render_labels(
 ) -> None:
     elements = render_params.elements
     element_table_mapping = render_params.element_table_mapping
-
-    if not isinstance(render_params.outline, bool):
-        raise TypeError("Parameter 'outline' must be a boolean.")
-
-    if not isinstance(render_params.contour_px, int):
-        raise TypeError("Parameter 'contour_px' must be an integer.")
-
-    if render_params.groups is not None:
-        if isinstance(render_params.groups, str):
-            render_params.groups = [render_params.groups]
-        if not all(isinstance(g, str) for g in render_params.groups):
-            raise TypeError("All groups must be strings.")
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
