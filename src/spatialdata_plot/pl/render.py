@@ -503,7 +503,7 @@ def _render_images(
                 )
                 im.set_transform(trans_data)
 
-            elif render_params.palette[i] is None and got_multiple_cmaps:
+            elif render_params.palette[i][0] is None and got_multiple_cmaps:
                 channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
 
                 # Apply cmaps to each channel, add up and normalize to [0, 1]
