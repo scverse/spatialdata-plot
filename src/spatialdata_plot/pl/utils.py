@@ -1356,7 +1356,7 @@ def _update_element_table_mapping_label_colors(sdata, params, render_elements):
                 for table_name in element_table_mapping[element_name].copy():
                     if (
                         params.color[index] not in sdata[table_name].obs.columns
-                        or params.color[index] not in sdata[table_name].var_names
+                        and params.color[index] not in sdata[table_name].var_names
                     ):
                         element_table_mapping[element_name].remove(table_name)
 
