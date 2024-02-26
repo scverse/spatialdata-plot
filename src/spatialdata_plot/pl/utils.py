@@ -1542,14 +1542,14 @@ def _validate_render_params(
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
-    groups: list[str] | str | None = None,
+    groups: list[list[str | None]] | list[str] | str | None = None,
     na_color: ColorLike | None = None,
     norm: Normalize | bool | None = None,
     outline: bool | None = None,
     outline_alpha: float | int | None = None,
     outline_color: str | list[float] | None = None,
     outline_width: float | int | None = None,
-    palette: list[str] | str | None = None,
+    palette: list[list[str | None]] | list[str] | str | None = None,
     quantiles_for_norm: tuple[float | None, float | None] | None = None,
     scale: float | int | list[str] | str | None = None,
     size: float | int | None = None,
@@ -1571,25 +1571,57 @@ def _validate_render_params(
     if groups is not None and element_type != "images":
         if not isinstance(groups, (list, str)):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
-        groups = [groups] if isinstance(groups, str) else groups
-        if not all(isinstance(g, str) for g in groups):
-            raise TypeError("All items in 'groups' list must be strings.")
+        if isinstance(groups, str):
+            groups = [[groups]]
+        elif not isinstance(groups[0], list):
+            if not all(isinstance(g, str) for g in groups):
+                raise TypeError("All items in single 'groups' list must be strings.")
+            groups = [groups]
+        else:
+            if not all(isinstance(g, str) or g is None for group in groups for g in group):
+                raise TypeError("All items in lists within lists of 'groups' must be strings or None.")
+
     params_dict["groups"] = groups
 
     if palette is not None:
         if not isinstance(palette, (list, str)):
             raise TypeError("Parameter 'palette' must be a string or a list of strings.")
+        if isinstance(palette, str):
+            palette = [[palette]]
+        elif not isinstance(palette[0], list):
+            if not all(isinstance(pal, str) for pal in palette):
+                raise TypeError("All items in single 'palette' list must be strings.")
+            palette = [palette]
+        else:
+            if not all(isinstance(p, str) or p is None for pal in palette for p in pal):
+                raise TypeError("All items in lists within lists of 'groups' must be strings.")
 
-        palette = [palette] if isinstance(palette, str) else palette
-
-        if not all(isinstance(p, str) for p in palette):
-            raise TypeError("All items in 'palette' list must be strings.")
-
-        if element_type in ["shapes", "points"]:
+        if element_type in ["shapes", "points", "labels"]:
             if groups is None:
                 raise ValueError("When specifying 'palette', 'groups' must also be specified.")
             if len(groups) != len(palette):
-                raise ValueError("The length of 'palette' and 'groups' must be the same.")
+                raise ValueError(
+                    f"The length of 'palette' and 'groups' must be the same, length is {len(palette)} and"
+                    f"{len(groups)} respectively."
+                )
+            for index, sublist in enumerate(groups):
+                if not len(sublist) == len(palette[index]):
+                    raise ValueError("Not all nested lists in `groups` and `palette` are of equal length.")
+                if (
+                    not len(g_set := {type(el) for el in sublist})
+                    == len(p_set := {type(pal) for pal in palette[index]})
+                    == 1
+                ):
+                    raise ValueError(
+                        "Mixed dtypes found in sublists of `groups` and/or `palette`. Must be either all"
+                        "`str` or `None`."
+                    )
+                if g_set != p_set:
+                    raise ValueError(
+                        "Sublists with same index in `groups` and `palette` must contain elements of the "
+                        "same dtype, either both `str` or `None`."
+                    )
+
     params_dict["palette"] = palette
 
     if cmap is not None:
@@ -1730,3 +1762,31 @@ def _validate_render_params(
                 raise ValueError("The first number in 'quantiles_for_norm' must not be smaller than the second.")
         params_dict["quantiles_for_norm"] = quantiles_for_norm
     return params_dict
+
+
+def _match_length_elements_groups_palette(params, render_elements, image=False):
+    if image:
+        if params.palette is None:
+            params.palette = [[None] for _ in range(len(render_elements))]
+        else:
+            params.palette = [params.palette[0] for _ in range(len(render_elements))]
+    else:
+        groups = params.groups
+        palette = params.palette
+        # We already checked before that length of groups and palette is the same
+        if groups is not None:
+            if len(groups) == 1:
+                params.groups = [groups[0] for _ in range(len(render_elements))]
+                if palette is not None:
+                    params.palette = [palette[0] for _ in range(len(render_elements))]
+            else:
+                if len(groups) != len(render_elements):
+                    raise ValueError(
+                        "Multiple groups and palettes are given but the number is not the same as the number "
+                        "of elements to be rendered."
+                    )
+        else:
+            params.groups = [[None] for _ in range(len(render_elements))]
+            params.palette = [[None] for _ in range(len(render_elements))]
+
+    return params

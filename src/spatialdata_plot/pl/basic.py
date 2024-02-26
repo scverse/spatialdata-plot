@@ -44,6 +44,7 @@ from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
+    _match_length_elements_groups_palette,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
@@ -153,8 +154,8 @@ class PlotAccessor:
         elements: list[str] | str | None = None,
         color: str | None = None,
         fill_alpha: float | int = 1.0,
-        groups: list[str] | str | None = None,
-        palette: list[str] | str | None = None,
+        groups: list[list[str | None]] | list[str] | str | None = None,
+        palette: list[list[str | None]] | list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         outline: bool = False,
         outline_width: float | int = 1.5,
@@ -275,8 +276,8 @@ class PlotAccessor:
         elements: list[str] | str | None = None,
         color: list[str] | str | None = None,
         alpha: float | int = 1.0,
-        groups: list[str] | str | None = None,
-        palette: list[str] | str | None = None,
+        groups: list[list[str | None]] | list[str] | str | None = None,
+        palette: list[list[str | None]] | list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
@@ -477,10 +478,10 @@ class PlotAccessor:
         self,
         elements: list[str] | str | None = None,
         color: list[str] | str | None = None,
-        groups: list[str] | str | None = None,
+        groups: list[list[str | None]] | list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        palette: list[str] | str | None = None,
+        palette: list[list[str | None]] | list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
@@ -789,6 +790,10 @@ class PlotAccessor:
                         for image in wanted_images
                         if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
                     ]
+
+                    params_copy = _match_length_elements_groups_palette(
+                        params_copy, wanted_images_on_this_cs, image=True
+                    )
                     wanted_elements.extend(wanted_images_on_this_cs)
                     if wanted_images_on_this_cs:
                         rasterize = (params_copy.scale is None) or (
@@ -825,6 +830,7 @@ class PlotAccessor:
                             sdata, params_copy, wanted_shapes_on_this_cs
                         )
 
+                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_shapes_on_this_cs)
                     wanted_elements.extend(wanted_shapes_on_this_cs)
                     if wanted_shapes_on_this_cs:
                         _render_shapes(
@@ -856,6 +862,7 @@ class PlotAccessor:
                             sdata, params_copy, wanted_points_on_this_cs
                         )
 
+                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_points_on_this_cs)
                     wanted_elements.extend(wanted_points_on_this_cs)
                     if wanted_points_on_this_cs:
                         _render_points(
@@ -911,6 +918,7 @@ class PlotAccessor:
                                     palette=params_copy.palette,
                                 )
 
+                        params_copy = _match_length_elements_groups_palette(params_copy, wanted_labels_on_this_cs)
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)
                             and params_copy.scale != "full"

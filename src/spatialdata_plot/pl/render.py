@@ -85,8 +85,10 @@ def _render_shapes(
             element=sdata_filt.shapes[e],
             element_name=e,
             value_to_plot=render_params.col_for_color[index],
-            groups=render_params.groups,
-            palette=render_params.palette,
+            groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
+            palette=render_params.palette[index]
+            if render_params.palette is not None and render_params.palette[index][0] is not None
+            else None,
             na_color=render_params.color[index] or render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
@@ -104,8 +106,8 @@ def _render_shapes(
             color_vector = [render_params.cmap_params.na_color]
 
         # filter by `groups`
-        if render_params.groups is not None and color_source_vector is not None:
-            mask = color_source_vector.isin(render_params.groups)
+        if render_params.groups[index][0] is not None and color_source_vector is not None:
+            mask = color_source_vector.isin(render_params.groups[index])
             shapes = shapes[mask]
             shapes = shapes.reset_index()
             color_source_vector = color_source_vector[mask]
@@ -213,8 +215,8 @@ def _render_points(
                 coords += [col_for_color]
 
         points = points[coords].compute()
-        if render_params.groups is not None and col_for_color is not None:
-            points = points[points[col_for_color].isin(render_params.groups)]
+        if render_params.groups[index][0] is not None and col_for_color is not None:
+            points = points[points[col_for_color].isin(render_params.groups[index])]
 
         # we construct an anndata to hack the plotting functions
         adata = AnnData(
@@ -233,7 +235,7 @@ def _render_points(
                     source=adata,
                     target=adata,
                     key=col_for_color,
-                    palette=render_params.palette,
+                    palette=render_params.palette[index] if render_params.palette[index][0] is not None else None,
                 )
 
         # when user specified a single color, we overwrite na with it
@@ -248,8 +250,8 @@ def _render_points(
             element=points,
             element_name=e,
             value_to_plot=render_params.col_for_color[index],
-            groups=render_params.groups,
-            palette=render_params.palette,
+            groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
+            palette=render_params.palette[index] if render_params.palette[index][0] is not None else None,
             na_color=default_color,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
@@ -392,10 +394,10 @@ def _render_images(
             if render_params.cmap_params.norm is not None:  # type: ignore[attr-defined]
                 layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
-            if render_params.palette is None:
+            if render_params.palette[i][0] is None:
                 cmap = render_params.cmap_params.cmap  # type: ignore[attr-defined]
             else:
-                cmap = _get_linear_colormap(render_params.palette, "k")[0]  # type: ignore[arg-type]
+                cmap = _get_linear_colormap(render_params.palette[i], "k")[0]  # type: ignore[arg-type]
 
             # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
             cmap._init()
@@ -410,7 +412,7 @@ def _render_images(
         # 2) Image has any number of channels but 1
         else:
             layers = {}
-            for i, c in enumerate(channels):
+            for ch_index, c in enumerate(channels):
                 layers[c] = img.sel(c=c).copy(deep=True).squeeze()
 
                 if render_params.quantiles_for_norm != (None, None):
@@ -425,18 +427,23 @@ def _render_images(
                     if render_params.cmap_params.norm is not None:
                         layers[c] = render_params.cmap_params.norm(layers[c])
                 else:
-                    if render_params.cmap_params[i].norm is not None:
-                        layers[c] = render_params.cmap_params[i].norm(layers[c])
+                    if render_params.cmap_params[ch_index].norm is not None:
+                        layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
 
             # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
-            if n_channels == 3 and render_params.palette is None and not isinstance(render_params.cmap_params, list):
+            if (
+                n_channels == 3
+                and render_params.palette[i][0] is None
+                and not isinstance(render_params.cmap_params, list)
+            ):
                 if render_params.cmap_params.is_default:  # -> use RGB
                     stacked = np.stack([layers[c] for c in channels], axis=-1)
                 else:  # -> use given cmap for each channel
                     channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                     # Apply cmaps to each channel, add up and normalize to [0, 1]
                     stacked = (
-                        np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0) / n_channels
+                        np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
+                        / n_channels
                     )
                     # Remove alpha channel so we can overwrite it from render_params.alpha
                     stacked = stacked[:, :, :3]
@@ -456,7 +463,7 @@ def _render_images(
                 im.set_transform(trans_data)
 
             # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
-            elif render_params.palette is None and not got_multiple_cmaps:
+            elif render_params.palette[i][0] is None and not got_multiple_cmaps:
                 # overwrite if n_channels == 2 for intuitive result
                 if n_channels == 2:
                     seed_colors = ["#ff0000ff", "#00ff00ff"]
@@ -466,7 +473,7 @@ def _render_images(
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
 
                 # Apply cmaps to each channel and add up
-                colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
+                colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
 
                 # Remove alpha channel so we can overwrite it from render_params.alpha
                 colored = colored[:, :, :3]
@@ -478,11 +485,11 @@ def _render_images(
                 im.set_transform(trans_data)
 
             # 2C) Image has n channels and palette info
-            elif render_params.palette is not None and not got_multiple_cmaps:
-                if len(render_params.palette) != n_channels:
+            elif render_params.palette[i][0] is not None and not got_multiple_cmaps:
+                if len(render_params.palette[i]) != n_channels:
                     raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
-                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in render_params.palette]
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in render_params.palette[i]]
 
                 # Apply cmaps to each channel and add up
                 colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
@@ -496,11 +503,13 @@ def _render_images(
                 )
                 im.set_transform(trans_data)
 
-            elif render_params.palette is None and got_multiple_cmaps:
+            elif render_params.palette[i] is None and got_multiple_cmaps:
                 channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
 
                 # Apply cmaps to each channel, add up and normalize to [0, 1]
-                colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0) / n_channels
+                colored = (
+                    np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
+                )
 
                 # Remove alpha channel so we can overwrite it from render_params.alpha
                 colored = colored[:, :, :3]
@@ -511,7 +520,7 @@ def _render_images(
                 )
                 im.set_transform(trans_data)
 
-            elif render_params.palette is not None and got_multiple_cmaps:
+            elif render_params.palette[i][0] is not None and got_multiple_cmaps:
                 raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 
 
