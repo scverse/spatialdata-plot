@@ -52,6 +52,7 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatial_image import SpatialImage
+from spatialdata import SpatialData
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, get_values
 from spatialdata._types import ArrayLike
@@ -1334,7 +1335,7 @@ def _create_initial_element_table_mapping(
     return params
 
 
-def _update_element_table_mapping_label_colors(sdata, params, render_elements):
+def _update_element_table_mapping_label_colors(sdata: SpatialData, params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     element_table_mapping = params.element_table_mapping
     if params.color is not None:
         params.color = [params.color] if isinstance(params.color, str) else params.color
