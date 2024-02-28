@@ -1285,7 +1285,7 @@ def _create_initial_element_table_mapping(
     sdata: sd.SpatialData,
     params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     render_elements: list[str],
-) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
+) -> LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     """
     Create the initial element to tables mapping based on what elements are rendered and table names are specified.
 
@@ -1302,12 +1302,12 @@ def _create_initial_element_table_mapping(
     -------
     The updated render parameters.
     """
-    element_table_mapping = defaultdict(set)
+    element_table_mapping: dict[str, set[str]] = defaultdict(set)
     if not params.element_table_mapping:
         for element_name in render_elements:
             element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
     else:
-        table_names = (
+        table_names: list[str] = (
             [params.element_table_mapping]
             if isinstance(params.element_table_mapping, str)
             else params.element_table_mapping
@@ -1317,7 +1317,7 @@ def _create_initial_element_table_mapping(
                 if element_name in sdata[table_names[0]].uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY]:
                     element_table_mapping[element_name] = {table_names[0]}
                 else:
-                    element_table_mapping[element_name] = {}
+                    element_table_mapping[element_name] = set()
                     warnings.warn(f"{element_name} is not annotated by {table_names[0]}.", UserWarning, stacklevel=2)
 
         if len(table_names) != 1:
@@ -1335,7 +1335,9 @@ def _create_initial_element_table_mapping(
     return params
 
 
-def _update_element_table_mapping_label_colors(sdata: SpatialData, params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
+def _update_element_table_mapping_label_colors(
+    sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     element_table_mapping = params.element_table_mapping
     if params.color is not None:
         params.color = [params.color] if isinstance(params.color, str) else params.color
@@ -1371,7 +1373,9 @@ def _update_element_table_mapping_label_colors(sdata: SpatialData, params: Image
     return params
 
 
-def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_elements):
+def _validate_colors_element_table_mapping_points_shapes(
+    sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
+) -> PointsRenderParams | ShapesRenderParams:
     element_table_mapping = params.element_table_mapping
     if len(params.color) == 1:
         color = params.color[0]
@@ -1771,7 +1775,11 @@ def _validate_render_params(
     return params_dict
 
 
-def _match_length_elements_groups_palette(params, render_elements, image=False):
+def _match_length_elements_groups_palette(
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    render_elements: list[str],
+    image: bool = False,
+):
     if image:
         if params.palette is None:
             params.palette = [[None] for _ in range(len(render_elements))]
