@@ -1398,21 +1398,27 @@ def _validate_colors_element_table_mapping_points_shapes(sdata, params, render_e
                 params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
     else:
-        assert len(params.color) == len(render_elements), (
-            "The number of given colors and elements to render is not equal. "
-            "Either provide one color or a list with one color for each element."
-        )
-        for index, color in enumerate(params.color):
-            if color is None:
-                element_name = render_elements[index]
-                col_color = params.col_for_color[index]
-                for table_name in element_table_mapping[element_name].copy():
-                    if (
-                        col_color not in sdata[table_name].obs.columns
-                        and col_color not in sdata[table_name].var_names
-                        and col_color not in sdata[element_name].columns
-                    ):
-                        element_table_mapping[element_name].remove(table_name)
+        if len(params.color) != len(render_elements):
+            warnings.warn(
+                "The number of given colors and elements to render is not equal. "
+                "Either provide one color or a list with one color for each element. skipping",
+                UserWarning,
+                stacklevel=2,
+            )
+            params.color = [None] * len(render_elements)
+            params.col_for_color = [None] * len(render_elements)
+        else:
+            for index, color in enumerate(params.color):
+                if color is None:
+                    element_name = render_elements[index]
+                    col_color = params.col_for_color[index]
+                    for table_name in element_table_mapping[element_name].copy():
+                        if (
+                            col_color not in sdata[table_name].obs.columns
+                            and col_color not in sdata[table_name].var_names
+                            and col_color not in sdata[element_name].columns
+                        ):
+                            element_table_mapping[element_name].remove(table_name)
     for index, element_name in enumerate(render_elements):
         # We only want one table value per element and only when there is a color column in the table
         if params.col_for_color[index] is not None:
