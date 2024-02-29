@@ -7,11 +7,11 @@ from dask.dataframe.core import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
+from spatialdata.models import get_table_keys
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pp.utils import (
     _get_coordinate_system_mapping,
-    _get_region_key,
     _verify_plotting_tree,
 )
 
@@ -237,24 +237,26 @@ class PreprocessingAccessor:
                             del sdata.points[valid_point_key]
 
         # subset table if it is present and the region key is a valid column
-        if sdata.table is not None and len(shape_keys + label_keys) > 0:
-            assert hasattr(sdata, "table"), "SpatialData object does not have a table."
-            assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
-            assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
+        if len(sdata.tables) != 0 and len(shape_keys + label_keys + point_keys) > 0:
+            for name, table in sdata.tables.items():
+                assert hasattr(sdata, "table"), "SpatialData object does not have a table."
+                assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
+                assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
 
-            # create mask of used keys
-            mask = sdata.table.obs[_get_region_key(sdata)]
-            mask = list(mask.str.contains("|".join(shape_keys + label_keys)))
+                # create mask of used keys
+                _, region_key, _ = get_table_keys(table)
+                mask = table.obs[region_key]
+                mask = list(mask.str.contains("|".join(shape_keys + label_keys)))
 
-            # create copy and delete original so we can reuse slot
-            old_table = sdata.table.copy()
-            new_table = old_table[mask, :].copy()
-            new_table.uns["spatialdata_attrs"]["region"] = list(set(new_table.obs[_get_region_key(sdata)]))
-            del sdata.table
-            sdata.table = new_table
+                # create copy and delete original so we can reuse slot
+                old_table = table.copy()
+                new_table = old_table[mask, :].copy()
+                new_table.uns["spatialdata_attrs"]["region"] = list(set(new_table.obs[region_key]))
+                del sdata.tables[name]
+                sdata.tables[name] = new_table
 
         else:
-            del sdata.table
+            sdata.tables = {}
 
         return sdata
 

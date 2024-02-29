@@ -23,15 +23,25 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(elements="blobs_points").pl.show()
 
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(color="genes", groups="b", palette="orange").pl.show()
+        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs.pl.render_points(color="genes", groups="gene_b", palette="orange").pl.show()
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(color="genes", groups=["a", "b"], palette=["lightgreen", "darkblue"]).pl.show()
+        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs.pl.render_points(
+            color="genes", groups=["gene_a", "gene_b"], palette=["lightgreen", "darkblue"]
+        ).pl.show()
 
     def test_plot_coloring_with_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         sdata_blobs.pl.render_points(color="genes", cmap="rainbow").pl.show()
 
     def test_plot_can_stack_render_points(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         (
             sdata_blobs.pl.render_points(elements="blobs_points", na_color="red", size=30)
             .pl.render_points(elements="blobs_points", na_color="blue", size=10)
