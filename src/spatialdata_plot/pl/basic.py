@@ -566,7 +566,7 @@ class PlotAccessor:
         )
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
             elements=params_dict["elements"],
-            color=color,
+            color=params_dict["color"],
             groups=params_dict["groups"],
             contour_px=contour_px,
             outline=outline,
@@ -896,16 +896,6 @@ class PlotAccessor:
                             sdata, params_copy, wanted_labels_on_this_cs
                         )
 
-                    if isinstance(params_copy.color, list):
-                        element_table_mapping = params_copy.element_table_mapping
-                        params_copy.color = (
-                            [
-                                params_copy.color[0] if value is not None else None
-                                for value in element_table_mapping.values()
-                            ]
-                            if len(params_copy.color) == 1
-                            else params_copy.color
-                        )
                         for index, table in enumerate(params_copy.element_table_mapping.values()):
                             if table is None:
                                 continue
@@ -918,22 +908,22 @@ class PlotAccessor:
                                     palette=params_copy.palette,
                                 )
 
-                        params_copy = _match_length_elements_groups_palette(params_copy, wanted_labels_on_this_cs)
-                        rasterize = (params_copy.scale is None) or (
-                            isinstance(params_copy.scale, str)
-                            and params_copy.scale != "full"
-                            and (dpi is not None or figsize is not None)
-                        )
-                        _render_labels(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            fig_params=fig_params,
-                            scalebar_params=scalebar_params,
-                            legend_params=legend_params,
-                            rasterize=rasterize,
-                        )
+                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_labels_on_this_cs)
+                    rasterize = (params_copy.scale is None) or (
+                        isinstance(params_copy.scale, str)
+                        and params_copy.scale != "full"
+                        and (dpi is not None or figsize is not None)
+                    )
+                    _render_labels(
+                        sdata=sdata,
+                        render_params=params_copy,
+                        coordinate_system=cs,
+                        ax=ax,
+                        fig_params=fig_params,
+                        scalebar_params=scalebar_params,
+                        legend_params=legend_params,
+                        rasterize=rasterize,
+                    )
 
                 if title is None:
                     t = cs

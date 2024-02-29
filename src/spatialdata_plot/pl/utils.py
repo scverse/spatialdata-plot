@@ -1339,37 +1339,36 @@ def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     element_table_mapping = params.element_table_mapping
-    if params.color is not None:
-        params.color = [params.color] if isinstance(params.color, str) else params.color
 
-        # If one color column check presence for each table annotating the specific element
-        if len(params.color) == 1:
-            for element_name in render_elements:
-                for table_name in element_table_mapping[element_name].copy():
-                    if (
-                        params.color[0] not in sdata[table_name].obs.columns
-                        and params.color[0] not in sdata[table_name].var_names
-                    ):
-                        element_table_mapping[element_name].remove(table_name)
-        if len(params.color) > 1:
-            assert len(params.color) == len(
-                render_elements
-            ), "Either one color should be given or the length should be equal to the number of elements being plotted."
-            for index, element_name in enumerate(render_elements):
-                for table_name in element_table_mapping[element_name].copy():
-                    if (
-                        params.color[index] not in sdata[table_name].obs.columns
-                        and params.color[index] not in sdata[table_name].var_names
-                    ):
-                        element_table_mapping[element_name].remove(table_name)
+    # If one color column check presence for each table annotating the specific element
+    if len(params.color) == 1:
+        params.color = params.color * len(render_elements)
+        for element_name in render_elements:
+            for table_name in element_table_mapping[element_name].copy():
+                if (
+                    params.color[0] not in sdata[table_name].obs.columns
+                    and params.color[0] not in sdata[table_name].var_names
+                ):
+                    element_table_mapping[element_name].remove(table_name)
+    if len(params.color) > 1:
+        assert len(params.color) == len(
+            render_elements
+        ), "Either one color should be given or the length should be equal to the number of elements being plotted."
+        for index, element_name in enumerate(render_elements):
+            for table_name in element_table_mapping[element_name].copy():
+                if (
+                    params.color[index] not in sdata[table_name].obs.columns
+                    and params.color[index] not in sdata[table_name].var_names
+                ):
+                    element_table_mapping[element_name].remove(table_name)
 
-        # We only want one table containing the color column per element
-        for element_name, table_set in element_table_mapping.items():
-            if len(table_set) > 1:
-                raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
-            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+    # We only want one table containing the color column per element
+    for element_name, table_set in element_table_mapping.items():
+        if len(table_set) > 1:
+            raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
+        element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
-        params.element_table_mapping = element_table_mapping
+    params.element_table_mapping = element_table_mapping
     return params
 
 
@@ -1743,6 +1742,8 @@ def _validate_render_params(
                     f"Only provide 1 value for color or provide 1 color for each `{element_type}` being"
                     "tried to plot in a list"
                 )
+        if color is None or isinstance(color, str):
+            params_dict["color"] = [color]
 
     if alpha is not None and element_type in ["images", "points"]:
         if not isinstance(alpha, (float, int)):
