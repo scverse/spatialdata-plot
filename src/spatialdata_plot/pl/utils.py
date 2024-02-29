@@ -90,13 +90,6 @@ def _prepare_params_plot(
     hspace: float = 0.25,
     ncols: int = 4,
     frameon: bool | None = None,
-    # this is passed at `render_*`
-    cmap: Colormap | str | None = None,
-    norm: Normalize | Sequence[Normalize] | None = None,
-    na_color: str | tuple[float, ...] | None = (0.0, 0.0, 0.0, 0.0),
-    vmin: float | None = None,
-    vmax: float | None = None,
-    vcenter: float | None = None,
     # this args will be inferred from coordinate system
     scalebar_dx: float | Sequence[float] | None = None,
     scalebar_units: str | Sequence[str] | None = None,
@@ -1388,16 +1381,19 @@ def _validate_colors_element_table_mapping_points_shapes(
                 params.color = [None] * len(render_elements)
                 params.col_for_color = []
                 for element_name in render_elements:
-                    for table_name in element_table_mapping[element_name].copy():
-                        if (
-                            col_color not in sdata[table_name].obs.columns
-                            and col_color not in sdata[table_name].var_names
-                            and col_color not in sdata[element_name].columns
-                        ):
-                            element_table_mapping[element_name].remove(table_name)
-                            params.col_for_color.append(None)
-                        else:
-                            params.col_for_color.append(col_color)
+                    if col_color in sdata[element_name].columns:
+                        params.col_for_color.append(col_color)
+                        element_table_mapping[element_name] = set()
+                    else:
+                        for table_name in element_table_mapping[element_name].copy():
+                            if (
+                                col_color not in sdata[table_name].obs.columns
+                                and col_color not in sdata[table_name].var_names
+                            ):
+                                element_table_mapping[element_name].remove(table_name)
+                                params.col_for_color.append(None)
+                            else:
+                                params.col_for_color.append(col_color)
             else:
                 params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
@@ -1427,7 +1423,7 @@ def _validate_colors_element_table_mapping_points_shapes(
         # We only want one table value per element and only when there is a color column in the table
         if params.col_for_color[index] is not None:
             table_set = element_table_mapping[element_name]
-            if len(table_set) != 1:
+            if len(table_set) > 1:
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
             element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
             if element_table_mapping[element_name] is None:
