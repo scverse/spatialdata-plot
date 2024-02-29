@@ -1743,7 +1743,8 @@ def _validate_render_params(
                     "tried to plot in a list"
                 )
         if color is None or isinstance(color, str):
-            params_dict["color"] = [color]
+            color = [color]
+        params_dict["color"] = color
 
     if alpha is not None and element_type in ["images", "points"]:
         if not isinstance(alpha, (float, int)):

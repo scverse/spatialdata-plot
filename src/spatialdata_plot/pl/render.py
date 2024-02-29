@@ -63,7 +63,7 @@ def _render_shapes(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=any(value is not None for value in element_table_mapping.values()),
+        filter_tables=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:
@@ -194,7 +194,7 @@ def _render_points(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=any(value is not None for value in element_table_mapping.values()),
+        filter_tables=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:
@@ -321,7 +321,7 @@ def _render_images(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=sdata.table is not None,
+        filter_tables=False,
     )
 
     if elements is None:
@@ -539,7 +539,7 @@ def _render_labels(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_table=any(value is not None for value in element_table_mapping.values()),
+        filter_tables=any(value is not None for value in element_table_mapping.values()),
     )
 
     if elements is None:

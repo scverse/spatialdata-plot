@@ -98,7 +98,7 @@ class PlotAccessor:
         labels: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
         points: dict[str, DaskDataFrame] | None = None,
         shapes: dict[str, GeoDataFrame] | None = None,
-        table: dict[str, AnnData] | None = None,
+        tables: dict[str, AnnData] | None = None,
     ) -> sd.SpatialData:
         """Copy the current `SpatialData` object, optionally modifying some of its attributes.
 
@@ -143,7 +143,7 @@ class PlotAccessor:
             labels=self._sdata.labels if labels is None else labels,
             points=self._sdata.points if points is None else points,
             shapes=self._sdata.shapes if shapes is None else shapes,
-            table=self._sdata.tables if table is None else table,
+            tables=self._sdata.tables if tables is None else tables,
         )
         sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
 

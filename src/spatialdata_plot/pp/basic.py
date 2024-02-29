@@ -47,7 +47,7 @@ class PreprocessingAccessor:
         labels: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
         points: Union[None, dict[str, DaskDataFrame]] = None,
         shapes: Union[None, dict[str, GeoDataFrame]] = None,
-        table: Union[None, AnnData] = None,
+        tables: Union[None, dict[str, AnnData]] = None,
     ) -> sd.SpatialData:
         """Copy the references from the original to the new SpatialData object."""
         sdata = sd.SpatialData(
@@ -55,7 +55,7 @@ class PreprocessingAccessor:
             labels=self._sdata.labels if labels is None else labels,
             points=self._sdata.points if points is None else points,
             shapes=self._sdata.shapes if shapes is None else shapes,
-            table=self._sdata.table if table is None else table,
+            tables=self._sdata.tables if tables is None else tables,
         )
         sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
 
@@ -197,7 +197,7 @@ class PreprocessingAccessor:
         sdata = self._copy()
 
         if (valid_coord_keys is not None) and (len(coord_keys) > 0):
-            sdata = sdata.filter_by_coordinate_system(coord_keys, filter_table=False)
+            sdata = sdata.filter_by_coordinate_system(coord_keys, filter_tables=False)
 
         elif len(coord_keys) == 0:
             if valid_image_keys is not None:
@@ -239,9 +239,8 @@ class PreprocessingAccessor:
         # subset table if it is present and the region key is a valid column
         if len(sdata.tables) != 0 and len(shape_keys + label_keys + point_keys) > 0:
             for name, table in sdata.tables.items():
-                assert hasattr(sdata, "table"), "SpatialData object does not have a table."
-                assert hasattr(sdata.table, "uns"), "Table in SpatialData object does not have 'uns'."
-                assert hasattr(sdata.table, "obs"), "Table in SpatialData object does not have 'obs'."
+                assert hasattr(table, "uns"), "Table in SpatialData object does not have 'uns'."
+                assert hasattr(table, "obs"), "Table in SpatialData object does not have 'obs'."
 
                 # create mask of used keys
                 _, region_key, _ = get_table_keys(table)
@@ -252,7 +251,6 @@ class PreprocessingAccessor:
                 old_table = table.copy()
                 new_table = old_table[mask, :].copy()
                 new_table.uns["spatialdata_attrs"]["region"] = list(set(new_table.obs[region_key]))
-                del sdata.tables[name]
                 sdata.tables[name] = new_table
 
         else:

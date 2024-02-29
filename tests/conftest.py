@@ -118,7 +118,7 @@ def test_sdata_multiple_images_with_table():
     table = TableModel.parse(
         adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
     )
-    sdata = sd.SpatialData(images=images, table=table)
+    sdata = sd.SpatialData(images=images, tables={"table": table})
     return sdata
 
 
