@@ -1811,11 +1811,7 @@ def _get_wanted_render_elements(
 ):
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
-        wanted_elements = (
-            params.elements
-            if params.elements is not None
-            else list(getattr(sdata, element_type).keys())
-        )
+        wanted_elements = params.elements if params.elements is not None else list(getattr(sdata, element_type).keys())
 
         wanted_elements_on_cs = [
             element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
