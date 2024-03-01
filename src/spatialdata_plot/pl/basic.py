@@ -819,7 +819,7 @@ class PlotAccessor:
                         )
 
                     params_copy = _match_length_elements_groups_palette(params_copy, wanted_shapes_on_this_cs)
-                    wanted_elements.extend(wanted_shapes_on_this_cs)
+
                     if wanted_shapes_on_this_cs:
                         _render_shapes(
                             sdata=sdata,
@@ -845,7 +845,6 @@ class PlotAccessor:
                         )
 
                     params_copy = _match_length_elements_groups_palette(params_copy, wanted_points_on_this_cs)
-                    wanted_elements.extend(wanted_points_on_this_cs)
                     if wanted_points_on_this_cs:
                         _render_points(
                             sdata=sdata,
