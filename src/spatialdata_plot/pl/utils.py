@@ -1567,7 +1567,7 @@ def _validate_render_params(
             raise TypeError("Parameter 'elements' must be a string or a list of strings.")
 
         elements = [elements] if isinstance(elements, str) else elements
-        sdata_elements = eval(f"sdata.{element_type}")  # noqa: PGH001
+        sdata_elements = getattr(sdata, element_type)
         if any(e not in sdata_elements for e in elements):
             raise ValueError(
                 f"Not all specified {element_type} elements were found. Available elements are: "
@@ -1814,7 +1814,7 @@ def _get_wanted_render_elements(
         wanted_elements = (
             params.elements
             if params.elements is not None
-            else list(eval(f"sdata.{element_type}.keys()"))  # noqa: PGH001
+            else list(getattr(sdata, element_type).keys())
         )
 
         wanted_elements_on_cs = [
