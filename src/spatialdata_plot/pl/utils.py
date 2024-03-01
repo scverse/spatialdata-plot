@@ -1825,3 +1825,14 @@ def _get_wanted_render_elements(
         return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
 
     raise ValueError(f"Unknown element type {element_type}")
+
+
+def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["images", "labels", "points", "shapes"]):
+    if element_type in ["labels", "points", "shapes"] and wanted_elements_on_cs:
+        params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
+        if element_type == "labels":
+            params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
+        else:
+            params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
+    image_flag = element_type == "images"
+    return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)

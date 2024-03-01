@@ -39,19 +39,16 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 from spatialdata_plot.pl.utils import (
-    _create_initial_element_table_mapping,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
     _get_wanted_render_elements,
-    _match_length_elements_groups_palette,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _update_element_table_mapping_label_colors,
-    _validate_colors_element_table_mapping_points_shapes,
+    _update_params,
     _validate_render_params,
     _validate_show_parameters,
     save_fig,
@@ -785,11 +782,8 @@ class PlotAccessor:
                         sdata, wanted_elements, params_copy, cs, "images"
                     )
 
-                    params_copy = _match_length_elements_groups_palette(
-                        params_copy, wanted_images_on_this_cs, image=True
-                    )
-
                     if wanted_images_on_this_cs:
+                        params_copy = _update_params(sdata, params_copy, wanted_images_on_this_cs, "images")
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)
                             and params_copy.scale != "full"
@@ -810,17 +804,9 @@ class PlotAccessor:
                     wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
                         sdata, wanted_elements, params_copy, cs, "shapes"
                     )
-                    if wanted_shapes_on_this_cs:
-                        params_copy = _create_initial_element_table_mapping(
-                            sdata, params_copy, wanted_shapes_on_this_cs
-                        )
-                        params_copy = _validate_colors_element_table_mapping_points_shapes(
-                            sdata, params_copy, wanted_shapes_on_this_cs
-                        )
-
-                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_shapes_on_this_cs)
 
                     if wanted_shapes_on_this_cs:
+                        params_copy = _update_params(sdata, params_copy, wanted_shapes_on_this_cs, "shapes")
                         _render_shapes(
                             sdata=sdata,
                             render_params=params_copy,
@@ -837,15 +823,7 @@ class PlotAccessor:
                     )
 
                     if wanted_points_on_this_cs:
-                        params_copy = _create_initial_element_table_mapping(
-                            sdata, params_copy, wanted_points_on_this_cs
-                        )
-                        params_copy = _validate_colors_element_table_mapping_points_shapes(
-                            sdata, params_copy, wanted_points_on_this_cs
-                        )
-
-                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_points_on_this_cs)
-                    if wanted_points_on_this_cs:
+                        params_copy = _update_params(sdata, params_copy, wanted_points_on_this_cs, "points")
                         _render_points(
                             sdata=sdata,
                             render_params=params_copy,
@@ -862,13 +840,7 @@ class PlotAccessor:
                     )
 
                     if wanted_labels_on_this_cs:
-                        # Create element to table mapping and check whether specified color columns are in tables.
-                        params_copy = _create_initial_element_table_mapping(
-                            sdata, params_copy, wanted_labels_on_this_cs
-                        )
-                        params_copy = _update_element_table_mapping_label_colors(
-                            sdata, params_copy, wanted_labels_on_this_cs
-                        )
+                        params_copy = _update_params(sdata, params_copy, wanted_labels_on_this_cs, "labels")
 
                         for index, table in enumerate(params_copy.element_table_mapping.values()):
                             if table is None:
@@ -882,7 +854,6 @@ class PlotAccessor:
                                     palette=params_copy.palette,
                                 )
 
-                    params_copy = _match_length_elements_groups_palette(params_copy, wanted_labels_on_this_cs)
                     rasterize = (params_copy.scale is None) or (
                         isinstance(params_copy.scale, str)
                         and params_copy.scale != "full"
