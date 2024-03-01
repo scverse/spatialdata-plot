@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Union
+from typing import Any, Literal, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -57,6 +57,7 @@ from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, get_values
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, TableModel
+from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -1803,3 +1804,24 @@ def _match_length_elements_groups_palette(
             params.palette = [[None] for _ in range(len(render_elements))]
 
     return params
+
+
+def _get_wanted_render_elements(
+    sdata, sdata_wanted_elements, params, cs, element_type: Literal["images", "labels", "points", "shapes"]
+):
+    wants_elements = True
+    if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
+        wanted_elements = (
+            params.elements
+            if params.elements is not None
+            else list(eval(f"sdata.{element_type}.keys()"))  # noqa: PGH001
+        )
+
+        wanted_elements_on_cs = [
+            element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
+        ]
+
+        sdata_wanted_elements.extend(wanted_elements_on_cs)
+        return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
+
+    raise ValueError(f"Unknown element type {element_type}")

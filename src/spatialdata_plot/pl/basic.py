@@ -20,7 +20,6 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
-from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -44,6 +43,7 @@ from spatialdata_plot.pl.utils import (
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
+    _get_wanted_render_elements,
     _match_length_elements_groups_palette,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
@@ -781,20 +781,14 @@ class PlotAccessor:
                 # We create a copy here as the wanted elements can change from one cs to another.
                 params_copy = deepcopy(params)
                 if cmd == "render_images" and has_images:
-                    wants_images = True
-                    wanted_images = (
-                        params_copy.elements if params_copy.elements is not None else list(sdata.images.keys())
+                    wanted_elements, wanted_images_on_this_cs, wants_images = _get_wanted_render_elements(
+                        sdata, wanted_elements, params_copy, cs, "images"
                     )
-                    wanted_images_on_this_cs = [
-                        image
-                        for image in wanted_images
-                        if cs in set(get_transformation(sdata.images[image], get_all=True).keys())
-                    ]
 
                     params_copy = _match_length_elements_groups_palette(
                         params_copy, wanted_images_on_this_cs, image=True
                     )
-                    wanted_elements.extend(wanted_images_on_this_cs)
+
                     if wanted_images_on_this_cs:
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)
@@ -813,15 +807,9 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_shapes" and has_shapes:
-                    wants_shapes = True
-                    wanted_shapes = (
-                        params_copy.elements if params_copy.elements is not None else list(sdata.shapes.keys())
+                    wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
+                        sdata, wanted_elements, params_copy, cs, "shapes"
                     )
-                    wanted_shapes_on_this_cs = [
-                        shape
-                        for shape in wanted_shapes
-                        if cs in set(get_transformation(sdata.shapes[shape], get_all=True).keys())
-                    ]
                     if wanted_shapes_on_this_cs:
                         params_copy = _create_initial_element_table_mapping(
                             sdata, params_copy, wanted_shapes_on_this_cs
@@ -844,15 +832,9 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_points" and has_points:
-                    wants_points = True
-                    wanted_points = (
-                        params_copy.elements if params_copy.elements is not None else list(sdata.points.keys())
+                    wanted_elements, wanted_points_on_this_cs, wants_points = _get_wanted_render_elements(
+                        sdata, wanted_elements, params_copy, cs, "points"
                     )
-                    wanted_points_on_this_cs = [
-                        point
-                        for point in wanted_points
-                        if cs in set(get_transformation(sdata.points[point], get_all=True).keys())
-                    ]
 
                     if wanted_points_on_this_cs:
                         params_copy = _create_initial_element_table_mapping(
@@ -876,16 +858,9 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_labels" and has_labels:
-                    wants_labels = True
-                    wanted_labels = (
-                        params_copy.elements if params_copy.elements is not None else list(sdata.labels.keys())
+                    wanted_elements, wanted_labels_on_this_cs, wants_labels = _get_wanted_render_elements(
+                        sdata, wanted_elements, params_copy, cs, "labels"
                     )
-                    wanted_labels_on_this_cs = [
-                        label
-                        for label in wanted_labels
-                        if cs in set(get_transformation(sdata.labels[label], get_all=True).keys())
-                    ]
-                    wanted_elements.extend(wanted_labels_on_this_cs)
 
                     if wanted_labels_on_this_cs:
                         # Create element to table mapping and check whether specified color columns are in tables.
