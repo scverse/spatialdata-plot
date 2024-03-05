@@ -42,8 +42,29 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", channel=0).pl.show()
 
+    def test_plot_can_render_a_single_channel_from_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_multiscale_image", channel=0).pl.show()
+
+    def test_plot_can_render_a_single_channel_from_image_no_el(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(channel=0).pl.show()
+
+    def test_plot_can_render_a_single_channel_str_from_image(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(elements="blobs_image", channel="c1").pl.show()
+
+    def test_plot_can_render_a_single_channel_str_from_multiscale_image(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(elements="blobs_multiscale_image", channel="c1").pl.show()
+
     def test_plot_can_render_two_channels_from_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1]).pl.show()
+
+    def test_plot_can_render_two_channels_from_multiscale_image(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(elements="blobs_multiscale_image", channel=[0, 1]).pl.show()
+
+    def test_plot_can_render_two_channels_str_from_image(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(elements="blobs_image", channel=["c1", "c2"]).pl.show()
+
+    def test_plot_can_render_two_channels_str_from_multiscale_image(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(elements="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(elements="blobs_image", channel=1, palette="red").pl.show()
