@@ -1244,4 +1244,4 @@ def _multiscale_to_spatial_image(
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
     image = multiscale_image[optimal_scale][data_var_keys[0]]
 
-    return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image)
+    return Labels2DModel.parse(image) if is_label else Image2DModel.parse(image, c_coords=image.coords["c"].values)
