@@ -18,12 +18,8 @@ from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialI
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
 from spatialdata._core.data_extent import get_extent
-from spatialdata.models import (
-    PointsModel,
-)
-from spatialdata.transformations import (
-    get_transformation,
-)
+from spatialdata.models import PointsModel
+from spatialdata.transformations import get_transformation
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -132,7 +128,7 @@ def _render_shapes(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha
+            outline_alpha=render_params.outline_alpha,
             # **kwargs,
         )
 
@@ -284,7 +280,7 @@ def _render_points(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans
+            transform=trans,
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
@@ -397,7 +393,7 @@ def _render_images(
 
         # 1) Image has only 1 channel
         if n_channels == 1 and not isinstance(render_params.cmap_params, list):
-            layer = img.sel(c=channels).squeeze()
+            layer = img.sel(c=channels[0]).squeeze()
 
             if render_params.quantiles_for_norm != (None, None):
                 layer = _normalize(
