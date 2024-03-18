@@ -90,6 +90,4 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         table = table[:, ~table.var_names.isin(["channel_0_sum"])]
         sdata_blobs["multi_table"] = table
-        sdata_blobs.pl.render_labels(
-            color=["channel_0_sum"], table_name=["table"]
-        ).pl.show()
+        sdata_blobs.pl.render_labels(color=["channel_0_sum"], table_name=["table"]).pl.show()
