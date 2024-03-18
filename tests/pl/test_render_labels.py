@@ -83,3 +83,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             color=["channel_0_sum", "channel_1_sum"], table_name=["table", "multi_table"]
         ).pl.show()
+
+    def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
+        table = sdata_blobs["table"].copy()
+        table.obs["region"] = "blobs_multiscale_labels"
+        table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        table = table[:, ~table.var_names.isin(["channel_0_sum"])]
+        sdata_blobs["multi_table"] = table
+        sdata_blobs.pl.render_labels(
+            color=["channel_0_sum"], table_name=["table"]
+        ).pl.show()

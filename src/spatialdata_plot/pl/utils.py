@@ -592,6 +592,7 @@ def _get_colors_for_categorical_obs(
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
+    element_index: int,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     groups: Sequence[str] | str | None = None,
@@ -617,7 +618,7 @@ def _set_color_source_vec(
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            if palette is not None:
+            if palette[element_index][0] is not None:
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
@@ -1830,5 +1831,8 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
             params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
         else:
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
+
+    if params.palette is None:
+        params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)

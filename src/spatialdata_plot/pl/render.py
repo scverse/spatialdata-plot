@@ -83,6 +83,7 @@ def _render_shapes(
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=sdata_filt.shapes[e],
+            element_index=index,
             element_name=e,
             value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
@@ -248,6 +249,7 @@ def _render_points(
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
+            element_index=index,
             element_name=e,
             value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
@@ -591,6 +593,7 @@ def _render_labels(
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
             element=label,
+            element_index=i,
             element_name=e,
             value_to_plot=render_params.color[i],
             groups=render_params.groups,
