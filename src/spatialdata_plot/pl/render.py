@@ -132,7 +132,7 @@ def _render_shapes(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha
+            outline_alpha=render_params.outline_alpha,
             # **kwargs,
         )
 
@@ -284,7 +284,7 @@ def _render_points(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans
+            transform=trans,
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
