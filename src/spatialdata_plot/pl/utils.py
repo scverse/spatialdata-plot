@@ -1350,12 +1350,15 @@ def _update_element_table_mapping_label_colors(
             render_elements
         ), "Either one color should be given or the length should be equal to the number of elements being plotted."
         for index, element_name in enumerate(render_elements):
-            for table_name in element_table_mapping[element_name].copy():
-                if (
-                    params.color[index] not in sdata[table_name].obs.columns
-                    and params.color[index] not in sdata[table_name].var_names
-                ):
-                    element_table_mapping[element_name].remove(table_name)
+            if len(element_table_mapping[element_name]) !=0:
+                for table_name in element_table_mapping[element_name].copy():
+                    if (
+                        params.color[index] not in sdata[table_name].obs.columns
+                        and params.color[index] not in sdata[table_name].var_names
+                    ):
+                        element_table_mapping[element_name].remove(table_name)
+            else:
+                params.color[index] = None
 
     # We only want one table containing the color column per element
     for element_name, table_set in element_table_mapping.items():
