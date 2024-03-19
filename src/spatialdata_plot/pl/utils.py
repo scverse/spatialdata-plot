@@ -639,7 +639,9 @@ def _set_color_source_vec(
         else:
             palette_input = palette
 
-        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params)))
+        color_map = dict(
+            zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
+        )
 
         if color_map is None:
             raise ValueError("Unable to create color palette.")

@@ -88,7 +88,8 @@ def _render_shapes(
             value_to_plot=render_params.col_for_color[index],
             groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
             palette=render_params.palette[index]
-            if render_params.palette is not None else None, #and render_params.palette[index][0] is not None
+            if render_params.palette is not None
+            else None,  # and render_params.palette[index][0] is not None
             na_color=render_params.color[index] or render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
             table_name=table_name,
