@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, cast
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -1383,7 +1383,7 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = params.element_table_mapping
+    element_table_mapping = cast(dict, params.element_table_mapping)
     if len(params.color) == 1:
         color = params.color[0]
         col_color = params.col_for_color[0]
