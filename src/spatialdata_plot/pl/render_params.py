@@ -75,12 +75,12 @@ class ShapesRenderParams:
     col_for_color: str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
-    layer: str | None = None
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    element_table_mapping: dict[str, set[str] | str] | str | list[str] | None = None
 
 
 @dataclass
@@ -96,6 +96,7 @@ class PointsRenderParams:
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    element_table_mapping: dict[str, set[str] | str] | str | list[str] | None = None
 
 
 @dataclass
@@ -117,13 +118,13 @@ class LabelsRenderParams:
 
     cmap_params: CmapParams
     elements: str | Sequence[str] | None = None
-    color: str | None = None
+    color: list[str | None] | str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
     outline: bool = False
-    layer: str | None = None
     palette: ListedColormap | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None
     scale: str | list[str] | None = None
+    element_table_mapping: dict[str, set[str] | str] | str | list[str] | None = None
