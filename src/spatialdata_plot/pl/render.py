@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import abc
 from copy import copy
-from typing import Union
+from typing import Union, cast
 
 import dask
 import geopandas as gpd
@@ -261,7 +261,7 @@ def _render_points(
             palette=render_params.palette[index] if render_params.palette[index][0] is not None else None,
             na_color=default_color,
             cmap_params=render_params.cmap_params,
-            table_name=table_name,
+            table_name=cast(str, table_name),
         )
 
         # color_source_vector is None when the values aren't categorical
@@ -401,10 +401,11 @@ def _render_images(
             if render_params.cmap_params.norm is not None:  # type: ignore[attr-defined]
                 layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
-            if render_params.palette[i][0] is None:
-                cmap = render_params.cmap_params.cmap  # type: ignore[attr-defined]
-            else:
-                cmap = _get_linear_colormap(render_params.palette[i], "k")[0]  # type: ignore[arg-type]
+            if isinstance(render_params.palette, list):
+                if render_params.palette[i][0] is None:
+                    cmap = render_params.cmap_params.cmap  # type: ignore[attr-defined]
+                else:
+                    cmap = _get_linear_colormap(render_params.palette[i], "k")[0]  # type: ignore[arg-type]
 
             # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
             cmap._init()
@@ -544,7 +545,7 @@ def _render_labels(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
-    element_table_mapping = render_params.element_table_mapping
+    element_table_mapping = cast(dict[str, str], render_params.element_table_mapping)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -602,12 +603,12 @@ def _render_labels(
             element=label,
             element_index=i,
             element_name=e,
-            value_to_plot=render_params.color[i],
+            value_to_plot=cast(list[str], render_params.color)[i],
             groups=render_params.groups,
             palette=render_params.palette,
             na_color=render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
-            table_name=table_name,
+            table_name=cast(str, table_name),
         )
 
         if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
@@ -683,7 +684,7 @@ def _render_labels(
             cax=cax,
             fig_params=fig_params,
             adata=table,
-            value_to_plot=render_params.color[i],
+            value_to_plot=cast(list[str], render_params.color)[i],
             color_source_vector=color_source_vector,
             palette=render_params.palette,
             alpha=render_params.fill_alpha,

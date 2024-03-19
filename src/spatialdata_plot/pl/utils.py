@@ -1793,7 +1793,7 @@ def _match_length_elements_groups_palette(
     render_elements: list[str],
     image: bool = False,
 ):
-    if image:
+    if image and isinstance(params, ImageRenderParams):
         if params.palette is None:
             params.palette = [[None] for _ in range(len(render_elements))]
         else:

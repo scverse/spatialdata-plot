@@ -118,7 +118,7 @@ class LabelsRenderParams:
 
     cmap_params: CmapParams
     elements: str | Sequence[str] | None = None
-    color: str | None = None
+    color: list[str | None] | str | None = None
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
     outline: bool = False
