@@ -772,7 +772,7 @@ class PlotAccessor:
             wants_labels = False
             wants_points = False
             wants_shapes = False
-            wanted_elements = []
+            wanted_elements: list[str] = []
 
             for cmd, params in render_cmds:
                 # We create a copy here as the wanted elements can change from one cs to another.

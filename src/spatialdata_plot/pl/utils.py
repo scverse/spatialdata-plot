@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, cast
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -618,7 +618,7 @@ def _set_color_source_vec(
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            if palette[0] is not None:
+            if isinstance(palette, list) and palette[0] is not None:
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
@@ -633,8 +633,9 @@ def _set_color_source_vec(
             categories = groups
 
         if groups is not None:
-            palette_input = palette[0] if palette[0] is None else palette
-        elif palette is not None:
+            if isinstance(palette, list):
+                palette_input = palette[0] if palette[0] is None else palette
+        elif palette is not None and isinstance(palette, list):
             palette_input = palette[0]
         else:
             palette_input = palette
@@ -1345,7 +1346,7 @@ def _update_element_table_mapping_label_colors(
     element_table_mapping = params.element_table_mapping
 
     # If one color column check presence for each table annotating the specific element
-    if len(params.color) == 1:
+    if isinstance(params.color, list) and len(params.color) == 1:
         params.color = params.color * len(render_elements)
         for element_name in render_elements:
             for table_name in element_table_mapping[element_name].copy():
@@ -1382,7 +1383,7 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = params.element_table_mapping
+    element_table_mapping = cast(dict, params.element_table_mapping)
     if len(params.color) == 1:
         color = params.color[0]
         col_color = params.col_for_color[0]
@@ -1558,7 +1559,7 @@ def _validate_render_params(
     alpha: float | int | None = None,
     channel: list[str] | list[int] | str | int | None = None,
     cmap: list[Colormap] | Colormap | str | None = None,
-    color: str | None = None,
+    color: list[str] | str | None = None,
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
@@ -1792,7 +1793,7 @@ def _match_length_elements_groups_palette(
     render_elements: list[str],
     image: bool = False,
 ):
-    if image:
+    if image and isinstance(params, ImageRenderParams):
         if params.palette is None:
             params.palette = [[None] for _ in range(len(render_elements))]
         else:
@@ -1849,5 +1850,4 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
     # if params.palette is None:
     #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
-    params = _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
-    return params
+    return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
