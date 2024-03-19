@@ -618,7 +618,7 @@ def _set_color_source_vec(
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            if palette[element_index][0] is not None:
+            if palette[0] is not None:
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
@@ -632,7 +632,16 @@ def _set_color_source_vec(
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
-        color_map = dict(zip(categories, _get_colors_for_categorical_obs(categories, palette, cmap_params=cmap_params)))
+        if groups is not None:
+            palette_input = palette[0] if palette[0] is None else palette
+        elif palette is not None:
+            palette_input = palette[0]
+        else:
+            palette_input = palette
+
+        color_map = dict(
+            zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
+        )
 
         if color_map is None:
             raise ValueError("Unable to create color palette.")
@@ -1797,6 +1806,8 @@ def _match_length_elements_groups_palette(
                 params.groups = [groups[0] for _ in range(len(render_elements))]
                 if palette is not None:
                     params.palette = [palette[0] for _ in range(len(render_elements))]
+                else:
+                    params.palette = [[None] for _ in range(len(render_elements))]
             else:
                 if len(groups) != len(render_elements):
                     raise ValueError(
@@ -1835,7 +1846,8 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
         else:
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
-    if params.palette is None:
-        params.palette = [[None] for _ in wanted_elements_on_cs]
+    # if params.palette is None:
+    #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
-    return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
+    params = _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
+    return params
