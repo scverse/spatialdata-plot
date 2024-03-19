@@ -5,6 +5,7 @@ from copy import copy
 from typing import Union
 
 import dask
+import datashader as ds
 import geopandas as gpd
 import matplotlib
 import matplotlib.transforms as mtransforms
@@ -13,10 +14,12 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
+from dask.array import from_array
 from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
+from spatial_image import to_spatial_image
 from spatialdata._core.data_extent import get_extent
 from spatialdata.models import (
     PointsModel,
@@ -24,6 +27,7 @@ from spatialdata.models import (
 from spatialdata.transformations import (
     get_transformation,
 )
+from spatialdata.transformations.transformations import Identity
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -132,7 +136,8 @@ def _render_shapes(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha
+            outline_alpha=render_params.outline_alpha,
+            zorder=render_params.zorder,
             # **kwargs,
         )
 
@@ -236,6 +241,47 @@ def _render_points(
         points = dask.dataframe.from_pandas(points, npartitions=1)
         sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
+        # TODO: maybe move this, add heuristic
+        if len(points) > 100:
+            extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
+            x_ext = extent["x"][1]
+            y_ext = extent["y"][1]
+            previous_xlim = fig_params.ax.get_xlim()
+            previous_ylim = fig_params.ax.get_ylim()
+            x_range = [0, x_ext]
+            y_range = [0, y_ext]
+            # if sth else was plotted before: might need larger extent/size
+            # else: circles representing a point are "cut off at image borders"
+            if previous_ylim[0] > previous_ylim[1]:
+                if previous_xlim[0] < x_range[0]:
+                    x_range[0] = previous_xlim[0]
+                if previous_xlim[1] > x_range[1]:
+                    x_range[1] = previous_xlim[1]
+                # different order for x and y!
+                if previous_ylim[0] > y_range[1]:
+                    y_range[1] = previous_ylim[0]
+                if previous_ylim[1] < y_range[0]:
+                    y_range[0] = previous_ylim[1]
+            # round because we need integers
+            plot_width = int(np.round(x_range[1] - x_range[0]))
+            plot_height = int(np.round(y_range[1] - y_range[0]))
+
+            # use datashader for the visualization of points
+            # TODO: incorporate color, size etc
+            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
+            agg = cvs.points(sdata.points[e], "x", "y")
+            ds_result = ds.tf.shade(ds.tf.spread(agg, px=5), rescale_discrete_levels=True)
+
+            # TODO: we might not even need this conversion (directly use numpy array) for direct rendering
+            dsimage = to_spatial_image(
+                from_array(np.transpose(ds_result.to_numpy().base, (2, 0, 1))), dims=["c", "y", "x"]
+            )
+            dsimage.attrs["transform"] = {"global": Identity()}
+            # render image
+            stacked = np.stack([dsimage.data[c] for c in [0, 1, 2, 3]], axis=-1)
+            ax.imshow(stacked, zorder=render_params.zorder)
+            return  # comment out to not show normal points
+
         if render_params.col_for_color is not None:
             cols = sc.get.obs_df(adata, render_params.col_for_color)
             # maybe set color based on type
@@ -284,7 +330,8 @@ def _render_points(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans
+            transform=trans,
+            zorder=render_params.zorder,
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
@@ -419,6 +466,7 @@ def _render_images(
             im = ax.imshow(
                 layer,
                 cmap=cmap,
+                zorder=render_params.zorder,
             )
             im.set_transform(trans_data)
 
@@ -467,6 +515,7 @@ def _render_images(
                 im = ax.imshow(
                     stacked,
                     alpha=render_params.alpha,
+                    zorder=render_params.zorder,
                 )
                 im.set_transform(trans_data)
 
@@ -489,6 +538,7 @@ def _render_images(
                 im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
+                    zorder=render_params.zorder,
                 )
                 im.set_transform(trans_data)
 
@@ -508,6 +558,7 @@ def _render_images(
                 im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
+                    zorder=render_params.zorder,
                 )
                 im.set_transform(trans_data)
 
@@ -523,6 +574,7 @@ def _render_images(
                 im = ax.imshow(
                     colored,
                     alpha=render_params.alpha,
+                    zorder=render_params.zorder,
                 )
                 im.set_transform(trans_data)
 
@@ -642,6 +694,7 @@ def _render_labels(
                 norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
+                zorder=render_params.zorder,
             )
             _cax.set_transform(trans_data)
             cax = ax.add_image(_cax)
@@ -665,6 +718,7 @@ def _render_labels(
                 norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.outline_alpha,
                 origin="lower",
+                zorder=render_params.zorder,
             )
         else:
             # Default: no alpha, contour = infill
@@ -686,6 +740,7 @@ def _render_labels(
                 norm=None if categorical else render_params.cmap_params.norm,
                 alpha=render_params.fill_alpha,
                 origin="lower",
+                zorder=render_params.zorder,
             )
         _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)

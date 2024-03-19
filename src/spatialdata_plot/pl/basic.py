@@ -342,6 +342,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
+            zorder=n_steps,
         )
 
         return sdata
@@ -499,6 +500,7 @@ class PlotAccessor:
             alpha=alpha,
             transfunc=kwargs.get("transfunc", None),
             size=size,
+            zorder=n_steps,
         )
 
         return sdata
@@ -654,6 +656,7 @@ class PlotAccessor:
             alpha=alpha,
             quantiles_for_norm=quantiles_for_norm,
             scale=scale,
+            zorder=n_steps,
         )
 
         return sdata
@@ -815,6 +818,7 @@ class PlotAccessor:
             fill_alpha=fill_alpha,
             transfunc=kwargs.get("transfunc", None),
             scale=scale,
+            zorder=n_steps,
         )
 
         return sdata

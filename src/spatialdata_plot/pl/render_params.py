@@ -81,6 +81,7 @@ class ShapesRenderParams:
     fill_alpha: float = 0.3
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    zorder: int | None = None
 
 
 @dataclass
@@ -96,6 +97,7 @@ class PointsRenderParams:
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    zorder: int | None = None
 
 
 @dataclass
@@ -109,6 +111,7 @@ class ImageRenderParams:
     alpha: float = 1.0
     quantiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | list[str] | None = None
+    zorder: int | None = None
 
 
 @dataclass
@@ -127,3 +130,4 @@ class LabelsRenderParams:
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None
     scale: str | list[str] | None = None
+    zorder: int | None = None
