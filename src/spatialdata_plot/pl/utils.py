@@ -1403,15 +1403,18 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        for table_name in element_table_mapping[element_name].copy():
-                            if (
-                                col_color not in sdata[table_name].obs.columns
-                                and col_color not in sdata[table_name].var_names
-                            ):
-                                element_table_mapping[element_name].remove(table_name)
-                                params.col_for_color.append(None)
-                            else:
-                                params.col_for_color.append(col_color)
+                        if len(element_table_mapping[element_name].copy()) != 0:
+                            for table_name in element_table_mapping[element_name].copy():
+                                if (
+                                    col_color not in sdata[table_name].obs.columns
+                                    and col_color not in sdata[table_name].var_names
+                                ):
+                                    element_table_mapping[element_name].remove(table_name)
+                                    params.col_for_color.append(None)
+                                else:
+                                    params.col_for_color.append(col_color)
+                        else:
+                            params.col_for_color.append(None)
             else:
                 params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
@@ -1439,7 +1442,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                             element_table_mapping[element_name].remove(table_name)
     for index, element_name in enumerate(render_elements):
         # We only want one table value per element and only when there is a color column in the table
-        if params.col_for_color[index] is not None:
+        if isinstance(params.col_for_color, list) and params.col_for_color[index] is not None:
             table_set = element_table_mapping[element_name]
             if len(table_set) > 1:
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
