@@ -14,12 +14,10 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from dask.array import from_array
 from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
 from scanpy._settings import settings as sc_settings
-from spatial_image import to_spatial_image
 from spatialdata._core.data_extent import get_extent
 from spatialdata.models import (
     PointsModel,
@@ -27,7 +25,6 @@ from spatialdata.models import (
 from spatialdata.transformations import (
     get_transformation,
 )
-from spatialdata.transformations.transformations import Identity
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -267,19 +264,17 @@ def _render_points(
             plot_height = int(np.round(y_range[1] - y_range[0]))
 
             # use datashader for the visualization of points
-            # TODO: incorporate color, size etc
+            # TODO: parameters of render_params: color, col_for_color, groups, palette, cmap_params
             cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
             agg = cvs.points(sdata.points[e], "x", "y")
-            ds_result = ds.tf.shade(ds.tf.spread(agg, px=5), rescale_discrete_levels=True)
-
-            # TODO: we might not even need this conversion (directly use numpy array) for direct rendering
-            dsimage = to_spatial_image(
-                from_array(np.transpose(ds_result.to_numpy().base, (2, 0, 1))), dims=["c", "y", "x"]
+            px = int(np.round(render_params.size))
+            ds_result = ds.tf.shade(
+                ds.tf.spread(agg, px=px), rescale_discrete_levels=True, alpha=render_params.alpha * 255
             )
-            dsimage.attrs["transform"] = {"global": Identity()}
+
             # render image
-            stacked = np.stack([dsimage.data[c] for c in [0, 1, 2, 3]], axis=-1)
-            ax.imshow(stacked, zorder=render_params.zorder)
+            rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
+            ax.imshow(rbga_image, zorder=render_params.zorder)
             return  # comment out to not show normal points
 
         if render_params.col_for_color is not None:
