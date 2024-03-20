@@ -57,13 +57,7 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 
 ## Citation
 
-If you use `spatialdata` in your work, please cite the `spatialdata` publication as follows:
-
-> SpatialData: an open and universal data framework for spatial omics
->
-> Luca Marconato, Giovanni Palla, Kevin A. Yamauchi, Isaac Virshup, Elyas Heidari, Tim Treis, Marcella Toth, Rahul Shrestha, Harald Vöhringer, Wolfgang Huber, Moritz Gerstung, Josh Moore, Fabian J. Theis, Oliver Stegle
->
-> bioRxiv 2023.05.05.539647; doi: https://doi.org/10.1101/2023.05.05.539647
+Marconato, L., Palla, G., Yamauchi, K.A. et al. SpatialData: an open and universal data framework for spatial omics. Nat Methods (2024). https://doi.org/10.1038/s41592-024-02212-x
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
