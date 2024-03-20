@@ -628,11 +628,11 @@ def _set_color_source_vec(
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
         categories = color_source_vector.categories
 
-        if groups is not None:
+        if groups is not None and groups[0] is not None:
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
-        if groups is not None:
+        if groups is not None and groups[0] is not None:
             if isinstance(palette, list):
                 palette_input = palette[0] if palette[0] is None else palette
         elif palette is not None and isinstance(palette, list):
@@ -717,6 +717,7 @@ def _get_palette(
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
+    palette = None if isinstance(palette, list) and palette[0] is None else palette
     if adata is not None and palette is None:
         try:
             palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
@@ -772,6 +773,7 @@ def _maybe_set_colors(
             palette = ListedColormap([palette])
         if isinstance(palette, ListedColormap):  # `scanpy` requires it
             palette = cycler(color=palette.colors)
+        palette = None
         add_colors_for_categorical_sample_annotation(target, key=key, force_update_colors=True, palette=palette)
 
 
@@ -809,6 +811,7 @@ def _decorate_axs(
             # order of clusters should agree to palette order
             clusters = color_source_vector.unique()
             clusters = clusters[~clusters.isnull()]
+            palette = None if isinstance(palette, list) and palette[0] else palette
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )

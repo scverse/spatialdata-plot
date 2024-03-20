@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
@@ -762,7 +763,9 @@ class PlotAccessor:
         # go through tree
 
         for i, cs in enumerate(coordinate_systems):
-            sdata = self._copy()
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                sdata = self._copy()
             _, has_images, has_labels, has_points, has_shapes = (
                 cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
             )
@@ -851,7 +854,7 @@ class PlotAccessor:
                                     source=sdata[table],
                                     target=sdata[table],
                                     key=params_copy.color[index],
-                                    palette=params_copy.palette,
+                                    palette=params_copy.palette[index],
                                 )
 
                     rasterize = (params_copy.scale is None) or (
