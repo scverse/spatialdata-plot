@@ -238,45 +238,6 @@ def _render_points(
         points = dask.dataframe.from_pandas(points, npartitions=1)
         sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
-        # TODO: maybe move this, add heuristic
-        if len(points) > 100:
-            extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
-            x_ext = extent["x"][1]
-            y_ext = extent["y"][1]
-            previous_xlim = fig_params.ax.get_xlim()
-            previous_ylim = fig_params.ax.get_ylim()
-            x_range = [0, x_ext]
-            y_range = [0, y_ext]
-            # if sth else was plotted before: might need larger extent/size
-            # else: circles representing a point are "cut off at image borders"
-            if previous_ylim[0] > previous_ylim[1]:
-                if previous_xlim[0] < x_range[0]:
-                    x_range[0] = previous_xlim[0]
-                if previous_xlim[1] > x_range[1]:
-                    x_range[1] = previous_xlim[1]
-                # different order for x and y!
-                if previous_ylim[0] > y_range[1]:
-                    y_range[1] = previous_ylim[0]
-                if previous_ylim[1] < y_range[0]:
-                    y_range[0] = previous_ylim[1]
-            # round because we need integers
-            plot_width = int(np.round(x_range[1] - x_range[0]))
-            plot_height = int(np.round(y_range[1] - y_range[0]))
-
-            # use datashader for the visualization of points
-            # TODO: parameters of render_params: color, col_for_color, groups, palette, cmap_params
-            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
-            agg = cvs.points(sdata.points[e], "x", "y")
-            px = int(np.round(render_params.size))
-            ds_result = ds.tf.shade(
-                ds.tf.spread(agg, px=px), rescale_discrete_levels=True, alpha=render_params.alpha * 255
-            )
-
-            # render image
-            rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-            ax.imshow(rbga_image, zorder=render_params.zorder)
-            return  # comment out to not show normal points
-
         if render_params.col_for_color is not None:
             cols = sc.get.obs_df(adata, render_params.col_for_color)
             # maybe set color based on type
@@ -314,6 +275,52 @@ def _render_points(
         trans = get_transformation(sdata.points[e], get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
+        # optionally render points using datashader
+        # TODO: maybe move this, add heuristic
+        if len(points) > 100:
+            extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
+            x_ext = extent["x"][1]
+            y_ext = extent["y"][1]
+            previous_xlim = fig_params.ax.get_xlim()
+            previous_ylim = fig_params.ax.get_ylim()
+            x_range = [0, x_ext]
+            y_range = [0, y_ext]
+            # if sth else was plotted before: might need larger extent/size
+            # else: circles representing a point are "cut off at image borders"
+            if previous_ylim[0] > previous_ylim[1]:
+                if previous_xlim[0] < x_range[0]:
+                    x_range[0] = previous_xlim[0]
+                if previous_xlim[1] > x_range[1]:
+                    x_range[1] = previous_xlim[1]
+                # different order for x and y!
+                if previous_ylim[0] > y_range[1]:
+                    y_range[1] = previous_ylim[0]
+                if previous_ylim[1] < y_range[0]:
+                    y_range[0] = previous_ylim[1]
+            # round because we need integers
+            plot_width = int(np.round(x_range[1] - x_range[0]))
+            plot_height = int(np.round(y_range[1] - y_range[0]))
+
+            # use datashader for the visualization of points
+            # TODO: parameters of render_params: color, col_for_color, groups, palette, cmap_params
+            # TODO: what about trans at this point?
+            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
+            agg = cvs.points(sdata_filt.points[e], "x", "y")
+            px = int(np.round(render_params.size))
+            if render_params.color is None:
+                render_params.color = "black"
+            ds_result = ds.tf.shade(
+                ds.tf.spread(agg, px=px),
+                rescale_discrete_levels=True,
+                alpha=render_params.alpha * 255,
+                cmap=render_params.color,  # TODO: can we use color_vector somehow?
+            )
+
+            # render image
+            rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
+            ax.imshow(rbga_image, zorder=render_params.zorder)
+            return  # comment out to not show normal points
 
         norm = copy(render_params.cmap_params.norm)
         _cax = ax.scatter(
