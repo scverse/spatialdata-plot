@@ -1,10 +1,15 @@
 import matplotlib
+import numpy as np
+import pandas as pd
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from anndata import AnnData
 from spatialdata import SpatialData
+from spatialdata.models import TableModel
 
 from tests.conftest import PlotTester, PlotTesterMeta
 
+RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=40, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -50,3 +55,20 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(elements="blobs_points", color="red").pl.show()
+
+    def test_pplot_points_categorical_color(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_points"])
+        adata = AnnData(
+            RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        )
+        adata.obs["instance_id"] = np.arange(adata.n_obs)
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_points"
+        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
+        sdata_blobs["other_table"] = table
+
+        # with pytest.raises(ValueError, match="could not convert string"):
+        sdata_blobs.pl.render_points("blobs_points", color="category").pl.show()
+        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
+        sdata_blobs.pl.render_points("blobs_points", color="category").pl.show()

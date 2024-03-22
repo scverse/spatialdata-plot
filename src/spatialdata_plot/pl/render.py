@@ -213,21 +213,31 @@ def _render_points(
 
         coords = ["x", "y"]
         if col_for_color is not None:
-            if col_for_color not in points.columns:
+            if col_for_color not in points.columns and col_for_color not in sdata_filt[table_name].obs.columns:
                 # no error in case there are multiple elements, but onyl some have color key
                 msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
                 logger.warning(msg)
+            elif col_for_color in sdata_filt[table_name].obs.columns:
+                points = points[coords].compute()
             else:
                 coords += [col_for_color]
+                points = points[coords].compute()
 
-        points = points[coords].compute()
         if render_params.groups[index][0] is not None and col_for_color is not None:
             points = points[points[col_for_color].isin(render_params.groups[index])]
 
         # we construct an anndata to hack the plotting functions
-        adata = AnnData(
-            X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
-        )
+        if table_name is None:
+            adata = AnnData(
+                X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
+            )
+        else:
+            adata = AnnData(
+                X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
+            )
+            sdata_filt[table_name] = adata
+
+        # we can do this because of dealing with a copy
 
         # Convert back to dask dataframe to modify sdata
         points = dask.dataframe.from_pandas(points, npartitions=1)
