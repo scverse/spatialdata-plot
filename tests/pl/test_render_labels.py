@@ -25,13 +25,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(elements="blobs_labels").pl.show()
 
     def test_plot_can_render_multiscale_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.table.obs["region"] = "blobs_multiscale_labels"
-        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        sdata_blobs["table"].obs["region"] = "blobs_multiscale_labels"
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         sdata_blobs.pl.render_labels("blobs_multiscale_labels").pl.show()
 
     def test_plot_can_render_given_scale_of_multiscale_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.table.obs["region"] = "blobs_multiscale_labels"
-        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        sdata_blobs["table"].obs["region"] = "blobs_multiscale_labels"
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         sdata_blobs.pl.render_labels("blobs_multiscale_labels", scale="scale1").pl.show()
 
     def test_plot_can_do_rasterization(self, sdata_blobs: SpatialData):
@@ -42,8 +42,8 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         img.attrs["transform"] = sdata_blobs["blobs_labels"].transform
         sdata_blobs["blobs_giant_labels"] = img
 
-        sdata_blobs.table.obs["region"] = "blobs_giant_labels"
-        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
+        sdata_blobs["table"].obs["region"] = "blobs_giant_labels"
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
 
         sdata_blobs.pl.render_labels("blobs_giant_labels").pl.show()
 
@@ -55,8 +55,8 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         img.attrs["transform"] = sdata_blobs["blobs_labels"].transform
         sdata_blobs["blobs_giant_labels"] = img
 
-        sdata_blobs.table.obs["region"] = "blobs_giant_labels"
-        sdata_blobs.table.uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
+        sdata_blobs["table"].obs["region"] = "blobs_giant_labels"
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_giant_labels"
 
         sdata_blobs.pl.render_labels("blobs_giant_labels", scale="full").pl.show()
 
@@ -73,3 +73,21 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
+
+    def test_plot_can_color_labels(self, sdata_blobs: SpatialData):
+        table = sdata_blobs["table"].copy()
+        table.obs["region"] = "blobs_multiscale_labels"
+        table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        table = table[:, ~table.var_names.isin(["channel_0_sum"])]
+        sdata_blobs["multi_table"] = table
+        sdata_blobs.pl.render_labels(
+            color=["channel_0_sum", "channel_1_sum"], table_name=["table", "multi_table"]
+        ).pl.show()
+
+    def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
+        table = sdata_blobs["table"].copy()
+        table.obs["region"] = "blobs_multiscale_labels"
+        table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
+        table = table[:, ~table.var_names.isin(["channel_0_sum"])]
+        sdata_blobs["multi_table"] = table
+        sdata_blobs.pl.render_labels(color=["channel_0_sum"], table_name=["table"]).pl.show()
