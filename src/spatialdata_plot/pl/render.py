@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import abc
 from copy import copy
 from typing import Union, cast
@@ -37,6 +38,7 @@ from spatialdata_plot.pl.utils import (
     _get_collection_shape,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
+    _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
     _multiscale_to_spatial_image,
@@ -70,6 +72,7 @@ def _render_shapes(
         elements = list(sdata_filt.shapes.keys())
 
     for index, e in enumerate(elements):
+        col_for_color = render_params.col_for_color[index]
         shapes = sdata.shapes[e]
 
         table_name = element_table_mapping.get(e)
@@ -79,13 +82,28 @@ def _render_shapes(
             _, region_key, _ = get_table_keys(sdata[table_name])
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
+        if (
+            col_for_color is not None
+            and table_name is not None
+            and col_for_color in sdata_filt[table_name].obs.columns
+            and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
+            and not _is_coercable_to_float(color_col)
+        ):
+            warnings.warn(
+                f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
+                f"Consider converting before plotting.",
+                UserWarning,
+                stacklevel=2,
+            )
+            sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=sdata_filt.shapes[e],
             element_index=index,
             element_name=e,
-            value_to_plot=render_params.col_for_color[index],
+            value_to_plot=col_for_color,
             groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
             palette=(
                 render_params.palette[index] if render_params.palette is not None else None
@@ -170,7 +188,7 @@ def _render_shapes(
                 cax=cax,
                 fig_params=fig_params,
                 adata=table,
-                value_to_plot=render_params.col_for_color[index],
+                value_to_plot=col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -212,16 +230,32 @@ def _render_points(
         table_name = element_table_mapping.get(e)
 
         coords = ["x", "y"]
-        if col_for_color is not None:
-            if col_for_color not in points.columns and col_for_color not in sdata_filt[table_name].obs.columns:
-                # no error in case there are multiple elements, but onyl some have color key
-                msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
-                logger.warning(msg)
-            elif col_for_color in sdata_filt[table_name].obs.columns:
-                points = points[coords].compute()
-            else:
-                coords += [col_for_color]
-                points = points[coords].compute()
+        # if col_for_color is not None:
+        if (
+            col_for_color is not None
+            and col_for_color not in points.columns
+            and col_for_color not in sdata_filt[table_name].obs.columns
+        ):
+            # no error in case there are multiple elements, but onyl some have color key
+            msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
+            logger.warning(msg)
+        elif col_for_color is None or (table_name is not None and col_for_color in sdata_filt[table_name].obs.columns):
+            points = points[coords].compute()
+            if (
+                col_for_color
+                and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
+                and not _is_coercable_to_float(color_col)
+            ):
+                warnings.warn(
+                    f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
+                    f"plotting. Consider converting before plotting.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+        else:
+            coords += [col_for_color]
+            points = points[coords].compute()
 
         if render_params.groups[index][0] is not None and col_for_color is not None:
             points = points[points[col_for_color].isin(render_params.groups[index])]
@@ -569,6 +603,7 @@ def _render_labels(
         label = sdata_filt.labels[e]
         extent = get_extent(label, coordinate_system=coordinate_system)
         scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+        color = render_params.color[i]
 
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
@@ -613,7 +648,7 @@ def _render_labels(
             element=label,
             element_index=i,
             element_name=e,
-            value_to_plot=cast(list[str], render_params.color)[i],
+            value_to_plot=color,
             groups=render_params.groups[i],
             palette=render_params.palette[i],
             na_color=render_params.cmap_params.na_color,
@@ -694,7 +729,7 @@ def _render_labels(
             cax=cax,
             fig_params=fig_params,
             adata=table,
-            value_to_plot=cast(list[str], render_params.color)[i],
+            value_to_plot=color,
             color_source_vector=color_source_vector,
             palette=render_params.palette[i],
             alpha=render_params.fill_alpha,

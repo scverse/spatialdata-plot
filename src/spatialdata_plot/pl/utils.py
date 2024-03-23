@@ -1898,3 +1898,8 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
     #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
+
+
+def _is_coercable_to_float(series):
+    numeric_series = pd.to_numeric(series, errors="coerce")
+    return not numeric_series.isnull().any()

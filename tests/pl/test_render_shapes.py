@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from anndata import AnnData
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData
 from spatialdata.models import ShapesModel, TableModel
@@ -16,6 +17,7 @@ sc.set_figure_params(dpi=40, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
+RNG = np.random.default_rng(seed=42)
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
 # 2. tests which produce a plot must be prefixed with `test_plot_`
@@ -253,3 +255,30 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
         (sdata_blobs.pl.render_shapes(elements="blobs_circles", color="red").pl.show())
+
+    def test_plot_shapes_coercable_categorical_color(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_polygons"])
+        adata = AnnData(RNG.normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["instance_id"] = np.arange(adata.n_obs)
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_polygons"
+        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
+        sdata_blobs["table"] = table
+
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="category").pl.show()
+
+    def test_plot_shapes_categorical_color(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_polygons"])
+        adata = AnnData(RNG.normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["instance_id"] = np.arange(adata.n_obs)
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_polygons"
+        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
+        sdata_blobs["table"] = table
+
+        sdata_blobs["table"].obs["category"] = sdata_blobs["table"].obs["category"].astype("category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="category").pl.show()
