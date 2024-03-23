@@ -54,9 +54,9 @@ from skimage.util import map_array
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
 from spatialdata._core.operations.rasterize import rasterize
-from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, get_values
+from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, _ValueOrigin, get_values
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, TableModel
+from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, TableModel, get_model
 from spatialdata.transformations.operations import get_transformation
 
 from spatialdata_plot._logging import logger
@@ -211,7 +211,13 @@ def _get_collection_shape(
         if norm is None:
             c = cmap(c)
         else:
-            norm = colors.Normalize(vmin=min(c), vmax=max(c))
+            try:
+                norm = colors.Normalize(vmin=min(c), vmax=max(c))
+            except ValueError as e:
+                raise ValueError(
+                    "Could not convert values in the `color` column to float, if `color` column represents"
+                    " categories, set the column to categorical dtype."
+                ) from e
             c = cmap(norm(c))
 
     fill_c = ColorConverter().to_rgba_array(c)
@@ -589,6 +595,29 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
+def _locate_points_value_in_table(value_key: str, sdata: SpatialData, element_name: str, table_name: str):
+    table = sdata[table_name]
+
+    if value_key in table.obs.columns:
+        value = table.obs[value_key]
+        is_categorical = isinstance(value.dtype, CategoricalDtype)
+        return _ValueOrigin(origin="obs", is_categorical=is_categorical, value_key=value_key)
+
+    is_categorical = False
+    return _ValueOrigin(origin="var", is_categorical=is_categorical, value_key=value_key)
+
+
+# TODO consider move to relational query in spatialdata
+def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str):
+    """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
+    table = sdata[table_name]
+    if origin.origin == "obs":
+        return table.obs[origin.value_key]
+    if origin.origin == "var":
+        return table[:, table.var_names.isin([origin.value_key])].X.copy()
+    raise ValueError(f"Color column `{origin.value_key}` not found in table {table_name}")
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -605,16 +634,28 @@ def _set_color_source_vec(
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
+    model = get_model(sdata[element_name])
+
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+    if model == PointsModel and table_name is not None:
+        origin = _locate_points_value_in_table(
+            value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name
+        )
+        if origin is not None:
+            origins.append(origin)
+
     if len(origins) > 1:
         raise ValueError(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
         )
 
     if len(origins) == 1:
-        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-        color_source_vector = vals[value_to_plot]
+        if model == PointsModel and table_name is not None:
+            color_source_vector = get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
+        else:
+            vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+            color_source_vector = vals[value_to_plot]
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
@@ -1857,3 +1898,8 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
     #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
+
+
+def _is_coercable_to_float(series):
+    numeric_series = pd.to_numeric(series, errors="coerce")
+    return not numeric_series.isnull().any()
