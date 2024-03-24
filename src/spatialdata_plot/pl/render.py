@@ -645,7 +645,6 @@ def _render_labels(
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
 
-        # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
             element=label,
