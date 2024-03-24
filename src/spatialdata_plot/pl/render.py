@@ -591,6 +591,9 @@ def _render_labels(
     elements = render_params.elements
     element_table_mapping = cast(dict[str, str], render_params.element_table_mapping)
 
+    if render_params.outline is False:
+        render_params.outline_alpha = 0
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=any(value is not None for value in element_table_mapping.values()),
@@ -668,7 +671,7 @@ def _render_labels(
                 seg_boundaries=render_params.outline,
                 na_color=render_params.cmap_params.na_color,
             )
-
+            # labels_infill[:,:,3] = render_params.fill_alpha
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
