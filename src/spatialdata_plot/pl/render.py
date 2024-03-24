@@ -670,7 +670,7 @@ def _render_labels(
                 seg_boundaries=render_params.outline,
                 na_color=render_params.cmap_params.na_color,
             )
-            # labels_infill[:,:,3] = render_params.fill_alpha
+
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
