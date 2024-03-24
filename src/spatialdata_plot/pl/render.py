@@ -591,6 +591,9 @@ def _render_labels(
     elements = render_params.elements
     element_table_mapping = cast(dict[str, str], render_params.element_table_mapping)
 
+    if render_params.outline is False:
+        render_params.outline_alpha = 0
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=any(value is not None for value in element_table_mapping.values()),
@@ -642,7 +645,6 @@ def _render_labels(
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
 
-        # get color vector (categorical or continuous)
         color_source_vector, color_vector, categorical = _set_color_source_vec(
             sdata=sdata_filt,
             element=label,
