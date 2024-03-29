@@ -1870,8 +1870,12 @@ def _match_length_elements_groups_palette(
 
 
 def _get_wanted_render_elements(
-    sdata, sdata_wanted_elements, params, cs, element_type: Literal["images", "labels", "points", "shapes"]
-):
+    sdata: SpatialData,
+    sdata_wanted_elements: list[str],
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    cs: str,
+    element_type: Literal["images", "labels", "points", "shapes"],
+) -> tuple[list[str], list[str], bool]:
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         wanted_elements = params.elements if params.elements is not None else list(getattr(sdata, element_type).keys())
