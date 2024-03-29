@@ -1839,7 +1839,7 @@ def _match_length_elements_groups_palette(
     params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     render_elements: list[str],
     image: bool = False,
-):
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     if image and isinstance(params, ImageRenderParams):
         if params.palette is None:
             params.palette = [[None] for _ in range(len(render_elements))]
@@ -1890,7 +1890,12 @@ def _get_wanted_render_elements(
     raise ValueError(f"Unknown element type {element_type}")
 
 
-def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["images", "labels", "points", "shapes"]):
+def _update_params(
+    sdata: SpatialData,
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    wanted_elements_on_cs: list[str],
+    element_type: Literal["images", "labels", "points", "shapes"],
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     if element_type in ["labels", "points", "shapes"] and wanted_elements_on_cs:
         params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
         if element_type == "labels":
@@ -1898,8 +1903,6 @@ def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["
         else:
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
-    # if params.palette is None:
-    #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
 
