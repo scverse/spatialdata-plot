@@ -1387,13 +1387,14 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = cast(params.element_table_mapping, dict[str, str])
+    element_table_mapping: dict[str, set[str]] = params.element_table_mapping
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
         params.color = params.color * len(render_elements)
         for element_name in render_elements:
-            for table_name in element_table_mapping[element_name].copy():
+            table_names = element_table_mapping[element_name].copy()
+            for table_name in table_names:
                 if (
                     params.color[0] not in sdata[table_name].obs.columns
                     and params.color[0] not in sdata[table_name].var_names
