@@ -1387,7 +1387,7 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = params.element_table_mapping
+    element_table_mapping = cast(params.element_table_mapping, dict[str, str])
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
@@ -1845,7 +1845,7 @@ def _match_length_elements_groups_palette(
             params.palette = [[None] for _ in range(len(render_elements))]
         else:
             params.palette = [params.palette[0] for _ in range(len(render_elements))]
-    else:
+    elif not isinstance(params, ImageRenderParams):
         groups = params.groups
         palette = params.palette
         # We already checked before that length of groups and palette is the same
