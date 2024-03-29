@@ -608,7 +608,7 @@ def _locate_points_value_in_table(value_key: str, sdata: SpatialData, element_na
 
 
 # TODO consider move to relational query in spatialdata
-def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str):
+def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str) -> pd.Series:
     """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
     table = sdata[table_name]
     if origin.origin == "obs":
@@ -1606,7 +1606,7 @@ def _validate_render_params(
     alpha: float | int | None = None,
     channel: list[str] | list[int] | str | int | None = None,
     cmap: list[Colormap] | Colormap | str | None = None,
-    color: list[str] | str | None = None,
+    color: list[str | None] | str | None = None,
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
