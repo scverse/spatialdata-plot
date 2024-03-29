@@ -276,9 +276,11 @@ def _render_points(
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
+        norm = copy(render_params.cmap_params.norm)
+
         # optionally render points using datashader
         # TODO: maybe move this, add heuristic
-        if len(points) > 100:
+        if len(points) > 50:
             extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
             x_ext = extent["x"][1]
             y_ext = extent["y"][1]
@@ -303,40 +305,49 @@ def _render_points(
             plot_height = int(np.round(y_range[1] - y_range[0]))
 
             # use datashader for the visualization of points
-            # TODO: parameters of render_params: color, col_for_color, groups, palette, cmap_params
-            # TODO: what about trans at this point?
+            # TODO: parameters of render_params: color, col_for_color, palette, cmap_params
+            # TODO: what about trans/norm at this point?
             cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
-            agg = cvs.points(sdata_filt.points[e], "x", "y")
+            # TODO: design choice: do we want count as aggregate? for many overlapping points it could be cool
+            # currently it would be enough to just go full opacity when there is a point
+            if col_for_color is not None:
+                agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.count()))
+            else:
+                agg = cvs.points(sdata_filt.points[e], "x", "y")
             px = int(np.round(render_params.size))
-            if render_params.color is None:
-                render_params.color = "black"
+
+            color_key = (
+                [x[:-2] for x in color_vector.categories.values]
+                if type(color_vector) == pd.core.arrays.categorical.Categorical
+                else None
+            )  # TODO: is order always correct?
             ds_result = ds.tf.shade(
                 ds.tf.spread(agg, px=px),
                 rescale_discrete_levels=True,
                 alpha=render_params.alpha * 255,
-                cmap=render_params.color,  # TODO: can we use color_vector somehow?
+                cmap=color_vector[0][:-2],
+                color_key=color_key,
             )
-
             # render image
             rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
             ax.imshow(rbga_image, zorder=render_params.zorder)
-            return  # comment out to not show normal points
-
-        norm = copy(render_params.cmap_params.norm)
-        _cax = ax.scatter(
-            adata[:, 0].X.flatten(),
-            adata[:, 1].X.flatten(),
-            s=render_params.size,
-            c=color_vector,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            alpha=render_params.alpha,
-            transform=trans,
-            zorder=render_params.zorder,
-            # **kwargs,
-        )
-        cax = ax.add_collection(_cax)
+            cax = None
+        else:
+            # original way of plotting points
+            _cax = ax.scatter(
+                adata[:, 0].X.flatten(),
+                adata[:, 1].X.flatten(),
+                s=render_params.size,
+                c=color_vector,
+                rasterized=sc_settings._vector_friendly,
+                cmap=render_params.cmap_params.cmap,
+                norm=norm,
+                alpha=render_params.alpha,
+                transform=trans,
+                zorder=render_params.zorder,
+                # **kwargs,
+            )
+            cax = ax.add_collection(_cax)
 
         if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
             if color_source_vector is None:
