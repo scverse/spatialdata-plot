@@ -756,6 +756,7 @@ def _get_palette(
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
+    # print(cluster_key, type(cluster_key))
     palette = None if isinstance(palette, list) and palette[0] is None else palette
     if adata is not None and palette is None:
         try:
@@ -820,7 +821,7 @@ def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
     fig_params: FigParams,
-    value_to_plot: str | None,
+    value_to_plot: str | None,  # str | None,
     color_source_vector: pd.Series[CategoricalDtype],
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
@@ -1349,12 +1350,12 @@ def _create_initial_element_table_mapping(
     -------
     The updated render parameters.
     """
-    element_table_mapping: dict[str, set[str]] = defaultdict(set)
+    element_table_mapping: dict[str, set[str | None]] = defaultdict(set)
 
     if not params.element_table_mapping:
         for element_name in render_elements:
             element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
-    else:
+    elif isinstance(params.element_table_mapping, (list, str)):
         table_names: list[str] = (
             [params.element_table_mapping]
             if isinstance(params.element_table_mapping, str)
@@ -1386,7 +1387,7 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping: dict[str, set[str]] = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None]] = params.element_table_mapping
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
@@ -1415,6 +1416,7 @@ def _update_element_table_mapping_label_colors(
                 params.color[index] = None
 
     # We only want one table containing the color column per element
+    table_set: set[str | None]
     for element_name, table_set in element_table_mapping.items():
         if len(table_set) > 1:
             raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
@@ -1434,11 +1436,11 @@ def _validate_colors_element_table_mapping_points_shapes(
         # This means that we are dealing with colors that are color like
         if color is not None:
             params.color = [color] * len(render_elements)
-            params.col_for_color = [None] * len(render_elements)
+            params.col_for_color: list[None] = [None] * len(render_elements)
         else:
             if col_color is not None:
                 params.color = [None] * len(render_elements)
-                params.col_for_color = []
+                params.col_for_color: list[str | None] = []
                 for element_name in render_elements:
                     if col_color in sdata[element_name].columns:
                         params.col_for_color.append(col_color)
@@ -1458,7 +1460,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                             params.col_for_color.append(None)
             else:
                 params.color = [None] * len(render_elements)
-                params.col_for_color = [None] * len(render_elements)
+                params.col_for_color: list[None] = [None] * len(render_elements)
     else:
         if len(params.color) != len(render_elements):
             warnings.warn(
@@ -1468,7 +1470,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                 stacklevel=2,
             )
             params.color = [None] * len(render_elements)
-            params.col_for_color = [None] * len(render_elements)
+            params.col_for_color: list[None] = [None] * len(render_elements)
         else:
             for index, color in enumerate(params.color):
                 if color is None:
@@ -1497,6 +1499,7 @@ def _validate_colors_element_table_mapping_points_shapes(
         else:
             element_table_mapping[element_name] = None
     params.element_table_mapping = element_table_mapping
+    # print(params.col_for_color)
     return params
 
 
@@ -1759,7 +1762,7 @@ def _validate_render_params(
                     col_for_color = [color]
                     color = [None]
             else:
-                col_for_color = []
+                col_for_color: list[str | None] = []
                 for index, c in enumerate(color):
                     if colors.is_color_like(c):
                         logger.info(f"Value `{c}` in list 'color' appears to be a color, using it as such.")
@@ -1896,11 +1899,11 @@ def _update_params(
     wanted_elements_on_cs: list[str],
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    if element_type in ["labels", "points", "shapes"] and wanted_elements_on_cs:
+    if isinstance(params, (LabelsRenderParams, PointsRenderParams, ShapesRenderParams)) and wanted_elements_on_cs:
         params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
-        if element_type == "labels":
+        if isinstance(params, LabelsRenderParams):
             params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
-        else:
+        if isinstance(params, (PointsRenderParams, ShapesRenderParams)):
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
     image_flag = element_type == "images"
