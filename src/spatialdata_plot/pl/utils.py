@@ -595,7 +595,7 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
-def _locate_points_value_in_table(value_key: str, sdata: SpatialData, element_name: str, table_name: str):
+def _locate_points_value_in_table(value_key: str, sdata: SpatialData, table_name: str) -> _ValueOrigin:
     table = sdata[table_name]
 
     if value_key in table.obs.columns:
@@ -639,9 +639,7 @@ def _set_color_source_vec(
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     if model == PointsModel and table_name is not None:
-        origin = _locate_points_value_in_table(
-            value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name
-        )
+        origin = _locate_points_value_in_table(value_key=value_to_plot, sdata=sdata, table_name=table_name)
         if origin is not None:
             origins.append(origin)
 
@@ -1908,6 +1906,6 @@ def _update_params(
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
 
 
-def _is_coercable_to_float(series):
+def _is_coercable_to_float(series: pd.Series) -> bool:
     numeric_series = pd.to_numeric(series, errors="coerce")
     return not numeric_series.isnull().any()
