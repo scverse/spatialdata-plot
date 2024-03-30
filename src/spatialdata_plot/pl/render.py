@@ -305,22 +305,23 @@ def _render_points(
             plot_height = int(np.round(y_range[1] - y_range[0]))
 
             # use datashader for the visualization of points
-            # TODO: parameters of render_params: color, col_for_color, palette, cmap_params
             # TODO: what about trans/norm at this point?
             cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
-            # TODO: design choice: do we want count as aggregate? for many overlapping points it could be cool
-            # currently it would be enough to just go full opacity when there is a point
-            if col_for_color is not None:
+            # TODO: design choice: do we want count as reduction?
+            if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
                 agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.count()))
+                # agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.any()))
             else:
-                agg = cvs.points(sdata_filt.points[e], "x", "y")
-            px = int(np.round(render_params.size))
-
+                agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.count())
+                # agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.any())
+            # NOTE: s in matplotlib is in units of points**2
+            px = int(np.round(np.sqrt(render_params.size)))
             color_key = (
                 [x[:-2] for x in color_vector.categories.values]
-                if type(color_vector) == pd.core.arrays.categorical.Categorical
+                if (type(color_vector) == pd.core.arrays.categorical.Categorical)
+                and (len(color_vector.categories.values) > 1)
                 else None
-            )  # TODO: is order always correct?
+            )
             ds_result = ds.tf.shade(
                 ds.tf.spread(agg, px=px),
                 rescale_discrete_levels=True,
