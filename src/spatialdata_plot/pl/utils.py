@@ -756,7 +756,6 @@ def _get_palette(
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
-    # print(cluster_key, type(cluster_key))
     palette = None if isinstance(palette, list) and palette[0] is None else palette
     if adata is not None and palette is None:
         try:
@@ -1436,11 +1435,11 @@ def _validate_colors_element_table_mapping_points_shapes(
         # This means that we are dealing with colors that are color like
         if color is not None:
             params.color = [color] * len(render_elements)
-            params.col_for_color: list[None] = [None] * len(render_elements)
+            params.col_for_color = [None] * len(render_elements)
         else:
             if col_color is not None:
                 params.color = [None] * len(render_elements)
-                params.col_for_color: list[str | None] = []
+                params.col_for_color = []
                 for element_name in render_elements:
                     if col_color in sdata[element_name].columns:
                         params.col_for_color.append(col_color)
@@ -1499,7 +1498,6 @@ def _validate_colors_element_table_mapping_points_shapes(
         else:
             element_table_mapping[element_name] = None
     params.element_table_mapping = element_table_mapping
-    # print(params.col_for_color)
     return params
 
 
@@ -1913,3 +1911,25 @@ def _update_params(
 def _is_coercable_to_float(series: pd.Series) -> bool:
     numeric_series = pd.to_numeric(series, errors="coerce")
     return not numeric_series.isnull().any()
+
+
+def _return_list_str_none(parameter: list[str | None] | str | None) -> list[str | None]:
+    """Force mypy to recognize list of string and None."""
+    if isinstance(parameter, list) and all(isinstance(item, (str, type(None))) for item in parameter):
+        checked_parameter = parameter if isinstance(parameter, list) else [None]
+    else:
+        checked_parameter = [None]
+    return checked_parameter
+
+
+def _return_list_list_str_none(
+    parameter: str | list[list[str | None]] | list[str | None] | None,
+) -> list[list[str | None]]:
+    if not isinstance(parameter, list) or not all(isinstance(item, list) for item in parameter):
+        return [[None]]
+
+    return (
+        parameter
+        if all(all(isinstance(inner_item, (str, type(None))) for inner_item in sublist) for sublist in parameter)
+        else [[None]]
+    )

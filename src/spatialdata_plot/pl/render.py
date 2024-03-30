@@ -44,6 +44,8 @@ from spatialdata_plot.pl.utils import (
     _multiscale_to_spatial_image,
     _normalize,
     _rasterize_if_necessary,
+    _return_list_list_str_none,
+    _return_list_str_none,
     _set_color_source_vec,
     to_hex,
 )
@@ -62,8 +64,11 @@ def _render_shapes(
 ) -> None:
     elements = render_params.elements
     element_table_mapping = render_params.element_table_mapping
-    cols_for_color: list[str | None] = render_params.col_for_color
+    cols_for_color = _return_list_str_none(render_params.col_for_color)
+    colors = _return_list_str_none(render_params.color)
+    groups = _return_list_list_str_none(render_params.groups)
 
+    assert isinstance(element_table_mapping, dict)
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=any(value is not None for value in element_table_mapping.values()),
@@ -105,13 +110,13 @@ def _render_shapes(
             element_index=index,
             element_name=e,
             value_to_plot=col_for_color,
-            groups=render_params.groups[index] if render_params.groups[index][0] is not None else None,
+            groups=groups[index] if groups[index][0] is not None else None,
             palette=(
                 render_params.palette[index] if render_params.palette is not None else None
             ),  # and render_params.palette[index][0] is not None
-            na_color=render_params.color[index] or render_params.cmap_params.na_color,
+            na_color=colors[index] or render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
-            table_name=table_name,
+            table_name=cast(str, table_name),
         )
 
         values_are_categorical = color_source_vector is not None
@@ -127,12 +132,8 @@ def _render_shapes(
 
         # filter by `groups`
 
-        if (
-            isinstance(render_params.groups, list)
-            and render_params.groups[index][0] is not None
-            and color_source_vector is not None
-        ):
-            mask = color_source_vector.isin(render_params.groups[index])
+        if isinstance(groups, list) and groups[index][0] is not None and color_source_vector is not None:
+            mask = color_source_vector.isin(groups[index])
             shapes = shapes[mask]
             shapes = shapes.reset_index()
             color_source_vector = color_source_vector[mask]
@@ -178,7 +179,7 @@ def _render_shapes(
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
         ):
             # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None and render_params.col_for_color[index] is not None:
+            if color_source_vector is not None and col_for_color is not None:
                 color_source_vector = color_source_vector.remove_unused_categories()
 
             # False if user specified color-like with 'color' parameter
@@ -216,9 +217,10 @@ def _render_points(
 ) -> None:
     elements = render_params.elements
     element_table_mapping: dict[str, str | None] = render_params.element_table_mapping
-    cols_for_color: list[str | None] = render_params.col_for_color
-    groups: list[list[str | None]] = render_params.groups
-    palettes: list[list[str | None]] = render_params.palette
+    cols_for_color = _return_list_str_none(render_params.col_for_color)
+    groups = _return_list_list_str_none(render_params.groups)
+    palettes = _return_list_list_str_none(render_params.palette)
+    colors = _return_list_str_none(render_params.color)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -294,9 +296,7 @@ def _render_points(
 
         # when user specified a single color, we overwrite na with it
         default_color = (
-            render_params.color[index]
-            if col_for_color is None and render_params.color[index] is not None
-            else render_params.cmap_params.na_color
+            colors[index] if col_for_color is None and colors[index] is not None else render_params.cmap_params.na_color
         )
 
         color_source_vector, color_vector, _ = _set_color_source_vec(
@@ -590,8 +590,10 @@ def _render_labels(
 ) -> None:
     elements = render_params.elements
     element_table_mapping = cast(dict[str, str], render_params.element_table_mapping)
-    palettes: list[str | None] = render_params.palette
-
+    palettes = _return_list_list_str_none(render_params.palette)
+    colors = _return_list_str_none(render_params.color)
+    groups = _return_list_list_str_none(render_params.groups)
+    # print(palettes)
     if render_params.outline is False:
         render_params.outline_alpha = 0
 
@@ -607,7 +609,7 @@ def _render_labels(
         label = sdata_filt.labels[e]
         extent = get_extent(label, coordinate_system=coordinate_system)
         scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
-        color = render_params.color[i]
+        color = colors[i]
 
         # get best scale out of multiscale label
         if isinstance(label, MultiscaleSpatialImage):
@@ -652,7 +654,7 @@ def _render_labels(
             element_index=i,
             element_name=e,
             value_to_plot=color,
-            groups=render_params.groups[i] if isinstance(render_params.groups, list) else None,
+            groups=groups[i],  # if isinstance(groups, list) else None,
             palette=palettes[i],
             na_color=render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
