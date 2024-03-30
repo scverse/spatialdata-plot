@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union, cast
+from typing import Any, Literal, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -625,7 +625,7 @@ def _set_color_source_vec(
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     groups: Sequence[str | None] | str | None = None,
-    palette: list[str | None] | None = None,
+    palette: str | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -1350,6 +1350,7 @@ def _create_initial_element_table_mapping(
     The updated render parameters.
     """
     element_table_mapping: dict[str, set[str]] = defaultdict(set)
+
     if not params.element_table_mapping:
         for element_name in render_elements:
             element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
@@ -1398,7 +1399,7 @@ def _update_element_table_mapping_label_colors(
                     and params.color[0] not in sdata[table_name].var_names
                 ):
                     element_table_mapping[element_name].remove(table_name)
-    if len(params.color) > 1:
+    if isinstance(params.color, list) and len(params.color) > 1:
         assert len(params.color) == len(
             render_elements
         ), "Either one color should be given or the length should be equal to the number of elements being plotted."
@@ -1426,7 +1427,7 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = cast(dict, params.element_table_mapping)
+    element_table_mapping: dict[str, set[str | None]] = params.element_table_mapping
     if len(params.color) == 1:
         color = params.color[0]
         col_color = params.col_for_color[0]

@@ -122,7 +122,7 @@ class LabelsRenderParams:
     groups: str | Sequence[str] | None = None
     contour_px: int | None = None
     outline: bool = False
-    palette: ListedColormap | str | None = None
+    palette: ListedColormap | list[str | None] | str | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None

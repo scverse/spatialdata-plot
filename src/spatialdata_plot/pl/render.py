@@ -590,6 +590,7 @@ def _render_labels(
 ) -> None:
     elements = render_params.elements
     element_table_mapping = cast(dict[str, str], render_params.element_table_mapping)
+    palettes: list[str | None] = render_params.palette
 
     if render_params.outline is False:
         render_params.outline_alpha = 0
@@ -651,8 +652,8 @@ def _render_labels(
             element_index=i,
             element_name=e,
             value_to_plot=color,
-            groups=render_params.groups[i],
-            palette=render_params.palette[i],
+            groups=render_params.groups[i] if isinstance(render_params.groups, list) else None,
+            palette=palettes[i],
             na_color=render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
             table_name=cast(str, table_name),
@@ -733,7 +734,7 @@ def _render_labels(
             adata=table,
             value_to_plot=color,
             color_source_vector=color_source_vector,
-            palette=render_params.palette[i],
+            palette=palettes[i],
             alpha=render_params.fill_alpha,
             na_color=render_params.cmap_params.na_color,
             legend_fontsize=legend_params.legend_fontsize,
