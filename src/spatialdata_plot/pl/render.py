@@ -301,7 +301,7 @@ def _render_points(
         default_color = (
             colors[index] if col_for_color is None and colors[index] is not None else render_params.cmap_params.na_color
         )
-        print(palettes[index])
+
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
@@ -596,7 +596,7 @@ def _render_labels(
     palettes = _return_list_list_str_none(render_params.palette)
     colors = _return_list_str_none(render_params.color)
     groups = _return_list_list_str_none(render_params.groups)
-    # print(palettes)
+
     if render_params.outline is False:
         render_params.outline_alpha = 0
 

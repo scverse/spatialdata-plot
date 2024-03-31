@@ -1349,11 +1349,12 @@ def _create_initial_element_table_mapping(
     -------
     The updated render parameters.
     """
-    element_table_mapping: dict[str, set[str | None]] = defaultdict(set)
+    element_table_mapping: dict[str, set[str | None] | str | None] = defaultdict(set)
 
     if not params.element_table_mapping:
         for element_name in render_elements:
-            element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
+            if isinstance(mapping := element_table_mapping[element_name], set):
+                mapping.update(_get_element_annotators(sdata, element_name))
     elif isinstance(params.element_table_mapping, (list, str)):
         table_names: list[str] = (
             [params.element_table_mapping]
@@ -1378,7 +1379,9 @@ def _create_initial_element_table_mapping(
                     warnings.warn(
                         f"The element '{element}' is not annotated by table '{table_name}'", UserWarning, stacklevel=2
                     )
-                element_table_mapping[element].add(table_name)
+                if isinstance(mapping := element_table_mapping[element], set):
+                    mapping.add(table_name)
+    assert isinstance(element_table_mapping, dict)
     params.element_table_mapping = element_table_mapping
     return params
 
@@ -1386,38 +1389,39 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping: dict[str, set[str | None]] = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None] | str | None] = params.element_table_mapping
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
         params.color = params.color * len(render_elements)
         for element_name in render_elements:
-            table_names = element_table_mapping[element_name].copy()
-            for table_name in table_names:
-                if (
-                    params.color[0] not in sdata[table_name].obs.columns
-                    and params.color[0] not in sdata[table_name].var_names
-                ):
-                    element_table_mapping[element_name].remove(table_name)
+            if isinstance(mapping := element_table_mapping[element_name], set):
+                table_names = mapping.copy()
+                for table_name in table_names:
+                    if (
+                        params.color[0] not in sdata[table_name].obs.columns
+                        and params.color[0] not in sdata[table_name].var_names
+                    ):
+                        mapping.remove(table_name)
     if isinstance(params.color, list) and len(params.color) > 1:
         assert len(params.color) == len(
             render_elements
         ), "Either one color should be given or the length should be equal to the number of elements being plotted."
         for index, element_name in enumerate(render_elements):
-            if len(element_table_mapping[element_name]) != 0:
-                for table_name in element_table_mapping[element_name].copy():
+            if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping) != 0:
+                for table_name in mapping.copy():
                     if (
                         params.color[index] not in sdata[table_name].obs.columns
                         and params.color[index] not in sdata[table_name].var_names
                     ):
-                        element_table_mapping[element_name].remove(table_name)
+                        mapping.remove(table_name)
             else:
                 params.color[index] = None
 
     # We only want one table containing the color column per element
-    table_set: set[str | None]
+    # table_set: set[str | None]
     for element_name, table_set in element_table_mapping.items():
-        if len(table_set) > 1:
+        if isinstance(table_set, set) and len(table_set) > 1:
             raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
         element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
@@ -1461,7 +1465,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                 params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
     else:
-        if len(params.color) != len(render_elements):
+        if isinstance(params.color, list) and len(params.color) != len(render_elements):
             warnings.warn(
                 "The number of given colors and elements to render is not equal. "
                 "Either provide one color or a list with one color for each element. skipping",
@@ -1471,6 +1475,7 @@ def _validate_colors_element_table_mapping_points_shapes(
             params.color = [None] * len(render_elements)
             params.col_for_color = [None] * len(render_elements)
         else:
+            assert isinstance(params.color, list)
             for index, color in enumerate(params.color):
                 if color is None:
                     element_name = render_elements[index]
