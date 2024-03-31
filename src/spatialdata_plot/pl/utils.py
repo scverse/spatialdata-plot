@@ -1777,12 +1777,14 @@ def _validate_render_params(
         if not colors.is_color_like(outline_color):
             raise TypeError("Parameter 'outline_color' must be color-like.")
 
+    color_overwrite: list[str | None] = []
+    col_for_color: list[str | None]
     if element_type in ["points", "shapes"]:
         if isinstance(color, (str, list)):
             if not isinstance(color, list):
                 if colors.is_color_like(color):
                     logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-                    color = [color]
+                    color_overwrite = [color]
                     col_for_color = [None]
                 else:
                     if not isinstance(color, str):
@@ -1791,13 +1793,13 @@ def _validate_render_params(
                             + "in sdata.table to use for coloring the shapes."
                         )
                     col_for_color = [color]
-                    color = [None]
+                    color_overwrite = [None]
             else:
                 col_for_color = []
-                for index, c in enumerate(color):
+                for c in color:
                     if colors.is_color_like(c):
                         logger.info(f"Value `{c}` in list 'color' appears to be a color, using it as such.")
-                        color[index] = c
+                        color_overwrite.append(c)
                         col_for_color.append(None)
                     else:
                         if not isinstance(c, str):
@@ -1806,11 +1808,12 @@ def _validate_render_params(
                                 + "in sdata.table to use for coloring the shapes or should be color-like."
                             )
                         col_for_color.append(c)
-                        color[index] = None
+                        color_overwrite.append(None)
         else:
-            color = [color]
+            color_overwrite = [color]
             col_for_color = [None]
-        params_dict["color"] = color
+
+        params_dict["color"] = color_overwrite
         params_dict["col_for_color"] = col_for_color
 
     if element_type == "points":
