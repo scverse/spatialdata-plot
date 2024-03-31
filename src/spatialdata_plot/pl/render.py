@@ -375,7 +375,7 @@ def _render_images(
     rasterize: bool,
 ) -> None:
     elements = render_params.elements
-    palettes: list[list[str | None]] = render_params.palette
+    palettes = _return_list_list_str_none(render_params.palette)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -545,7 +545,7 @@ def _render_images(
                     if len(palettes[i]) != n_channels:
                         raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
-                    channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palettes[i]]
+                    channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palettes[i] if isinstance(c, str)]
 
                     # Apply cmaps to each channel and add up
                     colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)

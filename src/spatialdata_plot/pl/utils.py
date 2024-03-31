@@ -1477,6 +1477,7 @@ def _validate_colors_element_table_mapping_points_shapes(
             params.col_for_color = [None] * len(render_elements)
         else:
             assert isinstance(params.color, list)
+            assert isinstance(params.col_for_color, list)
             for index, color in enumerate(params.color):
                 if color is None:
                     element_name = render_elements[index]
@@ -1493,7 +1494,7 @@ def _validate_colors_element_table_mapping_points_shapes(
         # We only want one table value per element and only when there is a color column in the table
         if isinstance(params.col_for_color, list) and params.col_for_color[index] is not None:
             table_set = element_table_mapping[element_name]
-            if len(table_set) > 1:
+            if isinstance(table_set, set) and len(table_set) > 1:
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
             if isinstance(tables := table_set, set):
                 element_table_mapping[element_name] = next(iter(tables)) if len(tables) != 0 else None
