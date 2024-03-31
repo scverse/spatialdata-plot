@@ -1937,8 +1937,6 @@ def _return_list_list_str_none(
     if not isinstance(parameter, list):
         return [[None]]
 
-    assert all(isinstance(item, list) for item in parameter)
-
     if all(
         isinstance(sublist, list) and all(isinstance(inner_item, (str, type(None))) for inner_item in sublist)
         for sublist in parameter
