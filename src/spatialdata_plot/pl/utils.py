@@ -1885,14 +1885,17 @@ def _match_length_elements_groups_palette(
     elif not isinstance(params, ImageRenderParams):
         groups = params.groups
         palette = params.palette
+
+        groups_elements: list[list[str | None]] | None = None
+        palette_elements: list[list[str | None]] | None = None
         # We already checked before that length of groups and palette is the same
         if groups is not None:
             if len(groups) == 1:
-                params.groups = [groups[0] for _ in range(len(render_elements))]
+                params.groups = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
                 if palette is not None:
-                    params.palette = [palette[0] for _ in range(len(render_elements))]
+                    palette_elements = [palette[0] for _ in range(len(render_elements)) if isinstance(palette[0], list)]
                 else:
-                    params.palette = [[None] for _ in range(len(render_elements))]
+                    palette_elements = [[None] for _ in range(len(render_elements))]
             else:
                 if len(groups) != len(render_elements):
                     raise ValueError(
@@ -1900,8 +1903,10 @@ def _match_length_elements_groups_palette(
                         "of elements to be rendered."
                     )
         else:
-            params.groups = [[None] for _ in range(len(render_elements))]
-            params.palette = [[None] for _ in range(len(render_elements))]
+            groups_elements = [[None] for _ in range(len(render_elements))]
+            palette_elements = [[None] for _ in range(len(render_elements))]
+        params.palette = palette_elements
+        params.groups = groups_elements
 
     return params
 
