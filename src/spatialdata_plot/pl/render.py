@@ -677,17 +677,6 @@ def _render_labels(
                 na_color=render_params.cmap_params.na_color,
             )
 
-            _cax = ax.imshow(
-                labels_infill,
-                rasterized=True,
-                cmap=None if categorical else render_params.cmap_params.cmap,
-                norm=None if categorical else render_params.cmap_params.norm,
-                alpha=render_params.fill_alpha,
-                origin="lower",
-            )
-            _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
-
             # Then overlay the contour
             labels_contour = _map_color_seg(
                 seg=label.values,
@@ -708,6 +697,16 @@ def _render_labels(
                 alpha=render_params.outline_alpha,
                 origin="lower",
             )
+            _cax = ax.imshow(
+                labels_infill,
+                rasterized=True,
+                cmap=None if categorical else render_params.cmap_params.cmap,
+                norm=None if categorical else render_params.cmap_params.norm,
+                alpha=render_params.fill_alpha,
+                origin="lower",
+            )
+            _cax.set_transform(trans_data)
+            cax = ax.add_image(_cax)
         else:
             # Default: no alpha, contour = infill
             label = _map_color_seg(
