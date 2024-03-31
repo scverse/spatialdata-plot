@@ -1891,7 +1891,7 @@ def _match_length_elements_groups_palette(
         # We already checked before that length of groups and palette is the same
         if groups is not None:
             if len(groups) == 1:
-                params.groups = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
+                groups_elements = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
                 if palette is not None:
                     palette_elements = [palette[0] for _ in range(len(render_elements)) if isinstance(palette[0], list)]
                 else:
