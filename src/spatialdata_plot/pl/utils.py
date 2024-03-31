@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, cast
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -1934,12 +1934,15 @@ def _return_list_str_none(parameter: list[str | None] | str | None) -> list[str 
 def _return_list_list_str_none(
     parameter: str | list[list[str | None]] | list[str | None] | None,
 ) -> list[list[str | None]]:
-    if not isinstance(parameter, list) or not all(isinstance(item, list) for item in parameter):
+    if not isinstance(parameter, list):
         return [[None]]
+
+    assert all(isinstance(item, list) for item in parameter)
 
     if all(
         isinstance(sublist, list) and all(isinstance(inner_item, (str, type(None))) for inner_item in sublist)
         for sublist in parameter
     ):
-        return parameter
+        return [[inner_item for inner_item in sublist] for sublist in parameter if isinstance(sublist, list)]
+
     return [[None]]
