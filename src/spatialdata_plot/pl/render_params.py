@@ -119,7 +119,7 @@ class LabelsRenderParams:
     cmap_params: CmapParams
     elements: str | Sequence[str] | None = None
     color: list[str | None] | str | None = None
-    groups: str | Sequence[str] | None = None
+    groups: str | list[list[str | None]] | list[str | None] | None = None
     contour_px: int | None = None
     outline: bool = False
     palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None

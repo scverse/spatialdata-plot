@@ -625,7 +625,7 @@ def _set_color_source_vec(
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     groups: Sequence[str | None] | str | None = None,
-    palette: str | None = None,
+    palette: list[str | None] | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -1429,7 +1429,7 @@ def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
     element_table_mapping: dict[str, set[str | None]] = params.element_table_mapping
-    if len(params.color) == 1:
+    if isinstance(params.color, list) and len(params.color) == 1 and isinstance(params.col_for_color, list):
         color = params.color[0]
         col_color = params.col_for_color[0]
         # This means that we are dealing with colors that are color like
@@ -1459,7 +1459,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                             params.col_for_color.append(None)
             else:
                 params.color = [None] * len(render_elements)
-                params.col_for_color: list[None] = [None] * len(render_elements)
+                params.col_for_color = [None] * len(render_elements)
     else:
         if len(params.color) != len(render_elements):
             warnings.warn(
@@ -1469,7 +1469,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                 stacklevel=2,
             )
             params.color = [None] * len(render_elements)
-            params.col_for_color: list[None] = [None] * len(render_elements)
+            params.col_for_color = [None] * len(render_elements)
         else:
             for index, color in enumerate(params.color):
                 if color is None:
@@ -1745,7 +1745,7 @@ def _validate_render_params(
             raise TypeError("Parameter 'outline_color' must be color-like.")
 
     if element_type in ["points", "shapes"]:
-        if color is not None:
+        if isinstance(color, (str, list)):
             if not isinstance(color, list):
                 if colors.is_color_like(color):
                     logger.info("Value for parameter 'color' appears to be a color, using it as such.")
@@ -1760,7 +1760,7 @@ def _validate_render_params(
                     col_for_color = [color]
                     color = [None]
             else:
-                col_for_color: list[str | None] = []
+                col_for_color = []
                 for index, c in enumerate(color):
                     if colors.is_color_like(c):
                         logger.info(f"Value `{c}` in list 'color' appears to be a color, using it as such.")

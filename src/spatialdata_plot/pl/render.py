@@ -67,6 +67,7 @@ def _render_shapes(
     cols_for_color = _return_list_str_none(render_params.col_for_color)
     colors = _return_list_str_none(render_params.color)
     groups = _return_list_list_str_none(render_params.groups)
+    palettes = _return_list_list_str_none(render_params.palette)
 
     assert isinstance(element_table_mapping, dict)
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -112,7 +113,7 @@ def _render_shapes(
             value_to_plot=col_for_color,
             groups=groups[index] if groups[index][0] is not None else None,
             palette=(
-                render_params.palette[index] if render_params.palette is not None else None
+                palettes[index] if palettes is not None else None
             ),  # and render_params.palette[index][0] is not None
             na_color=colors[index] or render_params.cmap_params.na_color,
             cmap_params=render_params.cmap_params,
@@ -216,11 +217,13 @@ def _render_points(
     legend_params: LegendParams,
 ) -> None:
     elements = render_params.elements
-    element_table_mapping: dict[str, str | None] = render_params.element_table_mapping
+    element_table_mapping = render_params.element_table_mapping
     cols_for_color = _return_list_str_none(render_params.col_for_color)
     groups = _return_list_list_str_none(render_params.groups)
     palettes = _return_list_list_str_none(render_params.palette)
     colors = _return_list_str_none(render_params.color)
+    # Purely for mypy
+    assert isinstance(element_table_mapping, dict)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -298,7 +301,7 @@ def _render_points(
         default_color = (
             colors[index] if col_for_color is None and colors[index] is not None else render_params.cmap_params.na_color
         )
-
+        print(palettes[index])
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
             element=points,
