@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union, cast
+from typing import Any, Literal, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -674,7 +674,11 @@ def _set_color_source_vec(
         palette_input: list[str] | str | None
         if groups is not None and groups[0] is not None:
             if isinstance(palette, list):
-                palette_input = palette[0] if palette[0] is None else [color_palette for color_palette in palette if isinstance(color_palette, str)]
+                palette_input = (
+                    palette[0]
+                    if palette[0] is None
+                    else [color_palette for color_palette in palette if isinstance(color_palette, str)]
+                )
         elif palette is not None and isinstance(palette, list):
             palette_input = palette[0]
 
