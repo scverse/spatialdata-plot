@@ -1679,46 +1679,52 @@ def _validate_render_params(
 
     params_dict["groups"] = groups_overwrite
 
+    palette_overwrite: list[list[str]] | None = None
     if palette is not None:
         if not isinstance(palette, (list, str)):
             raise TypeError("Parameter 'palette' must be a string or a list of strings.")
         if isinstance(palette, str):
-            palette = [[palette]]
+            palette_overwrite = [[palette]]
         elif not isinstance(palette[0], list):
             if not all(isinstance(pal, str) for pal in palette):
                 raise TypeError("All items in single 'palette' list must be strings.")
-            palette = [palette]
+            palette_overwrite = [[pal for pal in palette if isinstance(pal, str)]]
         else:
             if not all(isinstance(p, str) or p is None for pal in palette for p in pal):
                 raise TypeError("All items in lists within lists of 'groups' must be strings.")
 
         if element_type in ["shapes", "points", "labels"]:
-            if groups is None:
+            if groups_overwrite is None:
                 raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-            if len(groups) != len(palette):
+            if (
+                groups_overwrite is not None
+                and palette_overwrite is not None
+                and len(groups_overwrite) != len(palette_overwrite)
+            ):
                 raise ValueError(
-                    f"The length of 'palette' and 'groups' must be the same, length is {len(palette)} and"
-                    f"{len(groups)} respectively."
+                    f"The length of 'palette' and 'groups' must be the same, length is {len(palette_overwrite)} and"
+                    f"{len(groups_overwrite)} respectively."
                 )
-            for index, sublist in enumerate(groups):
-                if not len(sublist) == len(palette[index]):
-                    raise ValueError("Not all nested lists in `groups` and `palette` are of equal length.")
-                if (
-                    not len(g_set := {type(el) for el in sublist})
-                    == len(p_set := {type(pal) for pal in palette[index]})
-                    == 1
-                ):
-                    raise ValueError(
-                        "Mixed dtypes found in sublists of `groups` and/or `palette`. Must be either all"
-                        "`str` or `None`."
-                    )
-                if g_set != p_set:
-                    raise ValueError(
-                        "Sublists with same index in `groups` and `palette` must contain elements of the "
-                        "same dtype, either both `str` or `None`."
-                    )
+            if palette_overwrite is not None:
+                for index, sublist in enumerate(groups_overwrite):
+                    if not len(sublist) == len(palette_overwrite[index]):
+                        raise ValueError("Not all nested lists in `groups` and `palette` are of equal length.")
+                    if (
+                        not len(g_set := {type(el) for el in sublist})
+                        == len(p_set := {type(pal) for pal in palette_overwrite[index]})
+                        == 1
+                    ):
+                        raise ValueError(
+                            "Mixed dtypes found in sublists of `groups` and/or `palette`. Must be either all"
+                            "`str` or `None`."
+                        )
+                    if g_set != p_set:
+                        raise ValueError(
+                            "Sublists with same index in `groups` and `palette` must contain elements of the "
+                            "same dtype, either both `str` or `None`."
+                        )
 
-    params_dict["palette"] = palette
+    params_dict["palette"] = palette_overwrite
 
     if cmap is not None:
         if element_type == "images":
