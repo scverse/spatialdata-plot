@@ -1423,7 +1423,8 @@ def _update_element_table_mapping_label_colors(
     for element_name, table_set in element_table_mapping.items():
         if isinstance(table_set, set) and len(table_set) > 1:
             raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
-        element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+        if isinstance(table_set, set):
+            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
     params.element_table_mapping = element_table_mapping
     return params
@@ -1432,7 +1433,7 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping: dict[str, set[str | None]] = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None] | str | None] = params.element_table_mapping
     if isinstance(params.color, list) and len(params.color) == 1 and isinstance(params.col_for_color, list):
         color = params.color[0]
         col_color = params.col_for_color[0]
@@ -1449,13 +1450,13 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        if len(element_table_mapping[element_name].copy()) != 0:
-                            for table_name in element_table_mapping[element_name].copy():
+                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping.copy()) != 0:
+                            for table_name in mapping.copy():
                                 if (
                                     col_color not in sdata[table_name].obs.columns
                                     and col_color not in sdata[table_name].var_names
                                 ):
-                                    element_table_mapping[element_name].remove(table_name)
+                                    mapping.remove(table_name)
                                     params.col_for_color.append(None)
                                 else:
                                     params.col_for_color.append(col_color)
@@ -1480,20 +1481,22 @@ def _validate_colors_element_table_mapping_points_shapes(
                 if color is None:
                     element_name = render_elements[index]
                     col_color = params.col_for_color[index]
-                    for table_name in element_table_mapping[element_name].copy():
-                        if (
-                            col_color not in sdata[table_name].obs.columns
-                            and col_color not in sdata[table_name].var_names
-                            and col_color not in sdata[element_name].columns
-                        ):
-                            element_table_mapping[element_name].remove(table_name)
+                    if isinstance(mapping := element_table_mapping[element_name], set):
+                        for table_name in mapping.copy():
+                            if (
+                                col_color not in sdata[table_name].obs.columns
+                                and col_color not in sdata[table_name].var_names
+                                and col_color not in sdata[element_name].columns
+                            ):
+                                mapping.remove(table_name)
     for index, element_name in enumerate(render_elements):
         # We only want one table value per element and only when there is a color column in the table
         if isinstance(params.col_for_color, list) and params.col_for_color[index] is not None:
             table_set = element_table_mapping[element_name]
             if len(table_set) > 1:
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
-            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+            if isinstance(tables := table_set, set):
+                element_table_mapping[element_name] = next(iter(tables)) if len(tables) != 0 else None
             if element_table_mapping[element_name] is None:
                 warnings.warn(
                     f"No table found with color column {params.col_for_color[index]} to render {element_name}",
@@ -1933,8 +1936,9 @@ def _return_list_list_str_none(
     if not isinstance(parameter, list) or not all(isinstance(item, list) for item in parameter):
         return [[None]]
 
-    return (
-        parameter
-        if all(all(isinstance(inner_item, (str, type(None))) for inner_item in sublist) for sublist in parameter)
-        else [[None]]
-    )
+    if all(
+        isinstance(sublist, list) and all(isinstance(inner_item, (str, type(None))) for inner_item in sublist)
+        for sublist in parameter
+    ):
+        return parameter
+    return [[None]]
