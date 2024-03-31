@@ -1661,20 +1661,23 @@ def _validate_render_params(
             )
     params_dict["elements"] = elements
 
+    groups_overwrite: list[list[str]] | None = None
     if groups is not None and element_type != "images":
         if not isinstance(groups, (list, str)):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
         if isinstance(groups, str):
-            groups = [[groups]]
+            groups_overwrite = [[groups]]
         elif not isinstance(groups[0], list):
-            if not all(isinstance(g, str) for g in groups):
+            if all(isinstance(g, str) for g in groups):
+                groups_overwrite = [[group for group in groups if isinstance(group, str)]]
+            else:
                 raise TypeError("All items in single 'groups' list must be strings.")
-            groups = [groups]
+
         else:
-            if not all(isinstance(g, str) or g is None for group in groups for g in group):
+            if not all(isinstance(g, (str, type(None))) for group in groups for g in group):
                 raise TypeError("All items in lists within lists of 'groups' must be strings or None.")
 
-    params_dict["groups"] = groups
+    params_dict["groups"] = groups_overwrite
 
     if palette is not None:
         if not isinstance(palette, (list, str)):
