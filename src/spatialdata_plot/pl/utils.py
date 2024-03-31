@@ -671,11 +671,13 @@ def _set_color_source_vec(
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
+        palette_input: list[str] | str | None
         if groups is not None and groups[0] is not None:
             if isinstance(palette, list):
-                palette_input = palette[0] if palette[0] is None else palette
+                palette_input = palette[0] if palette[0] is None else [color_palette for color_palette in palette if isinstance(color_palette, str)]
         elif palette is not None and isinstance(palette, list):
             palette_input = palette[0]
+
         else:
             palette_input = palette
 
