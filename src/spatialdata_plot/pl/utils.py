@@ -1395,7 +1395,11 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping: dict[str, set[str | None] | str | None] = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
+        params.element_table_mapping
+    )
+
+    assert isinstance(element_table_mapping, dict)
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
@@ -1439,7 +1443,12 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping: dict[str, set[str | None] | str | None] = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
+        params.element_table_mapping
+    )
+
+    assert isinstance(element_table_mapping, dict)
+
     if isinstance(params.color, list) and len(params.color) == 1 and isinstance(params.col_for_color, list):
         color = params.color[0]
         col_color = params.col_for_color[0]
@@ -1947,6 +1956,6 @@ def _return_list_list_str_none(
         isinstance(sublist, list) and all(isinstance(inner_item, (str, type(None))) for inner_item in sublist)
         for sublist in parameter
     ):
-        return [[inner_item for inner_item in sublist] for sublist in parameter if isinstance(sublist, list)]
+        return [list(sublist) for sublist in parameter if isinstance(sublist, list)]
 
     return [[None]]
