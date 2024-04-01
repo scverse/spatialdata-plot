@@ -218,7 +218,7 @@ def _get_collection_shape(
                         " categories, set the column to categorical dtype."
                     ) from e
                 c = cmap(norm(c))
-        elif not c:
+        else:
             fill_c = ColorConverter().to_rgba_array(c)
     except ValueError:
         if norm is None:
