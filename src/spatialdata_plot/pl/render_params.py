@@ -75,7 +75,7 @@ class ShapesRenderParams:
     col_for_color: str | None = None
     groups: str | list[list[str | None]] | list[str | None] | None = None
     contour_px: int | None = None
-    palette: ListedColormap | list[str | None] | None = None
+    palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
     scale: float = 1.0
@@ -106,7 +106,7 @@ class ImageRenderParams:
     cmap_params: list[CmapParams] | CmapParams
     elements: str | Sequence[str] | None = None
     channel: list[str] | list[int] | int | str | None = None
-    palette: ListedColormap | list[str | None] | None = None
+    palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
     alpha: float = 1.0
     quantiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | list[str] | None = None

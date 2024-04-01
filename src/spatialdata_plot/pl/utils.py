@@ -1648,14 +1648,14 @@ def _validate_render_params(
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
-    groups: list[list[str | None]] | list[str] | str | None = None,
+    groups: str | list[list[str | None]] | list[str | None] | None = None,
     na_color: ColorLike | None = None,
     norm: Normalize | bool | None = None,
     outline: bool | None = None,
     outline_alpha: float | int | None = None,
     outline_color: str | list[float] | None = None,
     outline_width: float | int | None = None,
-    palette: list[list[str | None]] | list[str] | str | None = None,
+    palette: list[list[str | None]] | list[str | None] | str | None = None,
     quantiles_for_norm: tuple[float | None, float | None] | None = None,
     scale: float | int | list[str] | str | None = None,
     size: float | int | None = None,
@@ -1687,7 +1687,14 @@ def _validate_render_params(
                 raise TypeError("All items in single 'groups' list must be strings.")
 
         else:
-            if not all(isinstance(g, (str, type(None))) for group in groups for g in group):
+            if not all(
+                (
+                    isinstance(group, list) and all(isinstance(g, (str, type(None))) for g in group)
+                    if group is not None
+                    else True
+                )
+                for group in groups
+            ):
                 raise TypeError("All items in lists within lists of 'groups' must be strings or None.")
 
     params_dict["groups"] = groups_overwrite
@@ -1703,7 +1710,14 @@ def _validate_render_params(
                 raise TypeError("All items in single 'palette' list must be strings.")
             palette_overwrite = [[pal for pal in palette if isinstance(pal, str)]]
         else:
-            if not all(isinstance(p, str) or p is None for pal in palette for p in pal):
+            if not all(
+                (
+                    isinstance(pal, list) and all(isinstance(p, (str, type(None))) for p in pal)
+                    if pal is not None
+                    else True
+                )
+                for pal in palette
+            ):
                 raise TypeError("All items in lists within lists of 'groups' must be strings.")
 
         if element_type in ["shapes", "points", "labels"]:
