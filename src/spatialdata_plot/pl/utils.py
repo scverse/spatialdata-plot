@@ -206,7 +206,20 @@ def _get_collection_shape(
 
     try:
         # fails when numeric
-        fill_c = ColorConverter().to_rgba_array(c)
+        if len(c.shape) == 1 and c.shape[0] in [3, 4] and c.shape[0] == len(shapes) and c.dtype == float:
+            if norm is None:
+                c = cmap(c)
+            else:
+                try:
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                except ValueError as e:
+                    raise ValueError(
+                        "Could not convert values in the `color` column to float, if `color` column represents"
+                        " categories, set the column to categorical dtype."
+                    ) from e
+                c = cmap(norm(c))
+        elif not c:
+            fill_c = ColorConverter().to_rgba_array(c)
     except ValueError:
         if norm is None:
             c = cmap(c)
