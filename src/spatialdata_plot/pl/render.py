@@ -328,6 +328,7 @@ def _render_points(
                 alpha=render_params.alpha * 255,
                 cmap=color_vector[0][:-2],
                 color_key=color_key,
+                min_alpha=200,  # TODO: choose some value (any gives wierd background)
             )
             # render image
             rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
