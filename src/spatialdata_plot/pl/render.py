@@ -122,35 +122,6 @@ def _render_shapes(
             shapes = shapes.reset_index()
             color_source_vector = color_source_vector[mask]
             color_vector = color_vector[mask]
-        shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
-
-        _cax = _get_collection_shape(
-            shapes=shapes,
-            s=render_params.scale,
-            c=color_vector,
-            render_params=render_params,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha,
-            zorder=render_params.zorder,
-            # **kwargs,
-        )
-
-        # Sets the limits of the colorbar to the values instead of [0, 1]
-        if not norm and not values_are_categorical:
-            _cax.set_clim(min(color_vector), max(color_vector))
-
-        cax = ax.add_collection(_cax)
-
-        # Apply the transformation to the PatchCollection's paths
-        trans = get_transformation(sdata_filt.shapes[e], get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-
-        for path in _cax.get_paths():
-            path.vertices = trans.transform(path.vertices)
 
         # Using dict.fromkeys here since set returns in arbitrary order
         # remove the color of NaN values, else it might be assigned to a category
@@ -159,6 +130,69 @@ def _render_shapes(
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
             palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
+        # Apply the transformation to the PatchCollection's paths
+        trans = get_transformation(sdata_filt.shapes[e], get_all=True)[coordinate_system]
+        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
+        shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
+        if len(shapes) < 1:
+            logger.info("Using matplotlib")
+            _cax = _get_collection_shape(
+                shapes=shapes,
+                s=render_params.scale,
+                c=color_vector,
+                render_params=render_params,
+                rasterized=sc_settings._vector_friendly,
+                cmap=render_params.cmap_params.cmap,
+                norm=norm,
+                fill_alpha=render_params.fill_alpha,
+                outline_alpha=render_params.outline_alpha,
+                zorder=render_params.zorder,
+                # **kwargs,
+            )
+            cax = ax.add_collection(_cax)
+
+            # Transform the paths in PatchCollection
+            for path in _cax.get_paths():
+                path.vertices = trans.transform(path.vertices)
+                cax = ax.add_collection(_cax)
+        else:
+            logger.info("Using datashader")
+            extent = get_extent(sdata.shapes[e])
+            x_ext = extent["x"][1]
+            y_ext = extent["y"][1]
+            # previous_xlim = fig_params.ax.get_xlim()
+            # previous_ylim = fig_params.ax.get_ylim()
+            x_range = [0, x_ext]
+            y_range = [0, y_ext]
+            # round because we need integers
+            plot_width = int(np.round(x_range[1] - x_range[0]))
+            plot_height = int(np.round(y_range[1] - y_range[0]))
+
+            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
+
+            _geometry = shapes["geometry"]
+            is_point = _geometry.type == "Point"
+
+            # Handle circles encoded as points with radius
+            if is_point.any():  # TODO
+                shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(shapes[is_point]["radius"])
+
+            agg = cvs.polygons(shapes, geometry="geometry", agg=ds.count())
+            ds_result = ds.tf.shade(agg)
+
+            # Render image
+            rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
+            _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
+            _cax.set_transform(trans)
+            cax = ax.add_image(_cax)
+
+        # Sets the limits of the colorbar to the values instead of [0, 1]
+        if not norm and not values_are_categorical:
+            _cax.set_clim(min(color_vector), max(color_vector))
 
         if not (
             len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
