@@ -684,7 +684,7 @@ def _set_color_source_vec(
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
-        palette_input: list[str] | str | None
+        palette_input: list[str] | str | None = None
         if groups is not None and groups[0] is not None:
             if isinstance(palette, list):
                 palette_input = (
