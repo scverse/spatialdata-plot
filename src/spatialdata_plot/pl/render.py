@@ -134,12 +134,21 @@ def _render_shapes(
         # Apply the transformation to the PatchCollection's paths
         trans = get_transformation(sdata_filt.shapes[e], get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+        trans = mtransforms.Affine2D(matrix=affine_trans)
 
         shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-        if len(shapes) < 1:
-            logger.info("Using matplotlib")
+        # Determine which method to use for rendering. Default is matplotlib for under 100 shapes and datashader for more
+        # User can also specify the method to use
+        method = render_params.method
+
+        if method is None:
+            method = "datashader" if len(shapes) > 100 else "matplotlib"
+        elif method not in ["matplotlib", "datashader"]:
+            raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+
+        if method == "matplotlib":
+            logger.info(f"Using {method}")
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
@@ -159,8 +168,12 @@ def _render_shapes(
             for path in _cax.get_paths():
                 path.vertices = trans.transform(path.vertices)
                 cax = ax.add_collection(_cax)
-        else:
-            logger.info("Using datashader")
+        elif method == "datashader":
+            logger.info(f"Using {method}")
+
+            # Where to put this
+            trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
             extent = get_extent(sdata.shapes[e])
             x_ext = extent["x"][1]
             y_ext = extent["y"][1]
@@ -179,10 +192,28 @@ def _render_shapes(
 
             # Handle circles encoded as points with radius
             if is_point.any():  # TODO
-                shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(shapes[is_point]["radius"])
+                scale = shapes[is_point]["radius"] * render_params.scale
+                shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
 
             agg = cvs.polygons(shapes, geometry="geometry", agg=ds.count())
-            ds_result = ds.tf.shade(agg)
+
+            # Render shapes with datashader
+            if render_params.col_for_color is not None and (
+                render_params.groups is None or len(render_params.groups) > 1
+            ):
+                agg = cvs.polygons(shapes, geometry="geometry", agg=ds.by(render_params.col_for_color, ds.count()))
+            else:
+                agg = cvs.polygons(shapes, geometry="geometry", agg=ds.count())
+
+            color_key = (
+                [x[:-2] for x in color_vector.categories.values]
+                if (type(color_vector) == pd.core.arrays.categorical.Categorical)
+                and (len(color_vector.categories.values) > 1)
+                else None
+            )
+            ds_result = ds.tf.shade(
+                agg, cmap=color_vector[0][:-2], alpha=render_params.fill_alpha * 255, color_key=color_key, min_alpha=200
+            )
 
             # Render image
             rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
@@ -312,9 +343,13 @@ def _render_points(
 
         norm = copy(render_params.cmap_params.norm)
 
-        # optionally render points using datashader
-        # TODO: maybe move this, add heuristic
-        if len(points) > 50:
+        method = render_params.method
+        if method is None:
+            method = "datashader" if len(points.shape[0]) > 10000 else "matplotlib"
+        elif method not in ["matplotlib", "datashader"]:
+            raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+
+        if method == "datashader":
             extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
             x_ext = extent["x"][1]
             y_ext = extent["y"][1]
@@ -368,7 +403,7 @@ def _render_points(
             rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
             ax.imshow(rbga_image, zorder=render_params.zorder)
             cax = None
-        else:
+        elif method == "matplotlib":
             # original way of plotting points
             _cax = ax.scatter(
                 adata[:, 0].X.flatten(),
