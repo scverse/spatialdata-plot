@@ -138,10 +138,8 @@ def _render_shapes(
 
         shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-        # Determine which method to use for rendering. Default is matplotlib for under 100 shapes and datashader for more
-        # User can also specify the method to use
+        # Determine which method to use for rendering
         method = render_params.method
-
         if method is None:
             method = "datashader" if len(shapes) > 100 else "matplotlib"
         elif method not in ["matplotlib", "datashader"]:
