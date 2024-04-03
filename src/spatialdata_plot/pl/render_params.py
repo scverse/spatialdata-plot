@@ -81,6 +81,7 @@ class ShapesRenderParams:
     fill_alpha: float = 0.3
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    method: str | None = None
     zorder: int | None = None
 
 
@@ -97,6 +98,7 @@ class PointsRenderParams:
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    method: str | None = None
     zorder: int | None = None
 
 
