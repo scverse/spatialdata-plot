@@ -193,7 +193,8 @@ class PlotAccessor:
             used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
             lists means that there is one list per element to be plotted in the list and this list can contain multiple
             palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
+            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
+            default "lightgray".
         na_color : str | list[float] | None, default "lightgrey"
             Color to be used for NAs values, if present. Can either be a named color
             ("red"), a hex representation ("#000000ff") or a list of floats that
@@ -315,7 +316,8 @@ class PlotAccessor:
             can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
             lists means that there is one list per element to be plotted in the list and this list can contain multiple
             discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements).
+            (use the same values for all elements). If groups is provided but not palette, palette is set to
+            default "lightgray".
         palette : list[list[str | None]] | list[str | None] | str | None
             Palette for discrete annotations. List of valid color names that should be
             used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
@@ -540,7 +542,8 @@ class PlotAccessor:
             used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
             lists means that there is one list per element to be plotted in the list and this list can contain multiple
             palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
+            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
+            default "lightgray".
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills
             entire segment, see :func:`skimage.morphology.erosion`.

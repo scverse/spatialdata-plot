@@ -1700,6 +1700,12 @@ def _validate_render_params(
     params_dict["groups"] = groups_overwrite
 
     palette_overwrite: list[list[str]] | None = None
+    if groups_overwrite is not None and palette is None:
+        warnings.warn(
+            "Groups is specified but palette is not. Setting palette to default 'lightgray'", UserWarning, stacklevel=2
+        )
+        palette_overwrite = [["lightgray" for _ in range(len(groups_sublist))] for groups_sublist in groups_overwrite]
+
     if palette is not None:
         if not isinstance(palette, (list, str)):
             raise TypeError("Parameter 'palette' must be a string or a list of strings.")
