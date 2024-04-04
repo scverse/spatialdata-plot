@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union, cast
+from typing import Any, Literal, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -595,7 +595,7 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
-def _locate_points_value_in_table(value_key: str, sdata: SpatialData, element_name: str, table_name: str):
+def _locate_points_value_in_table(value_key: str, sdata: SpatialData, table_name: str) -> _ValueOrigin:
     table = sdata[table_name]
 
     if value_key in table.obs.columns:
@@ -608,7 +608,7 @@ def _locate_points_value_in_table(value_key: str, sdata: SpatialData, element_na
 
 
 # TODO consider move to relational query in spatialdata
-def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str):
+def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str) -> pd.Series:
     """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
     table = sdata[table_name]
     if origin.origin == "obs":
@@ -624,8 +624,8 @@ def _set_color_source_vec(
     element_index: int,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
-    groups: Sequence[str] | str | None = None,
-    palette: str | list[str] | None = None,
+    groups: Sequence[str | None] | str | None = None,
+    palette: list[str | None] | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -639,9 +639,7 @@ def _set_color_source_vec(
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     if model == PointsModel and table_name is not None:
-        origin = _locate_points_value_in_table(
-            value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name
-        )
+        origin = _locate_points_value_in_table(value_key=value_to_plot, sdata=sdata, table_name=table_name)
         if origin is not None:
             origins.append(origin)
 
@@ -673,11 +671,17 @@ def _set_color_source_vec(
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
+        palette_input: list[str] | str | None
         if groups is not None and groups[0] is not None:
             if isinstance(palette, list):
-                palette_input = palette[0] if palette[0] is None else palette
+                palette_input = (
+                    palette[0]
+                    if palette[0] is None
+                    else [color_palette for color_palette in palette if isinstance(color_palette, str)]
+                )
         elif palette is not None and isinstance(palette, list):
             palette_input = palette[0]
+
         else:
             palette_input = palette
 
@@ -822,7 +826,7 @@ def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
     fig_params: FigParams,
-    value_to_plot: str | None,
+    value_to_plot: str | None,  # str | None,
     color_source_vector: pd.Series[CategoricalDtype],
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
@@ -1351,11 +1355,13 @@ def _create_initial_element_table_mapping(
     -------
     The updated render parameters.
     """
-    element_table_mapping: dict[str, set[str]] = defaultdict(set)
+    element_table_mapping: dict[str, set[str | None] | str | None] = defaultdict(set)
+
     if not params.element_table_mapping:
         for element_name in render_elements:
-            element_table_mapping[element_name].update(_get_element_annotators(sdata, element_name))
-    else:
+            if isinstance(mapping := element_table_mapping[element_name], set):
+                mapping.update(_get_element_annotators(sdata, element_name))
+    elif isinstance(params.element_table_mapping, (list, str)):
         table_names: list[str] = (
             [params.element_table_mapping]
             if isinstance(params.element_table_mapping, str)
@@ -1379,7 +1385,9 @@ def _create_initial_element_table_mapping(
                     warnings.warn(
                         f"The element '{element}' is not annotated by table '{table_name}'", UserWarning, stacklevel=2
                     )
-                element_table_mapping[element].add(table_name)
+                if isinstance(mapping := element_table_mapping[element], set):
+                    mapping.add(table_name)
+    assert isinstance(element_table_mapping, dict)
     params.element_table_mapping = element_table_mapping
     return params
 
@@ -1387,38 +1395,46 @@ def _create_initial_element_table_mapping(
 def _update_element_table_mapping_label_colors(
     sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = params.element_table_mapping
+    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
+        params.element_table_mapping
+    )
+
+    assert isinstance(element_table_mapping, dict)
 
     # If one color column check presence for each table annotating the specific element
     if isinstance(params.color, list) and len(params.color) == 1:
         params.color = params.color * len(render_elements)
         for element_name in render_elements:
-            for table_name in element_table_mapping[element_name].copy():
-                if (
-                    params.color[0] not in sdata[table_name].obs.columns
-                    and params.color[0] not in sdata[table_name].var_names
-                ):
-                    element_table_mapping[element_name].remove(table_name)
-    if len(params.color) > 1:
+            if isinstance(mapping := element_table_mapping[element_name], set):
+                table_names = mapping.copy()
+                for table_name in table_names:
+                    if (
+                        params.color[0] not in sdata[table_name].obs.columns
+                        and params.color[0] not in sdata[table_name].var_names
+                    ):
+                        mapping.remove(table_name)
+    if isinstance(params.color, list) and len(params.color) > 1:
         assert len(params.color) == len(
             render_elements
         ), "Either one color should be given or the length should be equal to the number of elements being plotted."
         for index, element_name in enumerate(render_elements):
-            if len(element_table_mapping[element_name]) != 0:
-                for table_name in element_table_mapping[element_name].copy():
+            if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping) != 0:
+                for table_name in mapping.copy():
                     if (
                         params.color[index] not in sdata[table_name].obs.columns
                         and params.color[index] not in sdata[table_name].var_names
                     ):
-                        element_table_mapping[element_name].remove(table_name)
+                        mapping.remove(table_name)
             else:
                 params.color[index] = None
 
     # We only want one table containing the color column per element
+    # table_set: set[str | None]
     for element_name, table_set in element_table_mapping.items():
-        if len(table_set) > 1:
+        if isinstance(table_set, set) and len(table_set) > 1:
             raise ValueError(f"Multiple tables with color columns found for the element {element_name}")
-        element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+        if isinstance(table_set, set):
+            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
     params.element_table_mapping = element_table_mapping
     return params
@@ -1427,8 +1443,13 @@ def _update_element_table_mapping_label_colors(
 def _validate_colors_element_table_mapping_points_shapes(
     sdata: SpatialData, params: PointsRenderParams | ShapesRenderParams, render_elements: list[str]
 ) -> PointsRenderParams | ShapesRenderParams:
-    element_table_mapping = cast(dict, params.element_table_mapping)
-    if len(params.color) == 1:
+    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
+        params.element_table_mapping
+    )
+
+    assert isinstance(element_table_mapping, dict)
+
+    if isinstance(params.color, list) and len(params.color) == 1 and isinstance(params.col_for_color, list):
         color = params.color[0]
         col_color = params.col_for_color[0]
         # This means that we are dealing with colors that are color like
@@ -1444,13 +1465,13 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        if len(element_table_mapping[element_name].copy()) != 0:
-                            for table_name in element_table_mapping[element_name].copy():
+                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping.copy()) != 0:
+                            for table_name in mapping.copy():
                                 if (
                                     col_color not in sdata[table_name].obs.columns
                                     and col_color not in sdata[table_name].var_names
                                 ):
-                                    element_table_mapping[element_name].remove(table_name)
+                                    mapping.remove(table_name)
                                     params.col_for_color.append(None)
                                 else:
                                     params.col_for_color.append(col_color)
@@ -1460,7 +1481,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                 params.color = [None] * len(render_elements)
                 params.col_for_color = [None] * len(render_elements)
     else:
-        if len(params.color) != len(render_elements):
+        if isinstance(params.color, list) and len(params.color) != len(render_elements):
             warnings.warn(
                 "The number of given colors and elements to render is not equal. "
                 "Either provide one color or a list with one color for each element. skipping",
@@ -1470,24 +1491,28 @@ def _validate_colors_element_table_mapping_points_shapes(
             params.color = [None] * len(render_elements)
             params.col_for_color = [None] * len(render_elements)
         else:
+            assert isinstance(params.color, list)
+            assert isinstance(params.col_for_color, list)
             for index, color in enumerate(params.color):
                 if color is None:
                     element_name = render_elements[index]
                     col_color = params.col_for_color[index]
-                    for table_name in element_table_mapping[element_name].copy():
-                        if (
-                            col_color not in sdata[table_name].obs.columns
-                            and col_color not in sdata[table_name].var_names
-                            and col_color not in sdata[element_name].columns
-                        ):
-                            element_table_mapping[element_name].remove(table_name)
+                    if isinstance(mapping := element_table_mapping[element_name], set):
+                        for table_name in mapping.copy():
+                            if (
+                                col_color not in sdata[table_name].obs.columns
+                                and col_color not in sdata[table_name].var_names
+                                and col_color not in sdata[element_name].columns
+                            ):
+                                mapping.remove(table_name)
     for index, element_name in enumerate(render_elements):
         # We only want one table value per element and only when there is a color column in the table
         if isinstance(params.col_for_color, list) and params.col_for_color[index] is not None:
             table_set = element_table_mapping[element_name]
-            if len(table_set) > 1:
+            if isinstance(table_set, set) and len(table_set) > 1:
                 raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
-            element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
+            if isinstance(tables := table_set, set):
+                element_table_mapping[element_name] = next(iter(tables)) if len(tables) != 0 else None
             if element_table_mapping[element_name] is None:
                 warnings.warn(
                     f"No table found with color column {params.col_for_color[index]} to render {element_name}",
@@ -1606,7 +1631,7 @@ def _validate_render_params(
     alpha: float | int | None = None,
     channel: list[str] | list[int] | str | int | None = None,
     cmap: list[Colormap] | Colormap | str | None = None,
-    color: list[str] | str | None = None,
+    color: list[str | None] | str | None = None,
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
@@ -1636,61 +1661,70 @@ def _validate_render_params(
             )
     params_dict["elements"] = elements
 
+    groups_overwrite: list[list[str]] | None = None
     if groups is not None and element_type != "images":
         if not isinstance(groups, (list, str)):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
         if isinstance(groups, str):
-            groups = [[groups]]
+            groups_overwrite = [[groups]]
         elif not isinstance(groups[0], list):
-            if not all(isinstance(g, str) for g in groups):
+            if all(isinstance(g, str) for g in groups):
+                groups_overwrite = [[group for group in groups if isinstance(group, str)]]
+            else:
                 raise TypeError("All items in single 'groups' list must be strings.")
-            groups = [groups]
+
         else:
-            if not all(isinstance(g, str) or g is None for group in groups for g in group):
+            if not all(isinstance(g, (str, type(None))) for group in groups for g in group):
                 raise TypeError("All items in lists within lists of 'groups' must be strings or None.")
 
-    params_dict["groups"] = groups
+    params_dict["groups"] = groups_overwrite
 
+    palette_overwrite: list[list[str]] | None = None
     if palette is not None:
         if not isinstance(palette, (list, str)):
             raise TypeError("Parameter 'palette' must be a string or a list of strings.")
         if isinstance(palette, str):
-            palette = [[palette]]
+            palette_overwrite = [[palette]]
         elif not isinstance(palette[0], list):
             if not all(isinstance(pal, str) for pal in palette):
                 raise TypeError("All items in single 'palette' list must be strings.")
-            palette = [palette]
+            palette_overwrite = [[pal for pal in palette if isinstance(pal, str)]]
         else:
             if not all(isinstance(p, str) or p is None for pal in palette for p in pal):
                 raise TypeError("All items in lists within lists of 'groups' must be strings.")
 
         if element_type in ["shapes", "points", "labels"]:
-            if groups is None:
+            if groups_overwrite is None:
                 raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-            if len(groups) != len(palette):
+            if (
+                groups_overwrite is not None
+                and palette_overwrite is not None
+                and len(groups_overwrite) != len(palette_overwrite)
+            ):
                 raise ValueError(
-                    f"The length of 'palette' and 'groups' must be the same, length is {len(palette)} and"
-                    f"{len(groups)} respectively."
+                    f"The length of 'palette' and 'groups' must be the same, length is {len(palette_overwrite)} and"
+                    f"{len(groups_overwrite)} respectively."
                 )
-            for index, sublist in enumerate(groups):
-                if not len(sublist) == len(palette[index]):
-                    raise ValueError("Not all nested lists in `groups` and `palette` are of equal length.")
-                if (
-                    not len(g_set := {type(el) for el in sublist})
-                    == len(p_set := {type(pal) for pal in palette[index]})
-                    == 1
-                ):
-                    raise ValueError(
-                        "Mixed dtypes found in sublists of `groups` and/or `palette`. Must be either all"
-                        "`str` or `None`."
-                    )
-                if g_set != p_set:
-                    raise ValueError(
-                        "Sublists with same index in `groups` and `palette` must contain elements of the "
-                        "same dtype, either both `str` or `None`."
-                    )
+            if palette_overwrite is not None:
+                for index, sublist in enumerate(groups_overwrite):
+                    if not len(sublist) == len(palette_overwrite[index]):
+                        raise ValueError("Not all nested lists in `groups` and `palette` are of equal length.")
+                    if (
+                        not len(g_set := {type(el) for el in sublist})
+                        == len(p_set := {type(pal) for pal in palette_overwrite[index]})
+                        == 1
+                    ):
+                        raise ValueError(
+                            "Mixed dtypes found in sublists of `groups` and/or `palette`. Must be either all"
+                            "`str` or `None`."
+                        )
+                    if g_set != p_set:
+                        raise ValueError(
+                            "Sublists with same index in `groups` and `palette` must contain elements of the "
+                            "same dtype, either both `str` or `None`."
+                        )
 
-    params_dict["palette"] = palette
+    params_dict["palette"] = palette_overwrite
 
     if cmap is not None:
         if element_type == "images":
@@ -1743,12 +1777,14 @@ def _validate_render_params(
         if not colors.is_color_like(outline_color):
             raise TypeError("Parameter 'outline_color' must be color-like.")
 
+    color_overwrite: list[str | None] = []
+    col_for_color: list[str | None]
     if element_type in ["points", "shapes"]:
-        if color is not None:
+        if isinstance(color, (str, list)):
             if not isinstance(color, list):
                 if colors.is_color_like(color):
                     logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-                    color = [color]
+                    color_overwrite = [color]
                     col_for_color = [None]
                 else:
                     if not isinstance(color, str):
@@ -1757,13 +1793,13 @@ def _validate_render_params(
                             + "in sdata.table to use for coloring the shapes."
                         )
                     col_for_color = [color]
-                    color = [None]
+                    color_overwrite = [None]
             else:
                 col_for_color = []
-                for index, c in enumerate(color):
+                for c in color:
                     if colors.is_color_like(c):
                         logger.info(f"Value `{c}` in list 'color' appears to be a color, using it as such.")
-                        color[index] = c
+                        color_overwrite.append(c)
                         col_for_color.append(None)
                     else:
                         if not isinstance(c, str):
@@ -1772,11 +1808,12 @@ def _validate_render_params(
                                 + "in sdata.table to use for coloring the shapes or should be color-like."
                             )
                         col_for_color.append(c)
-                        color[index] = None
+                        color_overwrite.append(None)
         else:
-            color = [color]
+            color_overwrite = [color]
             col_for_color = [None]
-        params_dict["color"] = color
+
+        params_dict["color"] = color_overwrite
         params_dict["col_for_color"] = col_for_color
 
     if element_type == "points":
@@ -1839,23 +1876,26 @@ def _match_length_elements_groups_palette(
     params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     render_elements: list[str],
     image: bool = False,
-):
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
     if image and isinstance(params, ImageRenderParams):
         if params.palette is None:
             params.palette = [[None] for _ in range(len(render_elements))]
         else:
             params.palette = [params.palette[0] for _ in range(len(render_elements))]
-    else:
+    elif not isinstance(params, ImageRenderParams):
         groups = params.groups
         palette = params.palette
+
+        groups_elements: list[list[str | None]] | None = None
+        palette_elements: list[list[str | None]] | None = None
         # We already checked before that length of groups and palette is the same
         if groups is not None:
             if len(groups) == 1:
-                params.groups = [groups[0] for _ in range(len(render_elements))]
+                groups_elements = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
                 if palette is not None:
-                    params.palette = [palette[0] for _ in range(len(render_elements))]
+                    palette_elements = [palette[0] for _ in range(len(render_elements)) if isinstance(palette[0], list)]
                 else:
-                    params.palette = [[None] for _ in range(len(render_elements))]
+                    palette_elements = [[None] for _ in range(len(render_elements))]
             else:
                 if len(groups) != len(render_elements):
                     raise ValueError(
@@ -1863,15 +1903,21 @@ def _match_length_elements_groups_palette(
                         "of elements to be rendered."
                     )
         else:
-            params.groups = [[None] for _ in range(len(render_elements))]
-            params.palette = [[None] for _ in range(len(render_elements))]
+            groups_elements = [[None] for _ in range(len(render_elements))]
+            palette_elements = [[None] for _ in range(len(render_elements))]
+        params.palette = palette_elements
+        params.groups = groups_elements
 
     return params
 
 
 def _get_wanted_render_elements(
-    sdata, sdata_wanted_elements, params, cs, element_type: Literal["images", "labels", "points", "shapes"]
-):
+    sdata: SpatialData,
+    sdata_wanted_elements: list[str],
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    cs: str,
+    element_type: Literal["images", "labels", "points", "shapes"],
+) -> tuple[list[str], list[str], bool]:
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         wanted_elements = params.elements if params.elements is not None else list(getattr(sdata, element_type).keys())
@@ -1886,20 +1932,47 @@ def _get_wanted_render_elements(
     raise ValueError(f"Unknown element type {element_type}")
 
 
-def _update_params(sdata, params, wanted_elements_on_cs, element_type: Literal["images", "labels", "points", "shapes"]):
-    if element_type in ["labels", "points", "shapes"] and wanted_elements_on_cs:
+def _update_params(
+    sdata: SpatialData,
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    wanted_elements_on_cs: list[str],
+    element_type: Literal["images", "labels", "points", "shapes"],
+) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
+    if isinstance(params, (LabelsRenderParams, PointsRenderParams, ShapesRenderParams)) and wanted_elements_on_cs:
         params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
-        if element_type == "labels":
+        if isinstance(params, LabelsRenderParams):
             params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
-        else:
+        if isinstance(params, (PointsRenderParams, ShapesRenderParams)):
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
-    # if params.palette is None:
-    #     params.palette = [[None] for _ in wanted_elements_on_cs]
     image_flag = element_type == "images"
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
 
 
-def _is_coercable_to_float(series):
+def _is_coercable_to_float(series: pd.Series) -> bool:
     numeric_series = pd.to_numeric(series, errors="coerce")
     return not numeric_series.isnull().any()
+
+
+def _return_list_str_none(parameter: list[str | None] | str | None) -> list[str | None]:
+    """Force mypy to recognize list of string and None."""
+    if isinstance(parameter, list) and all(isinstance(item, (str, type(None))) for item in parameter):
+        checked_parameter = parameter if isinstance(parameter, list) else [None]
+    else:
+        checked_parameter = [None]
+    return checked_parameter
+
+
+def _return_list_list_str_none(
+    parameter: str | list[list[str | None]] | list[str | None] | None,
+) -> list[list[str | None]]:
+    if not isinstance(parameter, list):
+        return [[None]]
+
+    if all(
+        isinstance(sublist, list) and all(isinstance(inner_item, (str, type(None))) for inner_item in sublist)
+        for sublist in parameter
+    ):
+        return [list(sublist) for sublist in parameter if isinstance(sublist, list)]
+
+    return [[None]]
