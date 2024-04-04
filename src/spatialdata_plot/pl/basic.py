@@ -272,7 +272,7 @@ class PlotAccessor:
     def render_points(
         self,
         elements: list[str] | str | None = None,
-        color: list[str] | str | None = None,
+        color: list[str | None] | str | None = None,
         alpha: float | int = 1.0,
         groups: list[list[str | None]] | list[str] | str | None = None,
         palette: list[list[str | None]] | list[str] | str | None = None,
@@ -475,7 +475,7 @@ class PlotAccessor:
     def render_labels(
         self,
         elements: list[str] | str | None = None,
-        color: list[str] | str | None = None,
+        color: list[str | None] | str | None = None,
         groups: list[list[str | None]] | list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
@@ -562,6 +562,7 @@ class PlotAccessor:
             na_color=na_color,  # type: ignore[arg-type]
             **kwargs,
         )
+
         sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
             elements=params_dict["elements"],
             color=params_dict["color"],

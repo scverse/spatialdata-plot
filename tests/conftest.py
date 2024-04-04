@@ -210,7 +210,6 @@ def sdata(request) -> SpatialData:
         s = SpatialData()
     else:
         s = request.getfixturevalue(request.param)
-    # print(f"request.param = {request.param}")
     return s
 
 
