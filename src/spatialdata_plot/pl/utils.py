@@ -234,7 +234,7 @@ def _get_collection_shape(
             c = cmap(norm(c))
 
     fill_c = ColorConverter().to_rgba_array(c)
-    fill_c[..., -1] = render_params.fill_alpha
+    fill_c[..., -1] *= render_params.fill_alpha
 
     if render_params.outline_params.outline:
         outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
