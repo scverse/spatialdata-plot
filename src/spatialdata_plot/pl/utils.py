@@ -206,7 +206,20 @@ def _get_collection_shape(
 
     try:
         # fails when numeric
-        fill_c = ColorConverter().to_rgba_array(c)
+        if len(c.shape) == 1 and c.shape[0] in [3, 4] and c.shape[0] == len(shapes) and c.dtype == float:
+            if norm is None:
+                c = cmap(c)
+            else:
+                try:
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                except ValueError as e:
+                    raise ValueError(
+                        "Could not convert values in the `color` column to float, if `color` column represents"
+                        " categories, set the column to categorical dtype."
+                    ) from e
+                c = cmap(norm(c))
+        else:
+            fill_c = ColorConverter().to_rgba_array(c)
     except ValueError:
         if norm is None:
             c = cmap(c)
@@ -826,7 +839,7 @@ def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
     fig_params: FigParams,
-    value_to_plot: str | None,  # str | None,
+    value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
@@ -1465,13 +1478,13 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping.copy()) != 0:
-                            for table_name in mapping.copy():
+                        if isinstance(table_set := element_table_mapping[element_name], set) and len(table_set) != 0:
+                            for table_name in table_set.copy():
                                 if (
                                     col_color not in sdata[table_name].obs.columns
                                     and col_color not in sdata[table_name].var_names
                                 ):
-                                    mapping.remove(table_name)
+                                    table_set.remove(table_name)
                                     params.col_for_color.append(None)
                                 else:
                                     params.col_for_color.append(col_color)
@@ -1957,7 +1970,7 @@ def _is_coercable_to_float(series: pd.Series) -> bool:
 def _return_list_str_none(parameter: list[str | None] | str | None) -> list[str | None]:
     """Force mypy to recognize list of string and None."""
     if isinstance(parameter, list) and all(isinstance(item, (str, type(None))) for item in parameter):
-        checked_parameter = parameter if isinstance(parameter, list) else [None]
+        checked_parameter = parameter
     else:
         checked_parameter = [None]
     return checked_parameter

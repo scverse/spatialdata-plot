@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--  Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
+-   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
 
 ## [0.2.0] - 2024-03-24
 
