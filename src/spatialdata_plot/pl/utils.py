@@ -1970,7 +1970,7 @@ def _is_coercable_to_float(series: pd.Series) -> bool:
 def _return_list_str_none(parameter: list[str | None] | str | None) -> list[str | None]:
     """Force mypy to recognize list of string and None."""
     if isinstance(parameter, list) and all(isinstance(item, (str, type(None))) for item in parameter):
-        checked_parameter = parameter if isinstance(parameter, list) else [None]
+        checked_parameter = parameter
     else:
         checked_parameter = [None]
     return checked_parameter
