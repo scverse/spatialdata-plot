@@ -839,7 +839,7 @@ def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
     fig_params: FigParams,
-    value_to_plot: str | None,  # str | None,
+    value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype],
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
@@ -1478,7 +1478,7 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping.copy()) != 0:
+                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping) != 0:
                             for table_name in mapping.copy():
                                 if (
                                     col_color not in sdata[table_name].obs.columns
