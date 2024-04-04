@@ -708,7 +708,8 @@ def _set_color_source_vec(
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_map)
         if color_vector.isna().any():
-            color_vector = color_vector.add_categories([to_hex(na_color)])
+            if na_cat_color := to_hex(na_color) not in color_vector.categories:
+                color_vector = color_vector.add_categories([na_cat_color])
             color_vector = color_vector.fillna(to_hex(na_color))
 
         return color_source_vector, color_vector, True
