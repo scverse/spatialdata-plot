@@ -1478,13 +1478,13 @@ def _validate_colors_element_table_mapping_points_shapes(
                         params.col_for_color.append(col_color)
                         element_table_mapping[element_name] = set()
                     else:
-                        if isinstance(mapping := element_table_mapping[element_name], set) and len(mapping) != 0:
-                            for table_name in mapping.copy():
+                        if isinstance(table_set := element_table_mapping[element_name], set) and len(table_set) != 0:
+                            for table_name in table_set.copy():
                                 if (
                                     col_color not in sdata[table_name].obs.columns
                                     and col_color not in sdata[table_name].var_names
                                 ):
-                                    mapping.remove(table_name)
+                                    table_set.remove(table_name)
                                     params.col_for_color.append(None)
                                 else:
                                     params.col_for_color.append(col_color)
