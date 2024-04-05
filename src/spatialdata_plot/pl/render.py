@@ -45,6 +45,7 @@ from spatialdata_plot.pl.utils import (
     _normalize,
     _rasterize_if_necessary,
     _set_color_source_vec,
+    _get_palette,
     to_hex,
 )
 
@@ -230,63 +231,10 @@ def _render_points(
         table_name = element_table_mapping.get(e)
 
         coords = ["x", "y"]
-        # if col_for_color is not None:
-        if (
-            col_for_color is not None
-            and col_for_color not in points.columns
-            and col_for_color not in sdata_filt[table_name].obs.columns
-        ):
-            # no error in case there are multiple elements, but onyl some have color key
-            msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
-            logger.warning(msg)
-        elif col_for_color is None or (table_name is not None and col_for_color in sdata_filt[table_name].obs.columns):
-            points = points[coords].compute()
-            if (
-                col_for_color
-                and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-                and not _is_coercable_to_float(color_col)
-            ):
-                warnings.warn(
-                    f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
-                    f"plotting. Consider converting before plotting.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
-        else:
-            coords += [col_for_color]
-            points = points[coords].compute()
+        points = points[coords].compute()
 
         if render_params.groups[index][0] is not None and col_for_color is not None:
             points = points[points[col_for_color].isin(render_params.groups[index])]
-
-        # we construct an anndata to hack the plotting functions
-        if table_name is None:
-            adata = AnnData(
-                X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
-            )
-        else:
-            adata = AnnData(
-                X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
-            )
-            sdata_filt[table_name] = adata
-
-        # we can do this because of dealing with a copy
-
-        # Convert back to dask dataframe to modify sdata
-        points = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
-
-        if col_for_color is not None:
-            cols = sc.get.obs_df(adata, col_for_color)
-            # maybe set color based on type
-            if isinstance(cols.dtype, pd.CategoricalDtype):
-                _maybe_set_colors(
-                    source=adata,
-                    target=adata,
-                    key=col_for_color,
-                    palette=render_params.palette[index] if render_params.palette[index][0] is not None else None,
-                )
 
         # when user specified a single color, we overwrite na with it
         default_color = (
@@ -317,9 +265,15 @@ def _render_points(
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
         norm = copy(render_params.cmap_params.norm)
+
+        if type(color_vector[0]) == str:
+            color_vector = pd.Categorical(color_vector)
+            category_map = {category: i for i, category in enumerate(color_vector.categories)}
+            color_vector = color_vector.map(category_map)
+
         _cax = ax.scatter(
-            adata[:, 0].X.flatten(),
-            adata[:, 1].X.flatten(),
+            points["x"],
+            points["y"],
             s=render_params.size,
             c=color_vector,
             rasterized=sc_settings._vector_friendly,
@@ -341,7 +295,8 @@ def _render_points(
                 ax=ax,
                 cax=cax,
                 fig_params=fig_params,
-                adata=adata,
+                # adata=adata,
+                adata=None,
                 value_to_plot=render_params.col_for_color,
                 color_source_vector=color_source_vector,
                 palette=palette,
