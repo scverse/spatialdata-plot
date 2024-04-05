@@ -181,7 +181,8 @@ class PlotAccessor:
             annotate the respective element (region must be set to the specific element). If the color column is found
             in multiple locations, please provide the table_name to be used for the element.
         fill_alpha : float | int, default 1.0
-            Alpha value for the fill of shapes.
+            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the
+            user, this value will multiply the value present in the cmap. 
         groups : list[list[str | None]] | list[str | None] | str | None
             When using `color` and the key represents discrete labels, `groups`
             can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
