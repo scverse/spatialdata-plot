@@ -634,16 +634,8 @@ def _set_color_source_vec(
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
-    model = get_model(sdata[element_name])
-
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-    if model == PointsModel and table_name is not None:
-        origin = _locate_points_value_in_table(
-            value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name
-        )
-        if origin is not None:
-            origins.append(origin)
 
     if len(origins) > 1:
         raise ValueError(
@@ -651,11 +643,8 @@ def _set_color_source_vec(
         )
 
     if len(origins) == 1:
-        if model == PointsModel and table_name is not None:
-            color_source_vector = get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
-        else:
-            vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-            color_source_vector = vals[value_to_plot]
+        vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+        color_source_vector = vals[value_to_plot]
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
