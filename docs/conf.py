@@ -59,6 +59,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinx_design",
+    "sphinxext.opengraph",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -130,6 +131,7 @@ nitpicky = False  # TODO: solve upstream.
 html_theme = "sphinx_book_theme"
 # html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_css_files = ["css/custom.css"]
 html_title = project_name
 html_logo = "_static/img/spatialdata_horizontal.png"
 
@@ -145,19 +147,3 @@ nitpick_ignore = [
     # you can add an exception to this list.
     ("py:class", "igraph.Graph"),
 ]
-
-
-def setup(app):
-    """App setup hook."""
-    app.add_config_value(
-        "recommonmark_config",
-        {
-            "auto_toc_tree_section": "Contents",
-            "enable_auto_toc_tree": True,
-            "enable_math": True,
-            "enable_inline_math": False,
-            "enable_eval_rst": True,
-        },
-        True,
-    )
-    app.add_css_file("css/custom.css")
