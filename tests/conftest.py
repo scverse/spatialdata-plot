@@ -9,7 +9,6 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import spatialdata as sd
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
@@ -29,6 +28,8 @@ from spatialdata.models import (
     TableModel,
 )
 from xarray import DataArray
+
+import spatialdata_plot  # noqa: F401
 
 HERE: Path = Path(__file__).parent
 
@@ -193,8 +194,7 @@ def empty_table() -> SpatialData:
 
 @pytest.fixture(
     # params=["labels"]
-    params=["full", "empty"]
-    + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
+    params=["full", "empty"] + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
     # + ["empty_" + x for x in ["table"]] # TODO: empty table not supported yet
 )
 def sdata(request) -> SpatialData:

@@ -2,11 +2,11 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatialdata import SpatialData
 from spatialdata.models import TableModel
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)

@@ -3,13 +3,13 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
 from spatialdata.models import TableModel
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()

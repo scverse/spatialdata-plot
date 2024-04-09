@@ -3,7 +3,6 @@ import math
 import matplotlib
 import matplotlib.pyplot as plt
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from spatialdata import SpatialData
 from spatialdata.transformations import (
     Affine,
@@ -14,6 +13,7 @@ from spatialdata.transformations import (
     set_transformation,
 )
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()

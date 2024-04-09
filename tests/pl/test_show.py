@@ -1,8 +1,8 @@
 import matplotlib
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from spatialdata import SpatialData
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
