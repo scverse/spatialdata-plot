@@ -1,18 +1,7 @@
 from collections import OrderedDict
 
 import spatialdata as sd
-from spatialdata.models import TableModel
 from spatialdata.transformations import get_transformation
-
-
-def _get_region_key(sdata: sd.SpatialData) -> str:
-    """Quick access to the data's region key."""
-    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY_KEY])
-
-
-def _get_instance_key(sdata: sd.SpatialData) -> str:
-    """Quick access to the data's instance key."""
-    return str(sdata.table.uns[TableModel.ATTRS_KEY][TableModel.INSTANCE_KEY])
 
 
 def _verify_plotting_tree(sdata: sd.SpatialData) -> sd.SpatialData:

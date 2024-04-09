@@ -113,12 +113,12 @@ def test_sdata_multiple_images_with_table():
     region_key = "annotated_region"
 
     adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
-    adata.obs[instance_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
+    adata.obs[instance_key] = list(range(3)) + list(range(7)) + list(range(20))
     adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
     table = TableModel.parse(
         adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
     )
-    sdata = sd.SpatialData(images=images, table=table)
+    sdata = sd.SpatialData(images=images, tables={"table": table})
     return sdata
 
 
@@ -210,7 +210,6 @@ def sdata(request) -> SpatialData:
         s = SpatialData()
     else:
         s = request.getfixturevalue(request.param)
-    # print(f"request.param = {request.param}")
     return s
 
 
