@@ -48,6 +48,10 @@ test = [
     "pytest",
     "pytest-cov",
 ]
+# this will be used by readthedocs and will make pip also look for pre-releases, generally installing the latest available version
+pre = [
+    "spatialdata>=0.1.0-pre0"
+]
 
 [tool.coverage.run]
 source = ["spatialdata_plot"]
@@ -114,7 +118,7 @@ exclude = [
     "dist",
     "setup.py",
 ]
-ignore = [
+lint.ignore = [
     # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E731",
     # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
@@ -133,7 +137,7 @@ ignore = [
     "D105",
 ]
 line-length = 120
-select = [
+lint.select = [
     "D", # flake8-docstrings
     "I", # isort
     "E", # pycodestyle
@@ -152,16 +156,16 @@ select = [
     "RET", # flake8-raise
     "PGH", # pygrep-hooks
 ]
-unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
+lint.unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
 target-version = "py39"
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
     "tests/*" = ["D", "PT", "B024"]
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
     "docs/*" = ["D","B","E","A"]
     # "src/spatialdata/transformations/transformations.py" = ["D101","D102", "D106", "B024", "T201", "RET504"]
     "tests/conftest.py"= ["E402", "RET504"]
     "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
 [tool.bumpver]
