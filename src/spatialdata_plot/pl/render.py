@@ -697,6 +697,7 @@ def _render_labels(
                 alpha=render_params.outline_alpha,
                 origin="lower",
             )
+            _cax.set_transform(trans_data)
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
@@ -706,7 +707,6 @@ def _render_labels(
                 origin="lower",
             )
             _cax.set_transform(trans_data)
-            cax = ax.add_image(_cax)
         else:
             # Default: no alpha, contour = infill
             label = _map_color_seg(
@@ -728,7 +728,7 @@ def _render_labels(
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
-        _cax.set_transform(trans_data)
+            _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
