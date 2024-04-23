@@ -664,71 +664,48 @@ def _render_labels(
             table_name=cast(str, table_name),
         )
 
-        if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
-            # First get the labels infill and plot them
-            labels_infill = _map_color_seg(
-                seg=label.values,
-                cell_id=instance_id,
-                color_vector=color_vector,
-                color_source_vector=color_source_vector,
-                cmap_params=render_params.cmap_params,
-                seg_erosionpx=None,
-                seg_boundaries=render_params.outline,
-                na_color=render_params.cmap_params.na_color,
-            )
+        # First get the labels infill and plot them
+        labels_infill = _map_color_seg(
+            seg=label.values,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=None,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-            # Then overlay the contour
-            labels_contour = _map_color_seg(
-                seg=label.values,
-                cell_id=instance_id,
-                color_vector=color_vector,
-                color_source_vector=color_source_vector,
-                cmap_params=render_params.cmap_params,
-                seg_erosionpx=render_params.contour_px,
-                seg_boundaries=render_params.outline,
-                na_color=render_params.cmap_params.na_color,
-            )
+        # Then overlay the contour
+        labels_contour = _map_color_seg(
+            seg=label.values,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=render_params.outline,
+            na_color=render_params.cmap_params.na_color,
+        )
 
-            _cax = ax.imshow(
-                labels_contour,
-                rasterized=True,
-                cmap=None if categorical else render_params.cmap_params.cmap,
-                norm=None if categorical else render_params.cmap_params.norm,
-                alpha=render_params.outline_alpha,
-                origin="lower",
-            )
-            _cax.set_transform(trans_data)
-            _cax = ax.imshow(
-                labels_infill,
-                rasterized=True,
-                cmap=None if categorical else render_params.cmap_params.cmap,
-                norm=None if categorical else render_params.cmap_params.norm,
-                alpha=render_params.fill_alpha,
-                origin="lower",
-            )
-            _cax.set_transform(trans_data)
-        else:
-            # Default: no alpha, contour = infill
-            label = _map_color_seg(
-                seg=label.values,
-                cell_id=instance_id,
-                color_vector=color_vector,
-                color_source_vector=color_source_vector,
-                cmap_params=render_params.cmap_params,
-                seg_erosionpx=render_params.contour_px,
-                seg_boundaries=render_params.outline,
-                na_color=render_params.cmap_params.na_color,
-            )
-
-            _cax = ax.imshow(
-                label,
-                rasterized=True,
-                cmap=None if categorical else render_params.cmap_params.cmap,
-                norm=None if categorical else render_params.cmap_params.norm,
-                alpha=render_params.fill_alpha,
-                origin="lower",
-            )
-            _cax.set_transform(trans_data)
+        _cax = ax.imshow(
+            labels_contour,
+            rasterized=True,
+            cmap=None if categorical else render_params.cmap_params.cmap,
+            norm=None if categorical else render_params.cmap_params.norm,
+            alpha=render_params.outline_alpha,
+            origin="lower",
+        )
+        _cax.set_transform(trans_data)
+        _cax = ax.imshow(
+            labels_infill,
+            rasterized=True,
+            cmap=None if categorical else render_params.cmap_params.cmap,
+            norm=None if categorical else render_params.cmap_params.norm,
+            alpha=render_params.fill_alpha,
+            origin="lower",
+        )
+        _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
