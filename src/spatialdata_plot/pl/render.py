@@ -14,6 +14,7 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
+from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from pandas.api.types import is_categorical_dtype
@@ -43,6 +44,7 @@ from spatialdata_plot.pl.utils import (
     _get_linear_colormap,
     _map_color_seg,
     _maybe_set_colors,
+    _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
     _normalize,
     _rasterize_if_necessary,
@@ -141,12 +143,12 @@ def _render_shapes(
         # Determine which method to use for rendering
         method = render_params.method
         if method is None:
-            method = "datashader" if len(shapes) > 100 else "matplotlib"
+            method = "datashader" if len(shapes) > 10000 else "matplotlib"
         elif method not in ["matplotlib", "datashader"]:
             raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+        logger.info(f"Using {method}")
 
         if method == "matplotlib":
-            logger.info(f"Using {method}")
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
@@ -167,8 +169,6 @@ def _render_shapes(
                 path.vertices = trans.transform(path.vertices)
                 cax = ax.add_collection(_cax)
         elif method == "datashader":
-            logger.info(f"Using {method}")
-
             # Where to put this
             trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
@@ -343,65 +343,80 @@ def _render_points(
 
         method = render_params.method
         if method is None:
-            method = "datashader" if len(points.shape[0]) > 10000 else "matplotlib"
+            method = "datashader" if len(points) > 10000 else "matplotlib"
         elif method not in ["matplotlib", "datashader"]:
             raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
 
         if method == "datashader":
+            # NOTE: s in matplotlib is in units of points**2
+            px = int(np.round(np.sqrt(render_params.size)))
+
             extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
-            x_ext = extent["x"][1]
-            y_ext = extent["y"][1]
-            previous_xlim = fig_params.ax.get_xlim()
-            previous_ylim = fig_params.ax.get_ylim()
-            x_range = [0, x_ext]
-            y_range = [0, y_ext]
-            # if sth else was plotted before: might need larger extent/size
-            # else: circles representing a point are "cut off at image borders"
-            if previous_ylim[0] > previous_ylim[1]:
-                if previous_xlim[0] < x_range[0]:
-                    x_range[0] = previous_xlim[0]
-                if previous_xlim[1] > x_range[1]:
-                    x_range[1] = previous_xlim[1]
-                # different order for x and y!
-                if previous_ylim[0] > y_range[1]:
-                    y_range[1] = previous_ylim[0]
-                if previous_ylim[1] < y_range[0]:
-                    y_range[0] = previous_ylim[1]
+            x_ext = [min(0, extent["x"][0]), extent["x"][1]]
+            y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+            previous_xlim = ax.get_xlim()
+            previous_ylim = ax.get_ylim()
+            # increase range if sth larger was rendered before
+            if _mpl_ax_contains_elements(ax):
+                x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
+                if ax.yaxis_inverted():  # case for e.g. images
+                    y_ext = [min(y_ext[0], previous_ylim[1]), max(y_ext[1], previous_ylim[0])]
+                else:  # case for e.g. labels
+                    y_ext = [min(y_ext[0], previous_ylim[0]), max(y_ext[1], previous_ylim[1])]
             # round because we need integers
-            plot_width = int(np.round(x_range[1] - x_range[0]))
-            plot_height = int(np.round(y_range[1] - y_range[0]))
+            plot_width = int(np.round(x_ext[1] - x_ext[0]))
+            plot_height = int(np.round(y_ext[1] - y_ext[0]))
 
             # use datashader for the visualization of points
             # TODO: what about trans/norm at this point?
-            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
-            # TODO: design choice: do we want count as reduction?
+            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
+
+            color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
+            aggregate_with_sum = None
             if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
-                agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.count()))
-                # agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.any()))
+                if color_by_categorical:
+                    agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.by(col_for_color, ds.count()))
+                else:
+                    # numerical
+                    agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.sum(column=col_for_color))
+                    # save min and max values for drawing the colorbar
+                    aggregate_with_sum = (agg.min(), agg.max())
             else:
                 agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.count())
-                # agg = cvs.points(sdata_filt.points[e], "x", "y", agg=ds.any())
-            # NOTE: s in matplotlib is in units of points**2
-            px = int(np.round(np.sqrt(render_params.size)))
+
             color_key = (
                 [x[:-2] for x in color_vector.categories.values]
                 if (type(color_vector) == pd.core.arrays.categorical.Categorical)
                 and (len(color_vector.categories.values) > 1)
                 else None
             )
-            ds_result = ds.tf.shade(
-                ds.tf.spread(agg, px=px),
-                rescale_discrete_levels=True,
-                alpha=render_params.alpha * 255,
-                cmap=color_vector[0][:-2],
-                color_key=color_key,
-                min_alpha=200,  # TODO: choose some value (any gives wierd background)
-            )
+            if color_by_categorical or col_for_color is None:
+                ds_result = ds.tf.shade(
+                    ds.tf.spread(agg, px=px),
+                    rescale_discrete_levels=True,
+                    cmap=color_vector[0][:-2],
+                    color_key=color_key,
+                    min_alpha=np.min([150, render_params.alpha * 255]),
+                )  # TODO: choose other value than 150 for min_alpha (here and below)?
+            else:
+                ds_result = ds.tf.shade(
+                    ds.tf.spread(agg, px=px),
+                    rescale_discrete_levels=True,
+                    cmap=render_params.cmap_params.cmap,
+                    # color_key=color_key,
+                )
             # render image
             rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-            ax.imshow(rbga_image, zorder=render_params.zorder)
-            cax = None
+            cax = ax.imshow(rbga_image, zorder=render_params.zorder, alpha=render_params.alpha)
+            if aggregate_with_sum is not None:
+                cax = ScalarMappable(
+                    norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                    cmap=render_params.cmap_params.cmap,
+                )
+
         elif method == "matplotlib":
+            # update axis limits if plot was empty before (necessary if datashader comes after)
+            update_parameters = not _mpl_ax_contains_elements(ax)
             # original way of plotting points
             _cax = ax.scatter(
                 adata[:, 0].X.flatten(),
@@ -417,6 +432,11 @@ def _render_points(
                 # **kwargs,
             )
             cax = ax.add_collection(_cax)
+            if update_parameters:
+                # necessary if points are plotted with mpl first and then with datashader
+                extent = get_extent(sdata_filt.points[e], coordinate_system=coordinate_system)
+                ax.set_xbound(extent["x"])
+                ax.set_ybound(extent["y"])
 
         if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
             if color_source_vector is None:
