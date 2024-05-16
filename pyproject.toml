@@ -47,6 +47,7 @@ docs = [
 test = [
     "pytest",
     "pytest-cov",
+    "pooch", # for scipy.datasets module
 ]
 # this will be used by readthedocs and will make pip also look for pre-releases, generally installing the latest available version
 pre = [
