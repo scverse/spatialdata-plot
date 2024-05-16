@@ -1,13 +1,12 @@
 import dask.array as da
 import matplotlib
+import numpy as np
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
-import numpy as np
 
-from tests.conftest import PlotTester, PlotTesterMeta, DPI
-
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()

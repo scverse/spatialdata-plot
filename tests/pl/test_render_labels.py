@@ -10,8 +10,7 @@ from spatialdata import SpatialData
 from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
 from spatialdata.models import TableModel
 
-from tests.conftest import PlotTester, PlotTesterMeta, DPI
-
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
