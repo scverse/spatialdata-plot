@@ -8,11 +8,19 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.2.3] - tbd
+
+### Fixed
+
+-   Fix color assignment for NaN values (#257)
+-   Fix channel str support #221
+
 ## [0.2.2] - 2024-05-02
 
 ### Fixed
 
 -   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
+-   Fix channel str support (#221)
 
 ## [0.2.1] - 2024-03-26
 
