@@ -374,7 +374,7 @@ class PlotTester(ABC):  # noqa: B024
     def compare(cls, basename: str, tolerance: Optional[float] = None):
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
-        
+
         width, height = 400, 300  # fixed dimensions so runners don't change
         fig = plt.gcf()
         fig.set_size_inches(width / DPI, height / DPI)
