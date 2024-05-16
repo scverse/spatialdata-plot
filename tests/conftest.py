@@ -35,7 +35,7 @@ HERE: Path = Path(__file__).parent
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 TOL = 60
-DPI = 40
+DPI = 80
 
 RNG = default_rng()
 
