@@ -1,14 +1,16 @@
 import dask.array as da
 import matplotlib
+import numpy as np
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
-from tests.conftest import PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
+RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
-sc.set_figure_params(dpi=40, color_map="viridis")
+sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 

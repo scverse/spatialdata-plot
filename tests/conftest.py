@@ -14,7 +14,6 @@ from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
 from multiscale_spatial_image import MultiscaleSpatialImage
-from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
@@ -35,9 +34,9 @@ HERE: Path = Path(__file__).parent
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 TOL = 60
-DPI = 40
+DPI = 80
 
-RNG = default_rng()
+RNG = np.random.default_rng(seed=42)
 
 
 @pytest.fixture()
@@ -375,12 +374,19 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
+        width, height = 400, 300  # fixed dimensions so runners don't change
+        fig = plt.gcf()
+        fig.set_size_inches(width / DPI, height / DPI)
+        fig.set_dpi(DPI)
+
+        # Apply constrained layout and save the plot
+        fig.set_constrained_layout(True)
         plt.savefig(out_path, dpi=DPI)
         plt.close()
 
         if tolerance is None:
             # see https://github.com/scverse/squidpy/pull/302
-            tolerance = 2 * TOL if "Napari" in str(basename) else TOL
+            tolerance = 2 * TOL if "Napari" in basename else TOL
 
         res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
 

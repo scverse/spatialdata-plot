@@ -10,14 +10,14 @@ from spatialdata import SpatialData
 from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
 from spatialdata.models import TableModel
 
-from tests.conftest import PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
+RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
-sc.set_figure_params(dpi=40, color_map="viridis")
+sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
-RNG = np.random.default_rng(seed=42)
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
 # 2. tests which produce a plot must be prefixed with `test_plot_`
@@ -72,7 +72,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
                 elements="blobs_labels", na_color="red", fill_alpha=1, outline_alpha=0, outline=False
             )
             .pl.render_labels(
-                elements="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=10
+                elements="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=15
             )
             .pl.show()
         )
@@ -118,6 +118,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
     def test_plot_multiscale_label_categorical_color(self, sdata_blobs: SpatialData):
+        # recreate RNG to get same plot acorss 3.9 and 3.10 workers
+        RNG = np.random.default_rng(seed=42)
+
         n_obs = max(_get_unique_label_values_as_index(sdata_blobs["blobs_multiscale_labels"]))
         adata = AnnData(
             RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
@@ -133,19 +136,3 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
         sdata_blobs.pl.render_labels("blobs_multiscale_labels", color="category").pl.show()
-
-    # def test_plot_multiscale_label_coercable_categorical_color(self, sdata_blobs: SpatialData):
-    #     n_obs = max(_get_unique_label_values_as_index(sdata_blobs["blobs_multiscale_labels"]))
-    #     adata = AnnData(
-    #         RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
-    #     )
-    #     adata.obs["instance_id"] = np.arange(adata.n_obs)
-    #     adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
-    #     adata.obs["instance_id"] = list(range(adata.n_obs))
-    #     adata.obs["region"] = "blobs_multiscale_labels"
-    #     table = TableModel.parse(
-    #         adata=adata, region_key="region", instance_key="instance_id", region="blobs_multiscale_labels"
-    #     )
-    #     sdata_blobs["other_table"] = table
-    #
-    #     sdata_blobs.pl.render_labels("blobs_multiscale_labels", color="category").pl.show()
