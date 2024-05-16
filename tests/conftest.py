@@ -382,7 +382,7 @@ class PlotTester(ABC):  # noqa: B024
 
         # Apply constrained layout and save the plot
         fig.set_constrained_layout(True)
-        plt.savefig(out_path, dpi=DPI, bbox_inches="tight")
+        plt.savefig(out_path, dpi=DPI)
         plt.close()
 
         if tolerance is None:
