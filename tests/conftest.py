@@ -14,7 +14,6 @@ from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
 from multiscale_spatial_image import MultiscaleSpatialImage
-from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
@@ -37,7 +36,7 @@ ACTUAL = HERE / "figures"
 TOL = 60
 DPI = 80
 
-RNG = default_rng()
+RNG = np.random.default_rng(seed=42)
 
 
 @pytest.fixture()

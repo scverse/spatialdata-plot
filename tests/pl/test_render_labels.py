@@ -118,6 +118,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
     def test_plot_multiscale_label_categorical_color(self, sdata_blobs: SpatialData):
+        # recreate RNG to get same plot acorss 3.9 and 3.10 workers
+        RNG = np.random.default_rng(seed=42)
+
         n_obs = max(_get_unique_label_values_as_index(sdata_blobs["blobs_multiscale_labels"]))
         adata = AnnData(
             RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
