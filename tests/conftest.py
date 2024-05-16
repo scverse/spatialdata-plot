@@ -375,12 +375,12 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
-        plt.savefig(out_path, dpi=DPI)
+        plt.savefig(out_path, dpi=DPI, bbox_inches="tight")
         plt.close()
 
         if tolerance is None:
             # see https://github.com/scverse/squidpy/pull/302
-            tolerance = 2 * TOL if "Napari" in str(basename) else TOL
+            tolerance = 2 * TOL if "Napari" in basename else TOL
 
         res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
 
