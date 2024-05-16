@@ -374,7 +374,14 @@ class PlotTester(ABC):  # noqa: B024
     def compare(cls, basename: str, tolerance: Optional[float] = None):
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
+        
+        width, height = 400, 300  # fixed dimensions so runners don't change
+        fig = plt.gcf()
+        fig.set_size_inches(width / DPI, height / DPI)
+        fig.set_dpi(DPI)
 
+        # Apply constrained layout and save the plot
+        fig.set_constrained_layout(True)
         plt.savefig(out_path, dpi=DPI, bbox_inches="tight")
         plt.close()
 
