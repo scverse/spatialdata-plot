@@ -10,7 +10,7 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
 from spatialdata.models import TableModel
-
+import matplotlib.pyplot as plt
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
@@ -112,7 +112,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-        n_obs = max(_get_unique_label_values_as_index(sdata_blobs[label]))
+        n_obs = len(_get_unique_label_values_as_index(sdata_blobs[label]))
         adata = AnnData(
             RNG.normal(size=(n_obs, 10)),
             obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
@@ -131,3 +131,27 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
         sdata_blobs.pl.render_labels(label, color="category").pl.show()
+
+    def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
+        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
+        sdata_blobs.table.obs["which_max"] = max_col
+
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="which_max", groups=["channel_0_sum"],
+        ).pl.show(ax=axs[1])
+
+    def test_plot_subset_categorical_label_maintains_order_when_palette_overwrite(self, sdata_blobs: SpatialData):
+        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
+        sdata_blobs.table.obs["which_max"] = max_col
+
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="which_max", groups=["channel_0_sum"], palette="red"
+        ).pl.show(ax=axs[1])

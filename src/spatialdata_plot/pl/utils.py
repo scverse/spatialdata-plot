@@ -731,10 +731,12 @@ def _map_color_seg(
 
     else:
         val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
-
         try:
-            cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        except AttributeError:
+            if isinstance(color_vector[0], (int, float, np.number)):
+                cols = cmap_params.cmap(cmap_params.norm(color_vector))
+            else:
+                raise TypeError("color_vector contains non-numerical values")
+        except TypeError:
             assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
 
