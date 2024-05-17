@@ -11,7 +11,7 @@ authors = [
 maintainers = [
     {name = "scverse", email = "tim.treis@helmholtz-munich.de"},
 ]
-urls.Documentation = "https://spatialdata.readthedocs.io/"
+urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
 requires-python = ">=3.9"
