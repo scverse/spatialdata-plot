@@ -1,5 +1,6 @@
 import dask.array as da
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,7 +11,7 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
 from spatialdata.models import TableModel
-import matplotlib.pyplot as plt
+
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
@@ -141,7 +142,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
         sdata_blobs.pl.render_labels(
-            "blobs_labels", color="which_max", groups=["channel_0_sum"],
+            "blobs_labels",
+            color="which_max",
+            groups=["channel_0_sum"],
         ).pl.show(ax=axs[1])
 
     def test_plot_subset_categorical_label_maintains_order_when_palette_overwrite(self, sdata_blobs: SpatialData):
