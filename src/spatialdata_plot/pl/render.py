@@ -644,7 +644,7 @@ def _render_labels(
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
             # get instance id based on subsetted table
-            instance_id = table.obs[instance_key].values
+            instance_id = np.unique(table.obs[instance_key].values)
 
         trans = get_transformation(label, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
@@ -730,6 +730,9 @@ def _render_labels(
             )
         _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
+
+        if groups[i][0] is not None and color_source_vector is not None:
+            color_source_vector = color_source_vector.set_categories(groups[i])
 
         _ = _decorate_axs(
             ax=ax,

@@ -510,7 +510,7 @@ class PlotAccessor:
         palette: list[list[str | None]] | list[str | None] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
-        na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: ColorLike | None = "lightgrey",
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
         scale: list[str] | str | None = None,
@@ -554,8 +554,11 @@ class PlotAccessor:
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None, optional
-            Color to be used for NAs values, if present.
+        na_color : str | list[float] | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color
+            ("red"), a hex representation ("#000000ff") or a list of floats that
+            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
+            be shown.
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of the labels.
         fill_alpha : float | int, default 0.3

@@ -656,7 +656,6 @@ def _set_color_source_vec(
         origin = _locate_points_value_in_table(value_key=value_to_plot, sdata=sdata, table_name=table_name)
         if origin is not None:
             origins.append(origin)
-
     if len(origins) > 1:
         raise ValueError(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
@@ -668,6 +667,7 @@ def _set_color_source_vec(
         else:
             vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
             color_source_vector = vals[value_to_plot]
+
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             if isinstance(palette, list) and palette[0] is not None:
@@ -676,17 +676,24 @@ def _set_color_source_vec(
                     "Consider using `cmap` to pass a ColorMap."
                 )
             return None, color_source_vector, False
-
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-        categories = color_source_vector.categories
+        # categories = color_source_vector.categories
 
         if groups is not None and groups[0] is not None:
-            color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
-            categories = groups
+            # convert for filtering
+            color_source_vector = color_source_vector.add_categories(["NaN"])
+            color_source_series = pd.Series(color_source_vector)
+            color_source_series = color_source_series.where(color_source_series.isin(groups), "NaN")
+            color_source_vector = pd.Categorical(color_source_series)
 
         color_map = _get_palette(
-            adata=sdata.table, cluster_key=value_to_plot, categories=color_source_vector, palette=palette
+            adata=sdata.table,
+            cluster_key=value_to_plot,
+            categories=color_source_vector,
+            palette=palette,
+            na_color=na_color,
         )
+
         if color_map is None:
             raise ValueError("Unable to create color palette.")
 
@@ -727,7 +734,7 @@ def _map_color_seg(
 
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        except TypeError:
+        except AttributeError:
             assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
 
@@ -750,7 +757,6 @@ def _map_color_seg(
     if seg_boundaries:
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
-
     return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
 
@@ -760,30 +766,29 @@ def _get_palette(
     cluster_key: None | str = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
+    na_color: ColorLike | None = "lightgrey",
 ) -> Mapping[str, str] | None:
     if not isinstance(categories, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(categories).__name__}")
 
-    palette = None if isinstance(palette, list) and palette[0] is None else palette
+    if isinstance(palette, list) and palette[0] is None:
+        palette = None
 
     if adata is not None and palette is None and adata.uns.get(f"{cluster_key}_colors") is not None:
-        try:
-            # palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
-            # in case the user filtered to specific groups, we need to subset the cat <-> color mapping
-            cc_mapping = pd.DataFrame(adata.uns[f"{cluster_key}_colors"], index=adata.obs[cluster_key].cat.categories)
-            palette = cc_mapping.loc[categories].values.flatten().tolist()
-            if len(palette) != len(categories):
-                raise ValueError(
-                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
-                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
-                )
-            return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
-        except KeyError as e:
-            logger.warning(e)
-            return None
-
-    # user specified a group <-> color mapping
-    if palette is not None and isinstance(palette, list) and len(palette) == len(categories):
+        # in case the user filtered to specific groups, we need to subset the cat <-> color mapping
+        cc_mapping = pd.DataFrame(
+            {
+                "color": list(adata.uns[f"{cluster_key}_colors"]) + [to_hex(to_rgba(na_color)[:3])],
+                "category": adata.obs[cluster_key].cat.categories.values.tolist() + ["NaN"],
+            }
+        )
+        cc_mapping = dict(zip(cc_mapping["category"], cc_mapping["color"]))
+        palette = [cc_mapping[category] for category in categories]
+        if len(palette) != len(categories):
+            raise ValueError(
+                f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
+                + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
+            )
         return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
 
     len_cat = len(categories.categories)
@@ -835,11 +840,11 @@ def _decorate_axs(
     cax: PatchCollection,
     fig_params: FigParams,
     value_to_plot: str | None,
-    color_source_vector: pd.Series[CategoricalDtype],
+    color_source_vector: pd.Series[CategoricalDtype] | Categorical,
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
+    na_color: ColorLike | None = "lightgrey",
     legend_fontsize: int | float | _FontSize | None = None,
     legend_fontweight: int | _FontWeight = "bold",
     legend_loc: str | None = "right margin",
@@ -866,7 +871,12 @@ def _decorate_axs(
             clusters = clusters[~clusters.isnull()]
 
             palette = _get_palette(
-                adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
+                adata=adata,
+                cluster_key=value_to_plot,
+                categories=clusters,
+                palette=palette,
+                alpha=alpha,
+                na_color=na_color,
             )
 
             _add_categorical_legend(
@@ -1696,11 +1706,6 @@ def _validate_render_params(
     params_dict["groups"] = groups_overwrite
 
     palette_overwrite: list[list[str]] | None = None
-    if groups_overwrite is not None and palette is None:
-        warnings.warn(
-            "Groups is specified but palette is not. Setting palette to default 'lightgray'", UserWarning, stacklevel=2
-        )
-        palette_overwrite = [["lightgray" for _ in range(len(groups_sublist))] for groups_sublist in groups_overwrite]
 
     if palette is not None:
         if not isinstance(palette, (list, str)):
