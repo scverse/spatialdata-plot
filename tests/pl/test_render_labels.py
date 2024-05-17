@@ -2,6 +2,7 @@ import dask.array as da
 import matplotlib
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from anndata import AnnData
@@ -100,39 +101,33 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             color=["channel_0_sum", "channel_1_sum"], table_name=["table", "multi_table"]
         ).pl.show()
 
-    def test_plot_label_categorical_color(self, sdata_blobs: SpatialData):
-        n_obs = max(_get_unique_label_values_as_index(sdata_blobs["blobs_labels"]))
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "blobs_labels",
+            "blobs_multiscale_labels",
+        ],
+    )
+    def test_plot_label_categorical_color(self, sdata_blobs: SpatialData, label: str):
+        self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
+
+    def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
+        n_obs = max(_get_unique_label_values_as_index(sdata_blobs[label]))
         adata = AnnData(
-            RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+            RNG.normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = np.arange(adata.n_obs)
         adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"][:3] = ["a", "b", "c"]
         adata.obs["instance_id"] = list(range(adata.n_obs))
-        adata.obs["region"] = "blobs_labels"
-        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_labels")
-        sdata_blobs["other_table"] = table
-
-        # with pytest.raises(ValueError, match="could not convert string"):
-        #     sdata_blobs.pl.render_labels('blobs_labels', color='category').pl.show()
-        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
-
-    def test_plot_multiscale_label_categorical_color(self, sdata_blobs: SpatialData):
-        # recreate RNG to get same plot acorss 3.9 and 3.10 workers
-        RNG = np.random.default_rng(seed=42)
-
-        n_obs = max(_get_unique_label_values_as_index(sdata_blobs["blobs_multiscale_labels"]))
-        adata = AnnData(
-            RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
-        )
-        adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
-        adata.obs["instance_id"] = list(range(adata.n_obs))
-        adata.obs["region"] = "blobs_multiscale_labels"
+        adata.obs["region"] = label
         table = TableModel.parse(
-            adata=adata, region_key="region", instance_key="instance_id", region="blobs_multiscale_labels"
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region=label,
         )
         sdata_blobs["other_table"] = table
-
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs.pl.render_labels("blobs_multiscale_labels", color="category").pl.show()
+        sdata_blobs.pl.render_labels(label, color="category").pl.show()

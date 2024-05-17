@@ -19,6 +19,7 @@ __pycache__/
 /.pytest_cache/
 /.cache/
 /data/
+*failed-diff.png
 
 # docs
 /docs/generated/

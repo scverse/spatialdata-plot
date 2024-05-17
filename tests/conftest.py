@@ -56,6 +56,11 @@ def sdata_blobs() -> SpatialData:
 
 
 @pytest.fixture()
+def sdata_blobs_str() -> SpatialData:
+    return blobs(n_channels=5, c_coords=["c1", "c2", "c3", "c4", "c5"])
+
+
+@pytest.fixture()
 def sdata_raccoon() -> SpatialData:
     return raccoon()
 
