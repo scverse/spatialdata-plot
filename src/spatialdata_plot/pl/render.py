@@ -734,8 +734,8 @@ def _render_labels(
         cax = ax.add_image(_cax)
 
         if groups[i][0] is not None and color_source_vector is not None:
-            color_source_vector = color_source_vector.set_categories(groups[i])        
-        
+            color_source_vector = color_source_vector.set_categories(groups[i])
+
         _ = _decorate_axs(
             ax=ax,
             cax=cax,

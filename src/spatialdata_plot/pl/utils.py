@@ -642,9 +642,7 @@ def _robust_get_value(
     """Locate the value to plot in the spatial data object."""
     model = get_model(sdata[element_name])
     if model == PointsModel and table_name is not None:
-        return get_values_point_table(
-            sdata=sdata, origin=origin, table_name=table_name
-        )
+        return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
     vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     return vals[value_to_plot]
 
@@ -756,7 +754,6 @@ def _map_color_seg(
         else:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
-
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
@@ -817,9 +814,7 @@ def _modify_categorical_color_mapping(
     return modified_mapping
 
 
-def _get_default_categorial_color_mapping(
-    color_source_vector
-):
+def _get_default_categorial_color_mapping(color_source_vector):
     len_cat = len(color_source_vector.categories.unique())
     if len_cat <= 20:
         palette = default_20
@@ -975,11 +970,13 @@ def _decorate_axs(
 
             print("decorating now---------------------------------------")
             # derive mapping from color_source_vector and color_vector
-            group_to_color_matching = pd.DataFrame({
-                "cats": color_source_vector.remove_unused_categories(),
-                "color": color_vector,
-            })
-            color_mapping = group_to_color_matching.drop_duplicates('cats').set_index('cats')['color'].to_dict()
+            group_to_color_matching = pd.DataFrame(
+                {
+                    "cats": color_source_vector.remove_unused_categories(),
+                    "color": color_vector,
+                }
+            )
+            color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
 
             _add_categorical_legend(
                 ax,
