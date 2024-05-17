@@ -512,7 +512,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = "lightgrey",
         outline_alpha: float | int = 1.0,
-        fill_alpha: float | int = 0.3,
+        fill_alpha: float | int = 0.35,  # 0.3
         scale: list[str] | str | None = None,
         table_name: list[str] | str | None = None,
         **kwargs: Any,

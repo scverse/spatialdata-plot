@@ -192,6 +192,7 @@ def _render_shapes(
                 fig_params=fig_params,
                 adata=table,
                 value_to_plot=col_for_color,
+                color_vector=color_vector,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -349,6 +350,7 @@ def _render_points(
                 fig_params=fig_params,
                 adata=adata,
                 value_to_plot=col_for_color,
+                color_vector=color_vector,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.alpha,
@@ -732,8 +734,8 @@ def _render_labels(
         cax = ax.add_image(_cax)
 
         if groups[i][0] is not None and color_source_vector is not None:
-            color_source_vector = color_source_vector.set_categories(groups[i])
-
+            color_source_vector = color_source_vector.set_categories(groups[i])        
+        
         _ = _decorate_axs(
             ax=ax,
             cax=cax,
@@ -741,6 +743,7 @@ def _render_labels(
             adata=table,
             value_to_plot=color,
             color_source_vector=color_source_vector,
+            color_vector=color_vector,
             palette=palettes[i],
             alpha=render_params.fill_alpha,
             na_color=render_params.cmap_params.na_color,
