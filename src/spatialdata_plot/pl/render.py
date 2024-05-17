@@ -640,7 +640,7 @@ def _render_labels(
             instance_id = np.unique(label)
             table = None
         else:
-            regions, region_key, instance_key = get_table_keys(sdata[table_name])
+            _, region_key, instance_key = get_table_keys(sdata[table_name])
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
             # get instance id based on subsetted table

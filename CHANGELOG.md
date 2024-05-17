@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   Fix color assignment for NaN values (#257)
--   Fix channel str support #221
+-   Fix channel str support (#221)
+-   Updated incorrect link to documentation (#261)
 
 ## [0.2.2] - 2024-05-02
 

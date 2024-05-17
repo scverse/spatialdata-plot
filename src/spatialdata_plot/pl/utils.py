@@ -43,6 +43,7 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
+from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting.palettes import default_20, default_28, default_102
@@ -667,7 +668,6 @@ def _set_color_source_vec(
         else:
             vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
             color_source_vector = vals[value_to_plot]
-
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             if isinstance(palette, list) and palette[0] is not None:
@@ -684,24 +684,9 @@ def _set_color_source_vec(
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
-        palette_input: list[str] | str | None
-        if groups is not None and groups[0] is not None:
-            if isinstance(palette, list):
-                palette_input = (
-                    palette[0]
-                    if palette[0] is None
-                    else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                )
-        elif palette is not None and isinstance(palette, list):
-            palette_input = palette[0]
-
-        else:
-            palette_input = palette
-
-        color_map = dict(
-            zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
+        color_map = _get_palette(
+            adata=sdata.table, cluster_key=value_to_plot, categories=color_source_vector, palette=palette
         )
-
         if color_map is None:
             raise ValueError("Unable to create color palette.")
 
@@ -770,16 +755,23 @@ def _map_color_seg(
 
 
 def _get_palette(
-    categories: Sequence[Any],
+    categories: Categorical,
     adata: AnnData | None = None,
     cluster_key: None | str = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
 ) -> Mapping[str, str] | None:
+    if not isinstance(categories, Categorical):
+        raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(categories).__name__}")
+
     palette = None if isinstance(palette, list) and palette[0] is None else palette
-    if adata is not None and palette is None:
+
+    if adata is not None and palette is None and adata.uns.get(f"{cluster_key}_colors") is not None:
         try:
-            palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
+            # palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
+            # in case the user filtered to specific groups, we need to subset the cat <-> color mapping
+            cc_mapping = pd.DataFrame(adata.uns[f"{cluster_key}_colors"], index=adata.obs[cluster_key].cat.categories)
+            palette = cc_mapping.loc[categories].values.flatten().tolist()
             if len(palette) != len(categories):
                 raise ValueError(
                     f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
@@ -790,8 +782,11 @@ def _get_palette(
             logger.warning(e)
             return None
 
-    len_cat = len(categories)
+    # user specified a group <-> color mapping
+    if palette is not None and isinstance(palette, list) and len(palette) == len(categories):
+        return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
 
+    len_cat = len(categories.categories)
     if palette is None:
         if len_cat <= 20:
             palette = default_20
@@ -802,7 +797,7 @@ def _get_palette(
         else:
             palette = ["grey" for _ in range(len_cat)]
             logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
-        return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
+        return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories.categories, palette[:len_cat])}
 
     if isinstance(palette, str):
         cmap = ListedColormap([palette])
@@ -813,8 +808,7 @@ def _get_palette(
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or list.")
     palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
-
-    return dict(zip(categories, palette))
+    return dict(zip(categories.categories, palette))
 
 
 def _maybe_set_colors(
@@ -870,10 +864,11 @@ def _decorate_axs(
             # order of clusters should agree to palette order
             clusters = color_source_vector.unique()
             clusters = clusters[~clusters.isnull()]
-            palette = None if isinstance(palette, list) and palette[0] else palette
+
             palette = _get_palette(
                 adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
             )
+
             _add_categorical_legend(
                 ax,
                 color_source_vector,
