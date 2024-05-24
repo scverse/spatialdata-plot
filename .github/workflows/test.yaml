@@ -70,8 +70,9 @@ jobs:
           name: plotting-results
           path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
+            name: coverage
+            verbose: true
+        env:
+            CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
