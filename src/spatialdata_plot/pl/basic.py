@@ -501,7 +501,7 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 alpha=param_values["alpha"],
-                quantiles_for_norm=param_values["percentiles_for_norm"],
+                percentiles_for_norm=param_values["percentiles_for_norm"],
                 scale=param_values["scale"],
             )
             n_steps += 1

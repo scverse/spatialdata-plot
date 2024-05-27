@@ -108,7 +108,7 @@ class ImageRenderParams:
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
     alpha: float = 1.0
-    quantiles_for_norm: tuple[float | None, float | None] = (None, None)
+    percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | list[str] | None = None
 
 

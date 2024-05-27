@@ -1671,16 +1671,18 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if isinstance(palette, list) and not all(isinstance(p, str) for p in palette):
-        raise ValueError("If specified, parameter 'palette' must contain only strings.")
-    if isinstance(palette, (str, type(None))):
+    if isinstance(palette, list):
+        if not all(isinstance(p, str) for p in palette):
+            raise ValueError("If specified, parameter 'palette' must contain only strings.")
+    elif isinstance(palette, (str, type(None))):
         param_dict["palette"] = [palette] if palette is not None else None
     else:
         raise TypeError("Invalid type of parameter 'palette'. Must be `str` or `list[str]`.")
 
-    if isinstance(cmap, list) and not all(isinstance(c, (Colormap, str)) for c in cmap):
-        raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
-    if isinstance(cmap, (Colormap, str, type(None))):
+    if isinstance(cmap, list):
+        if not all(isinstance(c, (Colormap, str)) for c in cmap):
+            raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
+    elif isinstance(cmap, (Colormap, str, type(None))):
         param_dict["cmap"] = [cmap] if cmap is not None else None
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
@@ -1754,10 +1756,10 @@ def _validate_image_render_params(
         spatial_element_ch = (
             spatial_element.c if isinstance(spatial_element, SpatialImage) else spatial_element["scale0"].c
         )
-        if (
-            isinstance((channel := param_dict["channel"])[0], int)
-            and max([abs(ch) for ch in channel]) <= len(spatial_element_ch)
-        ) or all(ch in spatial_element_ch for ch in channel):
+        if (channel := param_dict["channel"]) is not None and (
+            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
+            or all(ch in spatial_element_ch for ch in channel)
+        ):
             element_params[el]["channel"] = channel
         else:
             element_params[el]["channel"] = None
@@ -1768,7 +1770,7 @@ def _validate_image_render_params(
             if len(palette) == 1:
                 palette_length = len(channel) if channel is not None else len(spatial_element.c)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) or len(palette) != len(spatial_element.c):
+            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element.c):
                 palette = None
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
