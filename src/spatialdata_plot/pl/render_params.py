@@ -104,7 +104,7 @@ class ImageRenderParams:
     """Labels render parameters.."""
 
     cmap_params: list[CmapParams] | CmapParams
-    elements: str | Sequence[str] | None = None
+    element: str | Sequence[str] | None = None
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
     alpha: float = 1.0
