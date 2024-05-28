@@ -478,33 +478,31 @@ def _render_images(
                     layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
-        if isinstance(palette := render_params.palette, list):
-            if n_channels == 3 and palette[0] is None and not isinstance(render_params.cmap_params, list):
-                if render_params.cmap_params.is_default:  # -> use RGB
-                    stacked = np.stack([layers[c] for c in channels], axis=-1)
-                else:  # -> use given cmap for each channel
-                    channel_cmaps = [render_params.cmap_params.cmap] * n_channels
-                    # Apply cmaps to each channel, add up and normalize to [0, 1]
-                    stacked = (
-                        np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-                        / n_channels
-                    )
-                    # Remove alpha channel so we can overwrite it from render_params.alpha
-                    stacked = stacked[:, :, :3]
-                    logger.warning(
-                        "One cmap was given for multiple channels and is now used for each channel. "
-                        "You're blending multiple cmaps. "
-                        "If the plot doesn't look like you expect, it might be because your "
-                        "cmaps go from a given color to 'white', and not to 'transparent'. "
-                        "Therefore, the 'white' of higher layers will overlay the lower layers. "
-                        "Consider using 'palette' instead."
-                    )
-
-                im = ax.imshow(
-                    stacked,
-                    alpha=render_params.alpha,
+        if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
+            if render_params.cmap_params.is_default:  # -> use RGB
+                stacked = np.stack([layers[c] for c in channels], axis=-1)
+            else:  # -> use given cmap for each channel
+                channel_cmaps = [render_params.cmap_params.cmap] * n_channels
+                # Apply cmaps to each channel, add up and normalize to [0, 1]
+                stacked = (
+                    np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
                 )
-                im.set_transform(trans_data)
+                # Remove alpha channel so we can overwrite it from render_params.alpha
+                stacked = stacked[:, :, :3]
+                logger.warning(
+                    "One cmap was given for multiple channels and is now used for each channel. "
+                    "You're blending multiple cmaps. "
+                    "If the plot doesn't look like you expect, it might be because your "
+                    "cmaps go from a given color to 'white', and not to 'transparent'. "
+                    "Therefore, the 'white' of higher layers will overlay the lower layers. "
+                    "Consider using 'palette' instead."
+                )
+
+            im = ax.imshow(
+                stacked,
+                alpha=render_params.alpha,
+            )
+            im.set_transform(trans_data)
 
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
