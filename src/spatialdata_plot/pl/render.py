@@ -34,7 +34,6 @@ from spatialdata_plot.pl.render_params import (
     ShapesRenderParams,
 )
 from spatialdata_plot.pl.utils import (
-    ax_show_and_transform,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -48,6 +47,7 @@ from spatialdata_plot.pl.utils import (
     _return_list_list_str_none,
     _return_list_str_none,
     _set_color_source_vec,
+    ax_show_and_transform,
     to_hex,
 )
 
@@ -451,7 +451,7 @@ def _render_images(
         cmap._init()
         cmap._lut[:, -1] = render_params.alpha
 
-        ax_show_and_transform(layer,trans_data, ax, cmap=cmap)
+        ax_show_and_transform(layer, trans_data, ax, cmap=cmap)
 
     # 2) Image has any number of channels but 1
     else:

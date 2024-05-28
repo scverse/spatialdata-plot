@@ -2175,6 +2175,7 @@ def _return_list_list_str_none(
 
     return [[None]]
 
+
 def ax_show_and_transform(array, trans_data, ax, alpha=None, cmap=None):
     if not cmap and alpha is not None:
         im = ax.imshow(
