@@ -2174,3 +2174,17 @@ def _return_list_list_str_none(
         return [list(sublist) for sublist in parameter if isinstance(sublist, list)]
 
     return [[None]]
+
+def ax_show_and_transform(array, trans_data, ax, alpha=None, cmap=None):
+    if not cmap and alpha is not None:
+        im = ax.imshow(
+            array,
+            alpha=alpha,
+        )
+        im.set_transform(trans_data)
+    else:
+        im = ax.imshow(
+            array,
+            cmap=cmap,
+        )
+        im.set_transform(trans_data)
