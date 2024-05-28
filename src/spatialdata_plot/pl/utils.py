@@ -39,8 +39,10 @@ from matplotlib.colors import (
 )
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
+from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
 from scanpy import settings
@@ -1727,13 +1729,13 @@ def _validate_image_render_params(
     element: str | None,
     channel: list[str] | list[int] | str | int | None,
     alpha: float | int | None,
-    palette: list[str] | None,
+    palette: list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
     percentiles_for_norm: tuple[float | None, float | None] | None,
-) -> dict[str]:
+) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
         "element": element,
@@ -1748,7 +1750,7 @@ def _validate_image_render_params(
     }
     param_dict = _type_check_params(param_dict, "images")
 
-    element_params = {}
+    element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
         element_params[el] = {}
         spatial_element = param_dict["sdata"][el]
@@ -1766,7 +1768,7 @@ def _validate_image_render_params(
 
         element_params[el]["alpha"] = param_dict["alpha"]
 
-        if (palette := param_dict["palette"]) is not None:
+        if isinstance(palette := param_dict["palette"], list):
             if len(palette) == 1:
                 palette_length = len(channel) if channel is not None else len(spatial_element.c)
                 palette = palette * palette_length
@@ -2107,15 +2109,15 @@ def _get_wanted_render_elements(
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         # TODO: Remove this when the refactor to single element configs is completed
-        if element_type == "images":
-            wanted_elements = params.element
+        if isinstance(params, ImageRenderParams):
+            wanted_elements: list[str] = [params.element]
         else:
-            wanted_elements = (
-                params.elements if params.elements is not None else list(getattr(sdata, element_type).keys())
-            )
-
-        # TODO: Remove this when the refactor to single element configs is completed
-        wanted_elements = [wanted_elements] if isinstance(wanted_elements, str) else wanted_elements
+            if isinstance(params.elements, str):
+                wanted_elements = [params.elements]
+            elif isinstance(params.elements, list):
+                wanted_elements = params.elements
+            else:
+                wanted_elements = list(getattr(sdata, element_type).keys())
 
         wanted_elements_on_cs = [
             element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
@@ -2141,7 +2143,7 @@ def _update_params(
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
     # TODO change after completion refactor
-    if element_type == "images":
+    if isinstance(params, ImageRenderParams):
         return params
 
     return _match_length_elements_groups_palette(params, wanted_elements_on_cs)
@@ -2176,7 +2178,13 @@ def _return_list_list_str_none(
     return [[None]]
 
 
-def ax_show_and_transform(array, trans_data, ax, alpha=None, cmap=None):
+def _ax_show_and_transform(
+    array: MaskedArray[np.float64, Any],
+    trans_data: CompositeGenericTransform,
+    ax: Axes,
+    alpha: float | None = None,
+    cmap: ListedColormap | LinearSegmentedColormap | None = None,
+) -> None:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,

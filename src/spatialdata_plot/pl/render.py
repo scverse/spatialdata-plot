@@ -34,6 +34,7 @@ from spatialdata_plot.pl.render_params import (
     ShapesRenderParams,
 )
 from spatialdata_plot.pl.utils import (
+    _ax_show_and_transform,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -47,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _return_list_list_str_none,
     _return_list_str_none,
     _set_color_source_vec,
-    ax_show_and_transform,
     to_hex,
 )
 
@@ -444,14 +444,17 @@ def _render_images(
             layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
         cmap = (
-            render_params.cmap_params.cmap if render_params.palette is None else _get_linear_colormap(palette, "k")[0]
+            _get_linear_colormap(palette, "k")[0]
+            if isinstance(palette, list) and all(isinstance(p, str) for p in palette)
+            else render_params.cmap_params.cmap
+            # render_params.cmap_params.cmap if render_params.palette is None else _get_linear_colormap(palette, "k")[0]
         )
 
         # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
         cmap._init()
         cmap._lut[:, -1] = render_params.alpha
 
-        ax_show_and_transform(layer, trans_data, ax, cmap=cmap)
+        _ax_show_and_transform(layer, trans_data, ax, cmap=cmap)
 
     # 2) Image has any number of channels but 1
     else:
@@ -469,7 +472,7 @@ def _render_images(
 
             if not isinstance(render_params.cmap_params, list) and render_params.cmap_params.norm:
                 layers[c] = render_params.cmap_params.norm(layers[c])
-            elif render_params.cmap_params[ch_index].norm:
+            elif isinstance(render_params.cmap_params, list) and render_params.cmap_params[ch_index].norm:
                 layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
@@ -493,7 +496,7 @@ def _render_images(
                     "Consider using 'palette' instead."
                 )
 
-            ax_show_and_transform(stacked, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(stacked, trans_data, ax, render_params.alpha)
 
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
@@ -511,7 +514,7 @@ def _render_images(
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
 
         # 2C) Image has n channels and palette info
         elif palette is not None and not got_multiple_cmaps:
@@ -526,7 +529,7 @@ def _render_images(
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
 
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
@@ -539,7 +542,7 @@ def _render_images(
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
 
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")

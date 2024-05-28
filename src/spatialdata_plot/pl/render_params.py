@@ -70,7 +70,7 @@ class ShapesRenderParams:
 
     cmap_params: CmapParams
     outline_params: OutlineParams
-    elements: str | Sequence[str] | None = None
+    elements: str | list[str] | None = None
     color: list[str | None] | str | None = None
     col_for_color: str | None = None
     groups: str | list[list[str | None]] | list[str | None] | None = None
@@ -104,12 +104,12 @@ class ImageRenderParams:
     """Labels render parameters.."""
 
     cmap_params: list[CmapParams] | CmapParams
-    element: str | Sequence[str] | None = None
+    element: str
     channel: list[str] | list[int] | int | str | None = None
-    palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
+    palette: ListedColormap | list[str] | None = None
     alpha: float = 1.0
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
-    scale: str | list[str] | None = None
+    scale: str | None = None
 
 
 @dataclass
@@ -117,7 +117,7 @@ class LabelsRenderParams:
     """Labels render parameters.."""
 
     cmap_params: CmapParams
-    elements: str | Sequence[str] | None = None
+    elements: str | list[str] | None = None
     color: list[str | None] | str | None = None
     groups: str | list[list[str | None]] | list[str | None] | None = None
     contour_px: int | None = None

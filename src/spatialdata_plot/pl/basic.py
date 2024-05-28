@@ -431,7 +431,7 @@ class PlotAccessor:
             Applies to all channels if set.
         na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
             Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
-        palette : list[str] | str | None
+        palette : list[str] | None
             Palette to color images. In the case of a list of
             lists means that there is one list per element to be plotted in the list and this list contains the string
             indicating the palette to be used. If not provided as list of lists, broadcasting behaviour is
