@@ -583,9 +583,6 @@ class PlotAccessor:
         -------
         None
         """
-        
-        
-        
         params_dict = _validate_render_params(
             "labels",
             self._sdata,

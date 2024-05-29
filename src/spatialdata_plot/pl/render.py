@@ -112,7 +112,7 @@ def _render_shapes(
         else:
             raise ValueError("groups must be a list of strings or a list of lists of strings")
 
-        if group is not None or (isinstance(group, list) and  all(isinstance(g, str) for g in group)):
+        if group is not None or (isinstance(group, list) and all(isinstance(g, str) for g in group)):
             raise ValueError("groups must be a list of strings or a list of lists of strings")
 
         # get color vector (categorical or continuous)
