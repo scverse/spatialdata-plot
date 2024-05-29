@@ -503,11 +503,11 @@ class PlotAccessor:
     def render_labels(
         self,
         elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
+        color: list[str] | str | None = None,
+        groups: list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        palette: list[ColorLike] | ColorLike | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = "lightgrey",
@@ -583,6 +583,9 @@ class PlotAccessor:
         -------
         None
         """
+        
+        
+        
         params_dict = _validate_render_params(
             "labels",
             self._sdata,

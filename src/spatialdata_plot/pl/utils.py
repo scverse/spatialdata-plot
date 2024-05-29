@@ -638,7 +638,7 @@ def _robust_get_value(
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     table_name: str | None = None,
-):
+) -> pd.Series | None:
     """Locate the value to plot in the spatial data object."""
     model = get_model(sdata[element_name])
     if model == PointsModel and table_name is not None:
@@ -653,8 +653,8 @@ def _set_color_source_vec(
     element_index: int,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
-    groups: Sequence[str | None] | str | None = None,
-    palette: list[str | None] | None = None,
+    groups: list[str] | None = None,
+    palette: list[str] | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -726,7 +726,7 @@ def _map_color_seg(
     seg: ArrayLike,
     cell_id: ArrayLike,
     color_vector: ArrayLike | pd.Series[CategoricalDtype],
-    color_source_vector: pd.Series[CategoricalDtype],
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     cmap_params: CmapParams,
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
@@ -758,8 +758,9 @@ def _map_color_seg(
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
     # check if no color is assigned, compute random colors
-    unique_cols = np.unique(cols)
-    if len(unique_cols) == 1 and unique_cols == 0:
+    cols_in_hex = [to_hex(c) for c in cols]  # robust to arrays with same numbers
+    if len(np.unique(cols_in_hex)) == 1:
+        # all colors are the same (probably na_color), generate random colors
         RNG = default_rng(42)
         cols = RNG.random((len(cols), 3))
 
@@ -777,36 +778,32 @@ def _map_color_seg(
 
 
 def _generate_base_categorial_color_mapping(
-    adata: AnnData | None = None,
-    cluster_key: None | str = None,
-    color_source_vector: Categorical | None = None,
+    adata: AnnData,
+    cluster_key: str,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     na_color: ColorLike | None = "lightgrey",
 ) -> Mapping[str, str]:
-    if adata is not None and adata.uns.get(f"{cluster_key}_colors") is not None:
-        cc_mapping = pd.DataFrame(
-            {
-                "color": list(adata.uns[f"{cluster_key}_colors"]) + [to_hex(to_rgba(na_color)[:3])],
-                "category": color_source_vector.categories.tolist() + ["NaN"],
-            }
-        )
-        return dict(zip(cc_mapping["category"], cc_mapping["color"]))
+    if adata is not None and cluster_key in adata.uns:
+        colors = adata.uns[f"{cluster_key}_colors"]
+        categories = color_source_vector.categories.tolist() + ["NaN"]
+        na_color_hex = to_hex(to_rgba(na_color)[:3])
+        return dict(zip(categories, colors + [na_color_hex]))
 
-    if adata.uns.get(f"{cluster_key}_colors") is None:
-        return _get_default_categorial_color_mapping(color_source_vector)
+    return _get_default_categorial_color_mapping(color_source_vector)
 
 
 def _modify_categorical_color_mapping(
     mapping: Mapping[str, str],
-    groups: list[list[str | None]] | list[str | None] | str | None = None,
-    palette: list[list[str | None]] | list[str | None] | str | None = None,
+    groups: list[str] | None = None,
+    palette: list[str] | None = None,
 ) -> Mapping[str, str]:
     if groups is None or isinstance(groups, list) and groups[0] is None:
         return mapping
 
     if palette is None or isinstance(palette, list) and palette[0] is None:
         # subset base mapping to only those specified in groups
-        modified_mapping = {key: mapping[key] for key in mapping.keys() if key in groups or key == "NaN"}
-    elif len(palette) == len(groups):
+        modified_mapping = {key: mapping[key] for key in mapping if key in groups or key == "NaN"}
+    elif len(palette) == len(groups) and isinstance(groups, list) and isinstance(palette, list):
         modified_mapping = dict(zip(groups, palette))
 
     else:
@@ -814,7 +811,9 @@ def _modify_categorical_color_mapping(
     return modified_mapping
 
 
-def _get_default_categorial_color_mapping(color_source_vector):
+def _get_default_categorial_color_mapping(
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+) -> Mapping[str, str]:
     len_cat = len(color_source_vector.categories.unique())
     if len_cat <= 20:
         palette = default_20
@@ -832,10 +831,10 @@ def _get_default_categorial_color_mapping(color_source_vector):
 def _get_categorical_color_mapping(
     adata: AnnData | None = None,
     cluster_key: None | str = None,
-    color_source_vector: Categorical | None = None,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
     na_color: ColorLike | None = "lightgrey",
-    groups: list[list[str | None]] | list[str | None] | str | None = None,
-    palette: list[list[str | None]] | list[str | None] | str | None = None,
+    groups: list[str] | None = None,
+    palette: list[str] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
@@ -968,7 +967,6 @@ def _decorate_axs(
             clusters = color_source_vector.remove_unused_categories().unique()
             clusters = clusters[~clusters.isnull()]
 
-            print("decorating now---------------------------------------")
             # derive mapping from color_source_vector and color_vector
             group_to_color_matching = pd.DataFrame(
                 {
@@ -1753,14 +1751,14 @@ def _validate_render_params(
     contour_px: int | None = None,
     elements: list[str] | str | None = None,
     fill_alpha: float | int | None = None,
-    groups: str | list[list[str | None]] | list[str | None] | None = None,
+    groups: list[str] | str | None = None,
     na_color: ColorLike | None = None,
     norm: Normalize | bool | None = None,
     outline: bool | None = None,
     outline_alpha: float | int | None = None,
     outline_color: str | list[float] | None = None,
     outline_width: float | int | None = None,
-    palette: list[list[str | None]] | list[str | None] | str | None = None,
+    palette: list[ColorLike] | ColorLike | None = None,
     quantiles_for_norm: tuple[float | None, float | None] | None = None,
     scale: float | int | list[str] | str | None = None,
     size: float | int | None = None,

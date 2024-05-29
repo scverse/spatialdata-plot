@@ -104,6 +104,17 @@ def _render_shapes(
             )
             sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
 
+        assert isinstance(groups, list), "groups must be a list"
+        if isinstance(groups[index], list) and groups[index][0] is None:
+            group = None
+        elif all(isinstance(g, str) for g in groups[index]):
+            group = groups[index]
+        else:
+            raise ValueError("groups must be a list of strings or a list of lists of strings")
+
+        if group is not None or (isinstance(group, list) and  all(isinstance(g, str) for g in group)):
+            raise ValueError("groups must be a list of strings or a list of lists of strings")
+
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
@@ -111,7 +122,7 @@ def _render_shapes(
             element_index=index,
             element_name=e,
             value_to_plot=col_for_color,
-            groups=groups[index] if groups[index][0] is not None else None,
+            groups=group,
             palette=(
                 palettes[index] if palettes is not None else None
             ),  # and render_params.palette[index][0] is not None
@@ -598,6 +609,7 @@ def _render_labels(
     palettes = _return_list_list_str_none(render_params.palette)
     colors = _return_list_str_none(render_params.color)
     groups = _return_list_list_str_none(render_params.groups)
+    print(element_table_mapping)
 
     if render_params.outline is False:
         render_params.outline_alpha = 0
