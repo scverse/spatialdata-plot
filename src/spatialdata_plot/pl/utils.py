@@ -1347,7 +1347,7 @@ def _get_elements_to_be_rendered(
         key = render_cmds_map.get(cmd)
         # TODO: change after completion of refactor to single element configs
         if cmd == "render_images" and isinstance(params, ImageRenderParams):
-            elements_to_be_rendered = [params.element]
+            elements_to_be_rendered += [params.element]
         if key and cs_query[key][0] and not isinstance(params, ImageRenderParams) and params.elements is not None:
             elements_to_be_rendered += [params.elements] if isinstance(params.elements, str) else params.elements
     return elements_to_be_rendered
