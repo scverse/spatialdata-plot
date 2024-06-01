@@ -105,6 +105,17 @@ def _render_shapes(
             )
             sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
 
+        assert isinstance(groups, list), "groups must be a list"
+        if isinstance(groups[index], list) and groups[index][0] is None:
+            group = None
+        elif all(isinstance(g, str) for g in groups[index]):
+            group = groups[index]
+        else:
+            raise ValueError("groups must be a list of strings or a list of lists of strings")
+
+        if group is not None or (isinstance(group, list) and all(isinstance(g, str) for g in group)):
+            raise ValueError("groups must be a list of strings or a list of lists of strings")
+
         # get color vector (categorical or continuous)
         color_source_vector, color_vector, _ = _set_color_source_vec(
             sdata=sdata_filt,
@@ -112,7 +123,7 @@ def _render_shapes(
             element_index=index,
             element_name=e,
             value_to_plot=col_for_color,
-            groups=groups[index] if groups[index][0] is not None else None,
+            groups=group,
             palette=(
                 palettes[index] if palettes is not None else None
             ),  # and render_params.palette[index][0] is not None
@@ -193,6 +204,7 @@ def _render_shapes(
                 fig_params=fig_params,
                 adata=table,
                 value_to_plot=col_for_color,
+                color_vector=color_vector,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.fill_alpha,
@@ -350,6 +362,7 @@ def _render_points(
                 fig_params=fig_params,
                 adata=adata,
                 value_to_plot=col_for_color,
+                color_vector=color_vector,
                 color_source_vector=color_source_vector,
                 palette=palette,
                 alpha=render_params.alpha,
@@ -563,6 +576,7 @@ def _render_labels(
     palettes = _return_list_list_str_none(render_params.palette)
     colors = _return_list_str_none(render_params.color)
     groups = _return_list_list_str_none(render_params.groups)
+    print(element_table_mapping)
 
     if render_params.outline is False:
         render_params.outline_alpha = 0
@@ -607,11 +621,11 @@ def _render_labels(
             instance_id = np.unique(label)
             table = None
         else:
-            regions, region_key, instance_key = get_table_keys(sdata[table_name])
+            _, region_key, instance_key = get_table_keys(sdata[table_name])
             table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
 
             # get instance id based on subsetted table
-            instance_id = table.obs[instance_key].values
+            instance_id = np.unique(table.obs[instance_key].values)
 
         trans = get_transformation(label, get_all=True)[coordinate_system]
         affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
@@ -698,6 +712,9 @@ def _render_labels(
         _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
 
+        if groups[i][0] is not None and color_source_vector is not None:
+            color_source_vector = color_source_vector.set_categories(groups[i])
+
         _ = _decorate_axs(
             ax=ax,
             cax=cax,
@@ -705,6 +722,7 @@ def _render_labels(
             adata=table,
             value_to_plot=color,
             color_source_vector=color_source_vector,
+            color_vector=color_vector,
             palette=palettes[i],
             alpha=render_params.fill_alpha,
             na_color=render_params.cmap_params.na_color,
