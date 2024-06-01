@@ -39,8 +39,10 @@ from matplotlib.colors import (
 )
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
+from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
 from scanpy import settings
@@ -1343,7 +1345,10 @@ def _get_elements_to_be_rendered(
 
     for cmd, params in render_cmds:
         key = render_cmds_map.get(cmd)
-        if key and cs_query[key][0] and params.elements is not None:
+        # TODO: change after completion of refactor to single element configs
+        if cmd == "render_images" and isinstance(params, ImageRenderParams):
+            elements_to_be_rendered += [params.element]
+        if key and cs_query[key][0] and not isinstance(params, ImageRenderParams) and params.elements is not None:
             elements_to_be_rendered += [params.elements] if isinstance(params.elements, str) else params.elements
     return elements_to_be_rendered
 
@@ -1639,6 +1644,160 @@ def _validate_show_parameters(
         raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
 
 
+def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
+    if (element := param_dict["element"]) is not None and not isinstance(element, str):
+        raise ValueError(
+            "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
+            "as `None` or chain pl.render(...).pl.render(...).pl.show()"
+        )
+    param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
+
+    if (channel := param_dict["channel"]) is not None and not isinstance(channel, (list, str, int)):
+        raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
+    if isinstance(channel, list):
+        if not all(isinstance(c, (str, int)) for c in channel):
+            raise TypeError("Each item in 'channel' list must be a string or an integer.")
+        if not all(isinstance(c, type(channel[0])) for c in channel):
+            raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
+    else:
+        param_dict["channel"] = [channel] if channel is not None else None
+
+    if (alpha := param_dict["alpha"]) is not None:
+        if not isinstance(alpha, (float, int)):
+            raise TypeError("Parameter 'alpha' must be numeric.")
+        if not 0 <= alpha <= 1:
+            raise ValueError("Parameter 'alpha' must be between 0 and 1.")
+
+    if (cmap := param_dict["cmap"]) is not None and (palette := param_dict["palette"]) is not None:
+        raise ValueError("Both `palette` and `cmap` are specified. Please specify only one of them.")
+
+    palette = param_dict["palette"]
+
+    if isinstance(palette, list):
+        if not all(isinstance(p, str) for p in palette):
+            raise ValueError("If specified, parameter 'palette' must contain only strings.")
+    elif isinstance(palette, (str, type(None))):
+        param_dict["palette"] = [palette] if palette is not None else None
+    else:
+        raise TypeError("Invalid type of parameter 'palette'. Must be `str` or `list[str]`.")
+
+    if isinstance(cmap, list):
+        if not all(isinstance(c, (Colormap, str)) for c in cmap):
+            raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
+    elif isinstance(cmap, (Colormap, str, type(None))):
+        param_dict["cmap"] = [cmap] if cmap is not None else None
+    else:
+        raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
+
+    if (na_color := param_dict["na_color"]) is not None and not colors.is_color_like(na_color):
+        raise ValueError("Parameter 'na_color' must be color-like.")
+
+    if (norm := param_dict["norm"]) is not None and not isinstance(norm, Normalize):
+        raise TypeError("Parameter 'norm' must be of type Normalize.")
+
+    if (scale := param_dict["scale"]) is not None and not isinstance(scale, str):
+        raise TypeError("Parameter 'scale' must be a string if specified.")
+
+    if (percentiles_for_norm := param_dict["percentiles_for_norm"]) is None:
+        percentiles_for_norm = (None, None)
+    elif not (isinstance(percentiles_for_norm, (list, tuple)) or len(percentiles_for_norm) != 2):
+        raise TypeError("Parameter 'percentiles_for_norm' must be a list or tuple of exactly two floats or None.")
+    elif not all(
+        isinstance(p, (float, int, type(None)))
+        and isinstance(p, type(percentiles_for_norm[0]))
+        and (p is None or 0 <= p <= 100)
+        for p in percentiles_for_norm
+    ):
+        raise TypeError(
+            "Each item in 'percentiles_for_norm' must be of the same dtype and must be a float or int within [0, 100], "
+            "or None"
+        )
+    elif (
+        percentiles_for_norm[0] is not None
+        and percentiles_for_norm[1] is not None
+        and percentiles_for_norm[0] > percentiles_for_norm[1]
+    ):
+        raise ValueError("The first number in 'quantiles_for_norm' must not be smaller than the second.")
+
+    param_dict["percentiles_for_norm"] = percentiles_for_norm
+
+    return param_dict
+
+
+def _validate_image_render_params(
+    sdata: sd.SpatialData,
+    element: str | None,
+    channel: list[str] | list[int] | str | int | None,
+    alpha: float | int | None,
+    palette: list[str] | str | None,
+    na_color: ColorLike | None,
+    cmap: list[Colormap | str] | Colormap | str | None,
+    norm: Normalize | None,
+    scale: str | None,
+    percentiles_for_norm: tuple[float | None, float | None] | None,
+) -> dict[str, dict[str, Any]]:
+    param_dict: dict[str, Any] = {
+        "sdata": sdata,
+        "element": element,
+        "channel": channel,
+        "alpha": alpha,
+        "palette": palette,
+        "na_color": na_color,
+        "cmap": cmap,
+        "norm": norm,
+        "scale": scale,
+        "percentiles_for_norm": percentiles_for_norm,
+    }
+    param_dict = _type_check_params(param_dict, "images")
+
+    element_params: dict[str, dict[str, Any]] = {}
+    for el in param_dict["element"]:
+        element_params[el] = {}
+        spatial_element = param_dict["sdata"][el]
+
+        spatial_element_ch = (
+            spatial_element.c if isinstance(spatial_element, SpatialImage) else spatial_element["scale0"].c
+        )
+        if (channel := param_dict["channel"]) is not None and (
+            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
+            or all(ch in spatial_element_ch for ch in channel)
+        ):
+            element_params[el]["channel"] = channel
+        else:
+            element_params[el]["channel"] = None
+
+        element_params[el]["alpha"] = param_dict["alpha"]
+
+        if isinstance(palette := param_dict["palette"], list):
+            if len(palette) == 1:
+                palette_length = len(channel) if channel is not None else len(spatial_element.c)
+                palette = palette * palette_length
+            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element.c):
+                palette = None
+        element_params[el]["palette"] = palette
+        element_params[el]["na_color"] = param_dict["na_color"]
+
+        if (cmap := param_dict["cmap"]) is not None:
+            if len(cmap) == 1:
+                cmap_length = len(channel) if channel is not None else len(spatial_element.c)
+                cmap = cmap * cmap_length
+            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element.c):
+                cmap = None
+        element_params[el]["cmap"] = cmap
+        element_params[el]["norm"] = param_dict["norm"]
+        if (scale := param_dict["scale"]) and isinstance(sdata[el], MultiscaleSpatialImage):
+            if scale not in list(sdata[el].keys()) and scale != "full":
+                element_params[el]["scale"] = None
+            else:
+                element_params[el]["scale"] = scale
+        else:
+            element_params[el]["scale"] = None
+
+        element_params[el]["percentiles_for_norm"] = param_dict["percentiles_for_norm"]
+
+    return element_params
+
+
 def _validate_render_params(
     element_type: str,
     sdata: sd.SpatialData,
@@ -1907,40 +2066,35 @@ def _validate_render_params(
 
 
 def _match_length_elements_groups_palette(
-    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    params: LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     render_elements: list[str],
     image: bool = False,
-) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
-    if image and isinstance(params, ImageRenderParams):
-        if params.palette is None:
-            params.palette = [[None] for _ in range(len(render_elements))]
-        else:
-            params.palette = [params.palette[0] for _ in range(len(render_elements))]
-    elif not isinstance(params, ImageRenderParams):
-        groups = params.groups
-        palette = params.palette
+) -> LabelsRenderParams | PointsRenderParams | ShapesRenderParams:
 
-        groups_elements: list[list[str | None]] | None = None
-        palette_elements: list[list[str | None]] | None = None
-        # We already checked before that length of groups and palette is the same
-        if groups is not None:
-            if len(groups) == 1:
-                groups_elements = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
-                if palette is not None:
-                    palette_elements = [palette[0] for _ in range(len(render_elements)) if isinstance(palette[0], list)]
-                else:
-                    palette_elements = [[None] for _ in range(len(render_elements))]
+    groups = params.groups
+    palette = params.palette
+
+    groups_elements: list[list[str | None]] | None = None
+    palette_elements: list[list[str | None]] | None = None
+    # We already checked before that length of groups and palette is the same
+    if groups is not None:
+        if len(groups) == 1:
+            groups_elements = [groups[0] for _ in range(len(render_elements)) if isinstance(groups[0], list)]
+            if palette is not None:
+                palette_elements = [palette[0] for _ in range(len(render_elements)) if isinstance(palette[0], list)]
             else:
-                if len(groups) != len(render_elements):
-                    raise ValueError(
-                        "Multiple groups and palettes are given but the number is not the same as the number "
-                        "of elements to be rendered."
-                    )
+                palette_elements = [[None] for _ in range(len(render_elements))]
         else:
-            groups_elements = [[None] for _ in range(len(render_elements))]
-            palette_elements = [[None] for _ in range(len(render_elements))]
-        params.palette = palette_elements
-        params.groups = groups_elements
+            if len(groups) != len(render_elements):
+                raise ValueError(
+                    "Multiple groups and palettes are given but the number is not the same as the number "
+                    "of elements to be rendered."
+                )
+    else:
+        groups_elements = [[None] for _ in range(len(render_elements))]
+        palette_elements = [[None] for _ in range(len(render_elements))]
+    params.palette = palette_elements
+    params.groups = groups_elements
 
     return params
 
@@ -1954,7 +2108,16 @@ def _get_wanted_render_elements(
 ) -> tuple[list[str], list[str], bool]:
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
-        wanted_elements = params.elements if params.elements is not None else list(getattr(sdata, element_type).keys())
+        # TODO: Remove this when the refactor to single element configs is completed
+        if isinstance(params, ImageRenderParams):
+            wanted_elements: list[str] = [params.element]
+        else:
+            if isinstance(params.elements, str):
+                wanted_elements = [params.elements]
+            elif isinstance(params.elements, list):
+                wanted_elements = params.elements
+            else:
+                wanted_elements = list(getattr(sdata, element_type).keys())
 
         wanted_elements_on_cs = [
             element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
@@ -1979,8 +2142,11 @@ def _update_params(
         if isinstance(params, (PointsRenderParams, ShapesRenderParams)):
             params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
-    image_flag = element_type == "images"
-    return _match_length_elements_groups_palette(params, wanted_elements_on_cs, image=image_flag)
+    # TODO change after completion refactor
+    if isinstance(params, ImageRenderParams):
+        return params
+
+    return _match_length_elements_groups_palette(params, wanted_elements_on_cs)
 
 
 def _is_coercable_to_float(series: pd.Series) -> bool:
@@ -2010,3 +2176,24 @@ def _return_list_list_str_none(
         return [list(sublist) for sublist in parameter if isinstance(sublist, list)]
 
     return [[None]]
+
+
+def _ax_show_and_transform(
+    array: MaskedArray[np.float64, Any],
+    trans_data: CompositeGenericTransform,
+    ax: Axes,
+    alpha: float | None = None,
+    cmap: ListedColormap | LinearSegmentedColormap | None = None,
+) -> None:
+    if not cmap and alpha is not None:
+        im = ax.imshow(
+            array,
+            alpha=alpha,
+        )
+        im.set_transform(trans_data)
+    else:
+        im = ax.imshow(
+            array,
+            cmap=cmap,
+        )
+        im.set_transform(trans_data)

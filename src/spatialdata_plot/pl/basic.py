@@ -23,6 +23,7 @@ from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot._utils import deprecation_alias
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -50,6 +51,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_params_plot,
     _set_outline,
     _update_params,
+    _validate_image_render_params,
     _validate_render_params,
     _validate_show_parameters,
     save_fig,
@@ -390,32 +392,38 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
     def render_images(
         self,
-        elements: list[str] | str | None = None,
+        element: str | None = None,
         channel: list[str] | list[int] | str | int | None = None,
-        cmap: list[Colormap] | Colormap | str | None = None,
+        cmap: list[Colormap | str] | Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
-        quantiles_for_norm: tuple[float | None, float | None] | None = None,
-        scale: list[str] | str | None = None,
+        percentiles_for_norm: tuple[float, float] | None = None,
+        scale: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
         Render image elements in SpatialData.
 
+        In case of no elements specified, "broadcasting" of parameters is applied. This means that for any particular
+        SpatialElement, we validate whether a given parameter is valid. If not valid for a particular SpatialElement the
+        specific parameter for that particular SpatialElement will be ignored. If you want to set specific parameters
+        for specific elements please chain the render functions: `pl.render_images(...).pl.render_images(...).pl.show()`
+        .
+
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the image element(s) to render. If `None`, all image
-            elements in the `SpatialData` object will be used. If a string is provided,
-            it is converted into a single-element list.
-        channel : list[str] | list[int] | str | int | None, optional
+        element : str | None
+            The name of the image element to render. If `None`, all image
+            elements in the `SpatialData` object will be used.
+        channels : list[str] | list[int] | str | int | None, optional
             To select specific channels to plot. Can be a single channel name/int or a
             list of channel names/ints. If `None`, all channels will be used.
-        cmap : list[Colormap] | Colormap | str | None, optional
+        cmap : list[Colormap | str] | Colormap | str | None, optional
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
         norm : Normalize | None, optional
@@ -423,26 +431,24 @@ class PlotAccessor:
             Applies to all channels if set.
         na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
             Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
-        palette : list[list[str | None]] | list[str | None] | str | None
+        palette : list[str] | None
             Palette to color images. In the case of a list of
             lists means that there is one list per element to be plotted in the list and this list contains the string
             indicating the palette to be used. If not provided as list of lists, broadcasting behaviour is
             attempted (use the same values for all elements).
         alpha : float | int, default 1.0
             Alpha value for the images. Must be a numeric between 0 and 1.
-        quantiles_for_norm : tuple[float | None, float | None] | None, optional
+        percentiles_for_norm : tuple[float, float] | None
             Optional pair of floats (pmin < pmax, 0-100) which will be used for quantile normalization.
-        scale : list[str] | str | None, optional
+        scale : str | None
             Influences the resolution of the rendering. Possibilities include:
                 1) `None` (default): The image is rasterized to fit the canvas size. For
                 multiscale images, the best scale is selected before rasterization.
-                2) A scale name: Renders the specified scale as-is (with adjustments for dpi
-                in `show()`).
+                2) A scale name: Renders the specified scale ( of a multiscale image) as-is
+                (with adjustments for dpi in `show()`).
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
-                4) A list matching the list of elements. Can contain `None`, scale names, or
-                "full". Each scale applies to the corresponding element.
         kwargs
             Additional arguments to be passed to cmap, norm, and other rendering functions.
 
@@ -451,10 +457,9 @@ class PlotAccessor:
         sd.SpatialData
             The SpatialData object with the rendered images.
         """
-        params_dict = _validate_render_params(
-            "images",
+        params_dict = _validate_image_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             channel=channel,
             alpha=alpha,
             palette=palette,
@@ -462,8 +467,9 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             scale=scale,
-            quantiles_for_norm=quantiles_for_norm,
+            percentiles_for_norm=percentiles_for_norm,
         )
+
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -488,15 +494,17 @@ class PlotAccessor:
                 **kwargs,
             )
 
-        sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
-            elements=params_dict["elements"],
-            channel=channel,
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            alpha=alpha,
-            quantiles_for_norm=params_dict["quantiles_for_norm"],
-            scale=params_dict["scale"],
-        )
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
+                element=element,
+                channel=param_values["channel"],
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                alpha=param_values["alpha"],
+                percentiles_for_norm=param_values["percentiles_for_norm"],
+                scale=param_values["scale"],
+            )
+            n_steps += 1
 
         return sdata
 

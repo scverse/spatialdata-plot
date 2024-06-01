@@ -34,6 +34,7 @@ from spatialdata_plot.pl.render_params import (
     ShapesRenderParams,
 )
 from spatialdata_plot.pl.utils import (
+    _ax_show_and_transform,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -374,211 +375,177 @@ def _render_images(
     legend_params: LegendParams,
     rasterize: bool,
 ) -> None:
-    elements = render_params.elements
-    palettes = _return_list_list_str_none(render_params.palette)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
     )
 
-    if elements is None:
-        elements = list(sdata_filt.images.keys())
+    palette = render_params.palette
+    img = sdata_filt[render_params.element]
+    extent = get_extent(img, coordinate_system=coordinate_system)
+    scale = render_params.scale
 
-    for i, e in enumerate(elements):
-        img = sdata.images[e]
-        extent = get_extent(img, coordinate_system=coordinate_system)
-        scale = render_params.scale[i] if isinstance(render_params.scale, list) else render_params.scale
+    # get best scale out of multiscale image
+    if isinstance(img, MultiscaleSpatialImage):
+        img = _multiscale_to_spatial_image(
+            multiscale_image=img,
+            dpi=fig_params.fig.dpi,
+            width=fig_params.fig.get_size_inches()[0],
+            height=fig_params.fig.get_size_inches()[1],
+            scale=scale,
+        )
+    # rasterize spatial image if necessary to speed up performance
+    if rasterize:
+        img = _rasterize_if_necessary(
+            image=img,
+            dpi=fig_params.fig.dpi,
+            width=fig_params.fig.get_size_inches()[0],
+            height=fig_params.fig.get_size_inches()[1],
+            coordinate_system=coordinate_system,
+            extent=extent,
+        )
 
-        # get best scale out of multiscale image
-        if isinstance(img, MultiscaleSpatialImage):
-            img = _multiscale_to_spatial_image(
-                multiscale_image=img,
-                dpi=fig_params.fig.dpi,
-                width=fig_params.fig.get_size_inches()[0],
-                height=fig_params.fig.get_size_inches()[1],
-                scale=scale,
+    channels = img.coords["c"].values if render_params.channel is None else render_params.channel
+
+    n_channels = len(channels)
+
+    # True if user gave n cmaps for n channels
+    got_multiple_cmaps = isinstance(render_params.cmap_params, list)
+    if got_multiple_cmaps:
+        logger.warning(
+            "You're blending multiple cmaps. "
+            "If the plot doesn't look like you expect, it might be because your "
+            "cmaps go from a given color to 'white', and not to 'transparent'. "
+            "Therefore, the 'white' of higher layers will overlay the lower layers. "
+            "Consider using 'palette' instead."
+        )
+
+    # not using got_multiple_cmaps here because of ruff :(
+    if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
+        raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
+
+    # prepare transformations
+    trans = get_transformation(img, get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans_data = trans + ax.transData
+
+    # 1) Image has only 1 channel
+    if n_channels == 1 and not isinstance(render_params.cmap_params, list):
+        layer = img.sel(c=channels[0]).squeeze()
+
+        if render_params.percentiles_for_norm != (None, None):
+            layer = _normalize(
+                layer, pmin=render_params.percentiles_for_norm[0], pmax=render_params.percentiles_for_norm[1], clip=True
             )
-        # rasterize spatial image if necessary to speed up performance
-        if rasterize:
-            img = _rasterize_if_necessary(
-                image=img,
-                dpi=fig_params.fig.dpi,
-                width=fig_params.fig.get_size_inches()[0],
-                height=fig_params.fig.get_size_inches()[1],
-                coordinate_system=coordinate_system,
-                extent=extent,
-            )
 
-        if render_params.channel is None:
-            channels = img.coords["c"].values
-        else:
-            channels = (
-                [render_params.channel] if isinstance(render_params.channel, (str, int)) else render_params.channel
-            )
+        if render_params.cmap_params.norm:  # type: ignore[attr-defined]
+            layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
-        n_channels = len(channels)
+        cmap = (
+            _get_linear_colormap(palette, "k")[0]
+            if isinstance(palette, list) and all(isinstance(p, str) for p in palette)
+            else render_params.cmap_params.cmap
+            # render_params.cmap_params.cmap if render_params.palette is None else _get_linear_colormap(palette, "k")[0]
+        )
 
-        # True if user gave n cmaps for n channels
-        got_multiple_cmaps = isinstance(render_params.cmap_params, list)
-        if got_multiple_cmaps:
-            logger.warning(
-                "You're blending multiple cmaps. "
-                "If the plot doesn't look like you expect, it might be because your "
-                "cmaps go from a given color to 'white', and not to 'transparent'. "
-                "Therefore, the 'white' of higher layers will overlay the lower layers. "
-                "Consider using 'palette' instead."
-            )
+        # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
+        cmap._init()
+        cmap._lut[:, -1] = render_params.alpha
 
-        # not using got_multiple_cmaps here because of ruff :(
-        if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
-            raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
+        _ax_show_and_transform(layer, trans_data, ax, cmap=cmap)
 
-        # prepare transformations
-        trans = get_transformation(img, get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-        trans_data = trans + ax.transData
+    # 2) Image has any number of channels but 1
+    else:
+        layers = {}
+        for ch_index, c in enumerate(channels):
+            layers[c] = img.sel(c=c).copy(deep=True).squeeze()
 
-        # 1) Image has only 1 channel
-        if n_channels == 1 and not isinstance(render_params.cmap_params, list):
-            layer = img.sel(c=channels[0]).squeeze()
-
-            if render_params.quantiles_for_norm != (None, None):
-                layer = _normalize(
-                    layer, pmin=render_params.quantiles_for_norm[0], pmax=render_params.quantiles_for_norm[1], clip=True
+            if render_params.percentiles_for_norm != (None, None):
+                layers[c] = _normalize(
+                    layers[c],
+                    pmin=render_params.percentiles_for_norm[0],
+                    pmax=render_params.percentiles_for_norm[1],
+                    clip=True,
                 )
 
-            if render_params.cmap_params.norm is not None:  # type: ignore[attr-defined]
-                layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
+            if not isinstance(render_params.cmap_params, list) and render_params.cmap_params.norm:
+                layers[c] = render_params.cmap_params.norm(layers[c])
+            elif isinstance(render_params.cmap_params, list) and render_params.cmap_params[ch_index].norm:
+                layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
 
-            if isinstance(palettes, list):
-                if palettes[i][0] is None:
-                    cmap = render_params.cmap_params.cmap  # type: ignore[attr-defined]
-                else:
-                    cmap = _get_linear_colormap(palettes[i], "k")[0]  # type: ignore[arg-type]
+        # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
+        if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
+            if render_params.cmap_params.is_default:  # -> use RGB
+                stacked = np.stack([layers[c] for c in channels], axis=-1)
+            else:  # -> use given cmap for each channel
+                channel_cmaps = [render_params.cmap_params.cmap] * n_channels
+                # Apply cmaps to each channel, add up and normalize to [0, 1]
+                stacked = (
+                    np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
+                )
+                # Remove alpha channel so we can overwrite it from render_params.alpha
+                stacked = stacked[:, :, :3]
+                logger.warning(
+                    "One cmap was given for multiple channels and is now used for each channel. "
+                    "You're blending multiple cmaps. "
+                    "If the plot doesn't look like you expect, it might be because your "
+                    "cmaps go from a given color to 'white', and not to 'transparent'. "
+                    "Therefore, the 'white' of higher layers will overlay the lower layers. "
+                    "Consider using 'palette' instead."
+                )
 
-            # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
-            cmap._init()
-            cmap._lut[:, -1] = render_params.alpha
+            _ax_show_and_transform(stacked, trans_data, ax, render_params.alpha)
 
-            im = ax.imshow(
-                layer,
-                cmap=cmap,
+        # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
+        elif palette is None and not got_multiple_cmaps:
+            # overwrite if n_channels == 2 for intuitive result
+            if n_channels == 2:
+                seed_colors = ["#ff0000ff", "#00ff00ff"]
+            else:
+                seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+
+            # Apply cmaps to each channel and add up
+            colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
+
+            # Remove alpha channel so we can overwrite it from render_params.alpha
+            colored = colored[:, :, :3]
+
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+
+        # 2C) Image has n channels and palette info
+        elif palette is not None and not got_multiple_cmaps:
+            if len(palette) != n_channels:
+                raise ValueError("If 'palette' is provided, its length must match the number of channels.")
+
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
+
+            # Apply cmaps to each channel and add up
+            colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
+
+            # Remove alpha channel so we can overwrite it from render_params.alpha
+            colored = colored[:, :, :3]
+
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+
+        elif palette is None and got_multiple_cmaps:
+            channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
+
+            # Apply cmaps to each channel, add up and normalize to [0, 1]
+            colored = (
+                np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
             )
-            im.set_transform(trans_data)
 
-        # 2) Image has any number of channels but 1
-        else:
-            layers = {}
-            for ch_index, c in enumerate(channels):
-                layers[c] = img.sel(c=c).copy(deep=True).squeeze()
+            # Remove alpha channel so we can overwrite it from render_params.alpha
+            colored = colored[:, :, :3]
 
-                if render_params.quantiles_for_norm != (None, None):
-                    layers[c] = _normalize(
-                        layers[c],
-                        pmin=render_params.quantiles_for_norm[0],
-                        pmax=render_params.quantiles_for_norm[1],
-                        clip=True,
-                    )
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
 
-                if not isinstance(render_params.cmap_params, list):
-                    if render_params.cmap_params.norm is not None:
-                        layers[c] = render_params.cmap_params.norm(layers[c])
-                else:
-                    if render_params.cmap_params[ch_index].norm is not None:
-                        layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
-
-            # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
-            if isinstance(palettes, list):
-                if n_channels == 3 and palettes[i][0] is None and not isinstance(render_params.cmap_params, list):
-                    if render_params.cmap_params.is_default:  # -> use RGB
-                        stacked = np.stack([layers[c] for c in channels], axis=-1)
-                    else:  # -> use given cmap for each channel
-                        channel_cmaps = [render_params.cmap_params.cmap] * n_channels
-                        # Apply cmaps to each channel, add up and normalize to [0, 1]
-                        stacked = (
-                            np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-                            / n_channels
-                        )
-                        # Remove alpha channel so we can overwrite it from render_params.alpha
-                        stacked = stacked[:, :, :3]
-                        logger.warning(
-                            "One cmap was given for multiple channels and is now used for each channel. "
-                            "You're blending multiple cmaps. "
-                            "If the plot doesn't look like you expect, it might be because your "
-                            "cmaps go from a given color to 'white', and not to 'transparent'. "
-                            "Therefore, the 'white' of higher layers will overlay the lower layers. "
-                            "Consider using 'palette' instead."
-                        )
-
-                    im = ax.imshow(
-                        stacked,
-                        alpha=render_params.alpha,
-                    )
-                    im.set_transform(trans_data)
-
-                # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
-                elif palettes[i][0] is None and not got_multiple_cmaps:
-                    # overwrite if n_channels == 2 for intuitive result
-                    if n_channels == 2:
-                        seed_colors = ["#ff0000ff", "#00ff00ff"]
-                    else:
-                        seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
-
-                    channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-
-                    # Apply cmaps to each channel and add up
-                    colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-
-                    # Remove alpha channel so we can overwrite it from render_params.alpha
-                    colored = colored[:, :, :3]
-
-                    im = ax.imshow(
-                        colored,
-                        alpha=render_params.alpha,
-                    )
-                    im.set_transform(trans_data)
-
-                # 2C) Image has n channels and palette info
-                elif palettes[i][0] is not None and not got_multiple_cmaps:
-                    if len(palettes[i]) != n_channels:
-                        raise ValueError("If 'palette' is provided, its length must match the number of channels.")
-
-                    channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palettes[i] if isinstance(c, str)]
-
-                    # Apply cmaps to each channel and add up
-                    colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-
-                    # Remove alpha channel so we can overwrite it from render_params.alpha
-                    colored = colored[:, :, :3]
-
-                    im = ax.imshow(
-                        colored,
-                        alpha=render_params.alpha,
-                    )
-                    im.set_transform(trans_data)
-
-                elif palettes[i][0] is None and got_multiple_cmaps:
-                    channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
-
-                    # Apply cmaps to each channel, add up and normalize to [0, 1]
-                    colored = (
-                        np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-                        / n_channels
-                    )
-
-                    # Remove alpha channel so we can overwrite it from render_params.alpha
-                    colored = colored[:, :, :3]
-
-                    im = ax.imshow(
-                        colored,
-                        alpha=render_params.alpha,
-                    )
-                    im.set_transform(trans_data)
-
-                elif palettes[i][0] is not None and got_multiple_cmaps:
-                    raise ValueError("If 'palette' is provided, 'cmap' must be None.")
+        elif palette is not None and got_multiple_cmaps:
+            raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 
 
 def _render_labels(
