@@ -70,7 +70,7 @@ class ShapesRenderParams:
 
     cmap_params: CmapParams
     outline_params: OutlineParams
-    element: str | None = None
+    element: str
     color: str | None = None
     col_for_color: str | None = None
     groups: str | list[str] | None = None

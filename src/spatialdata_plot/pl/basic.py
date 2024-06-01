@@ -154,7 +154,7 @@ class PlotAccessor:
     def render_shapes(
         self,
         element: str | None = None,
-        color: list[str] | str | None = None,
+        color: str | None = None,
         fill_alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
@@ -166,7 +166,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
-        table_name: list[str] | str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """

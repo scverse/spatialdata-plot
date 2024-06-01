@@ -639,7 +639,7 @@ def _set_color_source_vec(
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     groups: Sequence[str | None] | str | None = None,
-    palette: list[str | None] | None = None,
+    palette: list[str | None] | list[str] | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -1372,7 +1372,9 @@ def _get_elements_to_be_rendered(
     for cmd, params in render_cmds:
         key = render_cmds_map.get(cmd)
         # TODO: change after completion of refactor to single element configs
-        if cmd == "render_images" and isinstance(params, (ImageRenderParams, ShapesRenderParams)):
+        if (cmd == "render_images" or cmd == "render_shapes") and isinstance(
+            params, (ImageRenderParams, ShapesRenderParams)
+        ):
             elements_to_be_rendered += [params.element]
         if (
             key
@@ -1841,9 +1843,9 @@ def _validate_shape_render_params(
     outline_alpha: float | int,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
-    scale: str | None,
+    scale: float | int,
     table_name: str | None,
-):
+) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
         "element": element,
@@ -1893,7 +1895,9 @@ def _validate_shape_render_params(
     return element_params
 
 
-def _validate_col_for_column_table(sdata, element_name, col_for_color, table_name):
+def _validate_col_for_column_table(
+    sdata: SpatialData, element_name: str, col_for_color: str | None, table_name: str | None
+) -> tuple[str | None, str | None]:
 
     if col_for_color in sdata[element_name].columns:
         table_name = None
