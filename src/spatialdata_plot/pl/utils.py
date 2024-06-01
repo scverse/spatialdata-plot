@@ -1704,7 +1704,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if not 0 <= alpha <= 1:
             raise ValueError("Parameter 'alpha' must be between 0 and 1.")
 
-
     if (fill_alpha := param_dict.get("fill_alpha")) is not None:
         if not isinstance(fill_alpha, (float, int)):
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
