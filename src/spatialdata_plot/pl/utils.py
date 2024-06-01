@@ -1654,6 +1654,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
+
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
     if element_type == "shapes":
@@ -1666,6 +1667,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Each item in 'channel' list must be a string or an integer.")
         if not all(isinstance(c, type(channel[0])) for c in channel):
             raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
+
     elif "channel" in param_dict:
         param_dict["channel"] = [channel] if channel is not None else None
 
@@ -1701,6 +1703,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Parameter 'alpha' must be numeric.")
         if not 0 <= alpha <= 1:
             raise ValueError("Parameter 'alpha' must be between 0 and 1.")
+
 
     if (fill_alpha := param_dict.get("fill_alpha")) is not None:
         if not isinstance(fill_alpha, (float, int)):
@@ -2274,7 +2277,9 @@ def _get_wanted_render_elements(
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         # TODO: Remove this when the refactor to single element configs is completed
+
         if isinstance(params, (ImageRenderParams, ShapesRenderParams)):
+
             wanted_elements: list[str] = [params.element]
         else:
             if isinstance(params.elements, str):
