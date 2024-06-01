@@ -64,147 +64,134 @@ def _render_shapes(
     legend_params: LegendParams,
 ) -> None:
     element = render_params.element
-    cols_for_color = _return_list_str_none(render_params.col_for_color)
-    colors = _return_list_str_none(render_params.color)
-    groups = _return_list_list_str_none(render_params.groups)
-    palettes = _return_list_list_str_none(render_params.palette)
+    col_for_color = render_params.col_for_color
+    groups = render_params.groups
 
-    assert isinstance(element_table_mapping, dict)
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=any(value is not None for value in element_table_mapping.values()),
+        filter_tables=bool(render_params.table_name),
     )
 
-    if elements is None:
-        elements = list(sdata_filt.shapes.keys())
+    # for index, e in enumerate(elements):
+    shapes = sdata[element]
 
-    for index, e in enumerate(elements):
-        col_for_color = cols_for_color[index]
-        shapes = sdata.shapes[e]
+    if (table_name := render_params.table_name) is None:
+        table = None
+    else:
+        _, region_key, _ = get_table_keys(sdata[table_name])
+        table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 
-        table_name = element_table_mapping.get(e)
-        if table_name is None:
-            table = None
-        else:
-            _, region_key, _ = get_table_keys(sdata[table_name])
-            table = sdata[table_name][sdata[table_name].obs[region_key].isin([e])]
+    if (
+        col_for_color is not None
+        and table_name is not None
+        and col_for_color in sdata_filt[table_name].obs.columns
+        and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
+        and not _is_coercable_to_float(color_col)
+    ):
+        warnings.warn(
+            f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
+            f"Consider converting before plotting.",
+            UserWarning,
+            stacklevel=2,
+        )
+        sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
 
-        if (
-            col_for_color is not None
-            and table_name is not None
-            and col_for_color in sdata_filt[table_name].obs.columns
-            and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-            and not _is_coercable_to_float(color_col)
-        ):
-            warnings.warn(
-                f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
-                f"Consider converting before plotting.",
-                UserWarning,
-                stacklevel=2,
-            )
-            sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+    # get color vector (categorical or continuous)
+    color_source_vector, color_vector, _ = _set_color_source_vec(
+        sdata=sdata_filt,
+        element=sdata_filt[element],
+        element_name=element,
+        value_to_plot=col_for_color,
+        groups=groups,
+        palette=render_params.palette,
+        na_color=render_params.color or render_params.cmap_params.na_color,
+        cmap_params=render_params.cmap_params,
+        table_name=table_name,
+    )
 
-        # get color vector (categorical or continuous)
-        color_source_vector, color_vector, _ = _set_color_source_vec(
-            sdata=sdata_filt,
-            element=sdata_filt.shapes[e],
-            element_index=index,
-            element_name=e,
+    values_are_categorical = color_source_vector is not None
+
+    # color_source_vector is None when the values aren't categorical
+    if values_are_categorical and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
+
+    norm = copy(render_params.cmap_params.norm)
+
+    if len(color_vector) == 0:
+        color_vector = [render_params.cmap_params.na_color]
+
+    # filter by `groups`
+
+    if isinstance(groups, list) and color_source_vector is not None:
+        mask = color_source_vector.isin(groups)
+        shapes = shapes[mask]
+        shapes = shapes.reset_index()
+        color_source_vector = color_source_vector[mask]
+        color_vector = color_vector[mask]
+    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
+    _cax = _get_collection_shape(
+        shapes=shapes,
+        s=render_params.scale,
+        c=color_vector,
+        render_params=render_params,
+        rasterized=sc_settings._vector_friendly,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        fill_alpha=render_params.fill_alpha,
+        outline_alpha=render_params.outline_alpha,
+        # **kwargs,
+    )
+
+    # Sets the limits of the colorbar to the values instead of [0, 1]
+    if not norm and not values_are_categorical:
+        _cax.set_clim(min(color_vector), max(color_vector))
+
+    cax = ax.add_collection(_cax)
+
+    # Apply the transformation to the PatchCollection's paths
+    trans = get_transformation(sdata_filt[element], get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+
+    for path in _cax.get_paths():
+        path.vertices = trans.transform(path.vertices)
+
+    # Using dict.fromkeys here since set returns in arbitrary order
+    # remove the color of NaN values, else it might be assigned to a category
+    # order of color in the palette should agree to order of occurence
+    if color_source_vector is None:
+        palette = ListedColormap(dict.fromkeys(color_vector))
+    else:
+        palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
+    if not (len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)):
+        # necessary in case different shapes elements are annotated with one table
+        if color_source_vector is not None and col_for_color is not None:
+            color_source_vector = color_source_vector.remove_unused_categories()
+
+        # False if user specified color-like with 'color' parameter
+        colorbar = False if col_for_color is None else legend_params.colorbar
+
+        _ = _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=table,
             value_to_plot=col_for_color,
-            groups=groups[index] if groups[index][0] is not None else None,
-            palette=(
-                palettes[index] if palettes is not None else None
-            ),  # and render_params.palette[index][0] is not None
-            na_color=colors[index] or render_params.cmap_params.na_color,
-            cmap_params=render_params.cmap_params,
-            table_name=cast(str, table_name),
+            color_source_vector=color_source_vector,
+            palette=palette,
+            alpha=render_params.fill_alpha,
+            na_color=render_params.cmap_params.na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=colorbar,
+            scalebar_dx=scalebar_params.scalebar_dx,
+            scalebar_units=scalebar_params.scalebar_units,
         )
-
-        values_are_categorical = color_source_vector is not None
-
-        # color_source_vector is None when the values aren't categorical
-        if values_are_categorical and render_params.transfunc is not None:
-            color_vector = render_params.transfunc(color_vector)
-
-        norm = copy(render_params.cmap_params.norm)
-
-        if len(color_vector) == 0:
-            color_vector = [render_params.cmap_params.na_color]
-
-        # filter by `groups`
-
-        if isinstance(groups, list) and groups[index][0] is not None and color_source_vector is not None:
-            mask = color_source_vector.isin(groups[index])
-            shapes = shapes[mask]
-            shapes = shapes.reset_index()
-            color_source_vector = color_source_vector[mask]
-            color_vector = color_vector[mask]
-        shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
-
-        _cax = _get_collection_shape(
-            shapes=shapes,
-            s=render_params.scale,
-            c=color_vector,
-            render_params=render_params,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha,
-            # **kwargs,
-        )
-
-        # Sets the limits of the colorbar to the values instead of [0, 1]
-        if not norm and not values_are_categorical:
-            _cax.set_clim(min(color_vector), max(color_vector))
-
-        cax = ax.add_collection(_cax)
-
-        # Apply the transformation to the PatchCollection's paths
-        trans = get_transformation(sdata_filt.shapes[e], get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-
-        for path in _cax.get_paths():
-            path.vertices = trans.transform(path.vertices)
-
-        # Using dict.fromkeys here since set returns in arbitrary order
-        # remove the color of NaN values, else it might be assigned to a category
-        # order of color in the palette should agree to order of occurence
-        if color_source_vector is None:
-            palette = ListedColormap(dict.fromkeys(color_vector))
-        else:
-            palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
-
-        if not (
-            len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
-        ):
-            # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None and col_for_color is not None:
-                color_source_vector = color_source_vector.remove_unused_categories()
-
-            # False if user specified color-like with 'color' parameter
-            colorbar = False if cols_for_color[index] is None else legend_params.colorbar
-
-            _ = _decorate_axs(
-                ax=ax,
-                cax=cax,
-                fig_params=fig_params,
-                adata=table,
-                value_to_plot=col_for_color,
-                color_source_vector=color_source_vector,
-                palette=palette,
-                alpha=render_params.fill_alpha,
-                na_color=render_params.cmap_params.na_color,
-                legend_fontsize=legend_params.legend_fontsize,
-                legend_fontweight=legend_params.legend_fontweight,
-                legend_loc=legend_params.legend_loc,
-                legend_fontoutline=legend_params.legend_fontoutline,
-                na_in_legend=legend_params.na_in_legend,
-                colorbar=colorbar,
-                scalebar_dx=scalebar_params.scalebar_dx,
-                scalebar_units=scalebar_params.scalebar_units,
-            )
 
 
 def _render_points(

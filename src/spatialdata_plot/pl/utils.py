@@ -636,7 +636,6 @@ def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name:
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
-    element_index: int,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     groups: Sequence[str | None] | str | None = None,
@@ -672,7 +671,7 @@ def _set_color_source_vec(
 
         # numerical case, return early
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            if isinstance(palette, list) and palette[0] is not None:
+            if isinstance(palette, list):
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
@@ -682,12 +681,12 @@ def _set_color_source_vec(
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
         categories = color_source_vector.categories
 
-        if groups is not None and groups[0] is not None:
+        if groups is not None:
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
         palette_input: list[str] | str | None
-        if groups is not None and groups[0] is not None:
+        if groups is not None:
             if isinstance(palette, list):
                 palette_input = (
                     palette[0]
@@ -1655,7 +1654,10 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
-    param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
+    if element_type == "images":
+        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
+    if element_type == "shapes":
+        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
 
     if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
@@ -1835,7 +1837,7 @@ def _validate_shape_render_params(
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
         element_params[el] = {}
-        element_params[el]["fill_alhpa"] = param_dict["fill_alpha"]
+        element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["outline"] = param_dict["outline"]
         element_params[el]["outline_width"] = param_dict["outline_width"]
@@ -1847,12 +1849,14 @@ def _validate_shape_render_params(
 
         element_params[el]["color"] = param_dict["color"]
 
+        element_params[el]["table_name"] = None
+        element_params[el]["col_for_color"] = None
         if (col_for_color := param_dict["col_for_color"]) is not None:
             col_for_color, table_name = _validate_col_for_column_table(
                 sdata, el, col_for_color, param_dict["table_name"]
             )
-            param_dict["col_for_color"] = col_for_color
-            param_dict["table_name"] = table_name
+            element_params[el]["table_name"] = table_name
+            element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None

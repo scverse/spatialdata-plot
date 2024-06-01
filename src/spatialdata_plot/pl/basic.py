@@ -271,7 +271,7 @@ class PlotAccessor:
 
         for element, param_values in params_dict.items():
             sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
-                elements=element,
+                element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
                 groups=param_values["groups"],
@@ -284,6 +284,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 table_name=param_values["table_name"],
             )
+            n_steps += 1
 
         return sdata
 
