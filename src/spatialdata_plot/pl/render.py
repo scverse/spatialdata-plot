@@ -63,8 +63,7 @@ def _render_shapes(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    elements = render_params.elements
-    element_table_mapping = render_params.element_table_mapping
+    element = render_params.element
     cols_for_color = _return_list_str_none(render_params.col_for_color)
     colors = _return_list_str_none(render_params.color)
     groups = _return_list_list_str_none(render_params.groups)
