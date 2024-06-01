@@ -670,8 +670,15 @@ def _set_color_source_vec(
             color_source_vector = vals[value_to_plot]
 
         # numerical case, return early
+        # TODO temporary split until refactor is complete
         if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            if isinstance(palette, list):
+            if (
+                not isinstance(element, GeoDataFrame)
+                and isinstance(palette, list)
+                and palette[0] is not None
+                or isinstance(element, GeoDataFrame)
+                and isinstance(palette, list)
+            ):
                 logger.warning(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
@@ -681,23 +688,43 @@ def _set_color_source_vec(
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
         categories = color_source_vector.categories
 
-        if groups is not None:
+        if (
+            groups is not None
+            and not isinstance(element, GeoDataFrame)
+            and groups[0] is not None
+            or groups is not None
+            and isinstance(element, GeoDataFrame)
+        ):
             color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
             categories = groups
 
         palette_input: list[str] | str | None
-        if groups is not None:
-            if isinstance(palette, list):
-                palette_input = (
-                    palette[0]
-                    if palette[0] is None
-                    else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                )
-        elif palette is not None and isinstance(palette, list):
-            palette_input = palette[0]
+        if not isinstance(element, GeoDataFrame):
+            if groups is not None and groups[0] is not None:
+                if isinstance(palette, list):
+                    palette_input = (
+                        palette[0]
+                        if palette[0] is None
+                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
+                    )
+            elif palette is not None and isinstance(palette, list):
+                palette_input = palette[0]
 
-        else:
-            palette_input = palette
+            else:
+                palette_input = palette
+
+        if isinstance(element, GeoDataFrame):
+            if groups is not None:
+                if isinstance(palette, list):
+                    palette_input = (
+                        palette[0]
+                        if palette[0] is None
+                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
+                    )
+            elif palette is not None and isinstance(palette, list):
+                palette_input = palette[0]
+            else:
+                palette_input = palette
 
         color_map = dict(
             zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
