@@ -1727,7 +1727,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         )
         param_dict["palette"] = ["lightgray" for _ in range(len(groups))]
 
-    if isinstance(palette, list):
+    if isinstance((palette := param_dict["palette"]), list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
     elif isinstance(palette, (str, type(None))) and "palette" in param_dict:

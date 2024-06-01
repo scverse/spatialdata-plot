@@ -45,7 +45,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(elements="blobs_polygons").pl.show()
 
     def test_plot_extent_calculation_respects_element_selection_circles_and_polygons(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(elements=["blobs_circles", "blobs_polygons"]).pl.show()
+        sdata_blobs.pl.render_shapes("blobs_circles").pl.render_shapes("blobs_polygons").pl.show()
 
     def test_plot_extent_of_img_is_correct_after_spatial_query(self, sdata_blobs: SpatialData):
         cropped_blobs = sdata_blobs.pp.get_elements(["blobs_image"]).query.bounding_box(

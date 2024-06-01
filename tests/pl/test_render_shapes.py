@@ -216,7 +216,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs["table"] = new_table
 
-        sdata_blobs.pl.render_shapes(["blobs_circles", "blobs_polygons"], color="annotation").pl.show()
+        sdata_blobs.pl.render_shapes("blobs_circles", color="annotation").pl.render_shapes(
+            "blobs_polygons", color="annotation"
+        ).pl.show()
 
     def test_plot_can_color_two_queried_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
@@ -244,7 +246,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             filter_table=True,
         )
 
-        sdata_cropped.pl.render_shapes(["blobs_circles", "blobs_polygons"], color="annotation").pl.show()
+        sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.render_shapes(
+            "blobs_polygons", color="annotation"
+        ).pl.show()
 
     def test_plot_can_stack_render_shapes(self, sdata_blobs: SpatialData):
         (
