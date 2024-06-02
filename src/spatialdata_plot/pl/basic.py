@@ -50,10 +50,9 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _update_params,
     _validate_image_render_params,
+    _validate_label_render_params,
     _validate_points_render_params,
-    _validate_render_params,
     _validate_shape_render_params,
     _validate_show_parameters,
     save_fig,
@@ -517,21 +516,22 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", version="0.3.0")
     def render_labels(
         self,
-        elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
+        element: str | None = None,
+        color: str | None = None,
+        groups: list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
-        scale: list[str] | str | None = None,
-        table_name: list[str] | str | None = None,
+        scale: str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -597,10 +597,9 @@ class PlotAccessor:
         -------
         None
         """
-        params_dict = _validate_render_params(
-            "labels",
+        params_dict = _validate_label_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             cmap=cmap,
             color=color,
             contour_px=contour_px,
@@ -612,6 +611,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             palette=palette,
             scale=scale,
+            table_name=table_name,
         )
 
         sdata = self._copy()
@@ -624,20 +624,22 @@ class PlotAccessor:
             **kwargs,
         )
 
-        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
-            elements=params_dict["elements"],
-            color=params_dict["color"],
-            groups=params_dict["groups"],
-            contour_px=contour_px,
-            outline=outline,
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            outline_alpha=outline_alpha,
-            fill_alpha=fill_alpha,
-            transfunc=kwargs.get("transfunc", None),
-            scale=params_dict["scale"],
-            element_table_mapping=table_name,
-        )
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
+                element=element,
+                color=param_values["color"],
+                groups=param_values["groups"],
+                contour_px=param_values["contour_px"],
+                outline=param_values["outline"],
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                outline_alpha=param_values["outline_alpha"],
+                fill_alpha=param_values["fill_alpha"],
+                transfunc=kwargs.get("transfunc", None),
+                scale=param_values["scale"],
+                table_name=param_values["table_name"],
+            )
+            n_steps += 1
         return sdata
 
     def show(
@@ -854,7 +856,6 @@ class PlotAccessor:
                     )
 
                     if wanted_images_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_images_on_this_cs, "images")
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)
                             and params_copy.scale != "full"
@@ -908,20 +909,15 @@ class PlotAccessor:
                         sdata, wanted_elements, params_copy, cs, "labels"
                     )
 
-                    if wanted_labels_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_labels_on_this_cs, "labels")
-
-                        for index, table in enumerate(params_copy.element_table_mapping.values()):
-                            if table is None:
-                                continue
-                            colors = sc.get.obs_df(sdata[table], params_copy.color[index])
-                            if isinstance(colors.dtype, pd.CategoricalDtype):
-                                _maybe_set_colors(
-                                    source=sdata[table],
-                                    target=sdata[table],
-                                    key=params_copy.color[index],
-                                    palette=params_copy.palette[index],
-                                )
+                    if wanted_labels_on_this_cs and (table := params_copy.table_name) is not None:
+                        colors = sc.get.obs_df(sdata[table], params_copy.color)
+                        if isinstance(colors.dtype, pd.CategoricalDtype):
+                            _maybe_set_colors(
+                                source=sdata[table],
+                                target=sdata[table],
+                                key=params_copy.color,
+                                palette=params_copy.palette,
+                            )
 
                     rasterize = (params_copy.scale is None) or (
                         isinstance(params_copy.scale, str)
