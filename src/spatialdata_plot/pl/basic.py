@@ -174,31 +174,25 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element : list[str] | str | None, optional
-            The name(s) of the shapes element(s) to render. If `None`, all shapes
-            elements in the `SpatialData` object will be used.
+        element: str | None, optional
+            The name of the shapes element to render. If `None`, all shapes
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
         color : str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
+            can be used to color by categorical or continuous variables. If the color column is found in multiple
+            locations, please provide the table_name to be used for the element if you would like a specific table to
+            be used. By default one table will automatically be choosen.
         fill_alpha : float | int, default 1.0
             Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the
             user, this value will multiply the value present in the cmap.
-        groups : list[list[str | None]] | list[str | None] | str | None
+        groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements).
-        palette :  list[str | None] | str | None
+            can be used to show only a subset of them. Other values are set to NA. The list can contain multiple
+            discrete labels to be visualized.
+        palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
+            used for the categories. Must match the number of groups. The list can contain multiple
+            palettes (one per group) to be visualized. If groups is provided but not palette, palette is set to
             default "lightgray".
         na_color : str | list[float] | None, default "lightgrey"
             Color to be used for NAs values, if present. Can either be a named color
@@ -221,10 +215,8 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         scale : float | int, default 1.0
             Value to scale circles, if present.
-        table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+        table_name: str | None
+            Name of the table containing the color columns.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
@@ -308,31 +300,25 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the points element(s) to render. If `None`, all points
-            elements in the `SpatialData` object will be used.
-        color : list[str | None] | str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
+        element : str | None
+            The name of the points element to render. If `None`, all points
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        color : str | None
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
+            can be used to color by categorical or continuous variables. If the color column is found in multiple
+            locations, please provide the table_name to be used for the element if you would like a specific table to
+            be used. By default one table will automatically be choosen.
         alpha : float | int, default 1.0
             Alpha value for the points.
-        groups : list[list[str | None]] | list[str | None] | str | None
+        groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements). If groups is provided but not palette, palette is set to
-            default "lightgray".
-        palette : list[list[str | None]] | list[str | None] | str | None
+            can be used to show only a subset of them. Other values are set to NA. The list can contain multiple
+            discrete labels to be visualized.
+        palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
+            used for the categories. Must match the number of groups. The list can contain multiple
+            palettes (one per group) to be visualized. If groups is provided but not palette, palette is set to
+            default "lightgray".
         na_color : str | list[float] | None, default "lightgrey"
             Color to be used for NAs values, if present. Can either be a named color
             ("red"), a hex representation ("#000000ff") or a list of floats that
@@ -346,10 +332,8 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         size : float | int, default 1.0
             Size of the points
-        table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+        table_name: str | None
+            Name of the table containing the color columns.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -427,11 +411,11 @@ class PlotAccessor:
         ----------
         element : str | None
             The name of the image element to render. If `None`, all image
-            elements in the `SpatialData` object will be used.
-        channels : list[str] | list[int] | str | int | None, optional
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        channels : list[str] | list[int] | str | int | None
             To select specific channels to plot. Can be a single channel name/int or a
             list of channel names/ints. If `None`, all channels will be used.
-        cmap : list[Colormap | str] | Colormap | str | None, optional
+        cmap : list[Colormap | str] | Colormap | str | None
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
         norm : Normalize | None, optional
@@ -439,11 +423,8 @@ class PlotAccessor:
             Applies to all channels if set.
         na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
             Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
-        palette : list[str] | None
-            Palette to color images. In the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list contains the string
-            indicating the palette to be used. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
+        palette : list[str] | str | None
+            Palette to color images. The number of palettes should be equal to the number of channels.
         alpha : float | int, default 1.0
             Alpha value for the images. Must be a numeric between 0 and 1.
         percentiles_for_norm : tuple[float, float] | None
@@ -539,45 +520,39 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the label element(s) to render. If `None`, all label
-            elements in the `SpatialData` object will be used.
-        color : list[str | None] | str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
-        groups : list[list[str | None]] | list[str | None] | str | None
+        elements : str | None
+            The name of the labels element to render. If `None`, all label
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        color : list[str] | str | None
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
+            can be used to color by categorical or continuous variables. If the color column is found in multiple
+            locations, please provide the table_name to be used for the element if you would like a specific table to
+            be used. By default one table will automatically be choosen.
+        groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements).
-        palette : list[list[str | None]] | list[str | None] | str | None
+            can be used to show only a subset of them. Other values are set to NA. The list can contain multiple
+            discrete labels to be visualized.
+        palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
+            used for the categories. Must match the number of groups. The list can contain multiple
+            palettes (one per group) to be visualized. If groups is provided but not palette, palette is set to
             default "lightgray".
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills
             entire segment, see :func:`skimage.morphology.erosion`.
         outline : bool, default False
             Whether to plot boundaries around segmentation masks.
-        cmap : Colormap | str | None, optional
+        cmap : Colormap | str | None
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-        norm : Normalize | None, optional
+        norm : Normalize | None
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None, optional
+        na_color : ColorLike | None
             Color to be used for NAs values, if present.
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of the labels.
         fill_alpha : float | int, default 0.3
             Alpha value for the fill of the labels.
-        scale : list[str] | str | None, optional
+        scale : list[str] | str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
                 is selected before the rasterization step.
@@ -586,10 +561,8 @@ class PlotAccessor:
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
                 4) List that is matched to the list of elements (can contain `None`, scale names or "full").
-        table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+        table_name: str | None
+            Name of the table containing the color columns.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
