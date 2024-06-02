@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.3] - tbd
 
+### Changed
+
+-   All parameters are now provided for a single element. If element in pl.render is None then this value will be broadcasted
+
 ### Fixed
 
 -   Fix color assignment for NaN values (#257)
