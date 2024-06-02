@@ -203,151 +203,132 @@ def _render_points(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
 ) -> None:
-    elements = render_params.elements
-    element_table_mapping = render_params.element_table_mapping
-    cols_for_color = _return_list_str_none(render_params.col_for_color)
-    groups = _return_list_list_str_none(render_params.groups)
-    palettes = _return_list_list_str_none(render_params.palette)
-    colors = _return_list_str_none(render_params.color)
-    # Purely for mypy
-    assert isinstance(element_table_mapping, dict)
+    element = render_params.element
+    col_for_color = render_params.col_for_color
+    table_name = render_params.table_name
+    color = render_params.color
+    groups = render_params.groups
+    palette = render_params.palette
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=any(value is not None for value in element_table_mapping.values()),
+        filter_tables=bool(table_name),
     )
 
-    if elements is None:
-        elements = list(sdata_filt.points.keys())
+    points = sdata.points[element]
+    coords = ["x", "y"]
 
-    for index, e in enumerate(elements):
-        points = sdata.points[e]
-        col_for_color = cols_for_color[index]
-        table_name = element_table_mapping.get(e)
-
-        coords = ["x", "y"]
-
+    if col_for_color is None or (table_name is not None and col_for_color in sdata_filt[table_name].obs.columns):
+        points = points[coords].compute()
         if (
-            col_for_color is not None
-            and col_for_color not in points.columns
-            and col_for_color not in sdata_filt[table_name].obs.columns
+            col_for_color
+            and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
+            and not _is_coercable_to_float(color_col)
         ):
-            # no error in case there are multiple elements, but onyl some have color key
-            msg = f"Color key '{col_for_color}' for element '{e}' not been found, using default colors."
-            logger.warning(msg)
-        elif col_for_color is None or (table_name is not None and col_for_color in sdata_filt[table_name].obs.columns):
-            points = points[coords].compute()
-            if (
-                col_for_color
-                and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-                and not _is_coercable_to_float(color_col)
-            ):
-                warnings.warn(
-                    f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
-                    f"plotting. Consider converting before plotting.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
-        else:
-            coords += [col_for_color]
-            points = points[coords].compute()
-
-        if groups[index][0] is not None and col_for_color is not None:
-            points = points[points[col_for_color].isin(groups[index])]
-
-        # we construct an anndata to hack the plotting functions
-        if table_name is None:
-            adata = AnnData(
-                X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
+            warnings.warn(
+                f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
+                f"plotting. Consider converting before plotting.",
+                UserWarning,
+                stacklevel=2,
             )
-        else:
-            adata = AnnData(
-                X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
-            )
-            sdata_filt[table_name] = adata
+            sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+    else:
+        coords += [col_for_color]
+        points = points[coords].compute()
 
-        # we can do this because of dealing with a copy
+    if groups is not None and col_for_color is not None:
+        points = points[points[col_for_color].isin(groups)]
 
-        # Convert back to dask dataframe to modify sdata
-        points = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[e] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
-
-        if col_for_color is not None:
-            cols = sc.get.obs_df(adata, col_for_color)
-            # maybe set color based on type
-            if isinstance(cols.dtype, pd.CategoricalDtype):
-                _maybe_set_colors(
-                    source=adata,
-                    target=adata,
-                    key=col_for_color,
-                    palette=palettes[index] if palettes[index][0] is not None else None,
-                )
-
-        # when user specified a single color, we overwrite na with it
-        default_color = (
-            colors[index] if col_for_color is None and colors[index] is not None else render_params.cmap_params.na_color
+    # we construct an anndata to hack the plotting functions
+    if table_name is None:
+        adata = AnnData(
+            X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
         )
-
-        color_source_vector, color_vector, _ = _set_color_source_vec(
-            sdata=sdata_filt,
-            element=points,
-            element_name=e,
-            value_to_plot=col_for_color,
-            groups=groups[index] if groups[index][0] is not None else None,
-            palette=palettes[index] if palettes[index][0] is not None else None,
-            na_color=default_color,
-            cmap_params=render_params.cmap_params,
-            table_name=cast(str, table_name),
+    else:
+        adata = AnnData(
+            X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
         )
+        sdata_filt[table_name] = adata
 
-        # color_source_vector is None when the values aren't categorical
-        if color_source_vector is None and render_params.transfunc is not None:
-            color_vector = render_params.transfunc(color_vector)
+    # we can do this because of dealing with a copy
 
-        trans = get_transformation(sdata.points[e], get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+    # Convert back to dask dataframe to modify sdata
+    points = dask.dataframe.from_pandas(points, npartitions=1)
+    sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
 
-        norm = copy(render_params.cmap_params.norm)
-        _cax = ax.scatter(
-            adata[:, 0].X.flatten(),
-            adata[:, 1].X.flatten(),
-            s=render_params.size,
-            c=color_vector,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            alpha=render_params.alpha,
-            transform=trans,
-        )
-        cax = ax.add_collection(_cax)
-
-        if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
-            if color_source_vector is None:
-                palette = ListedColormap(dict.fromkeys(color_vector))
-            else:
-                palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
-
-            _ = _decorate_axs(
-                ax=ax,
-                cax=cax,
-                fig_params=fig_params,
-                adata=adata,
-                value_to_plot=col_for_color,
-                color_source_vector=color_source_vector,
+    if col_for_color is not None:
+        cols = sc.get.obs_df(adata, col_for_color)
+        # maybe set color based on type
+        if isinstance(cols.dtype, pd.CategoricalDtype):
+            _maybe_set_colors(
+                source=adata,
+                target=adata,
+                key=col_for_color,
                 palette=palette,
-                alpha=render_params.alpha,
-                na_color=render_params.cmap_params.na_color,
-                legend_fontsize=legend_params.legend_fontsize,
-                legend_fontweight=legend_params.legend_fontweight,
-                legend_loc=legend_params.legend_loc,
-                legend_fontoutline=legend_params.legend_fontoutline,
-                na_in_legend=legend_params.na_in_legend,
-                colorbar=legend_params.colorbar,
-                scalebar_dx=scalebar_params.scalebar_dx,
-                scalebar_units=scalebar_params.scalebar_units,
             )
+
+    # when user specified a single color, we overwrite na with it
+    default_color = color if col_for_color is None and color is not None else render_params.cmap_params.na_color
+
+    color_source_vector, color_vector, _ = _set_color_source_vec(
+        sdata=sdata_filt,
+        element=points,
+        element_name=element,
+        value_to_plot=col_for_color,
+        groups=groups,
+        palette=palette,
+        na_color=default_color,
+        cmap_params=render_params.cmap_params,
+        table_name=table_name,
+    )
+
+    # color_source_vector is None when the values aren't categorical
+    if color_source_vector is None and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
+
+    trans = get_transformation(sdata.points[element], get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
+    norm = copy(render_params.cmap_params.norm)
+    _cax = ax.scatter(
+        adata[:, 0].X.flatten(),
+        adata[:, 1].X.flatten(),
+        s=render_params.size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        alpha=render_params.alpha,
+        transform=trans,
+    )
+    cax = ax.add_collection(_cax)
+
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+        if color_source_vector is None:
+            palette = ListedColormap(dict.fromkeys(color_vector))
+        else:
+            palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
+        _ = _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=adata,
+            value_to_plot=col_for_color,
+            color_source_vector=color_source_vector,
+            palette=palette,
+            alpha=render_params.alpha,
+            na_color=render_params.cmap_params.na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=legend_params.colorbar,
+            scalebar_dx=scalebar_params.scalebar_dx,
+            scalebar_units=scalebar_params.scalebar_units,
+        )
 
 
 def _render_images(

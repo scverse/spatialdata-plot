@@ -52,6 +52,7 @@ from spatialdata_plot.pl.utils import (
     _set_outline,
     _update_params,
     _validate_image_render_params,
+    _validate_points_render_params,
     _validate_render_params,
     _validate_shape_render_params,
     _validate_show_parameters,
@@ -288,18 +289,19 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", version="0.3.0")
     def render_points(
         self,
-        elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
+        element: str | None = None,
+        color: str | None = None,
         alpha: float | int = 1.0,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        groups: list[str] | str | None = None,
+        palette: list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
-        table_name: list[str] | str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -357,10 +359,9 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
-        params_dict = _validate_render_params(
-            "points",
+        params_dict = _validate_points_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             alpha=alpha,
             color=color,
             groups=groups,
@@ -369,6 +370,7 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             size=size,
+            table_name=table_name,
         )
 
         sdata = self._copy()
@@ -382,18 +384,20 @@ class PlotAccessor:
             **kwargs,
         )
 
-        sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
-            elements=params_dict["elements"],
-            color=params_dict["color"],
-            col_for_color=params_dict["col_for_color"],
-            groups=params_dict["groups"],
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            alpha=alpha,
-            transfunc=kwargs.get("transfunc", None),
-            size=size,
-            element_table_mapping=table_name,
-        )
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
+                element=element,
+                color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
+                groups=param_values["groups"],
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                alpha=param_values["alpha"],
+                transfunc=kwargs.get("transfunc", None),
+                size=param_values["size"],
+                table_name=param_values["table_name"],
+            )
+            n_steps += 1
 
         return sdata
 
@@ -889,7 +893,6 @@ class PlotAccessor:
                     )
 
                     if wanted_points_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_points_on_this_cs, "points")
                         _render_points(
                             sdata=sdata,
                             render_params=params_copy,

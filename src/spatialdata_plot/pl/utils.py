@@ -1372,14 +1372,14 @@ def _get_elements_to_be_rendered(
     for cmd, params in render_cmds:
         key = render_cmds_map.get(cmd)
         # TODO: change after completion of refactor to single element configs
-        if (cmd == "render_images" or cmd == "render_shapes") and isinstance(
-            params, (ImageRenderParams, ShapesRenderParams)
+        if (cmd in ["render_images", "render_shapes", "render_points"]) and isinstance(
+            params, (ImageRenderParams, ShapesRenderParams, PointsRenderParams)
         ):
             elements_to_be_rendered += [params.element]
         if (
             key
             and cs_query[key][0]
-            and not isinstance(params, (ImageRenderParams, ShapesRenderParams))
+            and not isinstance(params, (ImageRenderParams, ShapesRenderParams, PointsRenderParams))
             and params.elements is not None
         ):
             elements_to_be_rendered += [params.elements] if isinstance(params.elements, str) else params.elements
@@ -1388,9 +1388,9 @@ def _get_elements_to_be_rendered(
 
 def _create_initial_element_table_mapping(
     sdata: sd.SpatialData,
-    params: LabelsRenderParams | PointsRenderParams,
+    params: LabelsRenderParams,
     render_elements: list[str],
-) -> LabelsRenderParams | PointsRenderParams:
+) -> LabelsRenderParams:
     """
     Create the initial element to tables mapping based on what elements are rendered and table names are specified.
 
@@ -1445,8 +1445,8 @@ def _create_initial_element_table_mapping(
 
 
 def _update_element_table_mapping_label_colors(
-    sdata: SpatialData, params: LabelsRenderParams | PointsRenderParams, render_elements: list[str]
-) -> LabelsRenderParams | PointsRenderParams:
+    sdata: SpatialData, params: LabelsRenderParams, render_elements: list[str]
+) -> LabelsRenderParams:
     element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
         params.element_table_mapping
     )
@@ -1488,91 +1488,6 @@ def _update_element_table_mapping_label_colors(
         if isinstance(table_set, set):
             element_table_mapping[element_name] = next(iter(table_set)) if len(table_set) != 0 else None
 
-    params.element_table_mapping = element_table_mapping
-    return params
-
-
-def _validate_colors_element_table_mapping_points_shapes(
-    sdata: SpatialData, params: PointsRenderParams, render_elements: list[str]
-) -> PointsRenderParams:
-    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = (
-        params.element_table_mapping
-    )
-
-    assert isinstance(element_table_mapping, dict)
-
-    if isinstance(params.color, list) and len(params.color) == 1 and isinstance(params.col_for_color, list):
-        color = params.color[0]
-        col_color = params.col_for_color[0]
-        # This means that we are dealing with colors that are color like
-        if color is not None:
-            params.color = [color] * len(render_elements)
-            params.col_for_color = [None] * len(render_elements)
-        else:
-            if col_color is not None:
-                params.color = [None] * len(render_elements)
-                params.col_for_color = []
-                for element_name in render_elements:
-                    if col_color in sdata[element_name].columns:
-                        params.col_for_color.append(col_color)
-                        element_table_mapping[element_name] = set()
-                    else:
-                        if isinstance(table_set := element_table_mapping[element_name], set) and len(table_set) != 0:
-                            for table_name in table_set.copy():
-                                if (
-                                    col_color not in sdata[table_name].obs.columns
-                                    and col_color not in sdata[table_name].var_names
-                                ):
-                                    table_set.remove(table_name)
-                                    params.col_for_color.append(None)
-                                else:
-                                    params.col_for_color.append(col_color)
-                        else:
-                            params.col_for_color.append(None)
-            else:
-                params.color = [None] * len(render_elements)
-                params.col_for_color = [None] * len(render_elements)
-    else:
-        if isinstance(params.color, list) and len(params.color) != len(render_elements):
-            warnings.warn(
-                "The number of given colors and elements to render is not equal. "
-                "Either provide one color or a list with one color for each element. skipping",
-                UserWarning,
-                stacklevel=2,
-            )
-            params.color = [None] * len(render_elements)
-            params.col_for_color = [None] * len(render_elements)
-        else:
-            assert isinstance(params.color, list)
-            assert isinstance(params.col_for_color, list)
-            for index, color in enumerate(params.color):
-                if color is None:
-                    element_name = render_elements[index]
-                    col_color = params.col_for_color[index]
-                    if isinstance(mapping := element_table_mapping[element_name], set):
-                        for table_name in mapping.copy():
-                            if (
-                                col_color not in sdata[table_name].obs.columns
-                                and col_color not in sdata[table_name].var_names
-                                and col_color not in sdata[element_name].columns
-                            ):
-                                mapping.remove(table_name)
-    for index, element_name in enumerate(render_elements):
-        # We only want one table value per element and only when there is a color column in the table
-        if isinstance(params.col_for_color, list) and params.col_for_color[index] is not None:
-            table_set = element_table_mapping[element_name]
-            if isinstance(table_set, set) and len(table_set) > 1:
-                raise ValueError(f"More than one table found with color column {params.col_for_color[index]}.")
-            if isinstance(tables := table_set, set):
-                element_table_mapping[element_name] = next(iter(tables)) if len(tables) != 0 else None
-            if element_table_mapping[element_name] is None:
-                warnings.warn(
-                    f"No table found with color column {params.col_for_color[index]} to render {element_name}",
-                    UserWarning,
-                    stacklevel=2,
-                )
-        else:
-            element_table_mapping[element_name] = None
     params.element_table_mapping = element_table_mapping
     return params
 
@@ -1688,6 +1603,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
     if element_type == "shapes":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
+    if element_type == "points":
+        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].points.keys())
 
     if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
@@ -1700,7 +1617,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif "channel" in param_dict:
         param_dict["channel"] = [channel] if channel is not None else None
 
-    if (color := param_dict.get("color")) and element_type == "shapes":
+    if (color := param_dict.get("color")) and element_type in ["shapes", "points"]:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
 
@@ -1823,10 +1740,69 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if "percentiles_for_norm" in param_dict:
         param_dict["percentiles_for_norm"] = percentiles_for_norm
 
+    if size := param_dict.get("size"):
+        if not isinstance(size, (float, int)):
+            raise TypeError("Parameter 'size' must be numeric.")
+        if size < 0:
+            raise ValueError("Parameter 'size' must be a positive number.")
+
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
 
     return param_dict
+
+
+def _validate_points_render_params(
+    sdata: sd.SpatialData,
+    element: str | None,
+    alpha: float | int,
+    color: str | None,
+    groups: list[str] | str | None,
+    palette: list[str] | str | None,
+    na_color: ColorLike | None,
+    cmap: list[Colormap | str] | Colormap | str | None,
+    norm: Normalize | None,
+    size: float | int,
+    table_name: str | None,
+) -> dict[str, dict[str, Any]]:
+    param_dict: dict[str, Any] = {
+        "sdata": sdata,
+        "element": element,
+        "alpha": alpha,
+        "color": color,
+        "groups": groups,
+        "palette": palette,
+        "na_color": na_color,
+        "cmap": cmap,
+        "norm": norm,
+        "size": size,
+        "table_name": table_name,
+    }
+    param_dict = _type_check_params(param_dict, "points")
+
+    element_params: dict[str, dict[str, Any]] = {}
+    for el in param_dict["element"]:
+        element_params[el] = {}
+        element_params[el]["na_color"] = param_dict["na_color"]
+        element_params[el]["cmap"] = param_dict["cmap"]
+        element_params[el]["norm"] = param_dict["norm"]
+        element_params[el]["color"] = param_dict["color"]
+        element_params[el]["size"] = param_dict["size"]
+        element_params[el]["alpha"] = param_dict["alpha"]
+
+        element_params[el]["table_name"] = None
+        element_params[el]["col_for_color"] = None
+        if (col_for_color := param_dict["col_for_color"]) is not None:
+            col_for_color, table_name = _validate_col_for_column_table(
+                sdata, el, col_for_color, param_dict["table_name"]
+            )
+            element_params[el]["table_name"] = table_name
+            element_params[el]["col_for_color"] = col_for_color
+
+        element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+
+    return element_params
 
 
 def _validate_shape_render_params(
@@ -2264,10 +2240,10 @@ def _validate_render_params(
 
 
 def _match_length_elements_groups_palette(
-    params: LabelsRenderParams | PointsRenderParams,
+    params: LabelsRenderParams,
     render_elements: list[str],
     image: bool = False,
-) -> LabelsRenderParams | PointsRenderParams:
+) -> LabelsRenderParams:
 
     groups = params.groups
     palette = params.palette
@@ -2308,8 +2284,7 @@ def _get_wanted_render_elements(
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         # TODO: Remove this when the refactor to single element configs is completed
 
-        if isinstance(params, (ImageRenderParams, ShapesRenderParams)):
-
+        if isinstance(params, (ImageRenderParams, ShapesRenderParams, PointsRenderParams)):
             wanted_elements: list[str] = [params.element]
         else:
             if isinstance(params.elements, str):
@@ -2331,16 +2306,14 @@ def _get_wanted_render_elements(
 
 def _update_params(
     sdata: SpatialData,
-    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams,
+    params: ImageRenderParams | LabelsRenderParams,
     wanted_elements_on_cs: list[str],
     element_type: Literal["images", "labels", "points", "shapes"],
-) -> ImageRenderParams | LabelsRenderParams | PointsRenderParams:
-    if isinstance(params, (LabelsRenderParams, PointsRenderParams)) and wanted_elements_on_cs:
+) -> ImageRenderParams | LabelsRenderParams:
+    if isinstance(params, LabelsRenderParams) and wanted_elements_on_cs:
         params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
         if isinstance(params, LabelsRenderParams):
             params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
-        if isinstance(params, PointsRenderParams):
-            params = _validate_colors_element_table_mapping_points_shapes(sdata, params, wanted_elements_on_cs)
 
     # TODO change after completion refactor
     if isinstance(params, ImageRenderParams):
