@@ -21,9 +21,9 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
+from spatialdata._utils import deprecation_alias
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._utils import deprecation_alias
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
