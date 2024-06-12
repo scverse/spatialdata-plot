@@ -696,8 +696,8 @@ def _render_labels(
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
-        _cax.set_transform(trans_data)
-        cax = ax.add_image(_cax)
+            _cax.set_transform(trans_data)
+            cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
             ax=ax,
