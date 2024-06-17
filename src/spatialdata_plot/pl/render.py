@@ -621,7 +621,7 @@ def _render_labels(
                 na_color=render_params.cmap_params.na_color,
             )
 
-            _cax = ax.imshow(
+            _cax_contour = ax.imshow(
                 labels_contour,
                 rasterized=True,
                 cmap=None if categorical else render_params.cmap_params.cmap,
@@ -629,6 +629,7 @@ def _render_labels(
                 alpha=render_params.outline_alpha,
                 origin="lower",
             )
+            _cax_contour.set_transform(trans_data)
             _cax = ax.imshow(
                 labels_infill,
                 rasterized=True,
@@ -660,8 +661,8 @@ def _render_labels(
                 alpha=render_params.fill_alpha,
                 origin="lower",
             )
-        _cax.set_transform(trans_data)
-        cax = ax.add_image(_cax)
+            _cax.set_transform(trans_data)
+            cax = ax.add_image(_cax)
 
         _ = _decorate_axs(
             ax=ax,
