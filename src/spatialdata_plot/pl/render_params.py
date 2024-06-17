@@ -88,15 +88,15 @@ class PointsRenderParams:
     """Points render parameters.."""
 
     cmap_params: CmapParams
-    elements: str | list[str] | None = None
-    color: list[str | None] | str | None = None
-    col_for_color: list[str | None] | str | None = None
-    groups: str | list[list[str | None]] | list[str | None] | None = None
-    palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
+    element: str
+    color: str | None = None
+    col_for_color: str | None = None
+    groups: str | list[str] | None = None
+    palette: ListedColormap | list[str] | None = None
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
-    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = None
+    table_name: str | None = None
 
 
 @dataclass

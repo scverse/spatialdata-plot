@@ -52,6 +52,7 @@ from spatialdata_plot.pl.utils import (
     _set_outline,
     _update_params,
     _validate_image_render_params,
+    _validate_points_render_params,
     _validate_render_params,
     _validate_shape_render_params,
     _validate_show_parameters,
@@ -175,40 +176,37 @@ class PlotAccessor:
         Parameters
         ----------
         element : str | None, optional
-            The name of the shapes element to render. If `None`, all shapes
-            elements in the `SpatialData` object will be used. If you would like multiple specific elements to be
-            rendered, please chain the calls to render: pl.render_shapes(...).pl.render_shapes(...).pl.show()
+            The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
+            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
+            pl.render_shapes(...).pl.render_shapes(...).pl.show().
         color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If element is None, if possible the color will
-            be broadcasted to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the elements.
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
+            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
+            broadcasted to all elements. For this, the table in which the color key is found must annotate the
+            respective element (region must be set to the specific element). If the color column is found in multiple
+            locations, please provide the table_name to be used for the elements.
         fill_alpha : float | int, default 1.0
-            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the
-            user, this value will multiply the value present in the cmap.
+            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the user, this value
+            will multiply the value present in the cmap.
         groups : list[str] | str | None
-            When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. If elment is None,
-            broadcasting behaviour is attempted (use the same values for all elements).
+            When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
+            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            values for all elements).
         palette :  list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. If element is None, broadcasting behaviour is
-            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
-            default "lightgray".
+            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
+            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
+            all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "lightgrey"
-            Color to be used for NAs values, if present. Can either be a named color
-            ("red"), a hex representation ("#000000ff") or a list of floats that
-            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
-            be shown.
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         outline : bool, default False
             If `True`, a border around the shape elements is plotted.
         outline_width : float | int, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
-            Color of the border. Can either be a named color ("red"), a hex
-            representation ("#000000ff") or a list of floats that represent RGB/RGBA
-            values (1.0, 0.0, 0.0, 1.0).
+            Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
+            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of shapes.
         cmap : Colormap | str | None, optional
@@ -217,7 +215,7 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         scale : float | int, default 1.0
             Value to scale circles, if present.
-        table_name:
+        table_name: str | None
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
@@ -284,18 +282,19 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", version="0.3.0")
     def render_points(
         self,
-        elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
+        element: str | None = None,
+        color: str | None = None,
         alpha: float | int = 1.0,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        groups: list[str] | str | None = None,
+        palette: list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
-        table_name: list[str] | str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -303,48 +302,41 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the points element(s) to render. If `None`, all points
-            elements in the `SpatialData` object will be used.
-        color : list[str | None] | str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
+        element : str | None, optional
+            The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
+            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
+            pl.render_points(...).pl.render_points(...).pl.show()
+        color : str | None
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
+            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
+            broadcasted to all elements. For this, the table in which the color key is found must annotate the
+            respective element (region must be set to the specific element). If the color column is found in multiple
+            locations, please provide the table_name to be used for the elements.
         alpha : float | int, default 1.0
             Alpha value for the points.
-        groups : list[list[str | None]] | list[str | None] | str | None
-            When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements). If groups is provided but not palette, palette is set to
-            default "lightgray".
-        palette : list[list[str | None]] | list[str | None] | str | None
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
-        na_color : str | list[float] | None, default "lightgrey"
-            Color to be used for NAs values, if present. Can either be a named color
-            ("red"), a hex representation ("#000000ff") or a list of floats that
-            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
-            be shown.
+        groups : list[str] | str | None
+            When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
+            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            values for all elements).
+        palette : list[str] | str | None
+            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
+            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
+            all elements). If groups is provided but not palette, palette is set to default "lightgray".
+        na_color : ColorLike | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         cmap : Colormap | str | None, optional
-            Colormap for discrete or continuous annotations using 'color', see
-            :class:`matplotlib.colors.Colormap`. If no palette is given and `color`
-            refers to a categorical, the colors are sampled from this colormap.
+            Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`. If
+            no palette is given and `color` refers to a categorical, the colors are sampled from this colormap.
         norm : bool | Normalize, default False
             Colormap normalization for continuous annotations.
         size : float | int, default 1.0
             Size of the points
-        table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+        table_name: str | None
+            Name of the table containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If you want to use different tables for particular
+            elements, as specified under element.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -353,10 +345,9 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
-        params_dict = _validate_render_params(
-            "points",
+        params_dict = _validate_points_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             alpha=alpha,
             color=color,
             groups=groups,
@@ -365,6 +356,7 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             size=size,
+            table_name=table_name,
         )
 
         sdata = self._copy()
@@ -378,18 +370,20 @@ class PlotAccessor:
             **kwargs,
         )
 
-        sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
-            elements=params_dict["elements"],
-            color=params_dict["color"],
-            col_for_color=params_dict["col_for_color"],
-            groups=params_dict["groups"],
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            alpha=alpha,
-            transfunc=kwargs.get("transfunc", None),
-            size=size,
-            element_table_mapping=table_name,
-        )
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
+                element=element,
+                color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
+                groups=param_values["groups"],
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                alpha=param_values["alpha"],
+                transfunc=kwargs.get("transfunc", None),
+                size=param_values["size"],
+                table_name=param_values["table_name"],
+            )
+            n_steps += 1
 
         return sdata
 
@@ -885,7 +879,6 @@ class PlotAccessor:
                     )
 
                     if wanted_points_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_points_on_this_cs, "points")
                         _render_points(
                             sdata=sdata,
                             render_params=params_copy,
