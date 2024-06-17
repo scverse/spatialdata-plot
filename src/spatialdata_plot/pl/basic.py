@@ -21,9 +21,9 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
+from spatialdata._utils import deprecation_alias
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._utils import deprecation_alias
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -50,10 +50,9 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
-    _update_params,
     _validate_image_render_params,
+    _validate_label_render_params,
     _validate_points_render_params,
-    _validate_render_params,
     _validate_shape_render_params,
     _validate_show_parameters,
     save_fig,
@@ -173,12 +172,17 @@ class PlotAccessor:
         """
         Render shapes elements in SpatialData.
 
+        In case of no elements specified, "broadcasting" of parameters is applied. This means that for any particular
+        SpatialElement, we validate whether a given parameter is valid. If not valid for a particular SpatialElement the
+        specific parameter for that particular SpatialElement will be ignored. If you want to set specific parameters
+        for specific elements please chain the render functions: `pl.render_points(...).pl.render_points(...).pl.show()`
+        .
+
         Parameters
         ----------
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
-            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
-            pl.render_shapes(...).pl.render_shapes(...).pl.show().
+            used.
         color : str | None
             Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
             color by categorical or continuous variables. If `element` is `None`, if possible the color will be
@@ -300,12 +304,17 @@ class PlotAccessor:
         """
         Render points elements in SpatialData.
 
+        In case of no elements specified, "broadcasting" of parameters is applied. This means that for any particular
+        SpatialElement, we validate whether a given parameter is valid. If not valid for a particular SpatialElement the
+        specific parameter for that particular SpatialElement will be ignored. If you want to set specific parameters
+        for specific elements please chain the render functions: `pl.render_points(...).pl.render_points(...).pl.show()`
+        .
+
         Parameters
         ----------
         element : str | None, optional
             The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
-            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
-            pl.render_points(...).pl.render_points(...).pl.show()
+            used.
         color : str | None
             Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
             color by categorical or continuous variables. If `element` is `None`, if possible the color will be
@@ -316,12 +325,12 @@ class PlotAccessor:
             Alpha value for the points.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            them. Other values are set to NA. If `element` is `None`, broadcasting behaviour is attempted (use the same
             values for all elements).
         palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
-            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
-            all elements). If groups is provided but not palette, palette is set to default "lightgray".
+            match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
+            for all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "lightgrey"
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -414,11 +423,11 @@ class PlotAccessor:
         ----------
         element : str | None
             The name of the image element to render. If `None`, all image
-            elements in the `SpatialData` object will be used.
-        channels : list[str] | list[int] | str | int | None, optional
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        channel : list[str] | list[int] | str | int | None
             To select specific channels to plot. Can be a single channel name/int or a
             list of channel names/ints. If `None`, all channels will be used.
-        cmap : list[Colormap | str] | Colormap | str | None, optional
+        cmap : list[Colormap | str] | Colormap | str | None
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
         norm : Normalize | None, optional
@@ -426,11 +435,8 @@ class PlotAccessor:
             Applies to all channels if set.
         na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
             Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
-        palette : list[str] | None
-            Palette to color images. In the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list contains the string
-            indicating the palette to be used. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements).
+        palette : list[str] | str | None
+            Palette to color images. The number of palettes should be equal to the number of channels.
         alpha : float | int, default 1.0
             Alpha value for the images. Must be a numeric between 0 and 1.
         percentiles_for_norm : tuple[float, float] | None
@@ -503,67 +509,66 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", version="0.3.0")
     def render_labels(
         self,
-        elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
+        element: str | None = None,
+        color: str | None = None,
+        groups: list[str] | str | None = None,
         contour_px: int = 3,
         outline: bool = False,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.3,
-        scale: list[str] | str | None = None,
-        table_name: list[str] | str | None = None,
+        scale: str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
         Render labels elements in SpatialData.
 
+        In case of no elements specified, "broadcasting" of parameters is applied. This means that for any particular
+        SpatialElement, we validate whether a given parameter is valid. If not valid for a particular SpatialElement the
+        specific parameter for that particular SpatialElement will be ignored. If you want to set specific parameters
+        for specific elements please chain the render functions: `pl.render_images(...).pl.render_images(...).pl.show()`
+        .
+
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the label element(s) to render. If `None`, all label
-            elements in the `SpatialData` object will be used.
-        color : list[str | None] | str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
-            annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
-        groups : list[list[str | None]] | list[str | None] | str | None
-            When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements).
-        palette : list[list[str | None]] | list[str | None] | str | None
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
-            attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
-            default "lightgray".
+        element : str | None
+            The name of the labels element to render. If `None`, all label
+            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        color : list[str] | str | None
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
+            color by categorical or continuous variables. If the color column is found in multiple locations, please
+            provide the table_name to be used for the element if you would like a specific table to be used. By default
+            one table will automatically be choosen.
+        groups : list[str] | str | None
+            When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
+            them. Other values are set to NA. The list can contain multiple discrete labels to be visualized.
+        palette : list[str] | str | None
+            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
+            match the number of groups. The list can contain multiple palettes (one per group) to be visualized. If
+            groups is provided but not palette, palette is set to default "lightgray".
         contour_px : int, default 3
-            Draw contour of specified width for each segment. If `None`, fills
-            entire segment, see :func:`skimage.morphology.erosion`.
+            Draw contour of specified width for each segment. If `None`, fills entire segment, see:
+            func:`skimage.morphology.erosion`.
         outline : bool, default False
             Whether to plot boundaries around segmentation masks.
-        cmap : Colormap | str | None, optional
+        cmap : Colormap | str | None
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-        norm : Normalize | None, optional
+        norm : Normalize | None
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None, optional
+        na_color : ColorLike | None
             Color to be used for NAs values, if present.
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of the labels.
         fill_alpha : float | int, default 0.3
             Alpha value for the fill of the labels.
-        scale : list[str] | str | None, optional
+        scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
                 is selected before the rasterization step.
@@ -571,11 +576,8 @@ class PlotAccessor:
                 (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
-                4) List that is matched to the list of elements (can contain `None`, scale names or "full").
-        table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+        table_name: str | None
+            Name of the table containing the color columns.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -583,10 +585,9 @@ class PlotAccessor:
         -------
         None
         """
-        params_dict = _validate_render_params(
-            "labels",
+        params_dict = _validate_label_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             cmap=cmap,
             color=color,
             contour_px=contour_px,
@@ -598,6 +599,7 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             palette=palette,
             scale=scale,
+            table_name=table_name,
         )
 
         sdata = self._copy()
@@ -610,20 +612,22 @@ class PlotAccessor:
             **kwargs,
         )
 
-        sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
-            elements=params_dict["elements"],
-            color=params_dict["color"],
-            groups=params_dict["groups"],
-            contour_px=contour_px,
-            outline=outline,
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            outline_alpha=outline_alpha,
-            fill_alpha=fill_alpha,
-            transfunc=kwargs.get("transfunc", None),
-            scale=params_dict["scale"],
-            element_table_mapping=table_name,
-        )
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
+                element=element,
+                color=param_values["color"],
+                groups=param_values["groups"],
+                contour_px=param_values["contour_px"],
+                outline=param_values["outline"],
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                outline_alpha=param_values["outline_alpha"],
+                fill_alpha=param_values["fill_alpha"],
+                transfunc=kwargs.get("transfunc", None),
+                scale=param_values["scale"],
+                table_name=param_values["table_name"],
+            )
+            n_steps += 1
         return sdata
 
     def show(
@@ -840,7 +844,6 @@ class PlotAccessor:
                     )
 
                     if wanted_images_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_images_on_this_cs, "images")
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)
                             and params_copy.scale != "full"
@@ -894,20 +897,15 @@ class PlotAccessor:
                         sdata, wanted_elements, params_copy, cs, "labels"
                     )
 
-                    if wanted_labels_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_labels_on_this_cs, "labels")
-
-                        for index, table in enumerate(params_copy.element_table_mapping.values()):
-                            if table is None:
-                                continue
-                            colors = sc.get.obs_df(sdata[table], params_copy.color[index])
-                            if isinstance(colors.dtype, pd.CategoricalDtype):
-                                _maybe_set_colors(
-                                    source=sdata[table],
-                                    target=sdata[table],
-                                    key=params_copy.color[index],
-                                    palette=params_copy.palette[index],
-                                )
+                    if wanted_labels_on_this_cs and (table := params_copy.table_name) is not None:
+                        colors = sc.get.obs_df(sdata[table], params_copy.color)
+                        if isinstance(colors.dtype, pd.CategoricalDtype):
+                            _maybe_set_colors(
+                                source=sdata[table],
+                                target=sdata[table],
+                                key=params_copy.color,
+                                palette=params_copy.palette,
+                            )
 
                     rasterize = (params_copy.scale is None) or (
                         isinstance(params_copy.scale, str)
