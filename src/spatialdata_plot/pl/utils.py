@@ -2283,7 +2283,6 @@ def _get_wanted_render_elements(
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         # TODO: Remove this when the refactor to single element configs is completed
-
         if isinstance(params, (ImageRenderParams, ShapesRenderParams, PointsRenderParams)):
             wanted_elements: list[str] = [params.element]
         else:
