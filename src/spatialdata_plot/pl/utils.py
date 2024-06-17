@@ -1700,7 +1700,7 @@ def _validate_label_render_params(
 
     return element_params
 
-  
+
 def _validate_points_render_params(
     sdata: sd.SpatialData,
     element: str | None,
