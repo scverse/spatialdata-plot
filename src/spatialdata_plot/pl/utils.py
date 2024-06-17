@@ -1700,7 +1700,7 @@ def _validate_label_render_params(
 
     return element_params
 
-
+  
 def _validate_points_render_params(
     sdata: sd.SpatialData,
     element: str | None,
@@ -1931,7 +1931,6 @@ def _get_wanted_render_elements(
     wants_elements = True
     if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
         wanted_elements: list[str] = [params.element]
-
         wanted_elements_on_cs = [
             element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
         ]
@@ -1940,24 +1939,6 @@ def _get_wanted_render_elements(
         return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
 
     raise ValueError(f"Unknown element type {element_type}")
-
-
-# def _update_params(
-#     sdata: SpatialData,
-#     params: ImageRenderParams | LabelsRenderParams,
-#     wanted_elements_on_cs: list[str],
-#     element_type: Literal["images", "labels", "points", "shapes"],
-# ) -> ImageRenderParams | LabelsRenderParams:
-#     if isinstance(params, LabelsRenderParams) and wanted_elements_on_cs:
-#         params = _create_initial_element_table_mapping(sdata, params, wanted_elements_on_cs)
-#         if isinstance(params, LabelsRenderParams):
-#             params = _update_element_table_mapping_label_colors(sdata, params, wanted_elements_on_cs)
-#
-#     # TODO change after completion refactor
-#     if isinstance(params, ImageRenderParams):
-#         return params
-#
-#     return _match_length_elements_groups_palette(params, wanted_elements_on_cs)
 
 
 def _is_coercable_to_float(series: pd.Series) -> bool:

@@ -174,39 +174,38 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element: str | None, optional
-            The name of the shapes element to render. If `None`, all shapes
-            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        element : str | None, optional
+            The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
+            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
+            pl.render_shapes(...).pl.render_shapes(...).pl.show().
         color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If the color column is found in multiple
-            locations, please provide the table_name to be used for the element if you would like a specific table to
-            be used. By default one table will automatically be choosen.
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
+            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
+            broadcasted to all elements. For this, the table in which the color key is found must annotate the
+            respective element (region must be set to the specific element). If the color column is found in multiple
+            locations, please provide the table_name to be used for the elements.
         fill_alpha : float | int, default 1.0
-            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the
-            user, this value will multiply the value present in the cmap.
+            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the user, this value
+            will multiply the value present in the cmap.
         groups : list[str] | str | None
-            When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. The list can contain multiple
-            discrete labels to be visualized.
-        palette : list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. The list can contain multiple
-            palettes (one per group) to be visualized. If groups is provided but not palette, palette is set to
-            default "lightgray".
-        na_color : str | list[float] | None, default "lightgrey"
-            Color to be used for NAs values, if present. Can either be a named color
-            ("red"), a hex representation ("#000000ff") or a list of floats that
-            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
-            be shown.
+            When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
+            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            values for all elements).
+        palette :  list[str] | str | None
+            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
+            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
+            all elements). If groups is provided but not palette, palette is set to default "lightgray".
+        na_color : ColorLike | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         outline : bool, default False
             If `True`, a border around the shape elements is plotted.
         outline_width : float | int, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
-            Color of the border. Can either be a named color ("red"), a hex
-            representation ("#000000ff") or a list of floats that represent RGB/RGBA
-            values (1.0, 0.0, 0.0, 1.0).
+            Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
+            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of shapes.
         cmap : Colormap | str | None, optional
@@ -216,7 +215,9 @@ class PlotAccessor:
         scale : float | int, default 1.0
             Value to scale circles, if present.
         table_name: str | None
-            Name of the table containing the color columns.
+            Name of the table containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If you want to use different tables for particular
+            elements, as specified under element.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
@@ -300,40 +301,41 @@ class PlotAccessor:
 
         Parameters
         ----------
-        element : str | None
-            The name of the points element to render. If `None`, all points
-            elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
+        element : str | None, optional
+            The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
+            used. If you would like multiple specific elements to be rendered, please chain the calls to render:
+            pl.render_points(...).pl.render_points(...).pl.show()
         color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If the color column is found in multiple
-            locations, please provide the table_name to be used for the element if you would like a specific table to
-            be used. By default one table will automatically be choosen.
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
+            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
+            broadcasted to all elements. For this, the table in which the color key is found must annotate the
+            respective element (region must be set to the specific element). If the color column is found in multiple
+            locations, please provide the table_name to be used for the elements.
         alpha : float | int, default 1.0
             Alpha value for the points.
         groups : list[str] | str | None
-            When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. The list can contain multiple
-            discrete labels to be visualized.
+            When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
+            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            values for all elements).
         palette : list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. The list can contain multiple
-            palettes (one per group) to be visualized. If groups is provided but not palette, palette is set to
-            default "lightgray".
-        na_color : str | list[float] | None, default "lightgrey"
-            Color to be used for NAs values, if present. Can either be a named color
-            ("red"), a hex representation ("#000000ff") or a list of floats that
-            represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
-            be shown.
+            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
+            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
+            all elements). If groups is provided but not palette, palette is set to default "lightgray".
+        na_color : ColorLike | None, default "lightgrey"
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         cmap : Colormap | str | None, optional
-            Colormap for discrete or continuous annotations using 'color', see
-            :class:`matplotlib.colors.Colormap`. If no palette is given and `color`
-            refers to a categorical, the colors are sampled from this colormap.
+            Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`. If
+            no palette is given and `color` refers to a categorical, the colors are sampled from this colormap.
         norm : bool | Normalize, default False
             Colormap normalization for continuous annotations.
         size : float | int, default 1.0
             Size of the points
         table_name: str | None
-            Name of the table containing the color columns.
+            Name of the table containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If you want to use different tables for particular
+            elements, as specified under element.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
