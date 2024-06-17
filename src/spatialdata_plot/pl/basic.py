@@ -53,6 +53,7 @@ from spatialdata_plot.pl.utils import (
     _update_params,
     _validate_image_render_params,
     _validate_render_params,
+    _validate_shape_render_params,
     _validate_show_parameters,
     save_fig,
 )
@@ -149,13 +150,14 @@ class PlotAccessor:
 
         return sdata
 
+    @deprecation_alias(elements="element", version="0.3.0")
     def render_shapes(
         self,
-        elements: list[str] | str | None = None,
-        color: list[str | None] | str | None = None,
+        element: str | None = None,
+        color: str | None = None,
         fill_alpha: float | int = 1.0,
-        groups: list[list[str | None]] | list[str | None] | str | None = None,
-        palette: list[list[str | None]] | list[str | None] | str | None = None,
+        groups: list[str] | str | None = None,
+        palette: list[str] | str | None = None,
         na_color: ColorLike | None = "lightgrey",
         outline: bool = False,
         outline_width: float | int = 1.5,
@@ -164,7 +166,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
-        table_name: list[str] | str | None = None,
+        table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -172,33 +174,29 @@ class PlotAccessor:
 
         Parameters
         ----------
-        elements : list[str] | str | None, optional
-            The name(s) of the shapes element(s) to render. If `None`, all shapes
-            elements in the `SpatialData` object will be used.
-        color : list[str | None] | str | None
-            Can either be string(s) representing a color-like or key(s) in :attr:`sdata.table.obs`. The latter
-            can be used to color by categorical or continuous variables. If provided as a list, the length of the list
-            must match the number of elements that will be plotted. Otherwise, if possible the color will be broadcasted
-            to all elements. For this, the table in which the color key is found must
+        element : str | None, optional
+            The name of the shapes element to render. If `None`, all shapes
+            elements in the `SpatialData` object will be used. If you would like multiple specific elements to be
+            rendered, please chain the calls to render: pl.render_shapes(...).pl.render_shapes(...).pl.show()
+        color : str | None
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter
+            can be used to color by categorical or continuous variables. If element is None, if possible the color will
+            be broadcasted to all elements. For this, the table in which the color key is found must
             annotate the respective element (region must be set to the specific element). If the color column is found
-            in multiple locations, please provide the table_name to be used for the element.
+            in multiple locations, please provide the table_name to be used for the elements.
         fill_alpha : float | int, default 1.0
             Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the
             user, this value will multiply the value present in the cmap.
-        groups : list[list[str | None]] | list[str | None] | str | None
+        groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups`
-            can be used to show only a subset of them. Other values are set to NA. In general the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            discrete labels to be visualized. If not provided as list of lists, broadcasting behaviour is attempted
-            (use the same values for all elements).
-        palette : list[list[str | None]] | list[str | None] | str | None
+            can be used to show only a subset of them. Other values are set to NA. If elment is None,
+            broadcasting behaviour is attempted (use the same values for all elements).
+        palette :  list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be
-            used for the categories. Must match the number of groups. Similarly to groups, in the case of a list of
-            lists means that there is one list per element to be plotted in the list and this list can contain multiple
-            palettes (one per group) to be visualized. If not provided as list of lists, broadcasting behaviour is
+            used for the categories. Must match the number of groups. If element is None, broadcasting behaviour is
             attempted (use the same values for all elements). If groups is provided but not palette, palette is set to
             default "lightgray".
-        na_color : str | list[float] | None, default "lightgrey"
+        na_color : ColorLike | None, default "lightgrey"
             Color to be used for NAs values, if present. Can either be a named color
             ("red"), a hex representation ("#000000ff") or a list of floats that
             represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values won't
@@ -220,9 +218,9 @@ class PlotAccessor:
         scale : float | int, default 1.0
             Value to scale circles, if present.
         table_name:
-            Name of the table(s) containing the color(s) columns. If one name is given than the table is used for each
-            spatial element to be plotted if the table annotates it. If multiple names are given in a list than the
-            length must be equal to the number of spatial elements being plotted.
+            Name of the table containing the color(s) columns. If one name is given than the table is used for each
+            spatial element to be plotted if the table annotates it. If you want to use different tables for particular
+            elements, as specified under element.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm.
 
@@ -237,10 +235,9 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
-        params_dict = _validate_render_params(
-            "shapes",
+        params_dict = _validate_shape_render_params(
             self._sdata,
-            elements=elements,
+            element=element,
             fill_alpha=fill_alpha,
             groups=groups,
             palette=palette,
@@ -253,6 +250,7 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             scale=scale,
+            table_name=table_name,
         )
 
         sdata = self._copy()
@@ -266,20 +264,23 @@ class PlotAccessor:
         )
 
         outline_params = _set_outline(outline, outline_width, outline_color)
-        sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
-            elements=params_dict["elements"],
-            color=params_dict["color"],
-            col_for_color=params_dict["col_for_color"],
-            groups=params_dict["groups"],
-            scale=scale,
-            outline_params=outline_params,
-            cmap_params=cmap_params,
-            palette=params_dict["palette"],
-            outline_alpha=outline_alpha,
-            fill_alpha=fill_alpha,
-            transfunc=kwargs.get("transfunc", None),
-            element_table_mapping=table_name,
-        )
+
+        for element, param_values in params_dict.items():
+            sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
+                element=element,
+                color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
+                groups=param_values["groups"],
+                scale=param_values["scale"],
+                outline_params=outline_params,
+                cmap_params=cmap_params,
+                palette=param_values["palette"],
+                outline_alpha=param_values["outline_alpha"],
+                fill_alpha=param_values["fill_alpha"],
+                transfunc=kwargs.get("transfunc", None),
+                table_name=param_values["table_name"],
+            )
+            n_steps += 1
 
         return sdata
 
@@ -868,7 +869,6 @@ class PlotAccessor:
                     )
 
                     if wanted_shapes_on_this_cs:
-                        params_copy = _update_params(sdata, params_copy, wanted_shapes_on_this_cs, "shapes")
                         _render_shapes(
                             sdata=sdata,
                             render_params=params_copy,

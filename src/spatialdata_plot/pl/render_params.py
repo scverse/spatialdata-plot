@@ -70,17 +70,17 @@ class ShapesRenderParams:
 
     cmap_params: CmapParams
     outline_params: OutlineParams
-    elements: str | list[str] | None = None
-    color: list[str | None] | str | None = None
+    element: str
+    color: str | None = None
     col_for_color: str | None = None
-    groups: str | list[list[str | None]] | list[str | None] | None = None
+    groups: str | list[str] | None = None
     contour_px: int | None = None
-    palette: ListedColormap | list[list[str | None]] | list[str | None] | None = None
+    palette: ListedColormap | list[str] | None = None
     outline_alpha: float = 1.0
     fill_alpha: float = 0.3
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
-    element_table_mapping: dict[str, set[str | None] | str | None] | str | list[str] | None = None
+    table_name: str | None = None
 
 
 @dataclass
