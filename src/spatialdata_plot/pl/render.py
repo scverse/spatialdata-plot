@@ -244,7 +244,10 @@ def _render_points(
         )
     else:
         adata = AnnData(
-            X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
+            X=points[["x", "y"]].values,
+            obs=sdata_filt[table_name].obs,
+            dtype=points[["x", "y"]].values.dtype,
+            uns=sdata_filt[table_name].uns,
         )
         sdata_filt[table_name] = adata
 

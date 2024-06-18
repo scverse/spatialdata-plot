@@ -608,18 +608,6 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
-def _locate_points_value_in_table(value_key: str, sdata: SpatialData, table_name: str) -> _ValueOrigin:
-    table = sdata[table_name]
-
-    if value_key in table.obs.columns:
-        value = table.obs[value_key]
-        is_categorical = isinstance(value.dtype, CategoricalDtype)
-        return _ValueOrigin(origin="obs", is_categorical=is_categorical, value_key=value_key)
-
-    is_categorical = False
-    return _ValueOrigin(origin="var", is_categorical=is_categorical, value_key=value_key)
-
-
 # TODO consider move to relational query in spatialdata
 def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str) -> pd.Series:
     """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
@@ -650,10 +638,6 @@ def _set_color_source_vec(
 
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-    if model == PointsModel and table_name is not None:
-        origin = _locate_points_value_in_table(value_key=value_to_plot, sdata=sdata, table_name=table_name)
-        if origin is not None:
-            origins.append(origin)
 
     if len(origins) > 1:
         raise ValueError(
@@ -662,7 +646,7 @@ def _set_color_source_vec(
 
     if len(origins) == 1:
         if model == PointsModel and table_name is not None:
-            color_source_vector = get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
+            color_source_vector = get_values_point_table(sdata=sdata, origin=origins[0], table_name=table_name)
         else:
             vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
             color_source_vector = vals[value_to_plot]
