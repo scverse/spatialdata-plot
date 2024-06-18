@@ -18,11 +18,11 @@ import multiscale_spatial_image as msi
 import numpy as np
 import pandas as pd
 import shapely
-import spatial_image
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
@@ -40,7 +40,6 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
-from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
@@ -52,13 +51,13 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatial_image import SpatialImage
 from spatialdata import SpatialData
 from spatialdata._core.operations.rasterize import rasterize
 from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, _ValueOrigin, get_values
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
+from xarray import DataArray
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -1029,7 +1028,7 @@ def _multiscale_to_image(sdata: sd.SpatialData) -> sd.SpatialData:
         raise ValueError("No images found in the SpatialData object.")
 
     for k, v in sdata.images.items():
-        if isinstance(v, msi.multiscale_spatial_image.MultiscaleSpatialImage):
+        if isinstance(v, msi.multiscale_spatial_image.DataTree):
             sdata.images[k] = Image2DModel.parse(v["scale0"].ds.to_array().squeeze(axis=0))
 
     return sdata
@@ -1047,9 +1046,9 @@ def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
 
 
 def _translate_image(
-    image: spatial_image.SpatialImage,
+    image: DataArray,
     translation: sd.transformations.transformations.Translation,
-) -> spatial_image.SpatialImage:
+) -> DataArray:
     shifts: dict[str, int] = {axis: int(translation.translation[idx]) for idx, axis in enumerate(translation.axes)}
     img = image.values.copy()
     # for yx images (important for rasterized MultiscaleImages as labels)
@@ -1201,16 +1200,16 @@ def _get_valid_cs(
 
 
 def _rasterize_if_necessary(
-    image: SpatialImage,
+    image: DataArray,
     dpi: float,
     width: float,
     height: float,
     coordinate_system: str,
     extent: dict[str, tuple[float, float]],
-) -> SpatialImage:
+) -> DataArray:
     """Ensure fast rendering by adapting the resolution if necessary.
 
-    A SpatialImage is prepared for plotting. To improve performance, large images are rasterized.
+    A DataArray is prepared for plotting. To improve performance, large images are rasterized.
 
     Parameters
     ----------
@@ -1230,7 +1229,7 @@ def _rasterize_if_necessary(
 
     Returns
     -------
-    SpatialImage
+    DataArray
         Spatial image ready for rendering
     """
     has_c_dim = len(image.shape) == 3
@@ -1265,22 +1264,22 @@ def _rasterize_if_necessary(
 
 
 def _multiscale_to_spatial_image(
-    multiscale_image: MultiscaleSpatialImage,
+    multiscale_image: DataTree,
     dpi: float,
     width: float,
     height: float,
     scale: str | None = None,
     is_label: bool = False,
-) -> SpatialImage:
-    """Extract the SpatialImage to be rendered from a multiscale image.
+) -> DataArray:
+    """Extract the DataArray to be rendered from a multiscale image.
 
-    From the `MultiscaleSpatialImage`, the scale that fits the given image size and dpi most is selected
+    From the `DataTree`, the scale that fits the given image size and dpi most is selected
     and returned. In case the lowest resolution is still too high, a rasterization step is added.
 
     Parameters
     ----------
     multiscale_image
-        `MultiscaleSpatialImage` that should be rendered
+        `DataTree` that should be rendered
     dpi
         dpi of the target image
     width
@@ -1294,8 +1293,8 @@ def _multiscale_to_spatial_image(
 
     Returns
     -------
-    SpatialImage
-        To be rendered, extracted from the MultiscaleSpatialImage respecting the dpi and size of the target image.
+    DataArray
+        To be rendered, extracted from the DataTree respecting the dpi and size of the target image.
     """
     scales = [leaf.name for leaf in multiscale_image.leaves]
     x_dims = [multiscale_image[scale].dims["x"] for scale in scales]
@@ -1879,7 +1878,7 @@ def _validate_image_render_params(
         spatial_element = param_dict["sdata"][el]
 
         spatial_element_ch = (
-            spatial_element.c if isinstance(spatial_element, SpatialImage) else spatial_element["scale0"].c
+            spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
         )
         if (channel := param_dict["channel"]) is not None and (
             (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
@@ -1908,7 +1907,7 @@ def _validate_image_render_params(
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
-        if (scale := param_dict["scale"]) and isinstance(sdata[el], MultiscaleSpatialImage):
+        if (scale := param_dict["scale"]) and isinstance(sdata[el], DataTree):
             if scale not in list(sdata[el].keys()) and scale != "full":
                 element_params[el]["scale"] = None
             else:

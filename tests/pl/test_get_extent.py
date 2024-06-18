@@ -30,19 +30,19 @@ plt.tight_layout()
 
 class TestExtent(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_extent_of_img_full_canvas(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show()
 
     def test_plot_extent_of_points_partial_canvas(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points().pl.show()
 
     def test_plot_extent_of_partial_canvas_on_full_canvas(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image").pl.render_points().pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image").pl.render_points().pl.show()
 
     def test_plot_extent_calculation_respects_element_selection_circles(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(elements="blobs_circles").pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
 
     def test_plot_extent_calculation_respects_element_selection_polygons(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(elements="blobs_polygons").pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
 
     def test_plot_extent_calculation_respects_element_selection_circles_and_polygons(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes("blobs_circles").pl.render_shapes("blobs_polygons").pl.show()
@@ -132,12 +132,12 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
                 multipolygons_name = "multipolygons_pi4"
                 points_name = "points_pi4"
 
-            sdata.pl.render_shapes(elements=circles_name).pl.show(coordinate_systems=cs, ax=axs[0, cs_idx], title="")
-            sdata.pl.render_shapes(elements=polygons_name).pl.show(coordinate_systems=cs, ax=axs[1, cs_idx], title="")
-            sdata.pl.render_shapes(elements=multipolygons_name).pl.show(
+            sdata.pl.render_shapes(element=circles_name).pl.show(coordinate_systems=cs, ax=axs[0, cs_idx], title="")
+            sdata.pl.render_shapes(element=polygons_name).pl.show(coordinate_systems=cs, ax=axs[1, cs_idx], title="")
+            sdata.pl.render_shapes(element=multipolygons_name).pl.show(
                 coordinate_systems=cs, ax=axs[2, cs_idx], title=""
             )
-            sdata.pl.render_points(elements=points_name, size=10).pl.show(
+            sdata.pl.render_points(element=points_name, size=10).pl.show(
                 coordinate_systems=cs, ax=axs[3, cs_idx], title="", pad_extent=0.02
             )
 

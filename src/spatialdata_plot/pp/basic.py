@@ -4,10 +4,10 @@ from typing import Union
 import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
+from datatree import DataTree
 from geopandas import GeoDataFrame
-from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from spatial_image import SpatialImage
 from spatialdata.models import get_table_keys
+from xarray import DataArray
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pp.utils import (
@@ -43,8 +43,8 @@ class PreprocessingAccessor:
 
     def _copy(
         self,
-        images: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
-        labels: Union[None, dict[str, Union[SpatialImage, MultiscaleSpatialImage]]] = None,
+        images: Union[None, dict[str, Union[DataArray, DataTree]]] = None,
+        labels: Union[None, dict[str, Union[DataArray, DataTree]]] = None,
         points: Union[None, dict[str, DaskDataFrame]] = None,
         shapes: Union[None, dict[str, GeoDataFrame]] = None,
         tables: Union[None, dict[str, AnnData]] = None,

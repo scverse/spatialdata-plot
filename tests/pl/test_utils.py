@@ -11,4 +11,4 @@ from spatialdata.datasets import blobs
 )
 def test_set_outline_accepts_str_or_float_or_list_thereof(outline_color):
     sdata = blobs()
-    sdata.pl.render_shapes(elements="blobs_polygons", outline=True, outline_color=outline_color).pl.show()
+    sdata.pl.render_shapes(element="blobs_polygons", outline=True, outline_color=outline_color).pl.show()
