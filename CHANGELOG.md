@@ -8,7 +8,41 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.1.0] - tbd
+## [0.2.3] - tbd
+
+### Changed
+
+-   All parameters are now provided for a single element. If element in pl.render is None then this value will be broadcasted
+
+### Fixed
+
+-   Fix color assignment for NaN values (#257)
+-   Fix channel str support #221
+
+## [0.2.2] - 2024-05-02
+
+### Fixed
+
+-   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
+-   Fix channel str support (#221)
+
+## [0.2.1] - 2024-03-26
+
+### Minor
+
+-   Adjusted GitHub worklows
+
+## [0.2.0] - 2024-03-24
+
+### Added
+
+-   Support for plotting multiple tables @melonora
+
+### Fixed
+
+-   Several bugfixes, especially for colors and palettes @melonora
+
+## [0.1.0] - 2024-01-17
 
 ### Added
 

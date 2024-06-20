@@ -14,7 +14,6 @@ from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
 from multiscale_spatial_image import MultiscaleSpatialImage
-from numpy.random import default_rng
 from shapely.geometry import MultiPolygon, Polygon
 from spatial_image import SpatialImage
 from spatialdata import SpatialData
@@ -35,9 +34,9 @@ HERE: Path = Path(__file__).parent
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 TOL = 60
-DPI = 40
+DPI = 80
 
-RNG = default_rng()
+RNG = np.random.default_rng(seed=42)
 
 
 @pytest.fixture()
@@ -54,6 +53,11 @@ def full_sdata() -> SpatialData:
 @pytest.fixture()
 def sdata_blobs() -> SpatialData:
     return blobs()
+
+
+@pytest.fixture()
+def sdata_blobs_str() -> SpatialData:
+    return blobs(n_channels=5, c_coords=["c1", "c2", "c3", "c4", "c5"])
 
 
 @pytest.fixture()
@@ -113,12 +117,12 @@ def test_sdata_multiple_images_with_table():
     region_key = "annotated_region"
 
     adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
-    adata.obs[instance_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
+    adata.obs[instance_key] = list(range(3)) + list(range(7)) + list(range(20))
     adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
     table = TableModel.parse(
         adata=adata, region=adata.obs[region_key].unique().tolist(), instance_key=instance_key, region_key=region_key
     )
-    sdata = sd.SpatialData(images=images, table=table)
+    sdata = sd.SpatialData(images=images, tables={"table": table})
     return sdata
 
 
@@ -210,7 +214,6 @@ def sdata(request) -> SpatialData:
         s = SpatialData()
     else:
         s = request.getfixturevalue(request.param)
-    # print(f"request.param = {request.param}")
     return s
 
 
@@ -376,12 +379,19 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
+        width, height = 400, 300  # fixed dimensions so runners don't change
+        fig = plt.gcf()
+        fig.set_size_inches(width / DPI, height / DPI)
+        fig.set_dpi(DPI)
+
+        # Apply constrained layout and save the plot
+        fig.set_constrained_layout(True)
         plt.savefig(out_path, dpi=DPI)
         plt.close()
 
         if tolerance is None:
             # see https://github.com/scverse/squidpy/pull/302
-            tolerance = 2 * TOL if "Napari" in str(basename) else TOL
+            tolerance = 2 * TOL if "Napari" in basename else TOL
 
         res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
 

@@ -2,6 +2,7 @@ import math
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from spatialdata import SpatialData
@@ -14,10 +15,11 @@ from spatialdata.transformations import (
     set_transformation,
 )
 
-from tests.conftest import PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-sc.pl.set_rcParams_defaults()
-sc.set_figure_params(dpi=40, color_map="viridis")
+RNG = np.random.default_rng(seed=42)
+# sc.pl.set_rcParams_defaults()
+sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 

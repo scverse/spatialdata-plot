@@ -8,7 +8,7 @@
 [![Documentation][badge-pypi]][link-pypi]
 [![DOI](https://zenodo.org/badge/588223127.svg)](https://zenodo.org/badge/latestdoi/588223127)
 
-[badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test_and_deploy.yaml?branch=main
+[badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test.yaml?branch=main
 [link-tests]: https://github.com/scverse/spatialdata-plot/actions/workflows/test.yml
 [badge-docs]: https://img.shields.io/readthedocs/spatialdata-plot
 [badge-codecov]: https://codecov.io/gh/scverse/spatialdata-plot/branch/main/graph/badge.svg?token=C45F3ATSVI
@@ -57,13 +57,7 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 
 ## Citation
 
-If you use `spatialdata` in your work, please cite the `spatialdata` publication as follows:
-
-> SpatialData: an open and universal data framework for spatial omics
->
-> Luca Marconato, Giovanni Palla, Kevin A. Yamauchi, Isaac Virshup, Elyas Heidari, Tim Treis, Marcella Toth, Rahul Shrestha, Harald Vöhringer, Wolfgang Huber, Moritz Gerstung, Josh Moore, Fabian J. Theis, Oliver Stegle
->
-> bioRxiv 2023.05.05.539647; doi: https://doi.org/10.1101/2023.05.05.539647
+Marconato, L., Palla, G., Yamauchi, K.A. et al. SpatialData: an open and universal data framework for spatial omics. Nat Methods (2024). https://doi.org/10.1038/s41592-024-02212-x
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues

@@ -11,12 +11,14 @@ from spatialdata import SpatialData
 from spatialdata.models import PointsModel, ShapesModel
 from spatialdata.transformations import Affine, set_transformation
 
-from tests.conftest import PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
+RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
-sc.set_figure_params(dpi=40, color_map="viridis")
+sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
+plt.tight_layout()
 
 # WARNING:
 # 1. all classes must both subclass PlotTester and use metaclass=PlotTesterMeta
@@ -43,7 +45,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(elements="blobs_polygons").pl.show()
 
     def test_plot_extent_calculation_respects_element_selection_circles_and_polygons(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(elements=["blobs_circles", "blobs_polygons"]).pl.show()
+        sdata_blobs.pl.render_shapes("blobs_circles").pl.render_shapes("blobs_polygons").pl.show()
 
     def test_plot_extent_of_img_is_correct_after_spatial_query(self, sdata_blobs: SpatialData):
         cropped_blobs = sdata_blobs.pp.get_elements(["blobs_image"]).query.bounding_box(

@@ -8,6 +8,7 @@ buck-out/
 __pycache__/
 .mypy_cache/
 .ruff_cache/
+/node_modules
 
 # Distribution / packaging
 /build/
@@ -18,6 +19,7 @@ __pycache__/
 /.pytest_cache/
 /.cache/
 /data/
+*failed-diff.png
 
 # docs
 /docs/generated/
@@ -41,3 +43,4 @@ tests/figures/
 
 # other
 _version.py
+/temp/
