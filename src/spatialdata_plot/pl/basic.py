@@ -21,7 +21,7 @@ from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
-from spatialdata._utils import deprecation_alias
+from spatialdata._utils import _deprecation_alias
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -150,7 +150,7 @@ class PlotAccessor:
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_shapes(
         self,
         element: str | None = None,
@@ -291,12 +291,14 @@ class PlotAccessor:
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc", None),
                 table_name=param_values["table_name"],
+                zorder=n_steps,
+                method=method,
             )
             n_steps += 1
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_points(
         self,
         element: str | None = None,
@@ -411,12 +413,14 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 size=param_values["size"],
                 table_name=param_values["table_name"],
+                zorder=n_steps,
+                method=method,
             )
             n_steps += 1
 
         return sdata
 
-    @deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
+    @_deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
     def render_images(
         self,
         element: str | None = None,
@@ -524,12 +528,13 @@ class PlotAccessor:
                 alpha=param_values["alpha"],
                 percentiles_for_norm=param_values["percentiles_for_norm"],
                 scale=param_values["scale"],
+                zorder=n_steps,
             )
             n_steps += 1
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_labels(
         self,
         element: str | None = None,
@@ -542,7 +547,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float | int = 1.0,
-        fill_alpha: float | int = 0.3,
+        fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
         **kwargs: Any,
@@ -646,6 +651,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
+                zorder=n_steps,
             )
             n_steps += 1
         return sdata
