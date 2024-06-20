@@ -135,14 +135,15 @@ class PreprocessingAccessor:
         valid_shape_keys = list(self._sdata.shapes.keys()) if hasattr(self._sdata, "shapes") else None
         valid_point_keys = list(self._sdata.points.keys()) if hasattr(self._sdata, "points") else None
 
-        # first, extract coordinate system keys becasuse they generate implicit keys
-        mapping = _get_coordinate_system_mapping(self._sdata)
+        # first, extract coordinate system keys because they generate implicit keys
         implicit_keys = []
-        for e in elements:
-            for valid_coord_key in valid_coord_keys:
-                if (valid_coord_keys is not None) and (e == valid_coord_key):
-                    coord_keys.append(e)
-                    implicit_keys += mapping[e]
+        if elements:
+            mapping = _get_coordinate_system_mapping(self._sdata)
+            for e in elements:
+                for valid_coord_key in valid_coord_keys:
+                    if (valid_coord_keys is not None) and (e == valid_coord_key):
+                        coord_keys.append(e)
+                        implicit_keys += mapping[e]
 
         for e in elements + implicit_keys:
             found = False
