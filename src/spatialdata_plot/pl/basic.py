@@ -897,31 +897,32 @@ class PlotAccessor:
                         sdata, wanted_elements, params_copy, cs, "labels"
                     )
 
-                    if wanted_labels_on_this_cs and (table := params_copy.table_name) is not None:
-                        colors = sc.get.obs_df(sdata[table], params_copy.color)
-                        if isinstance(colors.dtype, pd.CategoricalDtype):
-                            _maybe_set_colors(
-                                source=sdata[table],
-                                target=sdata[table],
-                                key=params_copy.color,
-                                palette=params_copy.palette,
-                            )
+                    if wanted_labels_on_this_cs:
+                        if (table := params_copy.table_name) is not None:
+                            colors = sc.get.obs_df(sdata[table], params_copy.color)
+                            if isinstance(colors.dtype, pd.CategoricalDtype):
+                                _maybe_set_colors(
+                                    source=sdata[table],
+                                    target=sdata[table],
+                                    key=params_copy.color,
+                                    palette=params_copy.palette,
+                                )
 
-                    rasterize = (params_copy.scale is None) or (
-                        isinstance(params_copy.scale, str)
-                        and params_copy.scale != "full"
-                        and (dpi is not None or figsize is not None)
-                    )
-                    _render_labels(
-                        sdata=sdata,
-                        render_params=params_copy,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                        rasterize=rasterize,
-                    )
+                        rasterize = (params_copy.scale is None) or (
+                            isinstance(params_copy.scale, str)
+                            and params_copy.scale != "full"
+                            and (dpi is not None or figsize is not None)
+                        )
+                        _render_labels(
+                            sdata=sdata,
+                            render_params=params_copy,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            rasterize=rasterize,
+                        )
 
                 if title is None:
                     t = cs
