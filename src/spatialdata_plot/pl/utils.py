@@ -749,7 +749,9 @@ def _map_color_seg(
 
     else:
         val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
-        val_im = np.squeeze(val_im, axis=0)
+
+        if val_im.shape[0] == 1:
+            val_im = np.squeeze(val_im, axis=0)
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
         except TypeError:
@@ -776,7 +778,8 @@ def _map_color_seg(
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
 
-    val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
+    if len(val_im.shape) != len(seg_im.shape):
+        val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
     return np.dstack((seg_im, val_im))
 
 
