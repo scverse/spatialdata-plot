@@ -748,8 +748,8 @@ def _map_color_seg(
         cols = colors.to_rgba_array(color_vector.categories)
 
     else:
-        val_im = map_array(seg, cell_id, cell_id)  # replace with same seg id to remove missing segs
-
+        val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
+        val_im = np.squeeze(val_im, axis=0)
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
         except TypeError:
@@ -776,7 +776,8 @@ def _map_color_seg(
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
 
-    return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
+    val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
+    return np.dstack((seg_im, val_im))
 
 
 def _get_palette(
