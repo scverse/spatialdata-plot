@@ -14,14 +14,14 @@ import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
+from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from spatial_image import SpatialImage
 from spatialdata._core.data_extent import get_extent
-from spatialdata._utils import deprecation_alias
+from spatialdata._utils import _deprecation_alias
+from xarray import DataArray
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -95,8 +95,8 @@ class PlotAccessor:
 
     def _copy(
         self,
-        images: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
-        labels: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
+        images: dict[str, DataArray | DataTree] | None = None,
+        labels: dict[str, DataArray | DataTree] | None = None,
         points: dict[str, DaskDataFrame] | None = None,
         shapes: dict[str, GeoDataFrame] | None = None,
         tables: dict[str, AnnData] | None = None,
@@ -105,11 +105,11 @@ class PlotAccessor:
 
         Parameters
         ----------
-        images : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
+        images : dict[str, DataArray | DataTree] | None, optional
             A dictionary containing image data to replace the images in the
             original `SpatialData` object, or `None` to keep the original
             images. Defaults to `None`.
-        labels : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
+        labels : dict[str, DataArray | DataTree] | None, optional
             A dictionary containing label data to replace the labels in the
             original `SpatialData` object, or `None` to keep the original
             labels. Defaults to `None`.
@@ -150,7 +150,7 @@ class PlotAccessor:
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_shapes(
         self,
         element: str | None = None,
@@ -286,7 +286,7 @@ class PlotAccessor:
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_points(
         self,
         element: str | None = None,
@@ -396,7 +396,7 @@ class PlotAccessor:
 
         return sdata
 
-    @deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
+    @_deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
     def render_images(
         self,
         element: str | None = None,
@@ -509,7 +509,7 @@ class PlotAccessor:
 
         return sdata
 
-    @deprecation_alias(elements="element", version="0.3.0")
+    @_deprecation_alias(elements="element", version="0.3.0")
     def render_labels(
         self,
         element: str | None = None,

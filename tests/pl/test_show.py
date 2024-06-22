@@ -22,4 +22,4 @@ _ = spatialdata_plot
 
 class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image").pl.show(pad_extent=100)
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)

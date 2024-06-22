@@ -7,8 +7,7 @@ import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatial_image import to_spatial_image
-from spatialdata import SpatialData
-from spatialdata._core.query.relational_query import _get_unique_label_values_as_index
+from spatialdata import SpatialData, get_element_instances
 from spatialdata.models import TableModel
 
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -29,7 +28,7 @@ _ = spatialdata_plot
 
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels(elements="blobs_labels").pl.show()
+        sdata_blobs.pl.render_labels(element="blobs_labels").pl.show()
 
     def test_plot_can_render_multiscale_labels(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_multiscale_labels"
@@ -70,10 +69,10 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_stack_render_labels(self, sdata_blobs: SpatialData):
         (
             sdata_blobs.pl.render_labels(
-                elements="blobs_labels", na_color="red", fill_alpha=1, outline_alpha=0, outline=False
+                element="blobs_labels", na_color="red", fill_alpha=1, outline_alpha=0, outline=False
             )
             .pl.render_labels(
-                elements="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=15
+                element="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=15
             )
             .pl.show()
         )
@@ -112,7 +111,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-        n_obs = max(_get_unique_label_values_as_index(sdata_blobs[label]))
+        n_obs = max(get_element_instances(sdata_blobs[label]))
         adata = AnnData(
             RNG.normal(size=(n_obs, 10)),
             obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
