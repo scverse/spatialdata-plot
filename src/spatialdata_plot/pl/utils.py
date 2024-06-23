@@ -775,6 +775,8 @@ def _map_color_seg(
     )
 
     if seg_boundaries:
+        if seg.shape[0] == 1:
+            seg = np.squeeze(seg, axis=0)
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
 
