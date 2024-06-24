@@ -17,7 +17,7 @@ from anndata import AnnData
 from datatree import DataTree
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata._core.data_extent import get_extent
+from spatialdata import get_extent
 from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     get_transformation,
