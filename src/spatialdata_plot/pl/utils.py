@@ -51,9 +51,8 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import SpatialData
-from spatialdata._core.operations.rasterize import rasterize
-from spatialdata._core.query.relational_query import _get_element_annotators, _locate_value, _ValueOrigin, get_values
+from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
+from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
@@ -1816,14 +1815,14 @@ def _validate_col_for_column_table(
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:
-        tables = _get_element_annotators(sdata, element_name)
+        tables = get_element_annotators(sdata, element_name)
         if table_name not in tables or (
             col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
         ):
             table_name = None
             col_for_color = None
     else:
-        tables = _get_element_annotators(sdata, element_name)
+        tables = get_element_annotators(sdata, element_name)
         for table_name in tables.copy():
             if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
                 tables.remove(table_name)
