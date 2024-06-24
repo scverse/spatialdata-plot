@@ -540,7 +540,7 @@ class PlotAccessor:
         element: str | None = None,
         color: str | None = None,
         groups: list[str] | str | None = None,
-        contour_px: int = 3,
+        contour_px: int | None = 3,
         outline: bool = False,
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,

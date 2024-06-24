@@ -358,6 +358,9 @@ def _render_points(
 
     if groups is not None and col_for_color is not None:
         points = points[points[col_for_color].isin(groups)]
+        # in case no rows are left:
+        if len(points) <= 0:
+            raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
 
     # we construct an anndata to hack the plotting functions
     if table_name is None:
@@ -493,55 +496,55 @@ def _render_points(
                 cmap=render_params.cmap_params.cmap,
             )
 
-        elif method == "matplotlib":
-            # update axis limits if plot was empty before (necessary if datashader comes after)
-            update_parameters = not _mpl_ax_contains_elements(ax)
-            # original way of plotting points
-            _cax = ax.scatter(
-                adata[:, 0].X.flatten(),
-                adata[:, 1].X.flatten(),
-                s=render_params.size,
-                c=color_vector,
-                rasterized=sc_settings._vector_friendly,
-                cmap=render_params.cmap_params.cmap,
-                norm=norm,
-                alpha=render_params.alpha,
-                transform=trans,
-                zorder=render_params.zorder,
-                # **kwargs,
-            )
-            cax = ax.add_collection(_cax)
-            if update_parameters:
-                # necessary if points are plotted with mpl first and then with datashader
-                extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
-                ax.set_xbound(extent["x"])
-                ax.set_ybound(extent["y"])
+    elif method == "matplotlib":
+        # update axis limits if plot was empty before (necessary if datashader comes after)
+        update_parameters = not _mpl_ax_contains_elements(ax)
+        # original way of plotting points
+        _cax = ax.scatter(
+            adata[:, 0].X.flatten(),
+            adata[:, 1].X.flatten(),
+            s=render_params.size,
+            c=color_vector,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            alpha=render_params.alpha,
+            transform=trans,
+            zorder=render_params.zorder,
+            # **kwargs,
+        )
+        cax = ax.add_collection(_cax)
+        if update_parameters:
+            # necessary if points are plotted with mpl first and then with datashader
+            extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
+            ax.set_xbound(extent["x"])
+            ax.set_ybound(extent["y"])
 
-        if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
-            if color_source_vector is None:
-                palette = ListedColormap(dict.fromkeys(color_vector))
-            else:
-                palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+        if color_source_vector is None:
+            palette = ListedColormap(dict.fromkeys(color_vector))
+        else:
+            palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-            _ = _decorate_axs(
-                ax=ax,
-                cax=cax,
-                fig_params=fig_params,
-                adata=adata,
-                value_to_plot=col_for_color,
-                color_source_vector=color_source_vector,
-                palette=palette,
-                alpha=render_params.alpha,
-                na_color=render_params.cmap_params.na_color,
-                legend_fontsize=legend_params.legend_fontsize,
-                legend_fontweight=legend_params.legend_fontweight,
-                legend_loc=legend_params.legend_loc,
-                legend_fontoutline=legend_params.legend_fontoutline,
-                na_in_legend=legend_params.na_in_legend,
-                colorbar=legend_params.colorbar,
-                scalebar_dx=scalebar_params.scalebar_dx,
-                scalebar_units=scalebar_params.scalebar_units,
-            )
+        _ = _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=adata,
+            value_to_plot=col_for_color,
+            color_source_vector=color_source_vector,
+            palette=palette,
+            alpha=render_params.alpha,
+            na_color=render_params.cmap_params.na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=legend_params.colorbar,
+            scalebar_dx=scalebar_params.scalebar_dx,
+            scalebar_units=scalebar_params.scalebar_units,
+        )
 
 
 def _render_images(

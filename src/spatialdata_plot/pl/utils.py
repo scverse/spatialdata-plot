@@ -1646,7 +1646,7 @@ def _validate_label_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     color: str | None,
     fill_alpha: float | int,
-    contour_px: int,
+    contour_px: int | None,
     outline: bool,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
