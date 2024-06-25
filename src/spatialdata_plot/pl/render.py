@@ -15,12 +15,12 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from datatree.datatree import DataTree
+#from datatree.datatree import DataTree
 from matplotlib.cm import ScalarMappable
+from datatree import DataTree
 from matplotlib.colors import ListedColormap, Normalize
-from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from scanpy._settings import settings as sc_settings
-from spatialdata._core.data_extent import get_extent
+from spatialdata import get_extent
 from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     get_transformation,
@@ -369,7 +369,10 @@ def _render_points(
         )
     else:
         adata = AnnData(
-            X=points[["x", "y"]].values, obs=sdata_filt[table_name].obs, dtype=points[["x", "y"]].values.dtype
+            X=points[["x", "y"]].values,
+            obs=sdata_filt[table_name].obs,
+            dtype=points[["x", "y"]].values.dtype,
+            uns=sdata_filt[table_name].uns,
         )
         sdata_filt[table_name] = adata
 
@@ -569,7 +572,7 @@ def _render_images(
     scale = render_params.scale
 
     # get best scale out of multiscale image
-    if isinstance(img, MultiscaleSpatialImage):
+    if isinstance(img, DataTree):
         img = _multiscale_to_spatial_image(
             multiscale_image=img,
             dpi=fig_params.fig.dpi,

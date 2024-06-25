@@ -11,11 +11,10 @@ import pytest
 import spatialdata as sd
 import spatialdata_plot  # noqa: F401
 from anndata import AnnData
+from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
-from multiscale_spatial_image import MultiscaleSpatialImage
 from shapely.geometry import MultiPolygon, Polygon
-from spatial_image import SpatialImage
 from spatialdata import SpatialData
 from spatialdata.datasets import blobs, raccoon
 from spatialdata.models import (
@@ -217,7 +216,7 @@ def sdata(request) -> SpatialData:
     return s
 
 
-def _get_images() -> dict[str, Union[SpatialImage, MultiscaleSpatialImage]]:
+def _get_images() -> dict[str, Union[DataArray, DataTree]]:
     out = {}
     dims_2d = ("c", "y", "x")
     dims_3d = ("z", "y", "x", "c")
@@ -244,7 +243,7 @@ def _get_images() -> dict[str, Union[SpatialImage, MultiscaleSpatialImage]]:
     return out
 
 
-def _get_labels() -> dict[str, Union[SpatialImage, MultiscaleSpatialImage]]:
+def _get_labels() -> dict[str, Union[DataArray, DataTree]]:
     out = {}
     dims_2d = ("y", "x")
     dims_3d = ("z", "y", "x")

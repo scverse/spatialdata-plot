@@ -14,14 +14,17 @@ import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe.core import DataFrame as DaskDataFrame
+from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
 from spatial_image import SpatialImage
-from spatialdata._core.data_extent import get_extent
+#from spatialdata._core.data_extent import get_extent
 from spatialdata._utils import _deprecation_alias
+from spatialdata import get_extent
+from xarray import DataArray
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -95,8 +98,8 @@ class PlotAccessor:
 
     def _copy(
         self,
-        images: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
-        labels: dict[str, SpatialImage | MultiscaleSpatialImage] | None = None,
+        images: dict[str, DataArray | DataTree] | None = None,
+        labels: dict[str, DataArray | DataTree] | None = None,
         points: dict[str, DaskDataFrame] | None = None,
         shapes: dict[str, GeoDataFrame] | None = None,
         tables: dict[str, AnnData] | None = None,
@@ -105,11 +108,11 @@ class PlotAccessor:
 
         Parameters
         ----------
-        images : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
+        images : dict[str, DataArray | DataTree] | None, optional
             A dictionary containing image data to replace the images in the
             original `SpatialData` object, or `None` to keep the original
             images. Defaults to `None`.
-        labels : dict[str, SpatialImage | MultiscaleSpatialImage] | None, optional
+        labels : dict[str, DataArray | DataTree] | None, optional
             A dictionary containing label data to replace the labels in the
             original `SpatialData` object, or `None` to keep the original
             labels. Defaults to `None`.
@@ -923,31 +926,32 @@ class PlotAccessor:
                         sdata, wanted_elements, params_copy, cs, "labels"
                     )
 
-                    if wanted_labels_on_this_cs and (table := params_copy.table_name) is not None:
-                        colors = sc.get.obs_df(sdata[table], params_copy.color)
-                        if isinstance(colors.dtype, pd.CategoricalDtype):
-                            _maybe_set_colors(
-                                source=sdata[table],
-                                target=sdata[table],
-                                key=params_copy.color,
-                                palette=params_copy.palette,
-                            )
+                    if wanted_labels_on_this_cs:
+                        if (table := params_copy.table_name) is not None:
+                            colors = sc.get.obs_df(sdata[table], params_copy.color)
+                            if isinstance(colors.dtype, pd.CategoricalDtype):
+                                _maybe_set_colors(
+                                    source=sdata[table],
+                                    target=sdata[table],
+                                    key=params_copy.color,
+                                    palette=params_copy.palette,
+                                )
 
-                    rasterize = (params_copy.scale is None) or (
-                        isinstance(params_copy.scale, str)
-                        and params_copy.scale != "full"
-                        and (dpi is not None or figsize is not None)
-                    )
-                    _render_labels(
-                        sdata=sdata,
-                        render_params=params_copy,
-                        coordinate_system=cs,
-                        ax=ax,
-                        fig_params=fig_params,
-                        scalebar_params=scalebar_params,
-                        legend_params=legend_params,
-                        rasterize=rasterize,
-                    )
+                        rasterize = (params_copy.scale is None) or (
+                            isinstance(params_copy.scale, str)
+                            and params_copy.scale != "full"
+                            and (dpi is not None or figsize is not None)
+                        )
+                        _render_labels(
+                            sdata=sdata,
+                            render_params=params_copy,
+                            coordinate_system=cs,
+                            ax=ax,
+                            fig_params=fig_params,
+                            scalebar_params=scalebar_params,
+                            legend_params=legend_params,
+                            rasterize=rasterize,
+                        )
 
                 if title is None:
                     t = cs
