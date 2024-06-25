@@ -15,9 +15,10 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-#from datatree.datatree import DataTree
-from matplotlib.cm import ScalarMappable
 from datatree import DataTree
+
+# from datatree.datatree import DataTree
+from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent

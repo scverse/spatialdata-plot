@@ -19,11 +19,10 @@ from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from multiscale_spatial_image.multiscale_spatial_image import MultiscaleSpatialImage
-from spatial_image import SpatialImage
-#from spatialdata._core.data_extent import get_extent
-from spatialdata._utils import _deprecation_alias
 from spatialdata import get_extent
+
+# from spatialdata._core.data_extent import get_extent
+from spatialdata._utils import _deprecation_alias
 from xarray import DataArray
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
