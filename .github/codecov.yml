@@ -15,6 +15,3 @@ comment:
   layout: "diff, flags, files"
   behavior: once
   require_base: false
-
-fixes:
-  - "/spatialdata-plot/spatialdata-plot/::spatialdata-plot/src/spatialdat_plot/"

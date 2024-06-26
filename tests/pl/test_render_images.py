@@ -24,68 +24,68 @@ _ = spatialdata_plot
 
 class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show()
 
     def test_plot_can_pass_str_cmap(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", cmap="seismic").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", cmap="seismic").pl.show()
 
     def test_plot_can_pass_cmap(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", cmap=matplotlib.colormaps["seismic"]).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", cmap=matplotlib.colormaps["seismic"]).pl.show()
 
     def test_plot_can_pass_str_cmap_list(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", cmap=["seismic", "Reds", "Blues"]).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", cmap=["seismic", "Reds", "Blues"]).pl.show()
 
     def test_plot_can_pass_cmap_list(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
-            elements="blobs_image",
+            element="blobs_image",
             cmap=[matplotlib.colormaps["seismic"], matplotlib.colormaps["Reds"], matplotlib.colormaps["Blues"]],
         ).pl.show()
 
     def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=0).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0).pl.show()
 
     def test_plot_can_render_a_single_channel_from_multiscale_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_multiscale_image", channel=0).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_multiscale_image", channel=0).pl.show()
 
     def test_plot_can_render_a_single_channel_from_image_no_el(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(channel=0).pl.show()
 
     def test_plot_can_render_a_single_channel_str_from_image(self, sdata_blobs_str: SpatialData):
-        sdata_blobs_str.pl.render_images(elements="blobs_image", channel="c1").pl.show()
+        sdata_blobs_str.pl.render_images(element="blobs_image", channel="c1").pl.show()
 
     def test_plot_can_render_a_single_channel_str_from_multiscale_image(self, sdata_blobs_str: SpatialData):
-        sdata_blobs_str.pl.render_images(elements="blobs_multiscale_image", channel="c1").pl.show()
+        sdata_blobs_str.pl.render_images(element="blobs_multiscale_image", channel="c1").pl.show()
 
     def test_plot_can_render_two_channels_from_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=[0, 1]).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1]).pl.show()
 
     def test_plot_can_render_two_channels_from_multiscale_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_multiscale_image", channel=[0, 1]).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_multiscale_image", channel=[0, 1]).pl.show()
 
     def test_plot_can_render_two_channels_str_from_image(self, sdata_blobs_str: SpatialData):
-        sdata_blobs_str.pl.render_images(elements="blobs_image", channel=["c1", "c2"]).pl.show()
+        sdata_blobs_str.pl.render_images(element="blobs_image", channel=["c1", "c2"]).pl.show()
 
     def test_plot_can_render_two_channels_str_from_multiscale_image(self, sdata_blobs_str: SpatialData):
-        sdata_blobs_str.pl.render_images(elements="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
+        sdata_blobs_str.pl.render_images(element="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=1, palette="red").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()
 
     def test_plot_can_pass_cmap_to_single_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", channel=1, cmap="Reds").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=1, cmap="Reds").pl.show()
 
     def test_plot_can_pass_color_to_each_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
-            elements="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
+            element="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
         ).pl.show()
 
     def test_plot_can_pass_cmap_to_each_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
-            elements="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]
+            element="blobs_image", channel=[0, 1, 2], cmap=["Reds", "Greens", "Blues"]
         ).pl.show()
 
     def test_plot_can_normalize_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(elements="blobs_image", quantiles_for_norm=(5, 90)).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", percentiles_for_norm=(5, 90)).pl.show()
 
     def test_plot_can_render_multiscale_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_multiscale_image").pl.show()
@@ -115,7 +115,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_stack_render_images(self, sdata_blobs: SpatialData):
         (
-            sdata_blobs.pl.render_images(elements="blobs_image", channel=0, palette="red", alpha=0.5)
-            .pl.render_images(elements="blobs_image", channel=1, palette="blue", alpha=0.5)
+            sdata_blobs.pl.render_images(element="blobs_image", channel=0, palette="red", alpha=0.5)
+            .pl.render_images(element="blobs_image", channel=1, palette="blue", alpha=0.5)
             .pl.show()
         )

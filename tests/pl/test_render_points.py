@@ -25,7 +25,7 @@ _ = spatialdata_plot
 
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(elements="blobs_points").pl.show()
+        sdata_blobs.pl.render_points(element="blobs_points").pl.show()
 
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
@@ -53,13 +53,13 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         (
-            sdata_blobs.pl.render_points(elements="blobs_points", na_color="red", size=30)
-            .pl.render_points(elements="blobs_points", na_color="blue", size=10)
+            sdata_blobs.pl.render_points(element="blobs_points", na_color="red", size=30)
+            .pl.render_points(element="blobs_points", na_color="blue", size=10)
             .pl.show()
         )
 
     def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(elements="blobs_points", color="red").pl.show()
+        sdata_blobs.pl.render_points(element="blobs_points", color="red").pl.show()
 
     def test_plot_points_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
