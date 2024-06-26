@@ -13,7 +13,7 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from dask.dataframe.core import DataFrame as DaskDataFrame
+from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
