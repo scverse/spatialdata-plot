@@ -45,6 +45,7 @@ from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
+from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from shapely.geometry import LineString, Polygon
 from skimage.color import label2rgb
@@ -835,8 +836,6 @@ def _get_palette(
 def _maybe_set_colors(
     source: AnnData, target: AnnData, key: str, palette: str | ListedColormap | Cycler | Sequence[Any] | None = None
 ) -> None:
-    from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
-
     color_key = f"{key}_colors"
     try:
         if palette is not None:
@@ -1635,7 +1634,7 @@ def _validate_label_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     color: str | None,
     fill_alpha: float | int,
-    contour_px: int,
+    contour_px: int | None,
     outline: bool,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
