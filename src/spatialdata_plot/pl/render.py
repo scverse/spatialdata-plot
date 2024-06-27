@@ -400,7 +400,7 @@ def _render_images(
 
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
-        layer = img.sel(c=channels[0]).squeeze()
+        layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
 
         if render_params.percentiles_for_norm != (None, None):
             layer = _normalize(
