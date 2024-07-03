@@ -25,6 +25,7 @@ from spatialdata import get_extent
 from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     get_transformation,
+    set_transformation,
 )
 
 from spatialdata_plot._logging import logger
@@ -254,15 +255,34 @@ def _render_shapes(
                 scale = shapes[is_point]["radius"] * render_params.scale
                 shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
 
-            agg = cvs.polygons(shapes, geometry="geometry", agg=ds.count())
+            # if isinstance(shapes, geopandas.geodataframe.GeoDataFrame):
+            #    shapes = spatialpandas.GeoDataFrame(shapes)
+
+            # in case we are coloring by a column in table
+            if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
+                # numerical
+                if color_source_vector is None:
+                    sdata_filt.shapes[element][col_for_color] = color_vector
+                else:  # categorical
+                    sdata_filt.shapes[element][col_for_color] = color_source_vector
 
             # Render shapes with datashader
-            if render_params.col_for_color is not None and (
-                render_params.groups is None or len(render_params.groups) > 1
-            ):
-                agg = cvs.polygons(shapes, geometry="geometry", agg=ds.by(render_params.col_for_color, ds.count()))
+            color_by_categorical = col_for_color is not None and color_source_vector is not None
+            aggregate_with_sum = None
+            if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+                if color_by_categorical:
+                    agg = cvs.polygons(
+                        sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
+                    )
+                else:
+                    # numerical
+                    agg = cvs.polygons(
+                        sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color)
+                    )
+                    # save min and max values for drawing the colorbar
+                    aggregate_with_sum = (agg.min(), agg.max())
             else:
-                agg = cvs.polygons(shapes, geometry="geometry", agg=ds.count())
+                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
 
             color_key = (
                 [x[:-2] for x in color_vector.categories.values]
@@ -270,15 +290,33 @@ def _render_shapes(
                 and (len(color_vector.categories.values) > 1)
                 else None
             )
-            ds_result = ds.tf.shade(
-                agg, cmap=color_vector[0][:-2], alpha=render_params.fill_alpha * 255, color_key=color_key, min_alpha=200
-            )
+            # ds_result = ds.tf.shade(
+            #     agg, cmap=color_vector[0][:-2], alpha=render_params.fill_alpha * 255, color_key=color_key,
+            #     min_alpha=200
+            # )
+            if color_by_categorical or col_for_color is None:
+                ds_result = ds.tf.shade(
+                    agg,
+                    cmap=color_vector[0][:-2],
+                    color_key=color_key,
+                    min_alpha=np.min([150, render_params.fill_alpha * 255]),
+                )  # TODO: choose other value than 150 for min_alpha (here and below)?
+            else:
+                ds_result = ds.tf.shade(
+                    agg,
+                    cmap=render_params.cmap_params.cmap,
+                )
 
             # Render image
             rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
             _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
             _cax.set_transform(trans)
             cax = ax.add_image(_cax)
+            if aggregate_with_sum is not None:
+                cax = ScalarMappable(
+                    norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                    cmap=render_params.cmap_params.cmap,
+                )
 
         # Sets the limits of the colorbar to the values instead of [0, 1]
         if not norm and not values_are_categorical:
@@ -380,8 +418,13 @@ def _render_points(
     # we can do this because of dealing with a copy
 
     # Convert back to dask dataframe to modify sdata
+    transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
     points = dask.dataframe.from_pandas(points, npartitions=1)
     sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
+    # restore transformation in coordinate system of interest
+    set_transformation(
+        element=sdata_filt.points[element], transformation=transformation_in_cs, to_coordinate_system=coordinate_system
+    )
 
     if col_for_color is not None:
         cols = sc.get.obs_df(adata, col_for_color)
