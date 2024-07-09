@@ -76,7 +76,6 @@ def _render_shapes(
         filter_tables=bool(render_params.table_name),
     )
 
-    # for index, e in enumerate(elements):
     shapes = sdata[element]
 
     if (table_name := render_params.table_name) is None:
@@ -125,7 +124,6 @@ def _render_shapes(
         color_vector = [render_params.cmap_params.na_color]
 
     # filter by `groups`
-
     if isinstance(groups, list) and color_source_vector is not None:
         mask = color_source_vector.isin(groups)
         shapes = shapes[mask]
@@ -134,50 +132,51 @@ def _render_shapes(
         color_vector = color_vector[mask]
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-    _cax = _get_collection_shape(
-        shapes=shapes,
-        s=render_params.scale,
-        c=color_vector,
-        render_params=render_params,
-        rasterized=sc_settings._vector_friendly,
-        cmap=render_params.cmap_params.cmap,
-        norm=norm,
-        fill_alpha=render_params.fill_alpha,
-        outline_alpha=render_params.outline_alpha,
-        # **kwargs,
-    )
+    # _cax = _get_collection_shape(
+    #     shapes=shapes,
+    #     s=render_params.scale,
+    #     c=color_vector,
+    #     render_params=render_params,
+    #     rasterized=sc_settings._vector_friendly,
+    #     cmap=render_params.cmap_params.cmap,
+    #     norm=norm,
+    #     fill_alpha=render_params.fill_alpha,
+    #     outline_alpha=render_params.outline_alpha,
+    #     zorder=render_params.zorder,
+    #     # **kwargs,
+    # )
 
-    # Sets the limits of the colorbar to the values instead of [0, 1]
-    if not norm and not values_are_categorical:
-        _cax.set_clim(min(color_vector), max(color_vector))
+    # Sets the limits of the colorbar to the right values instead of [0, 1]
+    # if not norm and not values_are_categorical:
+    #     _cax.set_clim(min(color_vector), max(color_vector))
 
-        values_are_categorical = color_source_vector is not None
+    #     values_are_categorical = color_source_vector is not None
 
-        # color_source_vector is None when the values aren't categorical
-        if values_are_categorical and render_params.transfunc is not None:
-            color_vector = render_params.transfunc(color_vector)
+    #     # color_source_vector is None when the values aren't categorical
+    #     if values_are_categorical and render_params.transfunc is not None:
+    #         color_vector = render_params.transfunc(color_vector)
 
-        norm = copy(render_params.cmap_params.norm)
+    #     norm = copy(render_params.cmap_params.norm)
 
-        if len(color_vector) == 0:
-            color_vector = [render_params.cmap_params.na_color]
+    #     if len(color_vector) == 0:
+    #         color_vector = [render_params.cmap_params.na_color]
 
-        # filter by `groups`
-        if render_params.groups is not None and color_source_vector is not None:
-            mask = color_source_vector.isin(render_params.groups)
-            shapes = shapes[mask]
-            shapes = shapes.reset_index()
-            color_source_vector = color_source_vector[mask]
-            color_vector = color_vector[mask]
-    cax = ax.add_collection(_cax)
+    #     # filter by `groups`
+    #     if render_params.groups is not None and color_source_vector is not None:
+    #         mask = color_source_vector.isin(render_params.groups)
+    #         shapes = shapes[mask]
+    #         shapes = shapes.reset_index()
+    #         color_source_vector = color_source_vector[mask]
+    #         color_vector = color_vector[mask]
+    # cax = ax.add_collection(_cax)
 
     # Apply the transformation to the PatchCollection's paths
-    trans = get_transformation(sdata_filt[element], get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
+    # trans = get_transformation(sdata_filt[element], get_all=True)[coordinate_system]
+    # affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    # trans = mtransforms.Affine2D(matrix=affine_trans)
 
-    for path in _cax.get_paths():
-        path.vertices = trans.transform(path.vertices)
+    # for path in _cax.get_paths():
+    #     path.vertices = trans.transform(path.vertices)
 
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
@@ -195,162 +194,150 @@ def _render_shapes(
         # False if user specified color-like with 'color' parameter
         colorbar = False if col_for_color is None else legend_params.colorbar
 
-        # Apply the transformation to the PatchCollection's paths
-        trans = get_transformation(sdata_filt.shapes[element], get_all=True)[coordinate_system]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
+    # Apply the transformation to the PatchCollection's paths
+    trans = get_transformation(sdata_filt.shapes[element], get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
 
-        shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-        # Determine which method to use for rendering
-        method = render_params.method
-        if method is None:
-            method = "datashader" if len(shapes) > 10000 else "matplotlib"
-        elif method not in ["matplotlib", "datashader"]:
-            raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-        logger.info(f"Using {method}")
+    # Determine which method to use for rendering
+    method = render_params.method
+    if method is None:
+        method = "datashader" if len(shapes) > 10000 else "matplotlib"
+    elif method not in ["matplotlib", "datashader"]:
+        raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+    logger.info(f"Using {method}")
 
-        if method == "matplotlib":
-            _cax = _get_collection_shape(
-                shapes=shapes,
-                s=render_params.scale,
-                c=color_vector,
-                render_params=render_params,
-                rasterized=sc_settings._vector_friendly,
-                cmap=render_params.cmap_params.cmap,
-                norm=norm,
-                fill_alpha=render_params.fill_alpha,
-                outline_alpha=render_params.outline_alpha,
-                zorder=render_params.zorder,
-                # **kwargs,
-            )
+    if method == "matplotlib":
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.scale,
+            c=color_vector,
+            render_params=render_params,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            fill_alpha=render_params.fill_alpha,
+            outline_alpha=render_params.outline_alpha,
+            zorder=render_params.zorder,
+            # **kwargs,
+        )
+        cax = ax.add_collection(_cax)
+
+        # Transform the paths in PatchCollection
+        for path in _cax.get_paths():
+            path.vertices = trans.transform(path.vertices)
             cax = ax.add_collection(_cax)
+    elif method == "datashader":
+        # Where to put this
+        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
-            # Transform the paths in PatchCollection
-            for path in _cax.get_paths():
-                path.vertices = trans.transform(path.vertices)
-                cax = ax.add_collection(_cax)
-        elif method == "datashader":
-            # Where to put this
-            trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+        extent = get_extent(sdata.shapes[element])
+        x_ext = extent["x"][1]
+        y_ext = extent["y"][1]
+        x_range = [0, x_ext]
+        y_range = [0, y_ext]
+        # round because we need integers
+        plot_width = int(np.round(x_range[1] - x_range[0]))
+        plot_height = int(np.round(y_range[1] - y_range[0]))
 
-            extent = get_extent(sdata.shapes[element])
-            x_ext = extent["x"][1]
-            y_ext = extent["y"][1]
-            # previous_xlim = fig_params.ax.get_xlim()
-            # previous_ylim = fig_params.ax.get_ylim()
-            x_range = [0, x_ext]
-            y_range = [0, y_ext]
-            # round because we need integers
-            plot_width = int(np.round(x_range[1] - x_range[0]))
-            plot_height = int(np.round(y_range[1] - y_range[0]))
+        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
 
-            cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
+        _geometry = shapes["geometry"]
+        is_point = _geometry.type == "Point"
 
-            _geometry = shapes["geometry"]
-            is_point = _geometry.type == "Point"
+        # Handle circles encoded as points with radius
+        if is_point.any():  # TODO
+            scale = shapes[is_point]["radius"] * render_params.scale
+            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
 
-            # Handle circles encoded as points with radius
-            if is_point.any():  # TODO
-                scale = shapes[is_point]["radius"] * render_params.scale
-                shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
+        # in case we are coloring by a column in table
+        if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
+            # numerical
+            if color_source_vector is None:
+                sdata_filt.shapes[element][col_for_color] = color_vector
+            else:  # categorical
+                sdata_filt.shapes[element][col_for_color] = color_source_vector
 
-            # if isinstance(shapes, geopandas.geodataframe.GeoDataFrame):
-            #    shapes = spatialpandas.GeoDataFrame(shapes)
-
-            # in case we are coloring by a column in table
-            if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
+        # Render shapes with datashader
+        color_by_categorical = col_for_color is not None and color_source_vector is not None
+        aggregate_with_sum = None
+        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+            if color_by_categorical:
+                agg = cvs.polygons(
+                    sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
+                )
+            else:
                 # numerical
-                if color_source_vector is None:
-                    sdata_filt.shapes[element][col_for_color] = color_vector
-                else:  # categorical
-                    sdata_filt.shapes[element][col_for_color] = color_source_vector
+                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
+                # save min and max values for drawing the colorbar
+                aggregate_with_sum = (agg.min(), agg.max())
+        else:
+            agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
 
-            # Render shapes with datashader
-            color_by_categorical = col_for_color is not None and color_source_vector is not None
-            aggregate_with_sum = None
-            if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
-                if color_by_categorical:
-                    agg = cvs.polygons(
-                        sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
-                    )
-                else:
-                    # numerical
-                    agg = cvs.polygons(
-                        sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color)
-                    )
-                    # save min and max values for drawing the colorbar
-                    aggregate_with_sum = (agg.min(), agg.max())
-            else:
-                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
+        color_key = (
+            [x[:-2] for x in color_vector.categories.values]
+            if (type(color_vector) == pd.core.arrays.categorical.Categorical)
+            and (len(color_vector.categories.values) > 1)
+            else None
+        )
 
-            color_key = (
-                [x[:-2] for x in color_vector.categories.values]
-                if (type(color_vector) == pd.core.arrays.categorical.Categorical)
-                and (len(color_vector.categories.values) > 1)
-                else None
+        if color_by_categorical or col_for_color is None:
+            ds_result = ds.tf.shade(
+                agg,
+                cmap=color_vector[0][:-2],
+                color_key=color_key,
+                min_alpha=np.min([150, render_params.fill_alpha * 255]),
+            )  # TODO: choose other value than 150 for min_alpha (here and below)?
+        else:
+            ds_result = ds.tf.shade(
+                agg,
+                cmap=render_params.cmap_params.cmap,
             )
-            # ds_result = ds.tf.shade(
-            #     agg, cmap=color_vector[0][:-2], alpha=render_params.fill_alpha * 255, color_key=color_key,
-            #     min_alpha=200
-            # )
-            if color_by_categorical or col_for_color is None:
-                ds_result = ds.tf.shade(
-                    agg,
-                    cmap=color_vector[0][:-2],
-                    color_key=color_key,
-                    min_alpha=np.min([150, render_params.fill_alpha * 255]),
-                )  # TODO: choose other value than 150 for min_alpha (here and below)?
-            else:
-                ds_result = ds.tf.shade(
-                    agg,
-                    cmap=render_params.cmap_params.cmap,
-                )
 
-            # Render image
-            rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-            _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
-            _cax.set_transform(trans)
-            cax = ax.add_image(_cax)
-            if aggregate_with_sum is not None:
-                cax = ScalarMappable(
-                    norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
-                    cmap=render_params.cmap_params.cmap,
-                )
-
-        # Sets the limits of the colorbar to the values instead of [0, 1]
-        if not norm and not values_are_categorical:
-            _cax.set_clim(min(color_vector), max(color_vector))
-
-        if not (
-            len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)
-        ):
-            # necessary in case different shapes elements are annotated with one table
-            if color_source_vector is not None and render_params.col_for_color is not None:
-                color_source_vector = color_source_vector.remove_unused_categories()
-
-            # False if user specified color-like with 'color' parameter
-            colorbar = False if render_params.col_for_color is None else legend_params.colorbar
-
-            _ = _decorate_axs(
-                ax=ax,
-                cax=cax,
-                fig_params=fig_params,
-                adata=table,
-                value_to_plot=col_for_color,
-                color_source_vector=color_source_vector,
-                palette=palette,
-                alpha=render_params.fill_alpha,
-                na_color=render_params.cmap_params.na_color,
-                legend_fontsize=legend_params.legend_fontsize,
-                legend_fontweight=legend_params.legend_fontweight,
-                legend_loc=legend_params.legend_loc,
-                legend_fontoutline=legend_params.legend_fontoutline,
-                na_in_legend=legend_params.na_in_legend,
-                colorbar=colorbar,
-                scalebar_dx=scalebar_params.scalebar_dx,
-                scalebar_units=scalebar_params.scalebar_units,
+        # Render image
+        rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
+        _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
+        _cax.set_transform(trans)
+        cax = ax.add_image(_cax)
+        if aggregate_with_sum is not None:
+            cax = ScalarMappable(
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                cmap=render_params.cmap_params.cmap,
             )
+
+    # Sets the limits of the colorbar to the values instead of [0, 1]
+    if not norm and not values_are_categorical:
+        _cax.set_clim(min(color_vector), max(color_vector))
+
+    if not (len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)):
+        # necessary in case different shapes elements are annotated with one table
+        if color_source_vector is not None and render_params.col_for_color is not None:
+            color_source_vector = color_source_vector.remove_unused_categories()
+
+        # False if user specified color-like with 'color' parameter
+        colorbar = False if render_params.col_for_color is None else legend_params.colorbar
+
+        _ = _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=table,
+            value_to_plot=col_for_color,
+            color_source_vector=color_source_vector,
+            palette=palette,
+            alpha=render_params.fill_alpha,
+            na_color=render_params.cmap_params.na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=colorbar,
+            scalebar_dx=scalebar_params.scalebar_dx,
+            scalebar_units=scalebar_params.scalebar_units,
+        )
 
 
 def _render_points(
