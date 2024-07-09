@@ -20,8 +20,6 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from spatialdata import get_extent
-
-# from spatialdata._core.data_extent import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray
 
@@ -261,11 +259,11 @@ class PlotAccessor:
             table_name=table_name,
         )
 
-        if method is not None:
-            if not isinstance(method, str):
-                raise TypeError("Parameter 'method' must be a string.")
-            if method not in ["matplotlib", "datashader"]:
-                raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+        if not isinstance(method, str):
+            raise TypeError("Parameter 'method' must be a string.")
+
+        if method not in ["matplotlib", "datashader"]:
+            raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)

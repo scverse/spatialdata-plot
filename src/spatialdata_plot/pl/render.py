@@ -16,8 +16,6 @@ import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from datatree import DataTree
-
-# from datatree.datatree import DataTree
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
@@ -163,27 +161,7 @@ def _render_shapes(
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
     logger.info(f"Using {method}")
 
-    if method == "matplotlib":
-        _cax = _get_collection_shape(
-            shapes=shapes,
-            s=render_params.scale,
-            c=color_vector,
-            render_params=render_params,
-            rasterized=sc_settings._vector_friendly,
-            cmap=render_params.cmap_params.cmap,
-            norm=norm,
-            fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha,
-            zorder=render_params.zorder,
-            # **kwargs,
-        )
-        cax = ax.add_collection(_cax)
-
-        # Transform the paths in PatchCollection
-        for path in _cax.get_paths():
-            path.vertices = trans.transform(path.vertices)
-            cax = ax.add_collection(_cax)
-    elif method == "datashader":
+    if method == "datashader":
         # TODO: Where to put this
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
@@ -209,11 +187,9 @@ def _render_shapes(
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
             # numerical
-            if color_source_vector is None:
-                sdata_filt.shapes[element][col_for_color] = color_vector
-            else:  # categorical
-                sdata_filt.shapes[element][col_for_color] = color_source_vector
-
+            sdata_filt.shapes[element][col_for_color] = (
+                color_vector if color_source_vector is None else color_source_vector
+            )
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
         aggregate_with_sum = None
@@ -232,24 +208,24 @@ def _render_shapes(
 
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
-            if (type(color_vector) == pd.core.arrays.categorical.Categorical)
+            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
             else None
         )
 
-        if color_by_categorical or col_for_color is None:
-            ds_result = ds.tf.shade(
+        ds_result = (
+            ds.tf.shade(
                 agg,
                 cmap=color_vector[0][:-2],
                 color_key=color_key,
                 min_alpha=np.min([150, render_params.fill_alpha * 255]),
-            )  # TODO: choose other value than 150 for min_alpha (here and below)?
-        else:
-            ds_result = ds.tf.shade(
+            )
+            if color_by_categorical or col_for_color is None
+            else ds.tf.shade(
                 agg,
                 cmap=render_params.cmap_params.cmap,
             )
-
+        )
         # Render image
         rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
         _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
@@ -260,6 +236,27 @@ def _render_shapes(
                 norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
                 cmap=render_params.cmap_params.cmap,
             )
+
+    elif method == "matplotlib":
+        _cax = _get_collection_shape(
+            shapes=shapes,
+            s=render_params.scale,
+            c=color_vector,
+            render_params=render_params,
+            rasterized=sc_settings._vector_friendly,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            fill_alpha=render_params.fill_alpha,
+            outline_alpha=render_params.outline_alpha,
+            zorder=render_params.zorder,
+            # **kwargs,
+        )
+        cax = ax.add_collection(_cax)
+
+        # Transform the paths in PatchCollection
+        for path in _cax.get_paths():
+            path.vertices = trans.transform(path.vertices)
+            cax = ax.add_collection(_cax)
 
     # Sets the limits of the colorbar to the values instead of [0, 1]
     if not norm and not values_are_categorical:
@@ -356,7 +353,7 @@ def _render_points(
         )
         sdata_filt[table_name] = adata
 
-    # we can do this because of dealing with a copy
+    # we can modify the sdata because of dealing with a copy
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
@@ -456,7 +453,7 @@ def _render_points(
 
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
-            if (type(color_vector) == pd.core.arrays.categorical.Categorical)
+            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
             else None
         )
@@ -473,9 +470,8 @@ def _render_points(
                 ds.tf.spread(agg, px=px),
                 rescale_discrete_levels=True,
                 cmap=render_params.cmap_params.cmap,
-                # color_key=color_key,
             )
-        # render image
+
         rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
         cax = ax.imshow(rbga_image, zorder=render_params.zorder, alpha=render_params.alpha)
         if aggregate_with_sum is not None:
@@ -498,7 +494,6 @@ def _render_points(
             alpha=render_params.alpha,
             transform=trans,
             zorder=render_params.zorder,
-            # **kwargs,
         )
         cax = ax.add_collection(_cax)
         if update_parameters:
