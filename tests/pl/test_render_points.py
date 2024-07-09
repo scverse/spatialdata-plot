@@ -89,3 +89,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
         sdata_blobs.pl.render_points("blobs_points", color="category").pl.show()
+
+    def test_plot_datashader_continuous_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", alpha=0.6, method="datashader"
+        ).pl.show()
+
+    def test_plot_datashader_matplotlib_stack(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="red", method="datashader"
+        ).pl.render_points(element="blobs_points", size=10, color="blue").pl.show()
+
+    def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            color="genes", groups="gene_b", palette="lightgreen", size=20, method="datashader"
+        ).pl.show()

@@ -81,7 +81,7 @@ class ShapesRenderParams:
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
     method: str | None = None
-    zorder: int | None = None
+    zorder: int = 0
     table_name: str | None = None
 
 
@@ -99,7 +99,7 @@ class PointsRenderParams:
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
     method: str | None = None
-    zorder: int | None = None
+    zorder: int = 0
     table_name: str | None = None
 
 
@@ -114,7 +114,7 @@ class ImageRenderParams:
     alpha: float = 1.0
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
-    zorder: int | None = None
+    zorder: int = 0
 
 
 @dataclass
@@ -133,4 +133,4 @@ class LabelsRenderParams:
     transfunc: Callable[[float], float] | None = None
     scale: str | None = None
     table_name: str | None = None
-    zorder: int | None = None
+    zorder: int = 0

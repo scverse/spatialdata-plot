@@ -1939,16 +1939,19 @@ def _ax_show_and_transform(
     ax: Axes,
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
+    zorder: int = 0,
 ) -> None:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
             alpha=alpha,
+            zorder=zorder,
         )
         im.set_transform(trans_data)
     else:
         im = ax.imshow(
             array,
             cmap=cmap,
+            zorder=zorder,
         )
         im.set_transform(trans_data)

@@ -132,52 +132,6 @@ def _render_shapes(
         color_vector = color_vector[mask]
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-    # _cax = _get_collection_shape(
-    #     shapes=shapes,
-    #     s=render_params.scale,
-    #     c=color_vector,
-    #     render_params=render_params,
-    #     rasterized=sc_settings._vector_friendly,
-    #     cmap=render_params.cmap_params.cmap,
-    #     norm=norm,
-    #     fill_alpha=render_params.fill_alpha,
-    #     outline_alpha=render_params.outline_alpha,
-    #     zorder=render_params.zorder,
-    #     # **kwargs,
-    # )
-
-    # Sets the limits of the colorbar to the right values instead of [0, 1]
-    # if not norm and not values_are_categorical:
-    #     _cax.set_clim(min(color_vector), max(color_vector))
-
-    #     values_are_categorical = color_source_vector is not None
-
-    #     # color_source_vector is None when the values aren't categorical
-    #     if values_are_categorical and render_params.transfunc is not None:
-    #         color_vector = render_params.transfunc(color_vector)
-
-    #     norm = copy(render_params.cmap_params.norm)
-
-    #     if len(color_vector) == 0:
-    #         color_vector = [render_params.cmap_params.na_color]
-
-    #     # filter by `groups`
-    #     if render_params.groups is not None and color_source_vector is not None:
-    #         mask = color_source_vector.isin(render_params.groups)
-    #         shapes = shapes[mask]
-    #         shapes = shapes.reset_index()
-    #         color_source_vector = color_source_vector[mask]
-    #         color_vector = color_vector[mask]
-    # cax = ax.add_collection(_cax)
-
-    # Apply the transformation to the PatchCollection's paths
-    # trans = get_transformation(sdata_filt[element], get_all=True)[coordinate_system]
-    # affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    # trans = mtransforms.Affine2D(matrix=affine_trans)
-
-    # for path in _cax.get_paths():
-    #     path.vertices = trans.transform(path.vertices)
-
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
     # order of color in the palette should agree to order of occurence
@@ -230,7 +184,7 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
             cax = ax.add_collection(_cax)
     elif method == "datashader":
-        # Where to put this
+        # TODO: Where to put this
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
         extent = get_extent(sdata.shapes[element])
@@ -248,7 +202,7 @@ def _render_shapes(
         is_point = _geometry.type == "Point"
 
         # Handle circles encoded as points with radius
-        if is_point.any():  # TODO
+        if is_point.any():
             scale = shapes[is_point]["radius"] * render_params.scale
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
 
@@ -533,7 +487,6 @@ def _render_points(
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
-        # original way of plotting points
         _cax = ax.scatter(
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
@@ -663,20 +616,13 @@ def _render_images(
             _get_linear_colormap(palette, "k")[0]
             if isinstance(palette, list) and all(isinstance(p, str) for p in palette)
             else render_params.cmap_params.cmap
-            # render_params.cmap_params.cmap if render_params.palette is None else _get_linear_colormap(palette, "k")[0]
         )
 
         # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
         cmap._init()
         cmap._lut[:, -1] = render_params.alpha
 
-        _ax_show_and_transform(layer, trans_data, ax, cmap=cmap)
-        # im = ax.imshow(
-        #     layer,
-        #     cmap=cmap,
-        #     zorder=render_params.zorder,
-        # )
-        # im.set_transform(trans_data)
+        _ax_show_and_transform(layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder)
 
     # 2) Image has any number of channels but 1
     else:
@@ -721,16 +667,7 @@ def _render_images(
                     "Consider using 'palette' instead."
                 )
 
-            # im = ax.imshow(
-            #     stacked,
-            #     alpha=render_params.alpha,
-            #     zorder=render_params.zorder,
-            # )
-            _ax_show_and_transform(stacked, trans_data, ax, render_params.alpha)
-            # if not isinstance(render_params.cmap_params, list) and render_params.cmap_params.norm:
-            #     layers[c] = render_params.cmap_params.norm(layers[c])
-            # elif isinstance(render_params.cmap_params, list) and render_params.cmap_params[ch_index].norm:
-            #     layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
+            _ax_show_and_transform(stacked, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
 
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
@@ -742,19 +679,13 @@ def _render_images(
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
 
-            # im = ax.imshow(
-            #     colored,
-            #     alpha=render_params.alpha,
-            #     zorder=render_params.zorder,
-            # )
-            # im.set_transform(trans_data)
             # Apply cmaps to each channel and add up
             colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
 
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
 
         # 2C) Image has n channels and palette info
         elif palette is not None and not got_multiple_cmaps:
@@ -763,29 +694,17 @@ def _render_images(
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
 
-            # im = ax.imshow(
-            #     colored,
-            #     alpha=render_params.alpha,
-            #     zorder=render_params.zorder,
-            # )
-            # im.set_transform(trans_data)
             # Apply cmaps to each channel and add up
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
 
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
 
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
 
-            # im = ax.imshow(
-            #     colored,
-            #     alpha=render_params.alpha,
-            #     zorder=render_params.zorder,
-            # )
-            # im.set_transform(trans_data)
             # Apply cmaps to each channel, add up and normalize to [0, 1]
             colored = (
                 np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
@@ -794,7 +713,7 @@ def _render_images(
             # Remove alpha channel so we can overwrite it from render_params.alpha
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha)
+            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
 
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
@@ -829,7 +748,6 @@ def _render_labels(
     extent = get_extent(label, coordinate_system=coordinate_system)
 
     # get best scale out of multiscale label
-    # if isinstance(label, MultiscaleSpatialImage):
     if isinstance(label, DataTree):
         label = _multiscale_to_spatial_image(
             multiscale_image=label,
