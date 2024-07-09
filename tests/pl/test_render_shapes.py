@@ -291,6 +291,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(method="datashader").pl.show()
 
     def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
+        RNG = np.random.default_rng(seed=42)
         n_obs = len(sdata_blobs["blobs_polygons"])
         adata = AnnData(RNG.normal(size=(n_obs, 10)))
         adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
