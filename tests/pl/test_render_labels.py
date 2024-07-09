@@ -111,12 +111,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-        n_obs = max(get_element_instances(sdata_blobs[label]))
+        instances = get_element_instances(sdata_blobs[label])
+        n_obs = len(instances)
         adata = AnnData(
             RNG.normal(size=(n_obs, 10)),
             obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
-        adata.obs["instance_id"] = np.arange(adata.n_obs)
+        adata.obs["instance_id"] = instances.values  # np.arange(1, adata.n_obs)
         adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["category"][:3] = ["a", "b", "c"]
         adata.obs["instance_id"] = list(range(adata.n_obs))
