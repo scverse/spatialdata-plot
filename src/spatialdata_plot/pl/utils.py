@@ -1625,6 +1625,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
 
+    if param_dict.get("method") not in ["matplotlib", "datashader", None]:
+        raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
     return param_dict
 
 
@@ -1757,6 +1760,7 @@ def _validate_shape_render_params(
     norm: Normalize | None,
     scale: float | int,
     table_name: str | None,
+    method: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1774,6 +1778,7 @@ def _validate_shape_render_params(
         "norm": norm,
         "scale": scale,
         "table_name": table_name,
+        "method": method,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
@@ -1803,6 +1808,7 @@ def _validate_shape_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["method"] = param_dict["method"]
 
     return element_params
 

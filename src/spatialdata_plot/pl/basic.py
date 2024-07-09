@@ -257,13 +257,8 @@ class PlotAccessor:
             norm=norm,
             scale=scale,
             table_name=table_name,
+            method=method,
         )
-
-        if not isinstance(method, str):
-            raise TypeError("Parameter 'method' must be a string.")
-
-        if method not in ["matplotlib", "datashader"]:
-            raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
