@@ -149,7 +149,7 @@ def _render_shapes(
     # Apply the transformation to the PatchCollection's paths
     trans = get_transformation(sdata_filt.shapes[element], get_all=True)[coordinate_system]
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+    trans = mtransforms.Affine2D(matrix=affine_trans)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -162,6 +162,8 @@ def _render_shapes(
     logger.info(f"Using {method}")
 
     if method == "datashader":
+        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+
         extent = get_extent(sdata.shapes[element])
         x_ext = extent["x"][1]
         y_ext = extent["y"][1]
