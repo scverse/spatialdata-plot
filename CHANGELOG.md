@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   Fix color assignment for NaN values (#257)
+-   Zorder of rendering now strictly follows the order of the render_x calls (#244)
 
 ## [0.2.2] - 2024-05-02
 

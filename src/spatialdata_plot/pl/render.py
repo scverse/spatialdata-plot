@@ -149,7 +149,7 @@ def _render_shapes(
     # Apply the transformation to the PatchCollection's paths
     trans = get_transformation(sdata_filt.shapes[element], get_all=True)[coordinate_system]
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -162,9 +162,6 @@ def _render_shapes(
     logger.info(f"Using {method}")
 
     if method == "datashader":
-        # TODO: Where to put this
-        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
-
         extent = get_extent(sdata.shapes[element])
         x_ext = extent["x"][1]
         y_ext = extent["y"][1]
@@ -186,7 +183,6 @@ def _render_shapes(
 
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
-            # numerical
             sdata_filt.shapes[element][col_for_color] = (
                 color_vector if color_source_vector is None else color_source_vector
             )
@@ -199,7 +195,6 @@ def _render_shapes(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                # numerical
                 agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
                 # save min and max values for drawing the colorbar
                 aggregate_with_sum = (agg.min(), agg.max())
@@ -226,7 +221,6 @@ def _render_shapes(
                 cmap=render_params.cmap_params.cmap,
             )
         )
-        # Render image
         rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
         _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
         _cax.set_transform(trans)
@@ -335,7 +329,6 @@ def _render_points(
 
     if groups is not None and col_for_color is not None:
         points = points[points[col_for_color].isin(groups)]
-        # in case no rows are left:
         if len(points) <= 0:
             raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
 
@@ -398,14 +391,6 @@ def _render_points(
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
     trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
-    # color_source_vector is None when the values aren't categorical
-    if color_source_vector is None and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
-
-    trans = get_transformation(sdata.points[element], get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
-
     norm = copy(render_params.cmap_params.norm)
 
     method = render_params.method
@@ -435,7 +420,6 @@ def _render_points(
         plot_height = int(np.round(y_ext[1] - y_ext[0]))
 
         # use datashader for the visualization of points
-        # TODO: what about trans/norm at this point?
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
         color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
@@ -444,7 +428,6 @@ def _render_points(
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                # numerical
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
                 # save min and max values for drawing the colorbar
                 aggregate_with_sum = (agg.min(), agg.max())
@@ -633,7 +616,6 @@ def _render_images(
                     clip=True,
                 )
 
-            # TODO: can't be list anymore???
             if not isinstance(render_params.cmap_params, list):
                 if render_params.cmap_params.norm is not None:
                     layers[c] = render_params.cmap_params.norm(layers[c])
