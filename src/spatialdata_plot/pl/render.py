@@ -448,8 +448,8 @@ def _render_points(
                 rescale_discrete_levels=True,
                 cmap=color_vector[0][:-2],
                 color_key=color_key,
-                min_alpha=np.min([150, render_params.alpha * 255]),
-            )  # TODO: choose other value than 150 for min_alpha (here and below)?
+                min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+            )
         else:
             ds_result = ds.tf.shade(
                 ds.tf.spread(agg, px=px),
