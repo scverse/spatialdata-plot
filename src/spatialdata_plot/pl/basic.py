@@ -166,6 +166,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
+        method: str | None = None,
         table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -219,6 +220,9 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         scale : float | int, default 1.0
             Value to scale circles, if present.
+        method : str | None, optional
+            Whether to use 'matplotlib' and 'datashader'. When None, the method is
+            chosen based on the size of the data.
         table_name: str | None
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
@@ -253,6 +257,7 @@ class PlotAccessor:
             norm=norm,
             scale=scale,
             table_name=table_name,
+            method=method,
         )
 
         sdata = self._copy()
@@ -281,6 +286,8 @@ class PlotAccessor:
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc", None),
                 table_name=param_values["table_name"],
+                zorder=n_steps,
+                method=method,
             )
             n_steps += 1
 
@@ -298,6 +305,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
+        method: str | None = None,
         table_name: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -342,6 +350,9 @@ class PlotAccessor:
             Colormap normalization for continuous annotations.
         size : float | int, default 1.0
             Size of the points
+        method : str | None, optional
+            Whether to use 'matplotlib' and 'datashader'. When None, the method is
+            chosen based on the size of the data.
         table_name: str | None
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
@@ -368,6 +379,12 @@ class PlotAccessor:
             table_name=table_name,
         )
 
+        if method is not None:
+            if not isinstance(method, str):
+                raise TypeError("Parameter 'method' must be a string.")
+            if method not in ["matplotlib", "datashader"]:
+                raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
@@ -391,6 +408,8 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 size=param_values["size"],
                 table_name=param_values["table_name"],
+                zorder=n_steps,
+                method=method,
             )
             n_steps += 1
 
@@ -504,6 +523,7 @@ class PlotAccessor:
                 alpha=param_values["alpha"],
                 percentiles_for_norm=param_values["percentiles_for_norm"],
                 scale=param_values["scale"],
+                zorder=n_steps,
             )
             n_steps += 1
 
@@ -515,14 +535,14 @@ class PlotAccessor:
         element: str | None = None,
         color: str | None = None,
         groups: list[str] | str | None = None,
-        contour_px: int = 3,
+        contour_px: int | None = 3,
         outline: bool = False,
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
         outline_alpha: float | int = 1.0,
-        fill_alpha: float | int = 0.3,
+        fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
         **kwargs: Any,
@@ -626,6 +646,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
+                zorder=n_steps,
             )
             n_steps += 1
         return sdata

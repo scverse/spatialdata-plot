@@ -45,6 +45,7 @@ from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
+from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from shapely.geometry import LineString, Polygon
 from skimage.color import label2rgb
@@ -835,8 +836,6 @@ def _get_palette(
 def _maybe_set_colors(
     source: AnnData, target: AnnData, key: str, palette: str | ListedColormap | Cycler | Sequence[Any] | None = None
 ) -> None:
-    from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
-
     color_key = f"{key}_colors"
     try:
         if palette is not None:
@@ -1626,6 +1625,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
 
+    if param_dict.get("method") not in ["matplotlib", "datashader", None]:
+        raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
     return param_dict
 
 
@@ -1635,7 +1637,7 @@ def _validate_label_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     color: str | None,
     fill_alpha: float | int,
-    contour_px: int,
+    contour_px: int | None,
     outline: bool,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
@@ -1758,6 +1760,7 @@ def _validate_shape_render_params(
     norm: Normalize | None,
     scale: float | int,
     table_name: str | None,
+    method: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1775,6 +1778,7 @@ def _validate_shape_render_params(
         "norm": norm,
         "scale": scale,
         "table_name": table_name,
+        "method": method,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
@@ -1804,6 +1808,7 @@ def _validate_shape_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["method"] = param_dict["method"]
 
     return element_params
 
@@ -1940,16 +1945,19 @@ def _ax_show_and_transform(
     ax: Axes,
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
+    zorder: int = 0,
 ) -> None:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
             alpha=alpha,
+            zorder=zorder,
         )
         im.set_transform(trans_data)
     else:
         im = ax.imshow(
             array,
             cmap=cmap,
+            zorder=zorder,
         )
         im.set_transform(trans_data)

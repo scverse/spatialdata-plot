@@ -12,20 +12,24 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.3] - 2024-07-03
 
+### Added
+
+-   Datashader support for points and shapes (#244)
+
 ### Changed
 
--   All parameters are now provided for a single element. If element in pl.render is None then this value will be broadcasted
+-   All parameters are now provided for a single element (#272)
 
 ### Fixed
 
 -   Fix color assignment for NaN values (#257)
--   Fix channel str support #221
+-   Zorder of rendering now strictly follows the order of the render_x calls (#244)
 
 ## [0.2.2] - 2024-05-02
 
 ### Fixed
 
--   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
+-   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap (#236)
 -   Fix channel str support (#221)
 
 ## [0.2.1] - 2024-03-26

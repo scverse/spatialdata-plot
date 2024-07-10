@@ -119,3 +119,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             .pl.render_images(element="blobs_image", channel=1, palette="blue", alpha=0.5)
             .pl.show()
         )
+
+    def test_plot_can_stick_to_zorder(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes().pl.render_images().pl.show()
