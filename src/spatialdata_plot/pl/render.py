@@ -181,7 +181,7 @@ def _render_shapes(
         # Handle circles encoded as points with radius
         if is_point.any():
             scale = shapes[is_point]["radius"] * render_params.scale
-            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
+            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
