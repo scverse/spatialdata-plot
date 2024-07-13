@@ -1,5 +1,5 @@
-import pytest
 import numpy as np
+import pytest
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
 
@@ -11,11 +11,11 @@ _ = spatialdata_plot
 import numpy as np
 import pandas as pd
 from geopandas import GeoDataFrame
-from shapely.geometry import Polygon, MultiPolygon
-from shapely.affinity import translate
 from numpy.random import default_rng
-from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, ShapesModel
+from shapely.affinity import translate
+from shapely.geometry import MultiPolygon, Polygon
 from spatialdata._core.spatialdata import SpatialData
+from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, ShapesModel
 
 
 def create_large_spatialdata(
