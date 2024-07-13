@@ -1,21 +1,19 @@
-import pytest
 import numpy as np
+import pandas as pd
+import pytest
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from geopandas import GeoDataFrame
+from numpy.random import default_rng
+from shapely.affinity import translate
+from shapely.geometry import MultiPolygon, Polygon
+from spatialdata._core.spatialdata import SpatialData
+from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, ShapesModel
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 # matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
-
-import numpy as np
-import pandas as pd
-from geopandas import GeoDataFrame
-from shapely.geometry import Polygon, MultiPolygon
-from shapely.affinity import translate
-from numpy.random import default_rng
-from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, ShapesModel
-from spatialdata._core.spatialdata import SpatialData
 
 
 def create_large_spatialdata(
@@ -45,7 +43,7 @@ def create_large_spatialdata(
     # create random xy points
     points_data = rng.random((n_points, 2)) * [x, y]
     points_df = pd.DataFrame(points_data, columns=["x", "y"])
-    points = PointsModel.parse(points_df.to_numpy(), feature_key="x", instance_key="y")
+    points = PointsModel.parse(points_df.to_numpy())
 
     # create random circles
     circles = ShapesModel.parse(points_df.to_numpy(), geometry=0, radius=10)
@@ -54,7 +52,7 @@ def create_large_spatialdata(
         minx = miny = bbox[0]
         maxx = maxy = bbox[1]
         polygons: list[Polygon] = []
-        for i in range(n):
+        for _ in range(n):
             x = rng.uniform(minx, maxx)
             y = rng.uniform(miny, maxy)
             poly = Polygon(
@@ -75,7 +73,7 @@ def create_large_spatialdata(
         minx = miny = bbox[0]
         maxx = maxy = bbox[1]
         multipolygons: list[MultiPolygon] = []
-        for i in range(n):
+        for _ in range(n):
             x = rng.uniform(minx, maxx)
             y = rng.uniform(miny, maxy)
             poly1 = Polygon(
