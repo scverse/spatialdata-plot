@@ -252,7 +252,6 @@ def _render_shapes(
         # Transform the paths in PatchCollection
         for path in _cax.get_paths():
             path.vertices = trans.transform(path.vertices)
-            cax = ax.add_collection(_cax)
 
     # Sets the limits of the colorbar to the values instead of [0, 1]
     if not norm and not values_are_categorical:
