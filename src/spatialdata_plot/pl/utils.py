@@ -1469,7 +1469,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
-    print(element)
 
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
@@ -1479,7 +1478,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].points.keys())
     elif element_type == "shapes":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
-        
+
     if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
     if isinstance(channel, list):
@@ -1672,10 +1671,10 @@ def _validate_label_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-        
+
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
-        
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
@@ -1730,10 +1729,10 @@ def _validate_points_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-        
+
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
-        
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]

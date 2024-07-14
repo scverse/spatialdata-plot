@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.4] - tbd
 
+### Added
+
+-
+
+### Changed
+
+-
+
+### Fixed
+
+-   Added error handling for non-existent elements (#305)
+
 ## [0.2.3] - 2024-07-03
 
 ### Added
