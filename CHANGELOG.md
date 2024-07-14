@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.4] - tbd
 
+### Added
+
+  
+
+### Changed
+
+-
+
+### Fixed
+
+-   Took RNG out of categorical label test (#306)
+
 ## [0.2.3] - 2024-07-03
 
 ### Added
