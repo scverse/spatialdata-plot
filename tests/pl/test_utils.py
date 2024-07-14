@@ -37,7 +37,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 
         # set up figure and modify the data to add 0s
-        _, axs = plt.subplots(ncols=2, figsize=(6, 3))
+        fig, axs = plt.subplots(ncols=2, figsize=(6, 3))
         table = sdata_blobs.table.copy()
         x = table.X.todense()
         x[:10, 0] = 0
@@ -49,10 +49,10 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
 
         # baseline img
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", cmap="viridis", table="table").pl.show(
-            ax=axs[0]
+            ax=axs[0], colorbar=False
         )
 
         # image with 0s as transparent, so some labels are "missing"
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
-        ).pl.show(ax=axs[1])
+        ).pl.show(ax=axs[1], colorbar=False)
