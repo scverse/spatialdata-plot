@@ -1964,7 +1964,7 @@ def _ax_show_and_transform(
         im.set_transform(trans_data)
 
 
-def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int = 256) -> ListedColormap:
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | str = None) -> ListedColormap:
     """
     Modify colormap so that 0s are transparent.
 
@@ -1980,7 +1980,7 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int = 256) -> L
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
 
-    colors = cmap(np.arange(cmap.N))
+    colors = cmap(np.arange(steps or cmap.N))
     colors[0, :] = [1.0, 1.0, 1.0, 0.0]
 
     return ListedColormap(colors)
