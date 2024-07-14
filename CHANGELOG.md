@@ -12,8 +12,6 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
-  
-
 ### Changed
 
 -
