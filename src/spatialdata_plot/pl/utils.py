@@ -1964,7 +1964,7 @@ def _ax_show_and_transform(
         im.set_transform(trans_data)
 
 
-def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | str = None) -> ListedColormap:
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
     """
     Modify colormap so that 0s are transparent.
 
