@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 -   Datashader support for points and shapes (#244)
+-    Added utils function for 0-transparent cmaps (#302) 
 
 ### Changed
 
