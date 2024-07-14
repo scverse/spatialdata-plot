@@ -10,12 +10,24 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.4] - tbd
 
+### Added
+
+-   Added utils function for 0-transparent cmaps (#302)
+
+### Changed
+
+-
+
+### Fixed
+
+-
+
 ## [0.2.3] - 2024-07-03
 
 ### Added
 
 -   Datashader support for points and shapes (#244)
--    Added utils function for 0-transparent cmaps (#302) 
+-   Added utils function for 0-transparent cmaps (#302)
 
 ### Changed
 
