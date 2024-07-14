@@ -1907,7 +1907,7 @@ def _validate_image_render_params(
             else:
                 element_params[el]["scale"] = scale
         else:
-            element_params[el]["scale"] = None
+            element_params[el]["scale"] = scale
 
         element_params[el]["percentiles_for_norm"] = param_dict["percentiles_for_norm"]
 
