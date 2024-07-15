@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
+-   Added utils function for 0-transparent cmaps (#302)
+
 ### Changed
 
 -

@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import matplotlib
+import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.patches as mplp
 import matplotlib.path as mpath
@@ -1977,3 +1978,25 @@ def _ax_show_and_transform(
             zorder=zorder,
         )
         im.set_transform(trans_data)
+
+
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
+    """
+    Modify colormap so that 0s are transparent.
+
+    Parameters
+    ----------
+    cmap (Colormap | str): A matplotlib Colormap instance or a colormap name string.
+    steps (int): The number of steps in the colormap.
+
+    Returns
+    -------
+    ListedColormap: A new colormap instance with modified alpha values.
+    """
+    if isinstance(cmap, str):
+        cmap = cm.get_cmap(cmap)
+
+    colors = cmap(np.arange(steps or cmap.N))
+    colors[0, :] = [1.0, 1.0, 1.0, 0.0]
+
+    return ListedColormap(colors)
