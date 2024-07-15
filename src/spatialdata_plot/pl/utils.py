@@ -375,11 +375,11 @@ def _prepare_cmap_norm(
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if norm is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
     elif isinstance(norm, Normalize) or not norm:
         pass  # TODO
     elif vcenter is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
     else:
         norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
