@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning][].
 ### Fixed
 
 -   Took RNG out of categorical label test (#306)
+-   Performance bug when plotting shapes (#298)
+-   scale parameter was ignored for single-scale images (#301)
+-   Changes to support for dask-expr (#283)
 
 ## [0.2.3] - 2024-07-03
 
