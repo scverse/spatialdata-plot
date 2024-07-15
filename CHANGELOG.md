@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--
+-   Took RNG out of categorical label test (#306)
 
 ## [0.2.3] - 2024-07-03
 

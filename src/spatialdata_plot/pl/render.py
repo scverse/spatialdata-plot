@@ -181,7 +181,7 @@ def _render_shapes(
         # Handle circles encoded as points with radius
         if is_point.any():
             scale = shapes[is_point]["radius"] * render_params.scale
-            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale)
+            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
@@ -252,7 +252,6 @@ def _render_shapes(
         # Transform the paths in PatchCollection
         for path in _cax.get_paths():
             path.vertices = trans.transform(path.vertices)
-            cax = ax.add_collection(_cax)
 
     # Sets the limits of the colorbar to the values instead of [0, 1]
     if not norm and not values_are_categorical:

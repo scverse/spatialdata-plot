@@ -3,7 +3,7 @@ from typing import Union
 
 import spatialdata as sd
 from anndata import AnnData
-from dask.dataframe.core import DataFrame as DaskDataFrame
+from dask.dataframe import DataFrame as DaskDataFrame
 from datatree import DataTree
 from geopandas import GeoDataFrame
 from spatialdata.models import get_table_keys
