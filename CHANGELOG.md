@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning][].
 -   Performance bug when plotting shapes (#298)
 -   scale parameter was ignored for single-scale images (#301)
 -   Changes to support for dask-expr (#283)
+-   Added error handling for non-existent elements (#305)
 
 ## [0.2.3] - 2024-07-03
 
