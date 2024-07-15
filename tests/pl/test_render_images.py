@@ -3,6 +3,7 @@ import matplotlib
 import numpy as np
 import scanpy as sc
 import spatialdata_plot  # noqa: F401
+from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
@@ -67,6 +68,13 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_render_two_channels_str_from_multiscale_image(self, sdata_blobs_str: SpatialData):
         sdata_blobs_str.pl.render_images(element="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
+
+    def test_plot_can_pass_vmin_vmax(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=1, vmin=0, vmax=0.4).pl.show()
+
+    def test_plot_can_pass_normalize(self, sdata_blobs: SpatialData):
+        norm = Normalize(vmin=0, vmax=0.4, clip=True)
+        sdata_blobs.pl.render_images(element="blobs_image", channel=1, norm=norm).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()
