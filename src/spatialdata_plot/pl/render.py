@@ -266,16 +266,6 @@ def _render_shapes(
                 cmap=render_params.cmap_params.cmap,
             )
 
-        # rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-        # _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
-        # _cax.set_transform(trans)
-        # cax = ax.add_image(_cax)
-        # if aggregate_with_sum is not None:
-        #     cax = ScalarMappable(
-        #         norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
-        #         cmap=render_params.cmap_params.cmap,
-        #     )
-
     elif method == "matplotlib":
         _cax = _get_collection_shape(
             shapes=shapes,
