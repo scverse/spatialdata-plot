@@ -11,6 +11,7 @@ import geopandas as gpd
 import matplotlib
 import matplotlib.transforms as mtransforms
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import scanpy as sc
 import spatialdata as sd
@@ -252,7 +253,8 @@ def _render_shapes(
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
 
-        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))
+        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
+        rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
         _cax = _ax_show_and_transform(
             rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
         )
@@ -517,7 +519,8 @@ def _render_points(
         trans = mtransforms.Affine2D(matrix=affine_trans)
         trans_data = trans + ax.transData
 
-        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))
+        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
+        rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
         _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.alpha)
 
         cax = None
