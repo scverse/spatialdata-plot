@@ -1963,7 +1963,7 @@ def _ax_show_and_transform(
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
-) -> None:
+) -> matplotlib.image.AxesImage:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
@@ -1978,6 +1978,7 @@ def _ax_show_and_transform(
             zorder=zorder,
         )
         im.set_transform(trans_data)
+    return im
 
 
 def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:

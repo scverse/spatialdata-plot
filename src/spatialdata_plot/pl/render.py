@@ -253,7 +253,9 @@ def _render_shapes(
         trans_data = trans + ax.transData
 
         rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))
-        _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha)
+        _cax = _ax_show_and_transform(
+            rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
+        )
 
         cax = None
         if aggregate_with_sum is not None:
