@@ -11,7 +11,6 @@ import geopandas as gpd
 import matplotlib
 import matplotlib.transforms as mtransforms
 import numpy as np
-import numpy.ma as ma
 import pandas as pd
 import scanpy as sc
 import spatialdata as sd
@@ -21,12 +20,11 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent
-from spatialdata.models import Image2DModel, PointsModel, get_table_keys
+from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     get_transformation,
     set_transformation,
 )
-from spatialdata.transformations.transformations import Scale
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -40,9 +38,11 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
+    _create_image_from_datashader_result,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
+    _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _is_coercable_to_float,
     _map_color_seg,
@@ -166,27 +166,9 @@ def _render_shapes(
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
-        extent = get_extent(sdata_filt.shapes[element], coordinate_system=coordinate_system)
-        x_ext = [min(0, extent["x"][0]), extent["x"][1]]
-        y_ext = [min(0, extent["y"][0]), extent["y"][1]]
-        previous_xlim = ax.get_xlim()
-        previous_ylim = ax.get_ylim()
-        # increase range if sth larger was rendered before
-        if _mpl_ax_contains_elements(ax):
-            x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
-            if ax.yaxis_inverted():  # case for e.g. images
-                y_ext = [min(y_ext[0], previous_ylim[1]), max(y_ext[1], previous_ylim[0])]
-            else:  # case for e.g. labels
-                y_ext = [min(y_ext[0], previous_ylim[0]), max(y_ext[1], previous_ylim[1])]
-
-        # compute canvas size in pixels close to the actual image size to speed up computation
-        plot_width = x_ext[1] - x_ext[0]
-        plot_height = y_ext[1] - y_ext[0]
-        plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
-        plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
-        factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
-        plot_width = int(np.round(plot_width / factor))
-        plot_height = int(np.round(plot_height / factor))
+        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
+            sdata_filt.shapes[element], coordinate_system, ax, fig_params
+        )
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
@@ -205,16 +187,16 @@ def _render_shapes(
             )
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
-        aggregate_with_mean = None
+        aggregate_with_sum = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.polygons(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.mean(column=col_for_color))
+                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
                 # save min and max values for drawing the colorbar
-                aggregate_with_mean = (agg.min(), agg.max())
+                aggregate_with_sum = (agg.min(), agg.max())
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
 
@@ -241,30 +223,15 @@ def _render_shapes(
             )
         )
 
-        # create SpatialImage to get it back to original size
-        rgba_image = np.transpose(ds_result.to_numpy().base, (2, 0, 1))
-        rgba_image = Image2DModel.parse(
-            rgba_image,
-            dims=("c", "y", "x"),
-            transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
-        )
-
-        # prepare transformation
-        trans = get_transformation(rgba_image, get_all=True)["global"]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-        trans_data = trans + ax.transData
-
-        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
-        rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
+        rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
             rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
         )
 
         cax = None
-        if aggregate_with_mean is not None:
+        if aggregate_with_sum is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_mean[0], vmax=aggregate_with_mean[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 
@@ -439,40 +406,22 @@ def _render_points(
         # NOTE: s in matplotlib is in units of points**2
         px = int(np.round(np.sqrt(render_params.size)))
 
-        extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
-        x_ext = [min(0, extent["x"][0]), extent["x"][1]]
-        y_ext = [min(0, extent["y"][0]), extent["y"][1]]
-        previous_xlim = ax.get_xlim()
-        previous_ylim = ax.get_ylim()
-        # increase range if sth larger was rendered before
-        if _mpl_ax_contains_elements(ax):
-            x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
-            if ax.yaxis_inverted():  # case for e.g. images
-                y_ext = [min(y_ext[0], previous_ylim[1]), max(y_ext[1], previous_ylim[0])]
-            else:  # case for e.g. labels
-                y_ext = [min(y_ext[0], previous_ylim[0]), max(y_ext[1], previous_ylim[1])]
-
-        # compute canvas size in pixels close to the actual image size to speed up computation
-        plot_width = x_ext[1] - x_ext[0]
-        plot_height = y_ext[1] - y_ext[0]
-        plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
-        plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
-        factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
-        plot_width = int(np.round(plot_width / factor))
-        plot_height = int(np.round(plot_height / factor))
+        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
+            sdata_filt.points[element], coordinate_system, ax, fig_params
+        )
 
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
         color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
-        aggregate_with_mean = None
+        aggregate_with_sum = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.mean(column=col_for_color))
+                agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
                 # save min and max values for drawing the colorbar
-                aggregate_with_mean = (agg.min(), agg.max())
+                aggregate_with_sum = (agg.min(), agg.max())
         else:
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
@@ -498,28 +447,13 @@ def _render_points(
                 how="linear",
             )
 
-        # create SpatialImage to get it back to original size
-        rgba_image = np.transpose(ds_result.to_numpy().base, (2, 0, 1))
-        rgba_image = Image2DModel.parse(
-            rgba_image,
-            dims=("c", "y", "x"),
-            transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
-        )
-
-        # prepare transformation
-        trans = get_transformation(rgba_image, get_all=True)["global"]
-        affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-        trans = mtransforms.Affine2D(matrix=affine_trans)
-        trans_data = trans + ax.transData
-
-        rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
-        rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
+        rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.alpha)
 
         cax = None
-        if aggregate_with_mean is not None:
+        if aggregate_with_sum is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_mean[0], vmax=aggregate_with_mean[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 
