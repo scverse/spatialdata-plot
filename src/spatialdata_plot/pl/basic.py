@@ -228,7 +228,9 @@ class PlotAccessor:
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
         **kwargs : Any
-            Additional arguments to be passed to cmap and norm.
+            Additional arguments to be passed to cmap and norm. And:
+            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None
+            reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
 
         Notes
         -----
@@ -288,6 +290,7 @@ class PlotAccessor:
                 table_name=param_values["table_name"],
                 zorder=n_steps,
                 method=method,
+                reduction=kwargs.get("datashader_reduction", None),
             )
             n_steps += 1
 
@@ -358,7 +361,9 @@ class PlotAccessor:
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
         kwargs
-            Additional arguments to be passed to cmap and norm.
+            Additional arguments to be passed to cmap and norm. And:
+            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None
+            reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
 
         Returns
         -------
@@ -410,6 +415,7 @@ class PlotAccessor:
                 table_name=param_values["table_name"],
                 zorder=n_steps,
                 method=method,
+                reduction=kwargs.get("datashader_reduction", None),
             )
             n_steps += 1
 

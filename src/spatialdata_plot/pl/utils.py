@@ -9,7 +9,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Union
 
-import datashader
+import dask
+import datashader as ds
 import matplotlib
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
@@ -26,6 +27,7 @@ import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+from datashader.core import Canvas
 from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
@@ -2036,7 +2038,7 @@ def _get_extent_and_range_for_datashader_canvas(
 
 
 def _create_image_from_datashader_result(
-    ds_result: datashader.transfer_functions.Image, factor: float, ax: Axes
+    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
 ) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.CompositeGenericTransform]:
     # create SpatialImage from datashader output to get it back to original size
     rgba_image = np.transpose(ds_result.to_numpy().base, (2, 0, 1))
@@ -2056,3 +2058,60 @@ def _create_image_from_datashader_result(
     rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
 
     return rgba_image, trans_data
+
+
+def _datashader_aggregate_with_function(
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None,
+    cvs: Canvas,
+    spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
+    col_for_color: str | None,
+    element_type: Literal["points", "shapes"],
+) -> DataArray:
+    """
+    When shapes or points are colored by a continuous value during rendering with datashader.
+
+    This function performs the aggregation using the user-specified reduction method.
+
+    Parameters
+    ----------
+    reduction: String specifying the datashader reduction method to be used.
+        If None, "sum" is used as default.
+    cvs: Canvas object previously created with ds.Canvas()
+    spatial_element: geo or dask dataframe with the shapes or points to render
+    col_for_color: name of the column containing the values by which to color
+    element_type: tells us if this function is called from _render_shapes() or _render_points()
+    """
+    if reduction is None:
+        reduction = "sum"
+
+    if reduction not in ["sum", "mean", "any", "count", "m2", "mode", "std", "sum", "var"]:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
+            ", std, sum, var."
+        )
+    if element_type not in ["points", "shapes"]:
+        raise ValueError(
+            f"utils._datashader_aggregate_with_function() should only be called with points or shapes, not with"
+            f"  {element_type}."
+        )
+
+    if reduction == "sum":
+        agg = ds.sum(column=col_for_color)
+    elif reduction == "mean":
+        agg = ds.mean(column=col_for_color)
+    elif reduction == "any":
+        agg = ds.any(column=col_for_color)
+    elif reduction == "count":
+        agg = ds.count(column=col_for_color)
+    elif reduction == "m2":
+        agg = ds.m2(column=col_for_color)
+    elif reduction == "mode":
+        agg = ds.mode(column=col_for_color)
+    elif reduction == "std":
+        agg = ds.std(column=col_for_color)
+    elif reduction == "var":
+        agg = ds.var(column=col_for_color)
+
+    if element_type == "points":
+        return cvs.points(spatial_element, "x", "y", agg=agg)
+    return cvs.polygons(spatial_element, geometry="geometry", agg=agg)

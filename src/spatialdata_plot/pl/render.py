@@ -39,6 +39,7 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _create_image_from_datashader_result,
+    _datashader_aggregate_with_function,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -187,16 +188,19 @@ def _render_shapes(
             )
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
-        aggregate_with_sum = None
+        aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.polygons(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
+                # agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
+                agg = _datashader_aggregate_with_function(
+                    render_params.reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
+                )
                 # save min and max values for drawing the colorbar
-                aggregate_with_sum = (agg.min(), agg.max())
+                aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
 
@@ -229,9 +233,9 @@ def _render_shapes(
         )
 
         cax = None
-        if aggregate_with_sum is not None:
+        if aggregate_with_reduction is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 
@@ -414,14 +418,17 @@ def _render_points(
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
         color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
-        aggregate_with_sum = None
+        aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
+                # agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
+                agg = _datashader_aggregate_with_function(
+                    render_params.reduction, cvs, sdata_filt.points[element], col_for_color, "points"
+                )
                 # save min and max values for drawing the colorbar
-                aggregate_with_sum = (agg.min(), agg.max())
+                aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
@@ -440,8 +447,10 @@ def _render_points(
                 how="linear",
             )
         else:
+            agg = ds.tf.spread(agg, px=px)
+            aggregate_with_reduction = (agg.min(), agg.max())
             ds_result = ds.tf.shade(
-                ds.tf.spread(agg, px=px),
+                agg,
                 rescale_discrete_levels=True,
                 cmap=render_params.cmap_params.cmap,
                 how="linear",
@@ -451,9 +460,9 @@ def _render_points(
         _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.alpha)
 
         cax = None
-        if aggregate_with_sum is not None:
+        if aggregate_with_reduction is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 
