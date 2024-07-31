@@ -408,7 +408,8 @@ def _render_points(
 
     if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
-        px = int(np.round(np.sqrt(render_params.size)))
+        # use dpi/100 as a factor for cases where dpi!=100
+        px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
 
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
             sdata_filt.points[element], coordinate_system, ax, fig_params
