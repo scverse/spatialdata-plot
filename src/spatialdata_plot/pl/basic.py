@@ -229,7 +229,7 @@ class PlotAccessor:
             elements, as specified under element.
         **kwargs : Any
             Additional arguments to be passed to cmap and norm. And:
-            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None
+            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]|None
             reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
 
         Notes
@@ -362,7 +362,7 @@ class PlotAccessor:
             elements, as specified under element.
         kwargs
             Additional arguments to be passed to cmap and norm. And:
-            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None
+            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]|None
             reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
 
         Returns

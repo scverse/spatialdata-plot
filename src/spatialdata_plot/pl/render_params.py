@@ -83,7 +83,7 @@ class ShapesRenderParams:
     method: str | None = None
     zorder: int = 0
     table_name: str | None = None
-    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None = None
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None = None
 
 
 @dataclass

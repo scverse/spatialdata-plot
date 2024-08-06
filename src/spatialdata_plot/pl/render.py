@@ -40,6 +40,7 @@ from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _create_image_from_datashader_result,
     _datashader_aggregate_with_function,
+    _datshader_get_how_kw_for_spread,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -195,7 +196,6 @@ def _render_shapes(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                # agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
                 agg = _datashader_aggregate_with_function(
                     render_params.reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
                 )
@@ -405,6 +405,7 @@ def _render_points(
         method = "datashader" if len(points) > 10000 else "matplotlib"
     elif method not in ["matplotlib", "datashader"]:
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+    logger.info(f"Using {method}")
 
     if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
@@ -424,7 +425,11 @@ def _render_points(
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                # agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
+                reduction_name = render_params.reduction if render_params.reduction is not None else "sum"
+                logger.info(
+                    f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
+                    "to the matplotlib result."
+                )
                 agg = _datashader_aggregate_with_function(
                     render_params.reduction, cvs, sdata_filt.points[element], col_for_color, "points"
                 )
@@ -448,7 +453,8 @@ def _render_points(
                 how="linear",
             )
         else:
-            agg = ds.tf.spread(agg, px=px)
+            spread_how = _datshader_get_how_kw_for_spread(render_params.reduction)
+            agg = ds.tf.spread(agg, px=px, how=spread_how)
             aggregate_with_reduction = (agg.min(), agg.max())
             ds_result = ds.tf.shade(
                 agg,

@@ -2061,7 +2061,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var"] | None,
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2084,10 +2084,23 @@ def _datashader_aggregate_with_function(
     if reduction is None:
         reduction = "sum"
 
-    if reduction not in ["sum", "mean", "any", "count", "m2", "mode", "std", "sum", "var"]:
+    reduction_function_map = {
+        "sum": ds.sum(column=col_for_color),
+        "mean": ds.mean(column=col_for_color),
+        "any": ds.any(column=col_for_color),
+        "count": ds.count(column=col_for_color),
+        "m2": ds.reductions.m2(column=col_for_color),
+        "mode": ds.reductions.mode(column=col_for_color),
+        "std": ds.std(column=col_for_color),
+        "var": ds.var(column=col_for_color),
+        "max": ds.max(column=col_for_color),
+        "min": ds.min(column=col_for_color),
+    }
+
+    if reduction not in reduction_function_map:
         raise ValueError(
             f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
-            ", std, sum, var."
+            ", std, var, max, min."
         )
     if element_type not in ["points", "shapes"]:
         raise ValueError(
@@ -2095,23 +2108,35 @@ def _datashader_aggregate_with_function(
             f"  {element_type}."
         )
 
-    if reduction == "sum":
-        agg = ds.sum(column=col_for_color)
-    elif reduction == "mean":
-        agg = ds.mean(column=col_for_color)
-    elif reduction == "any":
-        agg = ds.any(column=col_for_color)
-    elif reduction == "count":
-        agg = ds.count(column=col_for_color)
-    elif reduction == "m2":
-        agg = ds.m2(column=col_for_color)
-    elif reduction == "mode":
-        agg = ds.mode(column=col_for_color)
-    elif reduction == "std":
-        agg = ds.std(column=col_for_color)
-    elif reduction == "var":
-        agg = ds.var(column=col_for_color)
-
     if element_type == "points":
-        return cvs.points(spatial_element, "x", "y", agg=agg)
-    return cvs.polygons(spatial_element, geometry="geometry", agg=agg)
+        return cvs.points(spatial_element, "x", "y", agg=reduction_function_map[reduction])
+    return cvs.polygons(spatial_element, geometry="geometry", agg=reduction_function_map[reduction])
+
+
+def _datshader_get_how_kw_for_spread(
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None
+) -> str:
+    # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
+    if reduction is None:
+        reduction = "sum"
+
+    reduction_to_how_map = {
+        "sum": "add",
+        "mean": "source",
+        "any": "source",
+        "count": "add",
+        "m2": "source",
+        "mode": "source",
+        "std": "source",
+        "var": "source",
+        "max": "max",
+        "min": "min",
+    }
+
+    if reduction not in reduction_to_how_map:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
+            ", std, var, max, min."
+        )
+
+    return reduction_to_how_map[reduction]
