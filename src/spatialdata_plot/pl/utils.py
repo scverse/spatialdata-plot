@@ -10,7 +10,6 @@ from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import matplotlib
-import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.patches as mplp
 import matplotlib.path as mpath
