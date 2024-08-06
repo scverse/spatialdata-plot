@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning][].
 -   Changes to support for dask-expr (#283)
 -   Added error handling for non-existent elements (#305)
 -   Specifying vmin and vmax properly clips image data (#307)
+-   import bug `get_cmap()` (8fd969c)
 
 ## [0.2.3] - 2024-07-03
 

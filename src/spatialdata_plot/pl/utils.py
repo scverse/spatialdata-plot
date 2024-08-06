@@ -10,7 +10,6 @@ from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import matplotlib
-import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import matplotlib.patches as mplp
 import matplotlib.path as mpath
@@ -1994,7 +1993,7 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
     ListedColormap: A new colormap instance with modified alpha values.
     """
     if isinstance(cmap, str):
-        cmap = cm.get_cmap(cmap)
+        cmap = plt.get_cmap(cmap)
 
     colors = cmap(np.arange(steps or cmap.N))
     colors[0, :] = [1.0, 1.0, 1.0, 0.0]
