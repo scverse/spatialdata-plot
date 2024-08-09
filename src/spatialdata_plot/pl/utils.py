@@ -9,19 +9,24 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Union
 
+import dask
+import datashader as ds
 import matplotlib
 import matplotlib.patches as mpatches
 import matplotlib.patches as mplp
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 import multiscale_spatial_image as msi
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import shapely
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+from datashader.core import Canvas
 from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
@@ -52,11 +57,12 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
+from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
+from spatialdata.transformations.transformations import Scale
 from xarray import DataArray
 
 from spatialdata_plot._logging import logger
@@ -1962,7 +1968,7 @@ def _ax_show_and_transform(
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
-) -> None:
+) -> matplotlib.image.AxesImage:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
@@ -1977,6 +1983,7 @@ def _ax_show_and_transform(
             zorder=zorder,
         )
         im.set_transform(trans_data)
+    return im
 
 
 def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
@@ -1999,3 +2006,136 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
     colors[0, :] = [1.0, 1.0, 1.0, 0.0]
 
     return ListedColormap(colors)
+
+
+def _get_extent_and_range_for_datashader_canvas(
+    spatial_element: SpatialElement, coordinate_system: str, ax: Axes, fig_params: FigParams
+) -> tuple[Any, Any, list[Any], list[Any], Any]:
+    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
+    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+    previous_xlim = ax.get_xlim()
+    previous_ylim = ax.get_ylim()
+    # increase range if sth larger was rendered on the axis before
+    if _mpl_ax_contains_elements(ax):
+        x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
+        if ax.yaxis_inverted():  # case for e.g. images
+            y_ext = [min(y_ext[0], previous_ylim[1]), max(y_ext[1], previous_ylim[0])]
+        else:  # case for e.g. labels
+            y_ext = [min(y_ext[0], previous_ylim[0]), max(y_ext[1], previous_ylim[1])]
+
+    # compute canvas size in pixels close to the actual image size to speed up computation
+    plot_width = x_ext[1] - x_ext[0]
+    plot_height = y_ext[1] - y_ext[0]
+    plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
+    plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
+    factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
+    plot_width = int(np.round(plot_width / factor))
+    plot_height = int(np.round(plot_height / factor))
+
+    return plot_width, plot_height, x_ext, y_ext, factor
+
+
+def _create_image_from_datashader_result(
+    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
+) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.CompositeGenericTransform]:
+    # create SpatialImage from datashader output to get it back to original size
+    rgba_image = np.transpose(ds_result.to_numpy().base, (2, 0, 1))
+    rgba_image = Image2DModel.parse(
+        rgba_image,
+        dims=("c", "y", "x"),
+        transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
+    )
+
+    # prepare transformation
+    trans = get_transformation(rgba_image, get_all=True)["global"]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans_data = trans + ax.transData
+
+    rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
+    rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
+
+    return rgba_image, trans_data
+
+
+def _datashader_aggregate_with_function(
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None,
+    cvs: Canvas,
+    spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
+    col_for_color: str | None,
+    element_type: Literal["points", "shapes"],
+) -> DataArray:
+    """
+    When shapes or points are colored by a continuous value during rendering with datashader.
+
+    This function performs the aggregation using the user-specified reduction method.
+
+    Parameters
+    ----------
+    reduction: String specifying the datashader reduction method to be used.
+        If None, "sum" is used as default.
+    cvs: Canvas object previously created with ds.Canvas()
+    spatial_element: geo or dask dataframe with the shapes or points to render
+    col_for_color: name of the column containing the values by which to color
+    element_type: tells us if this function is called from _render_shapes() or _render_points()
+    """
+    if reduction is None:
+        reduction = "sum"
+
+    reduction_function_map = {
+        "sum": ds.sum(column=col_for_color),
+        "mean": ds.mean(column=col_for_color),
+        "any": ds.any(column=col_for_color),
+        "count": ds.count(column=col_for_color),
+        "m2": ds.reductions.m2(column=col_for_color),
+        "mode": ds.reductions.mode(column=col_for_color),
+        "std": ds.std(column=col_for_color),
+        "var": ds.var(column=col_for_color),
+        "max": ds.max(column=col_for_color),
+        "min": ds.min(column=col_for_color),
+    }
+
+    if reduction not in reduction_function_map:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
+            ", std, var, max, min."
+        )
+    if element_type not in ["points", "shapes"]:
+        raise ValueError(
+            f"utils._datashader_aggregate_with_function() should only be called with points or shapes, not with"
+            f"  {element_type}."
+        )
+
+    if element_type == "points":
+        return cvs.points(spatial_element, "x", "y", agg=reduction_function_map[reduction])
+    return cvs.polygons(spatial_element, geometry="geometry", agg=reduction_function_map[reduction])
+
+
+def _datshader_get_how_kw_for_spread(
+    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None
+) -> str:
+    # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
+    if reduction is None:
+        reduction = "sum"
+
+    reduction_to_how_map = {
+        "sum": "add",
+        "mean": "source",
+        "any": "source",
+        "count": "add",
+        "m2": "source",
+        "mode": "source",
+        "std": "source",
+        "var": "source",
+        "max": "max",
+        "min": "min",
+    }
+
+    if reduction not in reduction_to_how_map:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
+            ", std, var, max, min."
+        )
+
+    return reduction_to_how_map[reduction]
