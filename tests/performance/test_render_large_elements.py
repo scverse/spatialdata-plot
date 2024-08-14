@@ -1,3 +1,4 @@
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,7 +13,7 @@ from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, ShapesM
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
-# matplotlib.use("agg")  # same as GitHub action runner
+matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
 
@@ -101,13 +102,13 @@ def create_large_spatialdata(
 
 sdata = create_large_spatialdata(
     c=2,
-    y=10000,
-    x=10000,
+    y=20000,
+    x=20000,
     scale_factors=[2, 2, 2],
-    n_points=1000,
-    n_circles=1000,
-    n_polygons=1000,
-    n_multipolygons=1000,
+    n_points=10000,
+    n_circles=10000,
+    n_polygons=5000,
+    n_multipolygons=5000,
 )
 
 

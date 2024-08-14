@@ -31,6 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "bump2version",
+    "pytest-codspeed",
 ]
 docs = [
     "sphinx>=4.5",
