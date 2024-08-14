@@ -375,11 +375,11 @@ def _prepare_cmap_norm(
     cmap.set_bad("lightgray" if na_color is None else na_color)
 
     if norm is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
     elif isinstance(norm, Normalize) or not norm:
         pass  # TODO
     elif vcenter is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
+        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
     else:
         norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
@@ -1472,12 +1472,12 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
-    if element_type == "labels":
+    elif element_type == "labels":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].labels.keys())
-    if element_type == "shapes":
-        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
-    if element_type == "points":
+    elif element_type == "points":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].points.keys())
+    elif element_type == "shapes":
+        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
 
     if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
@@ -1493,10 +1493,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in ["shapes", "points", "labels"]:
+    if (color := param_dict.get("color")) and element_type in {
+        "shapes",
+        "points",
+        "labels",
+    }:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if element_type in ["shapes", "points"]:
+        if element_type in {"shapes", "points"}:
             if colors.is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
@@ -1667,6 +1671,10 @@ def _validate_label_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
@@ -1721,6 +1729,10 @@ def _validate_points_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
@@ -1784,6 +1796,10 @@ def _validate_shape_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["na_color"] = param_dict["na_color"]
@@ -1907,7 +1923,7 @@ def _validate_image_render_params(
             else:
                 element_params[el]["scale"] = scale
         else:
-            element_params[el]["scale"] = None
+            element_params[el]["scale"] = scale
 
         element_params[el]["percentiles_for_norm"] = param_dict["percentiles_for_norm"]
 
@@ -1961,3 +1977,25 @@ def _ax_show_and_transform(
             zorder=zorder,
         )
         im.set_transform(trans_data)
+
+
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
+    """
+    Modify colormap so that 0s are transparent.
+
+    Parameters
+    ----------
+    cmap (Colormap | str): A matplotlib Colormap instance or a colormap name string.
+    steps (int): The number of steps in the colormap.
+
+    Returns
+    -------
+    ListedColormap: A new colormap instance with modified alpha values.
+    """
+    if isinstance(cmap, str):
+        cmap = plt.get_cmap(cmap)
+
+    colors = cmap(np.arange(steps or cmap.N))
+    colors[0, :] = [1.0, 1.0, 1.0, 0.0]
+
+    return ListedColormap(colors)

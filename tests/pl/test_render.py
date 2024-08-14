@@ -28,9 +28,35 @@ def test_render_images_can_plot_multiple_cyx_images(share_coordinate_system: str
 
     if share_coordinate_system == "all":
         assert len(axs) == 1
-
-    if share_coordinate_system == "two":
+    elif share_coordinate_system == "none":
+        assert len(axs) == 3
+    elif share_coordinate_system == "two":
         assert len(axs) == 2
 
-    if share_coordinate_system == "none":
-        assert len(axs) == 3
+
+def test_keyerror_when_image_element_does_not_exist(request):
+    sdata = request.getfixturevalue("sdata_blobs")
+
+    with pytest.raises(KeyError):
+        sdata.pl.render_images(element="not_found").pl.show()
+
+
+def test_keyerror_when_label_element_does_not_exist(request):
+    sdata = request.getfixturevalue("sdata_blobs")
+
+    with pytest.raises(KeyError):
+        sdata.pl.render_labels(element="not_found").pl.show()
+
+
+def test_keyerror_when_point_element_does_not_exist(request):
+    sdata = request.getfixturevalue("sdata_blobs")
+
+    with pytest.raises(KeyError):
+        sdata.pl.render_points(element="not_found").pl.show()
+
+
+def test_keyerror_when_shape_element_does_not_exist(request):
+    sdata = request.getfixturevalue("sdata_blobs")
+
+    with pytest.raises(KeyError):
+        sdata.pl.render_shapes(element="not_found").pl.show()

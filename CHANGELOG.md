@@ -8,7 +8,27 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.4] - tbd
+## [0.2.x] - tbd
+
+## [0.2.4] - 2024-08-07
+
+### Added
+
+-   Added utils function for 0-transparent cmaps (#302)
+
+### Changed
+
+-
+
+### Fixed
+
+-   Took RNG out of categorical label test (#306)
+-   Performance bug when plotting shapes (#298)
+-   scale parameter was ignored for single-scale images (#301)
+-   Changes to support for dask-expr (#283)
+-   Added error handling for non-existent elements (#305)
+-   Specifying vmin and vmax properly clips image data (#307)
+-   import bug `get_cmap()` (8fd969c)
 
 ## [0.2.3] - 2024-07-03
 
