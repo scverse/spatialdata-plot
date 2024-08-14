@@ -1,4 +1,4 @@
-name: Test
+name: Codspeed Test
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
     branches: "*"
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+  codspeed-test:
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash -e {0} # -e to fail on error
@@ -18,11 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.10"]
-        os: [ubuntu-latest]
+        python: ["3.10"]
 
     env:
-      OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python }}
 
     steps:
@@ -50,29 +48,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --pre -e ".[dev,test]"
-      - name: Test
-        env:
-          MPLBACKEND: agg
-          PLATFORM: ${{ matrix.os }}
-          DISPLAY: :42
-        run: |
-          pytest -v --cov --color=yes --cov-report=xml -m "not benchmark"
-      # - name: Generate GH action "groundtruth" figures as artifacts, uncomment if needed
-      #   if: always()
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #       name: groundtruth-figures
-      #       path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/_images/*
-      - name: Archive figures generated during testing
-        if: always()
-        uses: actions/upload-artifact@v3
+      - name: Test performance
+        uses: CodSpeedHQ/action@v3
         with:
-          name: plotting-results
-          path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          name: coverage
-          verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: pytest tests/ --codspeed
