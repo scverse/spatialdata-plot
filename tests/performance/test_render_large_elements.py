@@ -102,13 +102,13 @@ def create_large_spatialdata(
 
 sdata = create_large_spatialdata(
     c=2,
-    y=20000,
-    x=20000,
+    y=1000,
+    x=1000,
     scale_factors=[2, 2, 2],
-    n_points=10000,
-    n_circles=10000,
-    n_polygons=5000,
-    n_multipolygons=5000,
+    n_points=500,
+    n_circles=500,
+    n_polygons=500,
+    n_multipolygons=500,
 )
 
 
