@@ -1657,7 +1657,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    if (na_color := param_dict.get("na_color")) != "default" and (na_color is not None and not colors.is_color_like(na_color)):
+    if (na_color := param_dict.get("na_color")) != "default" and (
+        na_color is not None and not colors.is_color_like(na_color)
+    ):
         raise ValueError("Parameter 'na_color' must be color-like.")
     param_dict["na_color"] = _attach_modification_status_to_na_color(na_color)
 

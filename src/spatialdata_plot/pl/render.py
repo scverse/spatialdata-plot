@@ -300,7 +300,7 @@ def _render_points(
 ) -> None:
     element = render_params.element
     col_for_color = render_params.col_for_color
-    table_name = render_params.table_name 
+    table_name = render_params.table_name
     color = render_params.color
     groups = render_params.groups
     palette = render_params.palette
@@ -373,7 +373,9 @@ def _render_points(
             )
 
     # when user specified a single color, we emulate the form of `na_color` and use it
-    default_color = {"color": color} if col_for_color is None and color is not None else render_params.cmap_params.na_color
+    default_color = (
+        {"color": color} if col_for_color is None and color is not None else render_params.cmap_params.na_color
+    )
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,

@@ -31,7 +31,6 @@ from spatialdata_plot.pl.render import (
     _render_shapes,
 )
 from spatialdata_plot.pl.render_params import (
-    CmapParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -265,7 +264,7 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
         outline_params = _set_outline(outline, outline_width, outline_color)
 
-        for element, param_values in params_dict.items():        
+        for element, param_values in params_dict.items():
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
                 norm=norm,
