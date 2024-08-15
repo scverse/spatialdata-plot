@@ -159,7 +159,9 @@ def _render_shapes(
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
     elif method not in ["matplotlib", "datashader"]:
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-    logger.info(f"Using '{method}' as plotting backend.")
+    if method != "matplotlib":
+        # we only notify the user when we switched away from matplotlib
+        logger.info(f"Using '{method}' as plotting backend.")
 
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
