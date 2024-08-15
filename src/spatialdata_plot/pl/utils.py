@@ -741,11 +741,11 @@ def _map_color_seg(
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
     # check if no color is assigned, compute random colors
-    cols_in_hex = [to_hex(c) for c in cols]  # robust to arrays with same numbers
-    if len(np.unique(cols_in_hex)) == 1:
-        # all colors are the same (probably na_color), generate random colors
-        RNG = default_rng(42)
-        cols = RNG.random((len(cols), 3))
+    # cols_in_hex = [to_hex(c) for c in cols]  # robust to arrays with same numbers
+    # if len(np.unique(cols_in_hex)) == 1:
+    #     # all colors are the same (probably na_color), generate random colors
+    #     RNG = default_rng(42)
+    #     cols = RNG.random((len(cols), 3))
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
@@ -1562,7 +1562,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     }:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if element_type in {"shapes", "points"}:
+        if element_type in {"shapes", "points", "labels"}:
             if colors.is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
