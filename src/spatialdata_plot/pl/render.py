@@ -138,7 +138,7 @@ def _render_shapes(
     else:
         palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -259,7 +259,7 @@ def _render_shapes(
     if not norm and not values_are_categorical:
         _cax.set_clim(min(color_vector), max(color_vector))
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -300,7 +300,7 @@ def _render_points(
 ) -> None:
     element = render_params.element
     col_for_color = render_params.col_for_color
-    table_name = render_params.table_name
+    table_name = render_params.table_name 
     color = render_params.color
     groups = render_params.groups
     palette = render_params.palette
@@ -372,8 +372,8 @@ def _render_points(
                 palette=palette,
             )
 
-    # when user specified a single color, we overwrite na with it
-    default_color = color if col_for_color is None and color is not None else render_params.cmap_params.na_color
+    # when user specified a single color, we emulate the form of `na_color` and use it
+    default_color = {"color": color} if col_for_color is None and color is not None else render_params.cmap_params.na_color
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
@@ -458,7 +458,7 @@ def _render_points(
         if isinstance(color_vector[0], str) and (
             color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#"
         ):
-            color_vector = [x[:-2] for x in color_vector]
+            color_vector = np.asarray([x[:-2] for x in color_vector])
 
         ds_result = (
             ds.tf.shade(
@@ -505,7 +505,7 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
@@ -521,7 +521,7 @@ def _render_points(
             color_vector=color_vector,
             palette=palette,
             alpha=render_params.alpha,
-            na_color=render_params.cmap_params.na_color,
+            na_color=render_params.cmap_params.na_color["color"],
             legend_fontsize=legend_params.legend_fontsize,
             legend_fontweight=legend_params.legend_fontweight,
             legend_loc=legend_params.legend_loc,

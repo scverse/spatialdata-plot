@@ -158,7 +158,7 @@ class PlotAccessor:
         fill_alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgray",
+        na_color: ColorLike | None = "default",
         outline: bool = False,
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
@@ -263,16 +263,15 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
-
         outline_params = _set_outline(outline, outline_width, outline_color)
 
-        for element, param_values in params_dict.items():
+        for element, param_values in params_dict.items():        
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
                 element=element,
                 color=param_values["color"],
@@ -301,7 +300,7 @@ class PlotAccessor:
         alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgray",
+        na_color: ColorLike | None = "default",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
@@ -389,14 +388,13 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
-
         for element, param_values in params_dict.items():
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=param_values["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
                 element=element,
                 color=param_values["color"],
@@ -422,7 +420,7 @@ class PlotAccessor:
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
         norm: Normalize | None = None,
-        na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         percentiles_for_norm: tuple[float, float] | None = None,
@@ -494,27 +492,33 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params: list[CmapParams] | CmapParams
-        if isinstance(cmap, list):
-            cmap_params = [
-                _prepare_cmap_norm(
-                    cmap=c,
-                    norm=norm,
-                    na_color=na_color,  # type: ignore[arg-type]
-                    **kwargs,
-                )
-                for c in cmap
-            ]
+        # cmap_params: list[CmapParams] | CmapParams
+        # if isinstance(cmap, list):
+        #     cmap_params = [
+        #         _prepare_cmap_norm(
+        #             cmap=c,
+        #             norm=norm,
+        #             na_color=params_dict["na_color"]["color"],  # type: ignore[arg-type]
+        #             **kwargs,
+        #         )
+        #         for c in cmap
+        #     ]
 
-        else:
+        # else:
+        #     cmap_params = _prepare_cmap_norm(
+        #         cmap=cmap,
+        #         norm=norm,
+        #         na_color=params_dict["na_color"]["color"],  # type: ignore[arg-type]
+        #         **kwargs,
+        #     )
+
+        for element, param_values in params_dict.items():
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
                 norm=norm,
-                na_color=na_color,  # type: ignore[arg-type]
+                na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
                 **kwargs,
             )
-
-        for element, param_values in params_dict.items():
             sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],
@@ -540,7 +544,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
-        na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: ColorLike | None = "default",
         outline_alpha: float | int = 1.0,
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
@@ -625,14 +629,14 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
 
         for element, param_values in params_dict.items():
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=param_values["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],

@@ -177,6 +177,24 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
     return cs_contents
 
 
+def _attach_modification_status_to_na_color(na_color: ColorLike | None) -> dict:
+    """
+    Usually, we'd use random colors if the user didn't specifically set a `na_color`
+    when rendering labels. When rendering points, we'd default to `lightgray`. So we
+    need to preserve the information whether the user actually specified `lightgray` or
+    if it originates from an internal default.
+    """
+    if na_color == "default":
+        # user kept the default
+        return {"color": "lightgray", "is_modified": False}
+    if na_color is ColorLike:
+        # user specified either a color or `None` (to hide NAs)
+        return {"color": na_color, "is_modified": True}
+    if na_color == "lightgray":
+        # user manually specified our default color
+        return {"color": na_color, "is_modified": True}
+
+
 def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
@@ -362,7 +380,7 @@ def _get_scalebar(
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: Normalize | bool = False,
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
+    na_color: ColorLike | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
     vcenter: float | None = None,
@@ -376,7 +394,7 @@ def _prepare_cmap_norm(
 
     cmap = copy(cmap)
 
-    cmap.set_bad("lightgray" if na_color is None else na_color)
+    cmap.set_bad(na_color["color"])
 
     if norm is None:
         norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
@@ -630,12 +648,12 @@ def _set_color_source_vec(
     element_name: list[str] | str | None = None,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
-    na_color: str | tuple[float, ...] | None = None,
+    na_color: dict | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None:
-        color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
+        color = np.full(len(element), to_hex(na_color["color"]))  # type: ignore[arg-type]
         return color, color, False
 
     # model = get_model(sdata[element_name])
@@ -709,7 +727,7 @@ def _map_color_seg(
     cmap_params: CmapParams,
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
-    na_color: str | tuple[float, ...] = (0, 0, 0, 0),
+    na_color: dict | None = None,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
@@ -740,12 +758,9 @@ def _map_color_seg(
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
-    # check if no color is assigned, compute random colors
-    # cols_in_hex = [to_hex(c) for c in cols]  # robust to arrays with same numbers
-    # if len(np.unique(cols_in_hex)) == 1:
-    #     # all colors are the same (probably na_color), generate random colors
-    #     RNG = default_rng(42)
-    #     cols = RNG.random((len(cols), 3))
+    if not na_color["is_modified"]:
+        RNG = default_rng(42)
+        cols = RNG.random((len(cols), 3))
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
@@ -769,12 +784,12 @@ def _generate_base_categorial_color_mapping(
     adata: AnnData,
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
-    na_color: ColorLike | None = "lightgray",
+    na_color: dict | None = None,
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
         categories = color_source_vector.categories.tolist() + ["NaN"]
-        na_color_hex = to_hex(to_rgba(na_color)[:3])
+        na_color_hex = to_hex(to_rgba(na_color["color"])[:3])
         return dict(zip(categories, colors + [na_color_hex]))
 
     return _get_default_categorial_color_mapping(color_source_vector)
@@ -820,7 +835,7 @@ def _get_categorical_color_mapping(
     adata: AnnData | None = None,
     cluster_key: None | str = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
-    na_color: ColorLike | None = "lightgragity",
+    na_color: dict | None = None,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
 ) -> Mapping[str, str]:
@@ -1600,6 +1615,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     if (cmap := param_dict.get("cmap")) is not None and (palette := param_dict.get("palette")) is not None:
         raise ValueError("Both `palette` and `cmap` are specified. Please specify only one of them.")
+    param_dict["cmap"] = cmap
 
     if (groups := param_dict.get("groups")) is not None:
         if not isinstance(groups, (list, str)):
@@ -1641,8 +1657,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    if (na_color := param_dict.get("na_color")) is not None and not colors.is_color_like(na_color):
+    if (na_color := param_dict.get("na_color")) != "default" and (na_color is not None and not colors.is_color_like(na_color)):
         raise ValueError("Parameter 'na_color' must be color-like.")
+    param_dict["na_color"] = _attach_modification_status_to_na_color(na_color)
 
     if (norm := param_dict.get("norm")) is not None:
         if element_type in ["images", "labels"] and not isinstance(norm, Normalize):
