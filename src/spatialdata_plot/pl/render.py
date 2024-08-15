@@ -415,10 +415,17 @@ def _render_points(
         # increase range if sth larger was rendered before
         if _mpl_ax_contains_elements(ax):
             x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
-            if ax.yaxis_inverted():  # case for e.g. images
-                y_ext = [min(y_ext[0], previous_ylim[1]), max(y_ext[1], previous_ylim[0])]
-            else:  # case for e.g. labels
-                y_ext = [min(y_ext[0], previous_ylim[0]), max(y_ext[1], previous_ylim[1])]
+            y_ext = (
+                [
+                    min(y_ext[0], previous_ylim[1]),
+                    max(y_ext[1], previous_ylim[0]),
+                ]
+                if ax.yaxis_inverted()
+                else [
+                    min(y_ext[0], previous_ylim[0]),
+                    max(y_ext[1], previous_ylim[1]),
+                ]
+            )
         # round because we need integers
         plot_width = int(np.round(x_ext[1] - x_ext[0]))
         plot_height = int(np.round(y_ext[1] - y_ext[0]))
@@ -439,26 +446,33 @@ def _render_points(
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
         color_key = (
-            [x[:-2] for x in color_vector.categories.values]
+            list(color_vector.categories.values)
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
             else None
         )
-        if color_by_categorical or col_for_color is None:
-            ds_result = ds.tf.shade(
+
+        # remove alpha from color if it's hex
+        if color_key is not None and all(len(x) == 9 for x in color_key) and color_key[0][0] == "#":
+            color_key = [x[:-2] for x in color_key]
+        if color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#":
+            color_vector = [x[:-2] for x in color_vector]
+
+        ds_result = (
+            ds.tf.shade(
                 ds.tf.spread(agg, px=px),
                 rescale_discrete_levels=True,
-                cmap=color_vector[0][:-2],
+                cmap=color_vector[0],
                 color_key=color_key,
                 min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
             )
-        else:
-            ds_result = ds.tf.shade(
+            if color_by_categorical or col_for_color is None
+            else ds.tf.shade(
                 ds.tf.spread(agg, px=px),
                 rescale_discrete_levels=True,
                 cmap=render_params.cmap_params.cmap,
             )
-
+        )
         rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
         cax = ax.imshow(rbga_image, zorder=render_params.zorder, alpha=render_params.alpha)
         if aggregate_with_sum is not None:
