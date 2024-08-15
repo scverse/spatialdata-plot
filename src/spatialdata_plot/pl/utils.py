@@ -769,7 +769,7 @@ def _generate_base_categorial_color_mapping(
     adata: AnnData,
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
-    na_color: ColorLike | None = "lightgrey",
+    na_color: ColorLike | None = "lightgray",
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
@@ -820,7 +820,7 @@ def _get_categorical_color_mapping(
     adata: AnnData | None = None,
     cluster_key: None | str = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
-    na_color: ColorLike | None = "lightgrey",
+    na_color: ColorLike | None = "lightgragity",
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
 ) -> Mapping[str, str]:

@@ -158,7 +158,7 @@ class PlotAccessor:
         fill_alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgrey",
+        na_color: ColorLike | None = "lightgray",
         outline: bool = False,
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
@@ -201,7 +201,7 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
             all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgrey"
+        na_color : ColorLike | None, default "lightgray"
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
@@ -301,7 +301,7 @@ class PlotAccessor:
         alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgrey",
+        na_color: ColorLike | None = "lightgray",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
@@ -339,7 +339,7 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
             for all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgrey"
+        na_color : ColorLike | None, default "lightgray"
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
