@@ -257,12 +257,15 @@ def _get_collection_shape(
     def assign_fill_and_outline_to_row(
         shapes: list[GeoDataFrame], fill_c: list[Any], outline_c: list[Any], row: pd.Series, idx: int
     ) -> None:
-        if len(shapes) > 1 and len(fill_c) == 1:
-            row["fill_c"] = fill_c
-            row["outline_c"] = outline_c
-        else:
-            row["fill_c"] = fill_c[idx]
-            row["outline_c"] = outline_c[idx]
+        try:
+            if len(shapes) > 1 and len(fill_c) == 1:
+                row["fill_c"] = fill_c
+                row["outline_c"] = outline_c
+            else:
+                row["fill_c"] = fill_c[idx]
+                row["outline_c"] = outline_c[idx]
+        except IndexError as e:
+            raise IndexError("Could not assign fill and outline colors due to a mismatch in row-numbers.") from e
 
     # Match colors to the geometry, potentially expanding the row in case of
     # multipolygons
