@@ -1562,7 +1562,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     }:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if element_type in {"shapes", "points", "labels"}:
+        if element_type in {"shapes", "points"}:
             if colors.is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
