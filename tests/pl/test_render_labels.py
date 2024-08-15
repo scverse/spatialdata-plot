@@ -1,5 +1,6 @@
 import dask.array as da
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -112,7 +113,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
 
-        n_obs = max(get_element_instances(sdata_blobs[label]))
+        n_obs = len(get_element_instances(sdata_blobs[label]))
         vals = np.arange(n_obs)
         obs = pd.DataFrame({"a": vals, "b": vals + 0.3, "c": vals + 0.7})
 
@@ -129,3 +130,29 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
         sdata_blobs.pl.render_labels(label, color="category").pl.show()
+
+    def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
+        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
+        sdata_blobs.table.obs["which_max"] = max_col
+
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels(
+            "blobs_labels",
+            color="which_max",
+            groups=["channel_0_sum"],
+        ).pl.show(ax=axs[1])
+
+    def test_plot_subset_categorical_label_maintains_order_when_palette_overwrite(self, sdata_blobs: SpatialData):
+        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
+        sdata_blobs.table.obs["which_max"] = max_col
+
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="which_max", groups=["channel_0_sum"], palette="red"
+        ).pl.show(ax=axs[1])

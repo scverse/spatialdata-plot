@@ -43,6 +43,7 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
+from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
@@ -627,8 +628,8 @@ def _set_color_source_vec(
     element: SpatialElement | None,
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
-    groups: Sequence[str | None] | str | None = None,
-    palette: list[str | None] | list[str] | None = None,
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
     na_color: str | tuple[float, ...] | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
@@ -637,7 +638,7 @@ def _set_color_source_vec(
         color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
         return color, color, False
 
-    model = get_model(sdata[element_name])
+    # model = get_model(sdata[element_name])
 
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
@@ -648,11 +649,13 @@ def _set_color_source_vec(
         )
 
     if len(origins) == 1:
-        if model == PointsModel and table_name is not None:
-            color_source_vector = get_values_point_table(sdata=sdata, origin=origins[0], table_name=table_name)
-        else:
-            vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-            color_source_vector = vals[value_to_plot]
+        color_source_vector = _robust_get_value(
+            sdata=sdata,
+            origin=origins[0],
+            value_to_plot=value_to_plot,
+            element_name=element_name,
+            table_name=table_name,
+        )
 
         # numerical case, return early
         # TODO temporary split until refactor is complete
@@ -671,55 +674,21 @@ def _set_color_source_vec(
             return None, color_source_vector, False
 
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-        categories = color_source_vector.categories
 
-        if (
-            groups is not None
-            and not isinstance(element, GeoDataFrame)
-            and groups[0] is not None
-            or groups is not None
-            and isinstance(element, GeoDataFrame)
-        ):
-            color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
-            categories = groups
-
-        palette_input: list[str] | str | None
-        if not isinstance(element, GeoDataFrame):
-            if groups is not None and groups[0] is not None:
-                if isinstance(palette, list):
-                    palette_input = (
-                        palette[0]
-                        if palette[0] is None
-                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                    )
-            elif palette is not None and isinstance(palette, list):
-                palette_input = palette[0]
-
-            else:
-                palette_input = palette
-
-        if isinstance(element, GeoDataFrame):
-            if groups is not None:
-                if isinstance(palette, list):
-                    palette_input = (
-                        palette[0]
-                        if palette[0] is None
-                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                    )
-            elif palette is not None and isinstance(palette, list):
-                palette_input = palette[0]
-            else:
-                palette_input = palette
-
-        color_map = dict(
-            zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
+        color_mapping = _get_categorical_color_mapping(
+            adata=sdata.table,
+            cluster_key=value_to_plot,
+            color_source_vector=color_source_vector,
+            groups=groups,
+            palette=palette,
+            na_color=na_color,
         )
-
-        if color_map is None:
+        color_source_vector = color_source_vector.set_categories(color_mapping.keys())
+        if color_mapping is None:
             raise ValueError("Unable to create color palette.")
 
         # do not rename categories, as colors need not be unique
-        color_vector = color_source_vector.map(color_map)
+        color_vector = color_source_vector.map(color_mapping)
         if color_vector.isna().any():
             if (na_cat_color := to_hex(na_color)) not in color_vector.categories:
                 color_vector = color_vector.add_categories([na_cat_color])
@@ -750,23 +719,31 @@ def _map_color_seg(
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
 
+    elif pd.api.types.is_numeric_dtype(color_vector.dtype):
+        if isinstance(color_vector, pd.Series):
+            color_vector = color_vector.to_numpy()
+        val_im = map_array(seg, cell_id, color_vector)
+        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+
     else:
         val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
 
         if val_im.shape[0] == 1:
             val_im = np.squeeze(val_im, axis=0)
-        try:
-            cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        except TypeError:
+        if "#" in str(color_vector[0]):
+            # we have hex colors
             assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
+        else:
+            cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
     # check if no color is assigned, compute random colors
-    unique_cols = np.unique(cols)
-    if len(unique_cols) == 1 and unique_cols == 0:
+    cols_in_hex = [to_hex(c) for c in cols]  # robust to arrays with same numbers
+    if len(np.unique(cols_in_hex)) == 1:
+        # all colors are the same (probably na_color), generate random colors
         RNG = default_rng(42)
         cols = RNG.random((len(cols), 3))
 
@@ -786,6 +763,83 @@ def _map_color_seg(
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
     return np.dstack((seg_im, val_im))
+
+
+def _generate_base_categorial_color_mapping(
+    adata: AnnData,
+    cluster_key: str,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+    na_color: ColorLike | None = "lightgrey",
+) -> Mapping[str, str]:
+    if adata is not None and cluster_key in adata.uns:
+        colors = adata.uns[f"{cluster_key}_colors"]
+        categories = color_source_vector.categories.tolist() + ["NaN"]
+        na_color_hex = to_hex(to_rgba(na_color)[:3])
+        return dict(zip(categories, colors + [na_color_hex]))
+
+    return _get_default_categorial_color_mapping(color_source_vector)
+
+
+def _modify_categorical_color_mapping(
+    mapping: Mapping[str, str],
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
+) -> Mapping[str, str]:
+    if groups is None or isinstance(groups, list) and groups[0] is None:
+        return mapping
+
+    if palette is None or isinstance(palette, list) and palette[0] is None:
+        # subset base mapping to only those specified in groups
+        modified_mapping = {key: mapping[key] for key in mapping if key in groups or key == "NaN"}
+    elif len(palette) == len(groups) and isinstance(groups, list) and isinstance(palette, list):
+        modified_mapping = dict(zip(groups, palette))
+
+    else:
+        raise ValueError(f"Expected palette to be of length `{len(groups)}`, found `{len(palette)}`.")
+    return modified_mapping
+
+
+def _get_default_categorial_color_mapping(
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+) -> Mapping[str, str]:
+    len_cat = len(color_source_vector.categories.unique())
+    if len_cat <= 20:
+        palette = default_20
+    elif len_cat <= 28:
+        palette = default_28
+    elif len_cat <= len(default_102):  # 103 colors
+        palette = default_102
+    else:
+        palette = ["grey" for _ in range(len_cat)]
+        logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+
+    return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(color_source_vector.categories, palette[:len_cat])}
+
+
+def _get_categorical_color_mapping(
+    adata: AnnData | None = None,
+    cluster_key: None | str = None,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
+    na_color: ColorLike | None = "lightgrey",
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
+) -> Mapping[str, str]:
+    if not isinstance(color_source_vector, Categorical):
+        raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
+
+    if isinstance(groups, str):
+        groups = [groups]
+
+    if isinstance(palette, str):
+        palette = [palette]
+
+    if cluster_key is None:
+        # user didn't specify a column to use for coloring
+        base_mapping = _get_default_categorial_color_mapping(color_source_vector)
+    else:
+        base_mapping = _generate_base_categorial_color_mapping(adata, cluster_key, color_source_vector, na_color)
+
+    return _modify_categorical_color_mapping(base_mapping, groups, palette)
 
 
 def _get_palette(
@@ -858,7 +912,8 @@ def _decorate_axs(
     cax: PatchCollection,
     fig_params: FigParams,
     value_to_plot: str | None,
-    color_source_vector: pd.Series[CategoricalDtype],
+    color_source_vector: pd.Series[CategoricalDtype] | Categorical,
+    color_vector: pd.Series[CategoricalDtype] | Categorical,
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
@@ -885,16 +940,20 @@ def _decorate_axs(
         # Adding legends
         if color_source_vector is not None and isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             # order of clusters should agree to palette order
-            clusters = color_source_vector.unique()
+            clusters = color_source_vector.remove_unused_categories().unique()
             clusters = clusters[~clusters.isnull()]
-            palette = None if isinstance(palette, list) and palette[0] else palette
-            palette = _get_palette(
-                adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
+            # derive mapping from color_source_vector and color_vector
+            group_to_color_matching = pd.DataFrame(
+                {
+                    "cats": color_source_vector.remove_unused_categories(),
+                    "color": color_vector,
+                }
             )
+            color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
             _add_categorical_legend(
                 ax,
-                color_source_vector,
-                palette=palette,
+                pd.Categorical(values=color_source_vector, categories=clusters),
+                palette=color_mapping,
                 legend_loc=legend_loc,
                 legend_fontweight=legend_fontweight,
                 legend_fontsize=legend_fontsize,
@@ -2002,3 +2061,18 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
     colors[0, :] = [1.0, 1.0, 1.0, 0.0]
 
     return ListedColormap(colors)
+
+
+def _robust_get_value(
+    sdata: sd.SpatialData,
+    origin: _ValueOrigin,
+    value_to_plot: str | None,
+    element_name: list[str] | str | None = None,
+    table_name: str | None = None,
+) -> pd.Series | None:
+    """Locate the value to plot in the spatial data object."""
+    model = get_model(sdata[element_name])
+    if model == PointsModel and table_name is not None:
+        return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
+    vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+    return vals[value_to_plot]

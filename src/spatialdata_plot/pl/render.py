@@ -138,7 +138,7 @@ def _render_shapes(
     else:
         palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-    if not (len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -159,7 +159,7 @@ def _render_shapes(
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
     elif method not in ["matplotlib", "datashader"]:
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-    logger.info(f"Using {method}")
+    logger.info(f"Using '{method}' as plotting backend.")
 
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
@@ -257,7 +257,7 @@ def _render_shapes(
     if not norm and not values_are_categorical:
         _cax.set_clim(min(color_vector), max(color_vector))
 
-    if not (len(set(color_vector)) == 1 and list(set(color_vector))[0] == to_hex(render_params.cmap_params.na_color)):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -272,6 +272,7 @@ def _render_shapes(
             adata=table,
             value_to_plot=col_for_color,
             color_source_vector=color_source_vector,
+            color_vector=color_vector,
             palette=palette,
             alpha=render_params.fill_alpha,
             na_color=render_params.cmap_params.na_color,
@@ -499,6 +500,7 @@ def _render_points(
             adata=adata,
             value_to_plot=col_for_color,
             color_source_vector=color_source_vector,
+            color_vector=color_vector,
             palette=palette,
             alpha=render_params.alpha,
             na_color=render_params.cmap_params.na_color,
@@ -751,11 +753,11 @@ def _render_labels(
         instance_id = np.unique(label)
         table = None
     else:
-        regions, region_key, instance_key = get_table_keys(sdata[table_name])
+        _, region_key, instance_key = get_table_keys(sdata[table_name])
         table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 
         # get instance id based on subsetted table
-        instance_id = table.obs[instance_key].values
+        instance_id = np.unique(table.obs[instance_key].values)
 
     trans = get_transformation(label, get_all=True)[coordinate_system]
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
@@ -851,6 +853,7 @@ def _render_labels(
         adata=table,
         value_to_plot=color,
         color_source_vector=color_source_vector,
+        color_vector=color_vector,
         palette=palette,
         alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
