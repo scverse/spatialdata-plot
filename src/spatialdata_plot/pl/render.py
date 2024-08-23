@@ -734,9 +734,6 @@ def _render_labels(
     groups = render_params.groups
     scale = render_params.scale
 
-    if render_params.outline is False:
-        render_params.outline_alpha = 0
-
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=bool(table_name),
@@ -794,8 +791,9 @@ def _render_labels(
         table_name=table_name,
     )
 
-    if (render_params.fill_alpha != render_params.outline_alpha) and render_params.contour_px is not None:
-        # First get the labels infill and plot them
+    # default case: no contour, just fill
+    # if fill_alpha and outline_alpha are the same, we're technically also at a no-outline situation
+    if render_params.outline_alpha == 0.0 or render_params.outline_alpha == render_params.fill_alpha:
         labels_infill = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
@@ -803,7 +801,7 @@ def _render_labels(
             color_source_vector=color_source_vector,
             cmap_params=render_params.cmap_params,
             seg_erosionpx=None,
-            seg_boundaries=render_params.outline,
+            seg_boundaries=False,
             na_color=render_params.cmap_params.na_color,
             na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
@@ -818,8 +816,10 @@ def _render_labels(
         )
         _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
+        alpha_to_decorate_ax = render_params.fill_alpha
 
-        # Then overlay the contour
+    # outline-only case
+    if render_params.fill_alpha == 0.0 and render_params.outline_alpha != 0.0:
         labels_contour = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
@@ -827,7 +827,7 @@ def _render_labels(
             color_source_vector=color_source_vector,
             cmap_params=render_params.cmap_params,
             seg_erosionpx=render_params.contour_px,
-            seg_boundaries=render_params.outline,
+            seg_boundaries=True,
             na_color=render_params.cmap_params.na_color,
             na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
@@ -840,23 +840,31 @@ def _render_labels(
             origin="lower",
             zorder=render_params.zorder,
         )
+        _cax.set_transform(trans_data)
+        cax = ax.add_image(_cax)
+        alpha_to_decorate_ax = render_params.outline_alpha
 
-    else:
-        # Default: no alpha, contour = infill
-        label = _map_color_seg(
+    # pretty case: both outline and infill
+    if (
+        render_params.fill_alpha > 0.0
+        and render_params.outline_alpha > 0.0
+        and render_params.fill_alpha != render_params.outline_alpha
+    ):
+        # first plot the infill ...
+        label_infill = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
             color_vector=color_vector,
             color_source_vector=color_source_vector,
             cmap_params=render_params.cmap_params,
-            seg_erosionpx=render_params.contour_px,
-            seg_boundaries=render_params.outline,
+            seg_erosionpx=None,
+            seg_boundaries=False,
             na_color=render_params.cmap_params.na_color,
             na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
 
-        _cax = ax.imshow(
-            label,
+        _cax_infill = ax.imshow(
+            label_infill,
             rasterized=True,
             cmap=None if categorical else render_params.cmap_params.cmap,
             norm=None if categorical else render_params.cmap_params.norm,
@@ -864,8 +872,37 @@ def _render_labels(
             origin="lower",
             zorder=render_params.zorder,
         )
-    _cax.set_transform(trans_data)
-    cax = ax.add_image(_cax)
+        _cax_infill.set_transform(trans_data)
+        cax_infill = ax.add_image(_cax_infill)
+
+        # ... then overlay the contour
+        label_contour = _map_color_seg(
+            seg=label.values,
+            cell_id=instance_id,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap_params=render_params.cmap_params,
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=True,
+            na_color=render_params.cmap_params.na_color,
+            na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
+        )
+
+        _cax_contour = ax.imshow(
+            label_contour,
+            rasterized=True,
+            cmap=None if categorical else render_params.cmap_params.cmap,
+            norm=None if categorical else render_params.cmap_params.norm,
+            alpha=render_params.outline_alpha,
+            origin="lower",
+            zorder=render_params.zorder,
+        )
+        _cax_contour.set_transform(trans_data)
+        cax_contour = ax.add_image(_cax_contour)
+
+        # pass the less-transparent _cax for the legend
+        cax = cax_infill if render_params.fill_alpha > render_params.outline_alpha else cax_contour
+        alpha_to_decorate_ax = max(render_params.fill_alpha, render_params.outline_alpha)
 
     _ = _decorate_axs(
         ax=ax,
@@ -876,7 +913,7 @@ def _render_labels(
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
-        alpha=render_params.fill_alpha,
+        alpha=alpha_to_decorate_ax,
         na_color=render_params.cmap_params.na_color,
         legend_fontsize=legend_params.legend_fontsize,
         legend_fontweight=legend_params.legend_fontweight,

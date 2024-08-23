@@ -162,7 +162,6 @@ class PlotAccessor:
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
-        outline: bool = False,
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
         outline_alpha: float | int = 1.0,
@@ -208,8 +207,6 @@ class PlotAccessor:
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline : bool, default False
-            If `True`, a border around the shape elements is plotted.
         outline_width : float | int, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
@@ -252,7 +249,6 @@ class PlotAccessor:
             palette=palette,
             color=color,
             na_color=na_color,
-            outline=outline,
             outline_alpha=outline_alpha,
             outline_color=outline_color,
             outline_width=outline_width,
@@ -266,7 +262,7 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        outline_params = _set_outline(outline, outline_width, outline_color)
+        outline_params = _set_outline(outline_alpha > 0, outline_width, outline_color)
 
         for element, param_values in params_dict.items():
             cmap_params = _prepare_cmap_norm(
@@ -544,7 +540,6 @@ class PlotAccessor:
         color: str | None = None,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
-        outline: bool = False,
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -584,8 +579,6 @@ class PlotAccessor:
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills entire segment, see:
             func:`skimage.morphology.erosion`.
-        outline : bool, default False
-            Whether to plot boundaries around segmentation masks.
         cmap : Colormap | str | None
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm : Normalize | None
@@ -625,7 +618,6 @@ class PlotAccessor:
             groups=groups,
             na_color=na_color,
             norm=norm,
-            outline=outline,
             outline_alpha=outline_alpha,
             palette=palette,
             scale=scale,
@@ -648,7 +640,6 @@ class PlotAccessor:
                 color=param_values["color"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
-                outline=param_values["outline"],
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],

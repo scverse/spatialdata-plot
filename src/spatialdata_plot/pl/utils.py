@@ -437,11 +437,8 @@ def _set_outline(
     outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    # Type checks for outline_width
-    if isinstance(outline_width, int):
-        outline_width = outline_width
-    if not isinstance(outline_width, float):
-        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
+    if not isinstance(outline_width, (int, float)):
+        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `int` or `float`.")
     if outline_width == 0.0:
         outline = False
     if outline_width < 0.0:
@@ -754,14 +751,15 @@ def _map_color_seg(
     seg_boundaries: bool = False,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
-
     if color_vector is not None and isinstance(color_vector.dtype, pd.CategoricalDtype):
+        # users wants to plot a categorical column
         if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
 
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
+        # user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
         val_im = map_array(seg, cell_id, color_vector)
@@ -782,7 +780,12 @@ def _map_color_seg(
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
-    if not na_color_modified_by_user:
+    if color_source_vector is not None and (
+        set(color_vector) == set(color_source_vector)
+        and len(set(color_vector)) == 1
+        and set(color_vector) == {na_color}
+        and not na_color_modified_by_user
+    ):
         RNG = default_rng(42)
         cols = RNG.random((len(cols), 3))
 
@@ -791,6 +794,7 @@ def _map_color_seg(
         colors=cols,
         bg_label=0,
         bg_color=(1, 1, 1),  # transparency doesn't really work
+        image_alpha=0,
     )
 
     if seg_boundaries:
@@ -798,6 +802,11 @@ def _map_color_seg(
             seg = np.squeeze(seg, axis=0)
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
+    # else:
+    #     # Handle the opposite case when seg_boundaries is False
+    #     if seg.shape[0] == 1:
+    #         seg = np.squeeze(seg, axis=0)
+    #     return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
@@ -1005,7 +1014,8 @@ def _decorate_axs(
             )
         elif colorbar:
             # TODO: na_in_legend should have some effect here
-            plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+            cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+            cb.solids.set_alpha(alpha)
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
@@ -1613,9 +1623,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif "color" in param_dict and element_type != "labels":
         param_dict["col_for_color"] = None
 
-    if (outline := param_dict.get("outline")) is not None and not isinstance(outline, bool):
-        raise TypeError("Parameter 'outline' must be a boolean.")
-
     if outline_width := param_dict.get("outline_width"):
         if not isinstance(outline_width, (float, int)):
             raise TypeError("Parameter 'outline_width' must be numeric.")
@@ -1626,6 +1633,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         not isinstance(outline_alpha, (float, int)) or not 0 <= outline_alpha <= 1
     ):
         raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
+
+    if contour_px is not None and contour_px <= 0:
+        raise ValueError("Parameter 'contour_px' must be a positive number.")
 
     if (alpha := param_dict.get("alpha")) is not None:
         if not isinstance(alpha, (float, int)):
@@ -1748,7 +1758,6 @@ def _validate_label_render_params(
     color: str | None,
     fill_alpha: float | int,
     contour_px: int | None,
-    outline: bool,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
     na_color: ColorLike | None,
@@ -1766,7 +1775,6 @@ def _validate_label_render_params(
         "palette": palette,
         "color": color,
         "na_color": na_color,
-        "outline": outline,
         "outline_alpha": outline_alpha,
         "cmap": cmap,
         "norm": norm,
@@ -1788,7 +1796,6 @@ def _validate_label_render_params(
         element_params[el]["color"] = param_dict["color"]
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["scale"] = param_dict["scale"]
-        element_params[el]["outline"] = param_dict["outline"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
         element_params[el]["contour_px"] = param_dict["contour_px"]
 
@@ -1870,7 +1877,6 @@ def _validate_shape_render_params(
     palette: list[str] | str | None,
     color: list[str] | str | None,
     na_color: ColorLike | None,
-    outline: bool,
     outline_width: float | int,
     outline_color: str | list[float],
     outline_alpha: float | int,
@@ -1888,7 +1894,6 @@ def _validate_shape_render_params(
         "palette": palette,
         "color": color,
         "na_color": na_color,
-        "outline": outline,
         "outline_width": outline_width,
         "outline_color": outline_color,
         "outline_alpha": outline_alpha,
@@ -1909,7 +1914,6 @@ def _validate_shape_render_params(
         element_params[el] = {}
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["na_color"] = param_dict["na_color"]
-        element_params[el]["outline"] = param_dict["outline"]
         element_params[el]["outline_width"] = param_dict["outline_width"]
         element_params[el]["outline_color"] = param_dict["outline_color"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]

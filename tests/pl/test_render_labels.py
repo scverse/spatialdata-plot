@@ -91,6 +91,26 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_multiscale_labels", color="channel_1_sum", table_name="multi_table"
         ).pl.show()
 
+    def test_plot_can_control_label_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.7).pl.show()
+
+    def test_plot_can_control_label_infill(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7).pl.show()
+
+    def test_plot_label_colorbar_uses_lower_alpha_of_infill_and_outline(self, sdata_blobs: SpatialData):
+
+        _, axs = plt.subplots(nrows=1, ncols=3, layout="tight")
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7).pl.show(
+            ax=axs[0]
+        )
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.4, outline_alpha=0.4).pl.show(
+            ax=axs[1]
+        )
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show(
+            ax=axs[2]
+        )
+
     def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
         table = sdata_blobs["table"].copy()
         table.obs["region"] = "blobs_multiscale_labels"
