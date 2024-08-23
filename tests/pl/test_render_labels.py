@@ -105,22 +105,19 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             fill_alpha=0.4,
         ).pl.show()
 
-    @pytest.mark.parametrize(
-        "alphas",
-        [
-            (0.1, 0.7),
-            (0.7, 0.1),
-        ],
-    )
-    def test_plot_label_colorbar_uses_less_transparent_of_infill_or_outline(
-        self, sdata_blobs: SpatialData, alphas: tuple[float, float]
+    def test_plot_label_colorbar_uses_alpha_of_less_transparent_infill(
+        self,
+        sdata_blobs: SpatialData,
     ):
 
-        fill_alpha, outline_alpha = alphas
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7).pl.show()
 
-        sdata_blobs.pl.render_labels(
-            "blobs_labels", color="channel_0_sum", fill_alpha=fill_alpha, outline_alpha=outline_alpha
-        ).pl.show()
+    def test_plot_label_colorbar_uses_alpha_of_less_transparent_outline(
+        self,
+        sdata_blobs: SpatialData,
+    ):
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show()
 
     def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
         table = sdata_blobs["table"].copy()
