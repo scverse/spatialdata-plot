@@ -7,7 +7,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -55,7 +55,7 @@ from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
-from spatialdata._types import ArrayLike
+from spatialdata._types import ArrayLike, ColorLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray
@@ -76,8 +76,6 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
-
-ColorLike = Union[tuple[float, ...], str]
 
 
 def _prepare_params_plot(
@@ -177,22 +175,35 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
     return cs_contents
 
 
-def _attach_modification_status_to_na_color(na_color: ColorLike | None) -> dict:
-    """
-    Usually, we'd use random colors if the user didn't specifically set a `na_color`
-    when rendering labels. When rendering points, we'd default to `lightgray`. So we
-    need to preserve the information whether the user actually specified `lightgray` or
-    if it originates from an internal default.
+def _sanitise_na_color(na_color: ColorLike | None) -> tuple[str, bool]:
+    """Return the color's hex value and a boolean indicating if the user changed the default color.
+
+    Returns the hex representation of the color and a boolean indicating whether the
+    color was changed by the user or not. Our default is "lightgray", but when we
+    render labels, we give them random colors instead. However, the user could've
+    manually specified "lightgray" as the color, so we need to check for that.
+
+    Parameters
+    ----------
+        na_color (ColorLike | None): The color input specified by the user.
+
+    Returns
+    -------
+        tuple[str, bool]: A tuple containing the hex color code and a boolean
+        indicating if the color was user-specified.
     """
     if na_color == "default":
         # user kept the default
-        return {"color": "lightgray", "is_modified": False}
-    if na_color is ColorLike:
-        # user specified either a color or `None` (to hide NAs)
-        return {"color": na_color, "is_modified": True}
-    if na_color == "lightgray":
-        # user manually specified our default color
-        return {"color": na_color, "is_modified": True}
+        return to_hex("lightgray"), False
+    if na_color is None:
+        # user wants to hide NAs
+        return "#FFFFFF00", True  # zero alpha so it's hidden
+    if colors.is_color_like(na_color):
+        # user specified a color (including "lightgray")
+        return to_hex(na_color), True
+
+    # Handle unexpected values (optional)
+    raise ValueError(f"Invalid na_color value: {na_color}")
 
 
 def _get_collection_shape(
@@ -386,15 +397,13 @@ def _prepare_cmap_norm(
     vcenter: float | None = None,
     **kwargs: Any,
 ) -> CmapParams:
-    is_default = cmap is None
+    cmap_is_default = cmap is None
     if cmap is None:
         cmap = rcParams["image.cmap"]
     if isinstance(cmap, str):
         cmap = matplotlib.colormaps[cmap]
 
     cmap = copy(cmap)
-
-    cmap.set_bad(na_color["color"])
 
     if norm is None:
         norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
@@ -405,7 +414,16 @@ def _prepare_cmap_norm(
     else:
         norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
-    return CmapParams(cmap, norm, na_color, is_default)
+    na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
+    cmap.set_bad(na_color)
+
+    return CmapParams(
+        cmap=cmap,
+        norm=norm,
+        na_color=na_color,
+        cmap_is_default=cmap_is_default,
+        na_color_modified_by_user=na_color_modified_by_user,
+    )
 
 
 def _set_outline(
@@ -591,7 +609,7 @@ def _get_colors_for_categorical_obs(
 
     # check if default matplotlib palette has enough colors
     if palette is None:
-        if cmap_params is not None and not cmap_params.is_default:
+        if cmap_params is not None and not cmap_params.cmap_is_default:
             palette = cmap_params.cmap
         elif len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
@@ -645,15 +663,15 @@ def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
     value_to_plot: str | None,
+    na_color: ColorLike,
     element_name: list[str] | str | None = None,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
-    na_color: dict | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
-    if value_to_plot is None:
-        color = np.full(len(element), to_hex(na_color["color"]))  # type: ignore[arg-type]
+    if value_to_plot is None and element is not None:
+        color = np.full(len(element), na_color)
         return color, color, False
 
     # model = get_model(sdata[element_name])
@@ -725,9 +743,10 @@ def _map_color_seg(
     color_vector: ArrayLike | pd.Series[CategoricalDtype],
     color_source_vector: pd.Series[CategoricalDtype],
     cmap_params: CmapParams,
+    na_color: ColorLike,
+    na_color_modified_by_user: bool = False,
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
-    na_color: dict | None = None,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
@@ -758,7 +777,7 @@ def _map_color_seg(
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
-    if not na_color["is_modified"]:
+    if not na_color_modified_by_user:
         RNG = default_rng(42)
         cols = RNG.random((len(cols), 3))
 
@@ -784,7 +803,7 @@ def _generate_base_categorial_color_mapping(
     adata: AnnData,
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
-    na_color: dict | None = None,
+    na_color: dict[str, ColorLike | bool | None],
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
@@ -832,10 +851,10 @@ def _get_default_categorial_color_mapping(
 
 
 def _get_categorical_color_mapping(
-    adata: AnnData | None = None,
-    cluster_key: None | str = None,
+    adata: AnnData,
+    na_color: dict[str, ColorLike | bool | None],
+    cluster_key: str | None = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
-    na_color: dict | None = None,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
 ) -> Mapping[str, str]:
@@ -932,7 +951,7 @@ def _decorate_axs(
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
+    na_color: ColorLike | None = "#d3d3d3",  # lightgray
     legend_fontsize: int | float | _FontSize | None = None,
     legend_fontweight: int | _FontWeight = "bold",
     legend_loc: str | None = "right margin",
@@ -1657,9 +1676,10 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    if (na_color := param_dict.get("na_color")) != "default" and (na_color is not None and not colors.is_color_like(na_color)):
+    if (na_color := param_dict.get("na_color")) != "default" and (
+        na_color is not None and not colors.is_color_like(na_color)
+    ):
         raise ValueError("Parameter 'na_color' must be color-like.")
-    param_dict["na_color"] = _attach_modification_status_to_na_color(na_color)
 
     if (norm := param_dict.get("norm")) is not None:
         if element_type in ["images", "labels"] and not isinstance(norm, Normalize):

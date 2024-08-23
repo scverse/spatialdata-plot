@@ -5,7 +5,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +20,7 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from spatialdata import get_extent
+from spatialdata._types import ColorLike
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray
 
@@ -31,7 +32,6 @@ from spatialdata_plot.pl.render import (
     _render_shapes,
 )
 from spatialdata_plot.pl.render_params import (
-    CmapParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -58,8 +58,6 @@ from spatialdata_plot.pl.utils import (
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
-
-ColorLike = Union[tuple[float, ...], str]
 
 
 @register_spatial_data_accessor("pl")
@@ -265,7 +263,7 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
         outline_params = _set_outline(outline, outline_width, outline_color)
 
-        for element, param_values in params_dict.items():        
+        for element, param_values in params_dict.items():
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
                 norm=norm,
@@ -498,7 +496,7 @@ class PlotAccessor:
         #         _prepare_cmap_norm(
         #             cmap=c,
         #             norm=norm,
-        #             na_color=params_dict["na_color"]["color"],  # type: ignore[arg-type]
+        #             na_color=params_dict["na_color"],  # type: ignore[arg-type]
         #             **kwargs,
         #         )
         #         for c in cmap
@@ -508,7 +506,7 @@ class PlotAccessor:
         #     cmap_params = _prepare_cmap_norm(
         #         cmap=cmap,
         #         norm=norm,
-        #         na_color=params_dict["na_color"]["color"],  # type: ignore[arg-type]
+        #         na_color=params_dict["na_color"],  # type: ignore[arg-type]
         #         **kwargs,
         #     )
 

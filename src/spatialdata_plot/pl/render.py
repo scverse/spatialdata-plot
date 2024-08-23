@@ -138,7 +138,7 @@ def _render_shapes(
     else:
         palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -259,7 +259,7 @@ def _render_shapes(
     if not norm and not values_are_categorical:
         _cax.set_clim(min(color_vector), max(color_vector))
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -300,7 +300,7 @@ def _render_points(
 ) -> None:
     element = render_params.element
     col_for_color = render_params.col_for_color
-    table_name = render_params.table_name 
+    table_name = render_params.table_name
     color = render_params.color
     groups = render_params.groups
     palette = render_params.palette
@@ -373,7 +373,7 @@ def _render_points(
             )
 
     # when user specified a single color, we emulate the form of `na_color` and use it
-    default_color = {"color": color} if col_for_color is None and color is not None else render_params.cmap_params.na_color
+    default_color = color if col_for_color is None and color is not None else render_params.cmap_params.na_color
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
@@ -505,7 +505,7 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color["color"]):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
@@ -521,7 +521,7 @@ def _render_points(
             color_vector=color_vector,
             palette=palette,
             alpha=render_params.alpha,
-            na_color=render_params.cmap_params.na_color["color"],
+            na_color=render_params.cmap_params.na_color,
             legend_fontsize=legend_params.legend_fontsize,
             legend_fontweight=legend_params.legend_fontweight,
             legend_loc=legend_params.legend_loc,
@@ -646,7 +646,7 @@ def _render_images(
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
-            if render_params.cmap_params.is_default:  # -> use RGB
+            if render_params.cmap_params.cmap_is_default:  # -> use RGB
                 stacked = np.stack([layers[c] for c in channels], axis=-1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
@@ -805,6 +805,7 @@ def _render_labels(
             seg_erosionpx=None,
             seg_boundaries=render_params.outline,
             na_color=render_params.cmap_params.na_color,
+            na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
         _cax = ax.imshow(
             labels_infill,
@@ -828,6 +829,7 @@ def _render_labels(
             seg_erosionpx=render_params.contour_px,
             seg_boundaries=render_params.outline,
             na_color=render_params.cmap_params.na_color,
+            na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
         _cax = ax.imshow(
             labels_contour,
@@ -850,6 +852,7 @@ def _render_labels(
             seg_erosionpx=render_params.contour_px,
             seg_boundaries=render_params.outline,
             na_color=render_params.cmap_params.na_color,
+            na_color_modified_by_user=render_params.cmap_params.na_color_modified_by_user,
         )
 
         _cax = ax.imshow(
