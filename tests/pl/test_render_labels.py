@@ -70,11 +70,12 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_stack_render_labels(self, sdata_blobs: SpatialData):
         (
             sdata_blobs.pl.render_labels(
-                element="blobs_labels", na_color="red", fill_alpha=1, outline_alpha=0, outline=False
+                element="blobs_labels",
+                na_color="red",
+                fill_alpha=1,
+                outline_alpha=0,
             )
-            .pl.render_labels(
-                element="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, outline=True, contour_px=15
-            )
+            .pl.render_labels(element="blobs_labels", na_color="blue", fill_alpha=0, outline_alpha=1, contour_px=15)
             .pl.show()
         )
 
@@ -92,23 +93,21 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_can_control_label_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.7).pl.show()
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.4).pl.show()
 
     def test_plot_can_control_label_infill(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7).pl.show()
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.4).pl.show()
 
     def test_plot_label_colorbar_uses_lower_alpha_of_infill_and_outline(self, sdata_blobs: SpatialData):
 
-        _, axs = plt.subplots(nrows=1, ncols=3, layout="tight")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7).pl.show(
             ax=axs[0]
         )
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.4, outline_alpha=0.4).pl.show(
-            ax=axs[1]
-        )
+
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show(
-            ax=axs[2]
+            ax=axs[1]
         )
 
     def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
