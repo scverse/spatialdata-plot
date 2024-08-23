@@ -10,6 +10,10 @@ from matplotlib.figure import Figure
 
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
+
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
 ColorLike = Union[tuple[float, ...], str]
 
 
@@ -19,7 +23,7 @@ class CmapParams:
 
     cmap: Colormap
     norm: Normalize
-    na_color: ColorLike | None = None
+    na_color: ColorLike
     na_color_modified_by_user: bool = False
     cmap_is_default: bool = True
 

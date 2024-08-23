@@ -5,7 +5,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +20,6 @@ from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from spatialdata import get_extent
-from spatialdata._types import ColorLike
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray
 
@@ -58,6 +57,11 @@ from spatialdata_plot.pl.utils import (
     save_fig,
 )
 from spatialdata_plot.pp.utils import _verify_plotting_tree
+
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = Union[tuple[float, ...], str]
 
 
 @register_spatial_data_accessor("pl")
@@ -199,7 +203,7 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
             all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgray"
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
@@ -336,7 +340,7 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
             for all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgray"
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
@@ -448,8 +452,10 @@ class PlotAccessor:
         norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
             Applies to all channels if set.
-        na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
-            Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         palette : list[str] | str | None
             Palette to color images. The number of palettes should be equal to the number of channels.
         alpha : float | int, default 1.0
@@ -584,8 +590,10 @@ class PlotAccessor:
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm : Normalize | None
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None
-            Color to be used for NAs values, if present.
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         outline_alpha : float | int, default 1.0
             Alpha value for the outline of the labels.
         fill_alpha : float | int, default 0.3

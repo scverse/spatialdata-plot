@@ -7,7 +7,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -55,7 +55,7 @@ from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
-from spatialdata._types import ArrayLike, ColorLike
+from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray
@@ -76,6 +76,11 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
+
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = Union[tuple[float, ...], str]
 
 
 def _prepare_params_plot(
@@ -803,13 +808,15 @@ def _generate_base_categorial_color_mapping(
     adata: AnnData,
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
-    na_color: dict[str, ColorLike | bool | None],
+    na_color: ColorLike,
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
         categories = color_source_vector.categories.tolist() + ["NaN"]
-        na_color_hex = to_hex(to_rgba(na_color["color"])[:3])
-        return dict(zip(categories, colors + [na_color_hex]))
+        if "#" not in na_color:
+            # should be unreachable, but just for safety
+            raise ValueError("Expected `na_color` to be a hex color, but got a non-hex color.")
+        return dict(zip(categories, colors + [na_color]))
 
     return _get_default_categorial_color_mapping(color_source_vector)
 
@@ -852,7 +859,7 @@ def _get_default_categorial_color_mapping(
 
 def _get_categorical_color_mapping(
     adata: AnnData,
-    na_color: dict[str, ColorLike | bool | None],
+    na_color: ColorLike,
     cluster_key: str | None = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
     groups: list[str] | str | None = None,
