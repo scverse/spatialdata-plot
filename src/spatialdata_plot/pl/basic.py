@@ -31,6 +31,7 @@ from spatialdata_plot.pl.render import (
     _render_shapes,
 )
 from spatialdata_plot.pl.render_params import (
+    CmapParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -496,33 +497,32 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        # cmap_params: list[CmapParams] | CmapParams
-        # if isinstance(cmap, list):
-        #     cmap_params = [
-        #         _prepare_cmap_norm(
-        #             cmap=c,
-        #             norm=norm,
-        #             na_color=params_dict["na_color"],  # type: ignore[arg-type]
-        #             **kwargs,
-        #         )
-        #         for c in cmap
-        #     ]
-
-        # else:
-        #     cmap_params = _prepare_cmap_norm(
-        #         cmap=cmap,
-        #         norm=norm,
-        #         na_color=params_dict["na_color"],  # type: ignore[arg-type]
-        #         **kwargs,
-        #     )
-
         for element, param_values in params_dict.items():
-            cmap_params = _prepare_cmap_norm(
-                cmap=cmap,
-                norm=norm,
-                na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
-                **kwargs,
-            )
+            # cmap_params = _prepare_cmap_norm(
+            #     cmap=params_dict[element]["cmap"],
+            #     norm=norm,
+            #     na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
+            #     **kwargs,
+            # )
+            cmap_params: list[CmapParams] | CmapParams
+            if isinstance(cmap, list):
+                cmap_params = [
+                    _prepare_cmap_norm(
+                        cmap=c,
+                        norm=norm,
+                        na_color=param_values["na_color"],
+                        **kwargs,
+                    )
+                    for c in cmap
+                ]
+
+            else:
+                cmap_params = _prepare_cmap_norm(
+                    cmap=cmap,
+                    norm=norm,
+                    na_color=param_values["na_color"],
+                    **kwargs,
+                )
             sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],
