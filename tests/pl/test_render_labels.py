@@ -93,10 +93,10 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_can_control_label_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.4).pl.show()
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.4, fill_alpha=0.0).pl.show()
 
     def test_plot_can_control_label_infill(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.4).pl.show()
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", outline_alpha=0.0, fill_alpha=0.4).pl.show()
 
     def test_plot_label_colorbar_uses_lower_alpha_of_infill_and_outline(self, sdata_blobs: SpatialData):
 

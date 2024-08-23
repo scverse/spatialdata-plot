@@ -802,11 +802,6 @@ def _map_color_seg(
             seg = np.squeeze(seg, axis=0)
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
         return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
-    # else:
-    #     # Handle the opposite case when seg_boundaries is False
-    #     if seg.shape[0] == 1:
-    #         seg = np.squeeze(seg, axis=0)
-    #     return np.dstack((seg_im, np.where(val_im > 0, 1, 0)))
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
@@ -1350,6 +1345,7 @@ def _rasterize_if_necessary(
         do_rasterization = False
 
     if do_rasterization:
+        logger.info("Rasterizing image for faster rendering.")
         # TODO: do we want min here?
         target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
         image = rasterize(
