@@ -764,6 +764,9 @@ def _render_labels(
             extent=extent,
         )
 
+        # the avove adds a useless c dimension of 1 (y, x) -> (1, y, x)
+        label = label.squeeze()
+
     if table_name is None:
         instance_id = np.unique(label)
         table = None
