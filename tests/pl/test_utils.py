@@ -56,3 +56,21 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
         ).pl.show(ax=axs[1], colorbar=False)
+
+
+@pytest.mark.parametrize(
+    "input_output",
+    [
+        (None, ("#FFFFFF00", True)),
+        ("default", ("#d3d3d3ff", False)),
+        ("red", ("#ff0000ff", True)),
+        ((1, 0, 0), ("#ff0000ff", True)),
+        ((1, 0, 0, 0.5), ("#ff000080", True)),
+    ],
+)
+def test_utils_sanitise_na_color(input_output):
+    from spatialdata_plot.pl.utils import _sanitise_na_color
+
+    func_input, expected_output = input_output
+
+    assert _sanitise_na_color(func_input) == expected_output

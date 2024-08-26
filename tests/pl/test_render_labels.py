@@ -8,7 +8,7 @@ import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatial_image import to_spatial_image
-from spatialdata import SpatialData, get_element_instances
+from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import TableModel
 
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -84,16 +84,14 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_two_calls_with_coloring_result_in_two_colorbars(self, sdata_blobs: SpatialData):
         # we're modifying the data here so we need an independent copy
-        from spatialdata.datasets import blobs
+        sdata_blobs_local = deepcopy(sdata_blobs)
 
-        sdata_blobs = blobs()
-
-        table = sdata_blobs["table"].copy()
+        table = sdata_blobs_local["table"].copy()
         table.obs["region"] = "blobs_multiscale_labels"
         table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         table = table[:, ~table.var_names.isin(["channel_0_sum"])]
-        sdata_blobs["multi_table"] = table
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_name="table").pl.render_labels(
+        sdata_blobs_local["multi_table"] = table
+        sdata_blobs_local.pl.render_labels("blobs_labels", color="channel_0_sum", table_name="table").pl.render_labels(
             "blobs_multiscale_labels", color="channel_1_sum", table_name="multi_table"
         ).pl.show()
 
@@ -147,13 +145,10 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-
         # we're modifying the data here so we need an independent copy
-        from spatialdata.datasets import blobs
+        sdata_blobs_local = deepcopy(sdata_blobs)
 
-        sdata_blobs = blobs()
-
-        n_obs = len(get_element_instances(sdata_blobs[label]))
+        n_obs = len(get_element_instances(sdata_blobs_local[label]))
         vals = np.arange(n_obs)
         obs = pd.DataFrame({"a": vals, "b": vals + 0.3, "c": vals + 0.7})
 
@@ -167,9 +162,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             instance_key="instance_id",
             region=label,
         )
-        sdata_blobs["other_table"] = table
-        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs.pl.render_labels(label, color="category", outline_alpha=0.0, table="other_table").pl.show()
+        sdata_blobs_local["other_table"] = table
+        sdata_blobs_local["other_table"].obs["category"] = (
+            sdata_blobs_local["other_table"].obs["category"].astype("category")
+        )
+        sdata_blobs_local.pl.render_labels(label, color="category", outline_alpha=0.0, table="other_table").pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs.table.to_df().idxmax(axis=1)

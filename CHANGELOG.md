@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning][].
 
 -   Replaced `outline` parameter in `render_labels` with alpha-based logic (#323)
 -   Lowered RMSE-threshold for plot-based tests from 60 to 45 (#323)
+-   Minor fixes for several tests as a result of the threshold change (#323)
 
 ### Changed
 
