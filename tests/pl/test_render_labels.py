@@ -148,6 +148,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
 
+        # we're modifying the data here so we need an independent copy
+        from spatialdata.datasets import blobs
+
+        sdata_blobs = blobs()
+
         n_obs = len(get_element_instances(sdata_blobs[label]))
         vals = np.arange(n_obs)
         obs = pd.DataFrame({"a": vals, "b": vals + 0.3, "c": vals + 0.7})
