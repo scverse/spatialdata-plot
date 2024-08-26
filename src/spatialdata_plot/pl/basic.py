@@ -544,7 +544,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
-        outline_alpha: float | int = 1.0,
+        outline_alpha: float | int = 0.0,
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
