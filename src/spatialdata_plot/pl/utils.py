@@ -497,51 +497,6 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     return fig, axes
 
 
-def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]:
-    """Return a list of random hex-color.
-
-    Parameters
-    ----------
-    num_colors
-        Number of colors to generate.
-
-    Returns
-    -------
-    list
-        List of random colors.
-    """
-    rng = default_rng(seed)
-    colors: set[str] = set()
-    while len(colors) < num_colors:
-        r, g, b = rng.integers(0, 255), rng.integers(0, 255), rng.integers(0, 255)
-        color = f"#{r:02x}{g:02x}{b:02x}"
-        colors.add(color)
-
-    return colors
-
-
-def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "viridis") -> list[str]:
-    """Convert a series of continuous numerical values to hex color values using a colormap.
-
-    Parameters
-    ----------
-    values
-        The values to be converted to colors.
-    cmap_name
-        The name of the colormap to be used, by default 'viridis'.
-
-    Returns
-    -------
-    pd.Series
-        The converted color values as hex strings.
-    """
-    cmap = plt.get_cmap(cmap_name)
-    norm = plt.Normalize(vmin=values.min(), vmax=values.max())
-    colors = cmap(norm(values))
-
-    return [colors.to_hex(color) for color in colors]
-
-
 def _normalize(
     img: xr.DataArray,
     pmin: float | None = None,
