@@ -4,12 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData, get_element_instances
 from spatialdata.models import TableModel
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)

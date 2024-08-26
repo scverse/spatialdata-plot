@@ -4,12 +4,12 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData
 from spatialdata.models import ShapesModel, TableModel
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
