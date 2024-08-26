@@ -544,7 +544,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
-        outline_alpha: float | int = 1.0,
+        outline_alpha: float | int = 0.0,
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
@@ -587,8 +587,8 @@ class PlotAccessor:
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline_alpha : float | int, default 1.0
-            Alpha value for the outline of the labels.
+        outline_alpha : float | int, default 0.0
+            Alpha value for the outline of the labels. Invisible by default.
         fill_alpha : float | int, default 0.3
             Alpha value for the fill of the labels.
         scale :  str | None
