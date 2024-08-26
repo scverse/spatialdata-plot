@@ -82,7 +82,12 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
-    def test_plot_can_color_labels(self, sdata_blobs: SpatialData):
+    def test_plot_two_calls_with_coloring_result_in_two_colorbars(self, sdata_blobs: SpatialData):
+        # we're modifying the data here so we need an independent copy
+        from spatialdata.datasets import blobs
+
+        sdata_blobs = blobs()
+
         table = sdata_blobs["table"].copy()
         table.obs["region"] = "blobs_multiscale_labels"
         table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
