@@ -1,7 +1,7 @@
 from importlib.metadata import version
 
-from . import pl, pp
+from . import pl
 
-__all__ = ["pl", "pp"]
+__all__ = ["pl"]
 
 __version__ = version("spatialdata-plot")

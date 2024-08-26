@@ -742,8 +742,6 @@ class PlotAccessor:
 
         # Evaluate execution tree for plotting
         valid_commands = [
-            "get_elements",
-            "get_bb",
             "render_images",
             "render_shapes",
             "render_labels",
