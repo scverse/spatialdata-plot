@@ -164,7 +164,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs.pl.render_labels(label, color="category", outline_alpha=0.0).pl.show()
+        sdata_blobs.pl.render_labels(label, color="category", outline_alpha=0.0, table="other_table").pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs.table.to_df().idxmax(axis=1)
