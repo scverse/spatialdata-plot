@@ -164,7 +164,7 @@ class PlotAccessor:
         na_color: ColorLike | None = "default",
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
-        outline_alpha: float | int = 1.0,
+        outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
@@ -212,8 +212,8 @@ class PlotAccessor:
         outline_color : str | list[float], default "#000000ff"
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
-        outline_alpha : float | int, default 1.0
-            Alpha value for the outline of shapes.
+        outline_alpha : float | int, default 0.0
+            Alpha value for the outline of shapes. Invisible by default.
         cmap : Colormap | str | None, optional
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
