@@ -1,3 +1,5 @@
+from typing import Union
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +22,11 @@ _ = spatialdata_plot
 # 3. if the tolerance needs to be changed, don't prefix the function with `test_plot_`, but with something else
 #    the comp. function can be accessed as `self.compare(<your_filename>, tolerance=<your_tolerance>)`
 #    ".png" is appended to <your_filename>, no need to set it
+
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = Union[tuple[float, ...], str]
 
 
 class TestUtils(PlotTester, metaclass=PlotTesterMeta):
@@ -68,3 +75,20 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
         ).pl.show(ax=axs[1], colorbar=False)
+
+
+@pytest.mark.parametrize(
+    "color_result",
+    [
+        ("0", False),
+        ("0.5", False),
+        ("1", False),
+        ("#00ff00", True),
+        ((0.0, 1.0, 0.0, 1.0), True),
+    ],
+)
+def test_is_color_like(color_result: tuple[ColorLike, bool]):
+
+    color, result = color_result
+
+    assert spatialdata_plot.pl.utils.is_color_like(color) == result

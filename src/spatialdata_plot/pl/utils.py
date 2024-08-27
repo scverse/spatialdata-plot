@@ -89,11 +89,16 @@ def _is_color_like(color: Any) -> bool:
     """
     if isinstance(color, bool):
         return False
-    try:
-        is_mpl_greyscale = float(color) >= 0 and float(color) <= 1
-    except (ValueError, TypeError):
-        is_mpl_greyscale = False
-    return False if is_mpl_greyscale else bool(colors.is_color_like(color))
+    if isinstance(color, str):
+        try:
+            num_value = float(color)
+            if 0 <= num_value <= 1:
+                return False
+        except ValueError:
+            # we're not dealing with what matplotlib considers greyscale
+            pass
+
+    return bool(colors.is_color_like(color))
 
 
 def _prepare_params_plot(
