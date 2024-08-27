@@ -1501,19 +1501,18 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    color = param_dict.get("color")
-    if element_type not in ("shapes", "points", "labels"):
-        param_dict["col_for_color"] = None
-        param_dict["color"] = color
-    else:
+    if (color := param_dict.get("color")) and element_type in {"shapes", "points", "labels"}:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if _is_color_like(color):
-            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-            param_dict["col_for_color"] = None
-        else:
-            param_dict["col_for_color"] = color
-            param_dict["color"] = None
+        if element_type in {"shapes", "points"}:
+            if colors.is_color_like(color):
+                logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+                param_dict["col_for_color"] = None
+            else:
+                param_dict["col_for_color"] = color
+                param_dict["color"] = None
+    elif "color" in param_dict and element_type != "labels":
+        param_dict["col_for_color"] = None
 
     if (outline := param_dict.get("outline")) is not None and not isinstance(outline, bool):
         raise TypeError("Parameter 'outline' must be a boolean.")
