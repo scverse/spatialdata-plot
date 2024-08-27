@@ -555,6 +555,14 @@ def _normalize(
 
     perc = np.percentile(img, [pmin, pmax])
 
+    # Ensure perc is an array of two elements
+    if np.isscalar(perc):
+        logger.warning(
+            "Percentile range is too small, using the same percentile for both min "
+            "and max. Consider using a larger percentile range."
+        )
+        perc = np.array([perc, perc])
+
     norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
 
     if clip:
