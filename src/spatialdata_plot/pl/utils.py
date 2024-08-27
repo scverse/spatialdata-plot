@@ -79,9 +79,9 @@ to_hex = partial(colors.to_hex, keep_alpha=True)
 ColorLike = Union[tuple[float, ...], str]
 
 
-def _is_color_like(color: Any) -> Any:
+def _is_color_like(color: Any) -> bool:
     """Check if a value is a valid color, returns False for pseudo-bools."""
-    return False if color in {"0", "1"} else colors.is_color_like(color)
+    return False if color in {"0", "1"} else bool(colors.is_color_like(color))
 
 
 def _prepare_params_plot(
