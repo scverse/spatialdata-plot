@@ -33,6 +33,18 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_set_outline_accepts_str_or_float_or_list_thereof(self, sdata_blobs: SpatialData, outline_color):
         sdata_blobs.pl.render_shapes(element="blobs_polygons", outline=True, outline_color=outline_color).pl.show()
 
+    @pytest.mark.parametrize(
+        "colname",
+        ["0", "0.5", "1"],
+    )
+    def test_plot_colnames_that_are_valid_matplotlib_greyscale_colors_are_not_evaluated_as_colors(
+        self, sdata_blobs: SpatialData, colname: str
+    ):
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"][colname] = [1, 2, 3, 5, 20]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color=colname).pl.show()
+
     def test_plot_can_set_zero_in_cmap_to_transparent(self, sdata_blobs: SpatialData):
         from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 

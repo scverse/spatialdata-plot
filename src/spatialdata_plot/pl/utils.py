@@ -553,7 +553,7 @@ def _normalize(
     pmin = pmin or 0.0
     pmax = pmax or 100.0
 
-    perc = np.percentile(img, [pmin, pmax])  # type: ignore
+    perc = np.percentile(img, [pmin, pmax])
 
     # Ensure perc is an array of two elements
     if np.isscalar(perc):
@@ -563,7 +563,7 @@ def _normalize(
         )
         perc = np.array([perc, perc])
 
-    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)  #
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)  # type: ignore
 
     if clip:
         norm = np.clip(norm, 0, 1)
