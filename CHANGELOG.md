@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning][].
 
 ## [0.2.x] - tbd
 
+### Added
+
+-
+
+### Changed
+
+-   Removed `preprocessing` (.pp) accessor (#329)
+
+### Fixed
+
+-
+
 ## [0.2.4] - 2024-08-07
 
 ### Added
