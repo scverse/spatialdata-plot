@@ -80,8 +80,20 @@ ColorLike = Union[tuple[float, ...], str]
 
 
 def _is_color_like(color: Any) -> bool:
-    """Check if a value is a valid color, returns False for pseudo-bools."""
-    return False if color in {"0", "1"} else bool(colors.is_color_like(color))
+    """Check if a value is a valid color, returns False for pseudo-bools.
+
+    For discussion, see: https://github.com/scverse/spatialdata-plot/issues/327.
+    matplotlib accepts strings in [0, 1] as grey-scale values - therefore,
+    "0" and "1" are considered valid colors. However, we won't do that
+    so we're filtering these out.
+    """
+    if isinstance(color, bool):
+        return False
+    try:
+        is_mpl_greyscale = float(color) >= 0 and float(color) <= 1
+    except ValueError:
+        is_mpl_greyscale = False
+    return False if is_mpl_greyscale else bool(colors.is_color_like(color))
 
 
 def _prepare_params_plot(
