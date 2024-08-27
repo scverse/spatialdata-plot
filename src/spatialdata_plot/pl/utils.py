@@ -91,7 +91,7 @@ def _is_color_like(color: Any) -> bool:
         return False
     try:
         is_mpl_greyscale = float(color) >= 0 and float(color) <= 1
-    except ValueError:
+    except (ValueError, TypeError):
         is_mpl_greyscale = False
     return False if is_mpl_greyscale else bool(colors.is_color_like(color))
 
