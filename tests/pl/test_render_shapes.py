@@ -7,7 +7,7 @@ import scanpy as sc
 import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from shapely.geometry import MultiPolygon, Point, Polygon
-from spatialdata import SpatialData
+from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
 
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -94,7 +94,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
 
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
-        blob = sdata_blobs
+        blob = deepcopy(sdata_blobs)
         blob["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
         blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]

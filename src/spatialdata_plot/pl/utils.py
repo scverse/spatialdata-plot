@@ -79,6 +79,11 @@ to_hex = partial(colors.to_hex, keep_alpha=True)
 ColorLike = Union[tuple[float, ...], str]
 
 
+def _is_color_like(color: Any) -> Any:
+    """Check if a value is a valid color, returns False for pseudo-bools."""
+    return False if color in {"0", "1"} else colors.is_color_like(color)
+
+
 def _prepare_params_plot(
     # this param is inferred when `pl.show`` is called
     num_panels: int,
@@ -758,7 +763,7 @@ def _map_color_seg(
         try:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
         except TypeError:
-            assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
+            assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
 
     if seg_erosionpx is not None:
@@ -1496,22 +1501,19 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in {
-        "shapes",
-        "points",
-        "labels",
-    }:
+    color = param_dict.get("color")
+    if element_type not in ("shapes", "points", "labels"):
+        param_dict["col_for_color"] = None
+        param_dict["color"] = color
+    else:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if element_type in {"shapes", "points"}:
-            if colors.is_color_like(color):
-                logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-                param_dict["col_for_color"] = None
-            else:
-                param_dict["col_for_color"] = color
-                param_dict["color"] = None
-    elif "color" in param_dict and element_type != "labels":
-        param_dict["col_for_color"] = None
+        if _is_color_like(color):
+            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+            param_dict["col_for_color"] = None
+        else:
+            param_dict["col_for_color"] = color
+            param_dict["color"] = None
 
     if (outline := param_dict.get("outline")) is not None and not isinstance(outline, bool):
         raise TypeError("Parameter 'outline' must be a boolean.")
@@ -1582,7 +1584,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    if (na_color := param_dict.get("na_color")) is not None and not colors.is_color_like(na_color):
+    if (na_color := param_dict.get("na_color")) is not None and not _is_color_like(na_color):
         raise ValueError("Parameter 'na_color' must be color-like.")
 
     if (norm := param_dict.get("norm")) is not None:
