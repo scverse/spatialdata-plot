@@ -91,4 +91,4 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
 
     color, result = color_result
 
-    assert spatialdata_plot.pl.utils.is_color_like(color) == result
+    assert spatialdata_plot.pl.utils._is_color_like(color) == result
