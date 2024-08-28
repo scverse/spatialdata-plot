@@ -61,7 +61,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: plotting-results-${{ matrix.os }}
+          name: visual_test_results_${{ matrix.os }}-python${{ matrix.python }}
           path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
