@@ -780,7 +780,7 @@ def _render_labels(
         table_name=table_name,
     )
 
-    def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool) -> matplotlib.image.AxesImage:
+    def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
@@ -798,7 +798,7 @@ def _render_labels(
             rasterized=True,
             cmap=None if categorical else render_params.cmap_params.cmap,
             norm=None if categorical else render_params.cmap_params.norm,
-            alpha=render_params.fill_alpha,
+            alpha=alpha,
             origin="lower",
             zorder=render_params.zorder,
         )
@@ -808,21 +808,25 @@ def _render_labels(
 
     # default case: no contour, just fill
     if render_params.fill_alpha > 0.0 and render_params.outline_alpha == 0.0:
-        cax = _draw_labels(seg_erosionpx=None, seg_boundaries=False)
+        cax = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
         alpha_to_decorate_ax = render_params.fill_alpha
 
     # outline-only case
     elif render_params.fill_alpha == 0.0 and render_params.outline_alpha > 0.0:
-        cax = _draw_labels(seg_erosionpx=render_params.contour_px, seg_boundaries=True)
+        cax = _draw_labels(
+            seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
+        )
         alpha_to_decorate_ax = render_params.outline_alpha
 
     # pretty case: both outline and infill
     elif render_params.fill_alpha > 0.0 and render_params.outline_alpha > 0.0:
         # first plot the infill ...
-        cax_infill = _draw_labels(seg_erosionpx=None, seg_boundaries=False)
+        cax_infill = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
 
         # ... then overlay the contour
-        cax_contour = _draw_labels(seg_erosionpx=render_params.contour_px, seg_boundaries=True)
+        cax_contour = _draw_labels(
+            seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
+        )
 
         # pass the less-transparent _cax for the legend
         cax = cax_infill if render_params.fill_alpha > render_params.outline_alpha else cax_contour

@@ -79,6 +79,17 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
+    def test_plot_can_use_contour_px_to_enlarge_label_even_if_identical_alphas(self, sdata_blobs: SpatialData):
+        # adresses https://github.com/scverse/spatialdata-plot/issues/335
+        (
+            sdata_blobs.pl.render_labels(
+                element="blobs_labels",
+                fill_alpha=0.6,
+                outline_alpha=0.6,
+                contour_px=30,
+            ).pl.show()
+        )
+
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
