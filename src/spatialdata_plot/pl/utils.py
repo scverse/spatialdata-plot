@@ -131,8 +131,8 @@ def _get_coordinate_system_mapping(sdata: SpatialData) -> dict[str, list[str]]:
                 mapping[key].append(point_key)
 
     return mapping
-  
-  
+
+
 def _is_color_like(color: Any) -> bool:
     """Check if a value is a valid color, returns False for pseudo-bools.
 
