@@ -10,9 +10,7 @@ from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import matplotlib
-import matplotlib.patches
-import matplotlib.patches as mpatches
-import matplotlib.patches as mplp
+import mpatches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import numpy as np
@@ -232,7 +230,7 @@ def _sanitise_na_color(na_color: ColorLike | None) -> tuple[str, bool]:
     raise ValueError(f"Invalid na_color value: {na_color}")
 
 
-def _get_centroid_of_pathpatch(pathpatch: matplotlib.patches.PathPatch) -> tuple[float, float]:
+def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, float]:
     # Extract the vertices from the PathPatch
     path = pathpatch.get_path()
     vertices = path.vertices
@@ -248,7 +246,7 @@ def _get_centroid_of_pathpatch(pathpatch: matplotlib.patches.PathPatch) -> tuple
     return centroid_x, centroid_y
 
 
-def _scale_pathpatch_around_centroid(pathpatch: matplotlib.patches.PathPatch, scale_factor: float) -> None:
+def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
 
     centroid = _get_centroid_of_pathpatch(pathpatch)
     vertices = pathpatch.get_path().vertices
@@ -345,7 +343,7 @@ def _get_collection_shape(
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
         scaled_coords = (centroid + (coords - centroid) * s).tolist()
-        return {**row.to_dict(), "geometry": mplp.Polygon(scaled_coords, closed=True)}
+        return {**row.to_dict(), "geometry": mpatches.Polygon(scaled_coords, closed=True)}
 
     def _process_multipolygon(row: pd.Series, s: float) -> list[dict[str, Any]]:
         mp = _make_patch_from_multipolygon(row["geometry"])
@@ -358,7 +356,7 @@ def _get_collection_shape(
     def _process_point(row: pd.Series, s: float) -> dict[str, Any]:
         return {
             **row.to_dict(),
-            "geometry": mplp.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * s),
+            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * s),
         }
 
     def _create_patches(shapes_df: GeoDataFrame, fill_c: list[Any], outline_c: list[Any], s: float) -> pd.DataFrame:
