@@ -152,7 +152,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         n_obs = len(get_element_instances(sdata_blobs[label]))
         vals = np.arange(n_obs) + 1
         adata = AnnData(vals.reshape(-1, 1), obs=pd.DataFrame({"instance_id": vals}))
-        adata.obs["category"] = pd.Categorical(list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs])
+        adata.obs["category"] = pd.Categorical(
+            list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs],
+            categories=["a", "b", "c"],
+            ordered=True,
+        )
         adata.obs["region"] = label
         table = TableModel.parse(
             adata=adata,
