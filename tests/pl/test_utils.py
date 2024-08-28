@@ -5,10 +5,12 @@ import pytest
 import scanpy as sc
 import spatialdata_plot
 from spatialdata import SpatialData
+from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
 
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-RNG = np.random.default_rng(seed=42)
+SEED = 42
+RNG = np.random.default_rng(seed=SEED)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -56,3 +58,61 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
         ).pl.show(ax=axs[1], colorbar=False)
+
+
+@pytest.mark.parametrize(
+    "input_output",
+    [
+        (None, ("#FFFFFF00", True)),
+        ("default", ("#d3d3d3ff", False)),
+        ("red", ("#ff0000ff", True)),
+        ((1, 0, 0), ("#ff0000ff", True)),
+        ((1, 0, 0, 0.5), ("#ff000080", True)),
+    ],
+)
+def test_utils_sanitise_na_color(input_output):
+    from spatialdata_plot.pl.utils import _sanitise_na_color
+
+    func_input, expected_output = input_output
+
+    assert _sanitise_na_color(func_input) == expected_output
+
+
+@pytest.mark.parametrize(
+    "input_output",
+    [
+        (None, ("#FFFFFF00", True)),
+        ("default", ("#d3d3d3ff", False)),
+        ("red", ("#ff0000ff", True)),
+        ((1, 0, 0), ("#ff0000ff", True)),
+        ((1, 0, 0, 0.5), ("#ff000080", True)),
+    ],
+)
+def test_utils_sanitise_na_color_accepts_valid_inputs(input_output):
+
+    func_input, expected_output = input_output
+
+    assert _sanitise_na_color(func_input) == expected_output
+
+
+def test_utils_sanitise_na_color_fails_when_input_isnt_a_color():
+    with pytest.raises(ValueError):
+        _sanitise_na_color((1, 0))
+
+
+@pytest.mark.parametrize(
+    "input_output",
+    [
+        (1, 4, 1, [True]),
+        (4, 4, 4, [True, True, True, True]),
+        (6, 4, 8, [True, True, True, True, True, True, False, False]),  # 2 rows with 4 columns
+    ],
+)
+def test_utils_get_subplots_produces_correct_axs_layout(input_output):
+
+    num_images, ncols, len_axs, axs_visible = input_output
+
+    _, axs = _get_subplots(num_images=num_images, ncols=ncols)
+
+    assert len_axs == len(axs.flatten())
+    assert axs_visible == [ax.axison for ax in axs.flatten()]
