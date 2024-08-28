@@ -59,6 +59,9 @@ from spatialdata_plot.pl.utils import (
     save_fig,
 )
 
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
 ColorLike = Union[tuple[float, ...], str]
 
 
@@ -158,11 +161,10 @@ class PlotAccessor:
         fill_alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgrey",
-        outline: bool = False,
+        na_color: ColorLike | None = "default",
         outline_width: float | int = 1.5,
         outline_color: str | list[float] = "#000000ff",
-        outline_alpha: float | int = 1.0,
+        outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
         norm: bool | Normalize = False,
         scale: float | int = 1.0,
@@ -201,19 +203,17 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
             all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgrey"
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline : bool, default False
-            If `True`, a border around the shape elements is plotted.
         outline_width : float | int, default 1.5
             Width of the border.
         outline_color : str | list[float], default "#000000ff"
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
-        outline_alpha : float | int, default 1.0
-            Alpha value for the outline of shapes.
+        outline_alpha : float | int, default 0.0
+            Alpha value for the outline of shapes. Invisible by default.
         cmap : Colormap | str | None, optional
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
@@ -249,7 +249,6 @@ class PlotAccessor:
             palette=palette,
             color=color,
             na_color=na_color,
-            outline=outline,
             outline_alpha=outline_alpha,
             outline_color=outline_color,
             outline_width=outline_width,
@@ -263,16 +262,15 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
-
-        outline_params = _set_outline(outline, outline_width, outline_color)
+        outline_params = _set_outline(outline_alpha > 0, outline_width, outline_color)
 
         for element, param_values in params_dict.items():
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
                 element=element,
                 color=param_values["color"],
@@ -301,7 +299,7 @@ class PlotAccessor:
         alpha: float | int = 1.0,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
-        na_color: ColorLike | None = "lightgrey",
+        na_color: ColorLike | None = "default",
         cmap: Colormap | str | None = None,
         norm: None | Normalize = None,
         size: float | int = 1.0,
@@ -339,7 +337,7 @@ class PlotAccessor:
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
             for all elements). If groups is provided but not palette, palette is set to default "lightgray".
-        na_color : ColorLike | None, default "lightgrey"
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
@@ -389,14 +387,13 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
-
         for element, param_values in params_dict.items():
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=param_values["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
                 element=element,
                 color=param_values["color"],
@@ -422,7 +419,7 @@ class PlotAccessor:
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
         norm: Normalize | None = None,
-        na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
+        na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         percentiles_for_norm: tuple[float, float] | None = None,
@@ -452,8 +449,10 @@ class PlotAccessor:
         norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
             Applies to all channels if set.
-        na_color : ColorLike | None, default (0.0, 0.0, 0.0, 0.0)
-            Color to be used for NA values. Accepts color-like values (string, hex, RGB(A)).
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
         palette : list[str] | str | None
             Palette to color images. The number of palettes should be equal to the number of channels.
         alpha : float | int, default 1.0
@@ -494,27 +493,32 @@ class PlotAccessor:
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        cmap_params: list[CmapParams] | CmapParams
-        if isinstance(cmap, list):
-            cmap_params = [
-                _prepare_cmap_norm(
-                    cmap=c,
+        for element, param_values in params_dict.items():
+            # cmap_params = _prepare_cmap_norm(
+            #     cmap=params_dict[element]["cmap"],
+            #     norm=norm,
+            #     na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
+            #     **kwargs,
+            # )
+            cmap_params: list[CmapParams] | CmapParams
+            if isinstance(cmap, list):
+                cmap_params = [
+                    _prepare_cmap_norm(
+                        cmap=c,
+                        norm=norm,
+                        na_color=param_values["na_color"],
+                        **kwargs,
+                    )
+                    for c in cmap
+                ]
+
+            else:
+                cmap_params = _prepare_cmap_norm(
+                    cmap=cmap,
                     norm=norm,
-                    na_color=na_color,  # type: ignore[arg-type]
+                    na_color=param_values["na_color"],
                     **kwargs,
                 )
-                for c in cmap
-            ]
-
-        else:
-            cmap_params = _prepare_cmap_norm(
-                cmap=cmap,
-                norm=norm,
-                na_color=na_color,  # type: ignore[arg-type]
-                **kwargs,
-            )
-
-        for element, param_values in params_dict.items():
             sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],
@@ -536,12 +540,11 @@ class PlotAccessor:
         color: str | None = None,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
-        outline: bool = False,
         palette: list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
-        na_color: ColorLike | None = (0.0, 0.0, 0.0, 0.0),
-        outline_alpha: float | int = 1.0,
+        na_color: ColorLike | None = "default",
+        outline_alpha: float | int = 0.0,
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
@@ -576,16 +579,16 @@ class PlotAccessor:
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills entire segment, see:
             func:`skimage.morphology.erosion`.
-        outline : bool, default False
-            Whether to plot boundaries around segmentation masks.
         cmap : Colormap | str | None
             Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
         norm : Normalize | None
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None
-            Color to be used for NAs values, if present.
-        outline_alpha : float | int, default 1.0
-            Alpha value for the outline of the labels.
+        na_color : ColorLike | None, default "default" (gets set to "lightgray")
+            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
+            won't be shown.
+        outline_alpha : float | int, default 0.0
+            Alpha value for the outline of the labels. Invisible by default.
         fill_alpha : float | int, default 0.3
             Alpha value for the fill of the labels.
         scale :  str | None
@@ -615,7 +618,6 @@ class PlotAccessor:
             groups=groups,
             na_color=na_color,
             norm=norm,
-            outline=outline,
             outline_alpha=outline_alpha,
             palette=palette,
             scale=scale,
@@ -625,20 +627,19 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        cmap_params = _prepare_cmap_norm(
-            cmap=cmap,
-            norm=norm,
-            na_color=na_color,  # type: ignore[arg-type]
-            **kwargs,
-        )
 
         for element, param_values in params_dict.items():
+            cmap_params = _prepare_cmap_norm(
+                cmap=cmap,
+                norm=norm,
+                na_color=param_values["na_color"],  # type: ignore[arg-type]
+                **kwargs,
+            )
             sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
-                outline=param_values["outline"],
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
