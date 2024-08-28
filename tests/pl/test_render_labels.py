@@ -149,12 +149,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs_local = deepcopy(sdata_blobs)
 
         n_obs = len(get_element_instances(sdata_blobs_local[label]))
-        vals = np.arange(n_obs)
-        obs = pd.DataFrame({"a": vals, "b": vals + 0.3, "c": vals + 0.7})
-
-        adata = AnnData(vals.reshape(-1, 1), obs=obs)
-        adata.obs["instance_id"] = vals
-        adata.obs["category"] = list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs]
+        vals = np.arange(n_obs) + 1
+        adata = AnnData(vals.reshape(-1, 1), obs=pd.DataFrame({"instance_id": vals}))
+        adata.obs["category"] = pd.Categorical(list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs])
         adata.obs["region"] = label
         table = TableModel.parse(
             adata=adata,
@@ -162,11 +159,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             instance_key="instance_id",
             region=label,
         )
-        sdata_blobs_local["other_table"] = table
-        sdata_blobs_local["other_table"].obs["category"] = (
-            sdata_blobs_local["other_table"].obs["category"].astype("category")
-        )
-        sdata_blobs_local.pl.render_labels(label, color="category", outline_alpha=0.0, table="other_table").pl.show()
+        sdata_blobs_local.tables["other_table"] = table
+
+        sdata_blobs_local.pl.render_labels(label, color="category", table="other_table", scale="scale0").pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs.table.to_df().idxmax(axis=1)

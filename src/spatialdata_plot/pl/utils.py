@@ -762,7 +762,7 @@ def _map_color_seg(
     cell_id = np.array(cell_id)
     if color_vector is not None and isinstance(color_vector.dtype, pd.CategoricalDtype):
         # users wants to plot a categorical column
-        if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
+        if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
