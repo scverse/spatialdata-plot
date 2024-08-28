@@ -807,7 +807,14 @@ def _render_labels(
         return cax  # noqa: RET504
 
     # default case: no contour, just fill
-    if render_params.fill_alpha > 0.0 and render_params.outline_alpha == 0.0:
+    # since contour_px is passed to skimage.morphology.erosion to create the contour,
+    # any border thickness is only within the label, not outside. Therefore, the case
+    # of fill_alpha == outline_alpha is equivalent to fill-only
+    if (
+        (render_params.fill_alpha > 0.0
+        and render_params.outline_alpha == 0.0)
+        or (render_params.fill_alpha == render_params.outline_alpha)
+    ):
         cax = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
         alpha_to_decorate_ax = render_params.fill_alpha
 
