@@ -91,7 +91,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     )
     def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData, label: str):
 
-        def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
+        def _make_tablemodel_with_categorical_labels(sdata_blobs, label):
 
             n_obs = len(get_element_instances(sdata_blobs[label]))
             vals = np.arange(n_obs) + 1
@@ -169,40 +169,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_name="table").pl.render_labels(
             "blobs_multiscale_labels", color="channel_1_sum", table_name="multi_table"
         ).pl.show()
-
-    @pytest.mark.parametrize(
-        "label",
-        [
-            "blobs_labels",
-            "blobs_multiscale_labels",
-        ],
-    )
-    def test_plot_label_can_use_categorical_to_color_labels(self, sdata_blobs: SpatialData, label: str):
-        # we're modifying the data here, so we need an independent copy
-        sdata_blobs_local = deepcopy(sdata_blobs)
-
-        self._make_tablemodel_with_categorical_labels(sdata_blobs_local, label)
-
-    def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-
-        n_obs = len(get_element_instances(sdata_blobs[label]))
-        vals = np.arange(n_obs) + 1
-        adata = AnnData(vals.reshape(-1, 1), obs=pd.DataFrame({"instance_id": vals}))
-        adata.obs["category"] = pd.Categorical(
-            list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs],
-            categories=["a", "b", "c"],
-            ordered=True,
-        )
-        adata.obs["region"] = label
-        table = TableModel.parse(
-            adata=adata,
-            region_key="region",
-            instance_key="instance_id",
-            region=label,
-        )
-        sdata_blobs.tables["other_table"] = table
-
-        sdata_blobs.pl.render_labels(label, color="category", table="other_table", scale="scale0").pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs.table.to_df().idxmax(axis=1)
