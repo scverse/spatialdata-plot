@@ -82,6 +82,41 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "blobs_labels",
+            "blobs_multiscale_labels",
+        ],
+    )
+    def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData, label: str):
+
+        def _make_tablemodel_with_categorical_labels(sdata_blobs, label):
+
+            n_obs = len(get_element_instances(sdata_blobs[label]))
+            vals = np.arange(n_obs) + 1
+            adata = AnnData(vals.reshape(-1, 1), obs=pd.DataFrame({"instance_id": vals}))
+            adata.obs["category"] = pd.Categorical(
+                list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs],
+                categories=["a", "b", "c"],
+                ordered=True,
+            )
+            adata.obs["region"] = label
+            table = TableModel.parse(
+                adata=adata,
+                region_key="region",
+                instance_key="instance_id",
+                region=label,
+            )
+            sdata_blobs.tables["other_table"] = table
+
+            sdata_blobs.pl.render_labels(label, color="category", table="other_table", scale="scale0").pl.show()
+
+        # we're modifying the data here, so we need an independent copy
+        sdata_blobs_local = deepcopy(sdata_blobs)
+
+        _make_tablemodel_with_categorical_labels(sdata_blobs_local, label)
+
     def test_plot_two_calls_with_coloring_result_in_two_colorbars(self, sdata_blobs: SpatialData):
         # we're modifying the data here so we need an independent copy
         sdata_blobs_local = deepcopy(sdata_blobs)
@@ -133,40 +168,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_name="table").pl.render_labels(
             "blobs_multiscale_labels", color="channel_1_sum", table_name="multi_table"
         ).pl.show()
-
-    @pytest.mark.parametrize(
-        "label",
-        [
-            "blobs_labels",
-            "blobs_multiscale_labels",
-        ],
-    )
-    def test_plot_label_categorical_color(self, sdata_blobs: SpatialData, label: str):
-        self._make_tablemodel_with_categorical_labels(sdata_blobs, label)
-
-    def _make_tablemodel_with_categorical_labels(self, sdata_blobs, label):
-        # we're modifying the data here so we need an independent copy
-        sdata_blobs_local = deepcopy(sdata_blobs)
-
-        n_obs = len(get_element_instances(sdata_blobs_local[label]))
-        vals = np.arange(n_obs)
-        obs = pd.DataFrame({"a": vals, "b": vals + 0.3, "c": vals + 0.7})
-
-        adata = AnnData(vals.reshape(-1, 1), obs=obs)
-        adata.obs["instance_id"] = vals
-        adata.obs["category"] = list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs]
-        adata.obs["region"] = label
-        table = TableModel.parse(
-            adata=adata,
-            region_key="region",
-            instance_key="instance_id",
-            region=label,
-        )
-        sdata_blobs_local["other_table"] = table
-        sdata_blobs_local["other_table"].obs["category"] = (
-            sdata_blobs_local["other_table"].obs["category"].astype("category")
-        )
-        sdata_blobs_local.pl.render_labels(label, color="category", outline_alpha=0.0, table="other_table").pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs.table.to_df().idxmax(axis=1)

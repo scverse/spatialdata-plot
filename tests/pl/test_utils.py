@@ -40,7 +40,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         ],
     )
     def test_plot_set_outline_accepts_str_or_float_or_list_thereof(self, sdata_blobs: SpatialData, outline_color):
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline=True, outline_color=outline_color).pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline_alpha=1, outline_color=outline_color).pl.show()
 
     @pytest.mark.parametrize(
         "colname",
