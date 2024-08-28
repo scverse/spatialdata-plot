@@ -57,17 +57,11 @@ jobs:
           DISPLAY: :42
         run: |
           pytest -v --cov --color=yes --cov-report=xml
-      # - name: Generate GH action "groundtruth" figures as artifacts, uncomment if needed
-      #   if: always()
-      #   uses: actions/upload-artifact@v3
-      #   with:
-      #       name: groundtruth-figures
-      #       path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/_images/*
       - name: Archive figures generated during testing
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: plotting-results
+          name: plotting-results-${{ matrix.os }}
           path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

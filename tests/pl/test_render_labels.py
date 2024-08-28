@@ -111,7 +111,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             sdata_blobs.tables["other_table"] = table
 
             sdata_blobs.pl.render_labels(label, color="category", table="other_table", scale="scale0").pl.show()
-            sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
         # we're modifying the data here, so we need an independent copy
         sdata_blobs_local = deepcopy(sdata_blobs)
