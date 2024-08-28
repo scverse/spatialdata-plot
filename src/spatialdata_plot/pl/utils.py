@@ -10,9 +10,9 @@ from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import matplotlib
-import mpatches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
+import mpatches as mpatches
 import numpy as np
 import pandas as pd
 import shapely
