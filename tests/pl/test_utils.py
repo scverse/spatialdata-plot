@@ -1,3 +1,5 @@
+from typing import Union
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,6 +25,11 @@ _ = spatialdata_plot
 #    the comp. function can be accessed as `self.compare(<your_filename>, tolerance=<your_tolerance>)`
 #    ".png" is appended to <your_filename>, no need to set it
 
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = Union[tuple[float, ...], str]
+
 
 class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     @pytest.mark.parametrize(
@@ -34,6 +41,18 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     )
     def test_plot_set_outline_accepts_str_or_float_or_list_thereof(self, sdata_blobs: SpatialData, outline_color):
         sdata_blobs.pl.render_shapes(element="blobs_polygons", outline=True, outline_color=outline_color).pl.show()
+
+    @pytest.mark.parametrize(
+        "colname",
+        ["0", "0.5", "1"],
+    )
+    def test_plot_colnames_that_are_valid_matplotlib_greyscale_colors_are_not_evaluated_as_colors(
+        self, sdata_blobs: SpatialData, colname: str
+    ):
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"][colname] = [1, 2, 3, 5, 20]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color=colname).pl.show()
 
     def test_plot_can_set_zero_in_cmap_to_transparent(self, sdata_blobs: SpatialData):
         from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
@@ -58,6 +77,23 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
         ).pl.show(ax=axs[1], colorbar=False)
+
+
+@pytest.mark.parametrize(
+    "color_result",
+    [
+        ("0", False),
+        ("0.5", False),
+        ("1", False),
+        ("#00ff00", True),
+        ((0.0, 1.0, 0.0, 1.0), True),
+    ],
+)
+def test_is_color_like(color_result: tuple[ColorLike, bool]):
+
+    color, result = color_result
+
+    assert spatialdata_plot.pl.utils._is_color_like(color) == result
 
 
 @pytest.mark.parametrize(

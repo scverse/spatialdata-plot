@@ -131,6 +131,28 @@ def _get_coordinate_system_mapping(sdata: SpatialData) -> dict[str, list[str]]:
                 mapping[key].append(point_key)
 
     return mapping
+  
+  
+def _is_color_like(color: Any) -> bool:
+    """Check if a value is a valid color, returns False for pseudo-bools.
+
+    For discussion, see: https://github.com/scverse/spatialdata-plot/issues/327.
+    matplotlib accepts strings in [0, 1] as grey-scale values - therefore,
+    "0" and "1" are considered valid colors. However, we won't do that
+    so we're filtering these out.
+    """
+    if isinstance(color, bool):
+        return False
+    if isinstance(color, str):
+        try:
+            num_value = float(color)
+            if 0 <= num_value <= 1:
+                return False
+        except ValueError:
+            # we're not dealing with what matplotlib considers greyscale
+            pass
+
+    return bool(colors.is_color_like(color))
 
 
 def _prepare_params_plot(
@@ -582,7 +604,15 @@ def _normalize(
 
     perc = np.percentile(img, [pmin, pmax])
 
-    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
+    # Ensure perc is an array of two elements
+    if np.isscalar(perc):
+        logger.warning(
+            "Percentile range is too small, using the same percentile for both min "
+            "and max. Consider using a larger percentile range."
+        )
+        perc = np.array([perc, perc])
+
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)  # type: ignore
 
     if clip:
         norm = np.clip(norm, 0, 1)
@@ -777,7 +807,7 @@ def _map_color_seg(
             val_im = np.squeeze(val_im, axis=0)
         if "#" in str(color_vector[0]):
             # we have hex colors
-            assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
+            assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
         else:
             cols = cmap_params.cmap(cmap_params.norm(color_vector))
@@ -1607,15 +1637,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in {
-        "shapes",
-        "points",
-        "labels",
-    }:
+    if (color := param_dict.get("color")) and element_type in {"shapes", "points", "labels"}:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
         if element_type in {"shapes", "points"}:
-            if colors.is_color_like(color):
+            if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
             else:
@@ -1695,7 +1721,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
     if (na_color := param_dict.get("na_color")) != "default" and (
-        na_color is not None and not colors.is_color_like(na_color)
+        na_color is not None and not _is_color_like(na_color)
     ):
         raise ValueError("Parameter 'na_color' must be color-like.")
 
