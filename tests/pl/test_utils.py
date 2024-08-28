@@ -152,4 +152,3 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
 
     assert len_axs == len(axs.flatten())
     assert axs_visible == [ax.axison for ax in axs.flatten()]
-
