@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import scanpy as sc
-import spatialdata_plot
 from spatialdata import SpatialData
-from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
 
+import spatialdata_plot
+from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 SEED = 42

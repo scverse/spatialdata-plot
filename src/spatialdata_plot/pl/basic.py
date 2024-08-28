@@ -55,9 +55,9 @@ from spatialdata_plot.pl.utils import (
     _validate_points_render_params,
     _validate_shape_render_params,
     _validate_show_parameters,
+    _verify_plotting_tree,
     save_fig,
 )
-from spatialdata_plot.pp.utils import _verify_plotting_tree
 
 # replace with
 # from spatialdata._types import ColorLike
@@ -743,8 +743,6 @@ class PlotAccessor:
 
         # Evaluate execution tree for plotting
         valid_commands = [
-            "get_elements",
-            "get_bb",
             "render_images",
             "render_shapes",
             "render_labels",
