@@ -799,7 +799,7 @@ def _generate_base_categorial_color_mapping(
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     na_color: ColorLike,
 ) -> Mapping[str, str]:
-    if adata is not None and cluster_key in adata.uns:
+    if adata is not None and cluster_key in adata.uns and f"{cluster_key}_colors" in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
         categories = color_source_vector.categories.tolist() + ["NaN"]
         if "#" not in na_color:
