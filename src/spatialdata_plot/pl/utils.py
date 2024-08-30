@@ -877,7 +877,14 @@ def _generate_base_categorial_color_mapping(
         if "#" not in na_color:
             # should be unreachable, but just for safety
             raise ValueError("Expected `na_color` to be a hex color, but got a non-hex color.")
-        return dict(zip(categories, colors + [na_color]))
+
+        colors = [to_hex(to_rgba(color)[:3]) for color in colors]
+        na_color = to_hex(to_rgba(na_color)[:3])
+
+        if na_color and len(categories) > len(colors):
+            return dict(zip(categories, colors + [na_color]))
+
+        return dict(zip(categories, colors))
 
     return _get_default_categorial_color_mapping(color_source_vector)
 
