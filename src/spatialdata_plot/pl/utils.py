@@ -1592,11 +1592,13 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if (groups := param_dict.get("groups")) is not None and palette is None:
-        warnings.warn(
-            "Groups is specified but palette is not. Setting palette to default 'lightgray'", UserWarning, stacklevel=2
-        )
-        param_dict["palette"] = ["lightgray" for _ in range(len(groups))]
+    # if (groups := param_dict.get("groups")) is not None and palette is None:
+    #     warnings.warn(
+    #         "Groups is specified but palette is not. Setting palette to default 'lightgray'",
+    #         UserWarning,
+    #         stacklevel=2
+    #     )
+    #     param_dict["palette"] = ["lightgray" for _ in range(len(groups))]
 
     if isinstance((palette := param_dict["palette"]), list):
         if not all(isinstance(p, str) for p in palette):
