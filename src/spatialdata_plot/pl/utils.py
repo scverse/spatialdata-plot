@@ -808,35 +808,57 @@ def _map_color_seg(
     seg_boundaries: bool = False,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
-    if color_vector is not None and isinstance(color_vector.dtype, pd.CategoricalDtype):
-        # users wants to plot a categorical column
+
+    #     def _convert_colorvector_to_rgba(color_vector: ArrayLike
+    # if "#" in str(color_vector[0]):
+    #     # we have hex colors
+    #     assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
+    #     cols = colors.to_rgba_array(color_vector)
+
+    if pd.api.types.is_categorical_dtype(color_vector.dtype):
+        # Case A: users wants to plot a categorical column
         if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
-
-    else:
+    elif pd.api.types.is_numeric_dtype(color_vector.dtype):
+        # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
-        if val_im.shape[0] == 1:
-            val_im = np.squeeze(val_im, axis=0)
-        if "#" in str(color_vector[0]):
-            # we have hex colors
-            assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
-            cols = colors.to_rgba_array(color_vector)
         cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        val_im = map_array(seg, cell_id, cell_id)
+    else:
+        # Case C: User didn't specify any column to color by
+        if color_source_vector is not None and (
+            set(color_vector) == set(color_source_vector)
+            and len(set(color_vector)) == 1
+            and set(color_vector) == {na_color}
+            and not na_color_modified_by_user
+        ):
+            val_im = map_array(seg, cell_id, cell_id)
+            RNG = default_rng(42)
+            cols = RNG.random((len(color_vector), 3))
+
+    #     if np.any(color_source_vector.isna()):
+    #         cell_id[color_source_vector.isna()] = 0
+    #     val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
+    #     cols = colors.to_rgba_array(color_vector.categories)
+
+    # if pd.api.types.is_numeric_dtype(color_vector.dtype):
+
+    #     if isinstance(color_vector, pd.Series):
+    #         color_vector = color_vector.to_numpy()
+    #     val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
+    #     if val_im.shape[0] == 1:
+    #         val_im = np.squeeze(val_im, axis=0)
+
+    #     cols = cmap_params.cmap(cmap_params.norm(color_vector))
+    # else:
+    #     cols = [colors.to_rgba(c) for c in color_vector]
+    #     cols = cmap_params.cmap(cmap_params.norm(cols))
+
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
-
-    if color_source_vector is not None and (
-        set(color_vector) == set(color_source_vector)
-        and len(set(color_vector)) == 1
-        and set(color_vector) == {na_color}
-        and not na_color_modified_by_user
-    ):
-        RNG = default_rng(42)
-        cols = RNG.random((len(cols), 3))
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
