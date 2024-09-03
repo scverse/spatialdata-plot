@@ -1,6 +1,7 @@
 import anndata
 import geopandas as gpd
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -107,6 +108,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_circles", scale=0.5).pl.show()
 
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
         sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
@@ -115,7 +118,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             "category"
         )
 
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups="c1").pl.show()
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster").pl.show(ax=axs[0], legend_fontsize=6)
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups="c1").pl.show(
+            ax=axs[1], legend_fontsize=6
+        )
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs

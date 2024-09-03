@@ -1607,6 +1607,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["palette"] = [palette] if palette is not None else None
 
     if element_type in ["shapes", "points", "labels"] and (palette := param_dict.get("palette")) is not None:
+        groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
         if len(groups) != len(palette):
