@@ -567,9 +567,6 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     Union[plt.Figure, plt.Axes]
         Matplotlib figure and axes object.
     """
-    # if num_images <= 1:
-    # raise ValueError("Number of images must be greater than 1.")
-
     if num_images < ncols:
         nrows = 1
         ncols = num_images
@@ -783,11 +780,6 @@ def _set_color_source_vec(
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
-        # if color_vector.isna().any():
-        #     print(pd.DataFrame(color_vector))
-        #     if (na_cat_color := to_hex(na_color)) not in color_vector.categories:
-        #         color_vector = color_vector.add_categories([na_cat_color])
-        # color_vector = color_vector.fillna(to_hex(na_color))
 
         return color_source_vector, color_vector, True
 
@@ -808,12 +800,6 @@ def _map_color_seg(
     seg_boundaries: bool = False,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
-
-    #     def _convert_colorvector_to_rgba(color_vector: ArrayLike
-    # if "#" in str(color_vector[0]):
-    #     # we have hex colors
-    #     assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
-    #     cols = colors.to_rgba_array(color_vector)
 
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
@@ -1591,14 +1577,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Each item in 'groups' must be a string.")
 
     palette = param_dict["palette"]
-
-    # if (groups := param_dict.get("groups")) is not None and palette is None:
-    #     warnings.warn(
-    #         "Groups is specified but palette is not. Setting palette to default 'lightgray'",
-    #         UserWarning,
-    #         stacklevel=2
-    #     )
-    #     param_dict["palette"] = ["lightgray" for _ in range(len(groups))]
 
     if isinstance((palette := param_dict["palette"]), list):
         if not all(isinstance(p, str) for p in palette):
