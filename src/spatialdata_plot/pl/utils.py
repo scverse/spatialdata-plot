@@ -815,25 +815,17 @@ def _map_color_seg(
         val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
 
-    elif pd.api.types.is_numeric_dtype(color_vector.dtype):
-        # user wants to plot a continous column
+    else:
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        val_im = map_array(seg, cell_id, color_vector)
-        cols = cmap_params.cmap(cmap_params.norm(color_vector))
-
-    else:
         val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
-
         if val_im.shape[0] == 1:
             val_im = np.squeeze(val_im, axis=0)
         if "#" in str(color_vector[0]):
             # we have hex colors
             assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
             cols = colors.to_rgba_array(color_vector)
-        else:
-            cols = cmap_params.cmap(cmap_params.norm(color_vector))
-
+        cols = cmap_params.cmap(cmap_params.norm(color_vector))
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
 
