@@ -1,4 +1,5 @@
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -33,9 +34,13 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(color="genes", groups="gene_b", palette="red").pl.show()
 
     def test_plot_can_filter_with_groups_default_palette(self, sdata_blobs: SpatialData):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
-        sdata_blobs.pl.render_points(color="genes", groups="gene_b").pl.show()
+
+        sdata_blobs.pl.render_points(color="genes", size=20).pl.show(ax=axs[0])
+        sdata_blobs.pl.render_points(color="genes", groups="gene_b", size=20).pl.show(ax=axs[1])
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
