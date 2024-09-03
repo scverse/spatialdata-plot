@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.2.6] - tbd
+
+### Added
+
+-
+
+### Changed
+
+-   Lowered RMSE-threshold for plot-based tests from 45 to 15 (#344)
+-   When subsetting to `groups`, `NA` isn't automatically added to legend (#344)
+
+### Fixed
+
+-   Filtering with `groups` now preserves original cmap (#344)
+-   Non-selected `groups` are now not shown in `na_color` (#344)
+
 ## [0.2.5] - 2024-08-23
 
 ### Added
