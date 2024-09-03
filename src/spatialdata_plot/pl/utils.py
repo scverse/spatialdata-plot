@@ -733,8 +733,6 @@ def _set_color_source_vec(
         color = np.full(len(element), na_color)
         return color, color, False
 
-    # model = get_model(sdata[element_name])
-
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
 
@@ -778,16 +776,18 @@ def _set_color_source_vec(
             palette=palette,
             na_color=na_color,
         )
+
         color_source_vector = color_source_vector.set_categories(color_mapping.keys())
         if color_mapping is None:
             raise ValueError("Unable to create color palette.")
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
-        if color_vector.isna().any():
-            if (na_cat_color := to_hex(na_color)) not in color_vector.categories:
-                color_vector = color_vector.add_categories([na_cat_color])
-            color_vector = color_vector.fillna(to_hex(na_color))
+        # if color_vector.isna().any():
+        #     print(pd.DataFrame(color_vector))
+        #     if (na_cat_color := to_hex(na_color)) not in color_vector.categories:
+        #         color_vector = color_vector.add_categories([na_cat_color])
+        # color_vector = color_vector.fillna(to_hex(na_color))
 
         return color_source_vector, color_vector, True
 
@@ -847,24 +847,6 @@ def _map_color_seg(
                 cols = colors.to_rgba_array(color_vector)
             else:
                 cols = cmap_params.cmap(cmap_params.norm(color_vector))
-
-    #     if np.any(color_source_vector.isna()):
-    #         cell_id[color_source_vector.isna()] = 0
-    #     val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
-    #     cols = colors.to_rgba_array(color_vector.categories)
-
-    # if pd.api.types.is_numeric_dtype(color_vector.dtype):
-
-    #     if isinstance(color_vector, pd.Series):
-    #         color_vector = color_vector.to_numpy()
-    #     val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
-    #     if val_im.shape[0] == 1:
-    #         val_im = np.squeeze(val_im, axis=0)
-
-    #     cols = cmap_params.cmap(cmap_params.norm(color_vector))
-    # else:
-    #     cols = [colors.to_rgba(c) for c in color_vector]
-    #     cols = cmap_params.cmap(cmap_params.norm(cols))
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
@@ -971,7 +953,7 @@ def _get_categorical_color_mapping(
     else:
         base_mapping = _generate_base_categorial_color_mapping(adata, cluster_key, color_source_vector, na_color)
 
-    return _modify_categorical_color_mapping(base_mapping, groups, palette)
+    return _modify_categorical_color_mapping(mapping=base_mapping, groups=groups, palette=palette)
 
 
 def _maybe_set_colors(
