@@ -39,8 +39,8 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
 
-        sdata_blobs.pl.render_points(color="genes", size=20).pl.show(ax=axs[0])
-        sdata_blobs.pl.render_points(color="genes", groups="gene_b", size=20).pl.show(ax=axs[1])
+        sdata_blobs.pl.render_points(color="genes", size=10).pl.show(ax=axs[0], legend_fontsize=6)
+        sdata_blobs.pl.render_points(color="genes", groups="gene_b", size=10).pl.show(ax=axs[1], legend_fontsize=6)
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs

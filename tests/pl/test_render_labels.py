@@ -176,7 +176,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0], legend_fontsize=6)
         sdata_blobs.pl.render_labels(
             "blobs_labels",
             color="which_max",
@@ -190,7 +190,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0], legend_fontsize=6)
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="which_max", groups=["channel_0_sum"], palette="red"
         ).pl.show(ax=axs[1])
