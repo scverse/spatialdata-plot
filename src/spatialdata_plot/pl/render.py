@@ -9,6 +9,7 @@ import dask
 import datashader as ds
 import geopandas as gpd
 import matplotlib
+import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
@@ -47,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
-    _normalize,
     _rasterize_if_necessary,
     _set_color_source_vec,
     to_hex,
@@ -603,11 +603,6 @@ def _render_images(
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
 
-        if render_params.percentiles_for_norm != (None, None):
-            layer = _normalize(
-                layer, pmin=render_params.percentiles_for_norm[0], pmax=render_params.percentiles_for_norm[1], clip=True
-            )
-
         if render_params.cmap_params.norm:  # type: ignore[attr-defined]
             layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
@@ -623,19 +618,15 @@ def _render_images(
 
         _ax_show_and_transform(layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder)
 
+        if legend_params.colorbar:
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
+            fig_params.fig.colorbar(sm, ax=ax)
+
     # 2) Image has any number of channels but 1
     else:
         layers = {}
         for ch_index, c in enumerate(channels):
             layers[c] = img.sel(c=c).copy(deep=True).squeeze()
-
-            if render_params.percentiles_for_norm != (None, None):
-                layers[c] = _normalize(
-                    layers[c],
-                    pmin=render_params.percentiles_for_norm[0],
-                    pmax=render_params.percentiles_for_norm[1],
-                    clip=True,
-                )
 
             if not isinstance(render_params.cmap_params, list):
                 if render_params.cmap_params.norm is not None:
