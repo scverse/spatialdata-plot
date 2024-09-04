@@ -805,14 +805,14 @@ def _map_color_seg(
         # Case A: users wants to plot a categorical column
         if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
-        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
+        val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
         cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        val_im = map_array(seg, cell_id, cell_id)
+        val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors
         if color_source_vector is not None and (
@@ -821,12 +821,12 @@ def _map_color_seg(
             and set(color_vector) == {na_color}
             and not na_color_modified_by_user
         ):
-            val_im = map_array(seg, cell_id, cell_id)
+            val_im = map_array(seg.copy(), cell_id, cell_id)
             RNG = default_rng(42)
             cols = RNG.random((len(color_vector), 3))
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
-            val_im = map_array(seg, cell_id, cell_id)
+            val_im = map_array(seg.copy(), cell_id, cell_id)
             if "#" in str(color_vector[0]):
                 # we have hex colors
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
