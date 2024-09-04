@@ -76,6 +76,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels", color="my_var", cmap=new_cmap, table="table", norm=None, vmin=0
         ).pl.show(ax=axs[1], colorbar=True)
 
+
 @pytest.mark.parametrize(
     "color_result",
     [
