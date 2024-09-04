@@ -18,11 +18,15 @@ and this project adheres to [Semantic Versioning][].
 
 -   Lowered RMSE-threshold for plot-based tests from 45 to 15 (#344)
 -   When subsetting to `groups`, `NA` isn't automatically added to legend (#344)
+-   When rendering a single image channel, a colorbar is now shown (#346)
+-   Removed `quantiles_for_norm` parameter (#346)
+-   Changed `norm` to no longer accept bools, only `mpl.colors.Normalise` or `None` (#346)
 
 ### Fixed
 
 -   Filtering with `groups` now preserves original cmap (#344)
 -   Non-selected `groups` are now not shown in `na_color` (#344)
+-   Several issues associated with `norm` and `colorbar` (#346)
 
 ## [0.2.5] - 2024-08-23
 
