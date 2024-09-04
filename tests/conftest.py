@@ -33,7 +33,7 @@ HERE: Path = Path(__file__).parent
 
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
-TOL = 45
+TOL = 15
 DPI = 80
 
 RNG = np.random.default_rng(seed=42)

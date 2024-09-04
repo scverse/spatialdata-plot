@@ -855,7 +855,7 @@ def _render_labels(
         legend_fontweight=legend_params.legend_fontweight,
         legend_loc=legend_params.legend_loc,
         legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend,
+        na_in_legend=legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector)),
         colorbar=legend_params.colorbar,
         scalebar_dx=scalebar_params.scalebar_dx,
         scalebar_units=scalebar_params.scalebar_units,

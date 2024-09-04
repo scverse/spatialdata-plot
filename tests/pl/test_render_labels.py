@@ -5,9 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
-from anndata import AnnData
 from spatial_image import to_spatial_image
-from spatialdata import SpatialData, deepcopy, get_element_instances
+from spatialdata import SpatialData, deepcopy
 from spatialdata.models import TableModel
 
 import spatialdata_plot  # noqa: F401
@@ -82,6 +81,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
+    def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData):
+        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
+        sdata_blobs.table.obs["which_max"] = max_col
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show()
+
     @pytest.mark.parametrize(
         "label",
         [
@@ -89,19 +95,17 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_multiscale_labels",
         ],
     )
-    def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData, label: str):
+    def test_plot_can_color_labels_by_categorical_variable_in_other_table(self, sdata_blobs: SpatialData, label: str):
 
         def _make_tablemodel_with_categorical_labels(sdata_blobs, label):
 
-            n_obs = len(get_element_instances(sdata_blobs[label]))
-            vals = np.arange(n_obs) + 1
-            adata = AnnData(vals.reshape(-1, 1), obs=pd.DataFrame({"instance_id": vals}))
-            adata.obs["category"] = pd.Categorical(
-                list(["a", "b", "c"] * ((n_obs // 3) + 1))[:n_obs],
-                categories=["a", "b", "c"],
-                ordered=True,
-            )
+            adata = sdata_blobs.tables["table"].copy()
+            max_col = adata.to_df().idxmax(axis=1)
+            max_col = max_col.str.replace("channel_", "ch").str.replace("_sum", "")
+            max_col = pd.Categorical(max_col, categories=set(max_col), ordered=True)
+            adata.obs["which_max"] = max_col
             adata.obs["region"] = label
+            del adata.uns["spatialdata_attrs"]
             table = TableModel.parse(
                 adata=adata,
                 region_key="region",
@@ -110,7 +114,17 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             )
             sdata_blobs.tables["other_table"] = table
 
-            sdata_blobs.pl.render_labels(label, color="category", table="other_table", scale="scale0").pl.show()
+            _, axs = plt.subplots(nrows=1, ncols=3, layout="tight")
+
+            sdata_blobs.pl.render_labels(label, color="channel_1_sum", table="other_table", scale="scale0").pl.show(
+                ax=axs[0], title="ch_1_sum", colorbar=False
+            )
+            sdata_blobs.pl.render_labels(label, color="channel_2_sum", table="other_table", scale="scale0").pl.show(
+                ax=axs[1], title="ch_2_sum", colorbar=False
+            )
+            sdata_blobs.pl.render_labels(label, color="which_max", table="other_table", scale="scale0").pl.show(
+                ax=axs[2], legend_fontsize=6
+            )
 
         # we're modifying the data here, so we need an independent copy
         sdata_blobs_local = deepcopy(sdata_blobs)
@@ -176,7 +190,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0], legend_fontsize=6)
         sdata_blobs.pl.render_labels(
             "blobs_labels",
             color="which_max",
@@ -190,7 +204,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0])
+        sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show(ax=axs[0], legend_fontsize=6)
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="which_max", groups=["channel_0_sum"], palette="red"
         ).pl.show(ax=axs[1])
