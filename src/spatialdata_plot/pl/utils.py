@@ -489,7 +489,7 @@ def _get_scalebar(
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: Normalize | bool = False,
+    norm: Normalize | None = None,
     na_color: ColorLike | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
