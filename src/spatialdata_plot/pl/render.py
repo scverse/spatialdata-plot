@@ -128,6 +128,7 @@ def _render_shapes(
         shapes = shapes.reset_index()
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
+
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
     # Using dict.fromkeys here since set returns in arbitrary order
@@ -256,7 +257,8 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     # Sets the limits of the colorbar to the values instead of [0, 1]
-    if not norm and not values_are_categorical:
+    if not values_are_categorical:
+        # if not norm and not values_are_categorical:
         _cax.set_clim(min(color_vector), max(color_vector))
 
     if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
