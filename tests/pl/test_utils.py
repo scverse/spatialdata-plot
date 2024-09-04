@@ -59,24 +59,22 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
 
         # set up figure and modify the data to add 0s
         fig, axs = plt.subplots(ncols=2, figsize=(6, 3))
-        table = sdata_blobs.table.copy()
-        x = table.X.todense()
-        x[:10, 0] = 0
-        table.X = x
-        sdata_blobs.tables["modified_table"] = table
+        sdata_blobs.tables["table"].obs["my_var"] = list(range(len(sdata_blobs.tables["table"].obs)))
+        sdata_blobs.tables["table"].obs["my_var"] += 2  # shift the values to not have 0s
 
-        # create a new cmap with 0 as transparent
-        new_cmap = set_zero_in_cmap_to_transparent(cmap="plasma")
+        new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
 
         # baseline img
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", cmap="viridis", table="table").pl.show(
+        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap="viridis", table="table").pl.show(
             ax=axs[0], colorbar=False
         )
 
+        sdata_blobs.tables["table"].obs.iloc[8:12, 2] = 0
+
         # image with 0s as transparent, so some labels are "missing"
         sdata_blobs.pl.render_labels(
-            "blobs_labels", color="channel_0_sum", cmap=new_cmap, table="modified_table"
-        ).pl.show(ax=axs[1], colorbar=False)
+            "blobs_labels", color="my_var", cmap=new_cmap, table="table", norm=None, vmin=0
+        ).pl.show(ax=axs[1], colorbar=True)
 
 
 @pytest.mark.parametrize(
