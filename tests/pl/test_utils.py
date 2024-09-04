@@ -77,6 +77,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show(ax=axs[1], colorbar=False)
 
 
+
 @pytest.mark.parametrize(
     "color_result",
     [
