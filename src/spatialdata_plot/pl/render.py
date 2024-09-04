@@ -9,6 +9,7 @@ import dask
 import datashader as ds
 import geopandas as gpd
 import matplotlib
+import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
@@ -47,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
-    _normalize,
     _rasterize_if_necessary,
     _set_color_source_vec,
     to_hex,
@@ -128,6 +128,7 @@ def _render_shapes(
         shapes = shapes.reset_index()
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
+
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
     # Using dict.fromkeys here since set returns in arbitrary order
@@ -255,9 +256,13 @@ def _render_shapes(
         for path in _cax.get_paths():
             path.vertices = trans.transform(path.vertices)
 
-    # Sets the limits of the colorbar to the values instead of [0, 1]
-    if not norm and not values_are_categorical:
-        _cax.set_clim(min(color_vector), max(color_vector))
+    if not values_are_categorical:
+        # If the user passed a Normalize object with vmin/vmax we'll use those,
+        # # if not we'll use the min/max of the color_vector
+        _cax.set_clim(
+            vmin=render_params.cmap_params.norm.vmin or min(color_vector),
+            vmax=render_params.cmap_params.norm.vmax or max(color_vector),
+        )
 
     if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
@@ -603,11 +608,6 @@ def _render_images(
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
 
-        if render_params.percentiles_for_norm != (None, None):
-            layer = _normalize(
-                layer, pmin=render_params.percentiles_for_norm[0], pmax=render_params.percentiles_for_norm[1], clip=True
-            )
-
         if render_params.cmap_params.norm:  # type: ignore[attr-defined]
             layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
@@ -623,19 +623,15 @@ def _render_images(
 
         _ax_show_and_transform(layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder)
 
+        if legend_params.colorbar:
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
+            fig_params.fig.colorbar(sm, ax=ax)
+
     # 2) Image has any number of channels but 1
     else:
         layers = {}
         for ch_index, c in enumerate(channels):
             layers[c] = img.sel(c=c).copy(deep=True).squeeze()
-
-            if render_params.percentiles_for_norm != (None, None):
-                layers[c] = _normalize(
-                    layers[c],
-                    pmin=render_params.percentiles_for_norm[0],
-                    pmax=render_params.percentiles_for_norm[1],
-                    clip=True,
-                )
 
             if not isinstance(render_params.cmap_params, list):
                 if render_params.cmap_params.norm is not None:

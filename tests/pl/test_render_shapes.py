@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
+from matplotlib.colors import Normalize
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
@@ -146,7 +147,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=True).pl.show()
+        norm = Normalize(vmin=0, vmax=5, clip=True)
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included

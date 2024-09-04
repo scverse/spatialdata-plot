@@ -489,7 +489,7 @@ def _get_scalebar(
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: Normalize | bool = False,
+    norm: Normalize | None = None,
     na_color: ColorLike | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
@@ -1623,29 +1623,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             if scale < 0:
                 raise ValueError("Parameter 'scale' must be a positive number.")
 
-    if (percentiles_for_norm := param_dict.get("percentiles_for_norm")) is None:
-        percentiles_for_norm = (None, None)
-    elif not (isinstance(percentiles_for_norm, (list, tuple)) or len(percentiles_for_norm) != 2):
-        raise TypeError("Parameter 'percentiles_for_norm' must be a list or tuple of exactly two floats or None.")
-    elif not all(
-        isinstance(p, (float, int, type(None)))
-        and isinstance(p, type(percentiles_for_norm[0]))
-        and (p is None or 0 <= p <= 100)
-        for p in percentiles_for_norm
-    ):
-        raise TypeError(
-            "Each item in 'percentiles_for_norm' must be of the same dtype and must be a float or int within [0, 100], "
-            "or None"
-        )
-    elif (
-        percentiles_for_norm[0] is not None
-        and percentiles_for_norm[1] is not None
-        and percentiles_for_norm[0] > percentiles_for_norm[1]
-    ):
-        raise ValueError("The first number in 'percentiles_for_norm' must not be smaller than the second.")
-    if "percentiles_for_norm" in param_dict:
-        param_dict["percentiles_for_norm"] = percentiles_for_norm
-
     if size := param_dict.get("size"):
         if not isinstance(size, (float, int)):
             raise TypeError("Parameter 'size' must be numeric.")
@@ -1886,7 +1863,6 @@ def _validate_image_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
-    percentiles_for_norm: tuple[float | None, float | None] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1898,7 +1874,6 @@ def _validate_image_render_params(
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
-        "percentiles_for_norm": percentiles_for_norm,
     }
     param_dict = _type_check_params(param_dict, "images")
 
@@ -1944,8 +1919,6 @@ def _validate_image_render_params(
                 element_params[el]["scale"] = scale
         else:
             element_params[el]["scale"] = scale
-
-        element_params[el]["percentiles_for_norm"] = param_dict["percentiles_for_norm"]
 
     return element_params
 

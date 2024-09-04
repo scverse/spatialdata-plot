@@ -166,7 +166,7 @@ class PlotAccessor:
         outline_color: str | list[float] = "#000000ff",
         outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
-        norm: bool | Normalize = False,
+        norm: Normalize | None = None,
         scale: float | int = 1.0,
         method: str | None = None,
         table_name: str | None = None,
@@ -301,7 +301,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
         cmap: Colormap | str | None = None,
-        norm: None | Normalize = None,
+        norm: Normalize | None = None,
         size: float | int = 1.0,
         method: str | None = None,
         table_name: str | None = None,
@@ -422,7 +422,6 @@ class PlotAccessor:
         na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
-        percentiles_for_norm: tuple[float, float] | None = None,
         scale: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -457,8 +456,6 @@ class PlotAccessor:
             Palette to color images. The number of palettes should be equal to the number of channels.
         alpha : float | int, default 1.0
             Alpha value for the images. Must be a numeric between 0 and 1.
-        percentiles_for_norm : tuple[float, float] | None
-            Optional pair of floats (pmin < pmax, 0-100) which will be used for quantile normalization.
         scale : str | None
             Influences the resolution of the rendering. Possibilities include:
                 1) `None` (default): The image is rasterized to fit the canvas size. For
@@ -486,7 +483,6 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             scale=scale,
-            percentiles_for_norm=percentiles_for_norm,
         )
 
         sdata = self._copy()
@@ -494,12 +490,7 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
 
         for element, param_values in params_dict.items():
-            # cmap_params = _prepare_cmap_norm(
-            #     cmap=params_dict[element]["cmap"],
-            #     norm=norm,
-            #     na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
-            #     **kwargs,
-            # )
+
             cmap_params: list[CmapParams] | CmapParams
             if isinstance(cmap, list):
                 cmap_params = [
@@ -525,7 +516,6 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 alpha=param_values["alpha"],
-                percentiles_for_norm=param_values["percentiles_for_norm"],
                 scale=param_values["scale"],
                 zorder=n_steps,
             )
