@@ -23,7 +23,9 @@ def test_render_images_can_plot_one_cyx_image(request):
 def test_render_images_can_plot_multiple_cyx_images(share_coordinate_system: str, request):
     fun = request.getfixturevalue("get_sdata_with_multiple_images")
     sdata = fun(share_coordinate_system)
-    sdata.pl.render_images().pl.show()
+    sdata.pl.render_images().pl.show(
+        colorbar=False,  # otherwise we'll get one cbar per image in the same cs
+    )
     axs = plt.gcf().get_axes()
 
     if share_coordinate_system == "all":
