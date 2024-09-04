@@ -256,10 +256,13 @@ def _render_shapes(
         for path in _cax.get_paths():
             path.vertices = trans.transform(path.vertices)
 
-    # Sets the limits of the colorbar to the values instead of [0, 1]
     if not values_are_categorical:
-        # if not norm and not values_are_categorical:
-        _cax.set_clim(min(color_vector), max(color_vector))
+        # If the user passed a Normalize object with vmin/vmax we'll use those,
+        # # if not we'll use the min/max of the color_vector
+        _cax.set_clim(
+            vmin=render_params.cmap_params.norm.vmin or min(color_vector),
+            vmax=render_params.cmap_params.norm.vmax or max(color_vector),
+        )
 
     if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
