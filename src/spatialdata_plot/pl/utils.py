@@ -39,6 +39,7 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
@@ -1016,7 +1017,9 @@ def _decorate_axs(
             )
         elif colorbar:
             # TODO: na_in_legend should have some effect here
-            cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+            ax_divider = make_axes_locatable(ax)
+            cax2 = ax_divider.append_axes("right", size="5%", pad="2%")
+            cb = fig_params.fig.colorbar(cax, ax=ax, cax=cax2)
             cb.solids.set_alpha(alpha)
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
