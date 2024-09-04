@@ -58,7 +58,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 
         # set up figure and modify the data to add 0s
-        fig, axs = plt.subplots(ncols=2, figsize=(6, 3))
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
         sdata_blobs.tables["table"].obs["my_var"] = list(range(len(sdata_blobs.tables["table"].obs)))
         sdata_blobs.tables["table"].obs["my_var"] += 2  # shift the values to not have 0s
 
@@ -75,7 +75,6 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="my_var", cmap=new_cmap, table="table", norm=None, vmin=0
         ).pl.show(ax=axs[1], colorbar=True)
-
 
 @pytest.mark.parametrize(
     "color_result",
