@@ -74,7 +74,8 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         # image with 0s as transparent, so some labels are "missing"
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="my_var", cmap=new_cmap, table="table", norm=None, vmin=0
-        ).pl.show(ax=axs[1], colorbar=True)
+        ).pl.show(ax=axs[1], colorbar=False)
+
 
 @pytest.mark.parametrize(
     "color_result",
