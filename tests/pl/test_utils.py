@@ -72,10 +72,9 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.tables["table"].obs.iloc[8:12, 2] = 0
 
         # image with 0s as transparent, so some labels are "missing"
-        sdata_blobs.pl.render_labels(
-            "blobs_labels", color="my_var", cmap=new_cmap, table="table", norm=None, vmin=0
-        ).pl.show(ax=axs[1], colorbar=False)
-
+        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap=new_cmap, table="table").pl.show(
+            ax=axs[1], colorbar=False
+        )
 
 
 @pytest.mark.parametrize(
