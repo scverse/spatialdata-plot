@@ -17,7 +17,6 @@ import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
-import multiscale_spatial_image as msi
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -2140,6 +2139,8 @@ def _datshader_get_how_kw_for_spread(
         )
 
     return reduction_to_how_map[reduction]
+
+
 def _robust_get_value(
     sdata: sd.SpatialData,
     origin: _ValueOrigin,
