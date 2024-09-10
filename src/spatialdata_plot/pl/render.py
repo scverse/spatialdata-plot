@@ -466,15 +466,14 @@ def _render_points(
             color_vector = np.asarray([x[:-2] for x in color_vector])
 
         if color_by_categorical or col_for_color is None:
-          ds_result = (
-              ds.tf.shade(
-                  ds.tf.spread(agg, px=px),
-                  rescale_discrete_levels=True,
-                  cmap=color_vector[0],
-                  color_key=color_key,
-                  min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
-                  how="linear",
-              )
+            ds_result = ds.tf.shade(
+                ds.tf.spread(agg, px=px),
+                rescale_discrete_levels=True,
+                cmap=color_vector[0],
+                color_key=color_key,
+                min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+                how="linear",
+            )
         else:
             spread_how = _datshader_get_how_kw_for_spread(render_params.reduction)
             agg = ds.tf.spread(agg, px=px, how=spread_how)
