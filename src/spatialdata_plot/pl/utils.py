@@ -2029,6 +2029,7 @@ def _get_extent_and_range_for_datashader_canvas(
     plot_height = y_ext[1] - y_ext[0]
     plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
     plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
+    factor: float
     factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
     plot_width = int(np.round(plot_width / factor))
     plot_height = int(np.round(plot_height / factor))
