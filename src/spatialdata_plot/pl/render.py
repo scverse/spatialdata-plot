@@ -132,7 +132,6 @@ def _render_shapes(
         shapes = shapes.reset_index()
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
-    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
@@ -163,7 +162,8 @@ def _render_shapes(
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
     elif method not in ["matplotlib", "datashader"]:
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-    logger.info(f"Using {method}")
+    if method == "datashader":
+        logger.info("Using datashader to render shapes.")
 
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
@@ -196,6 +196,11 @@ def _render_shapes(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
+                reduction_name = render_params.reduction if render_params.reduction is not None else "sum"
+                logger.info(
+                    f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
+                    "to the matplotlib result."
+                )
                 agg = _datashader_aggregate_with_function(
                     render_params.reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
                 )
@@ -405,7 +410,8 @@ def _render_points(
         method = "datashader" if len(points) > 10000 else "matplotlib"
     elif method not in ["matplotlib", "datashader"]:
         raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-    logger.info(f"Using {method}")
+    if method == "datashader":
+        logger.info("Using datashader to render points.")
 
     if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2

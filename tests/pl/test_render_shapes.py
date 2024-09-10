@@ -308,3 +308,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_datashader_shades_with_linear_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 2, 1, 20, 1]
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()

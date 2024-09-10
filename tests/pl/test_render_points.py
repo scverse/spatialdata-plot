@@ -104,3 +104,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(
             color="genes", groups="gene_b", palette="lightgreen", size=20, method="datashader"
         ).pl.show()
+
+    def test_plot_datashader_can_use_max_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="max"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_count_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="count"
+        ).pl.show()
+
+    def test_plot_mpl_and_datashader_point_sizes_agree_after_altered_dpi(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", size=400, color="blue").pl.render_points(
+            element="blobs_points", size=400, color="yellow", method="datashader", alpha=1
+        ).pl.show(dpi=200)
