@@ -1,12 +1,13 @@
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from spatialdata import SpatialData
 from spatialdata.models import TableModel
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
@@ -27,15 +28,25 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points").pl.show()
 
-    def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
-        sdata_blobs.pl.render_points(color="genes", groups="gene_b", palette="orange").pl.show()
-
     def test_plot_can_filter_with_groups_default_palette(self, sdata_blobs: SpatialData):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
-        sdata_blobs.pl.render_points(color="genes", groups="gene_b").pl.show()
+
+        sdata_blobs.pl.render_points(color="genes", size=10).pl.show(ax=axs[0], legend_fontsize=6)
+        sdata_blobs.pl.render_points(color="genes", groups="gene_b", size=10).pl.show(ax=axs[1], legend_fontsize=6)
+
+    def test_plot_can_filter_with_groups_custom_palette(self, sdata_blobs: SpatialData):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+
+        sdata_blobs.pl.render_points(color="genes", size=10).pl.show(ax=axs[0], legend_fontsize=6)
+        sdata_blobs.pl.render_points(color="genes", groups="gene_b", size=10, palette="red").pl.show(
+            ax=axs[1], legend_fontsize=6
+        )
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs

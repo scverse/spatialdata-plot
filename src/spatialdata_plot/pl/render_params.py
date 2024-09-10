@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Union
 
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, ListedColormap, Normalize
@@ -11,6 +11,11 @@ from matplotlib.figure import Figure
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = Union[tuple[float, ...], str]
+
 
 @dataclass
 class CmapParams:
@@ -18,8 +23,9 @@ class CmapParams:
 
     cmap: Colormap
     norm: Normalize
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0)
-    is_default: bool = True
+    na_color: ColorLike
+    na_color_modified_by_user: bool = False
+    cmap_is_default: bool = True
 
 
 @dataclass

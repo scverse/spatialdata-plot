@@ -9,7 +9,6 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import spatialdata as sd
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 from datatree import DataTree
 from geopandas import GeoDataFrame
@@ -28,11 +27,13 @@ from spatialdata.models import (
 )
 from xarray import DataArray
 
+import spatialdata_plot  # noqa: F401
+
 HERE: Path = Path(__file__).parent
 
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
-TOL = 60
+TOL = 15
 DPI = 80
 
 RNG = np.random.default_rng(seed=42)

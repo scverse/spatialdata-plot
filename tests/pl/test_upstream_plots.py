@@ -4,7 +4,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from spatialdata import SpatialData
 from spatialdata.transformations import (
     Affine,
@@ -15,6 +14,7 @@ from spatialdata.transformations import (
     set_transformation,
 )
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)

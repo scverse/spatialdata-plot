@@ -4,13 +4,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from geopandas import GeoDataFrame
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData
 from spatialdata.models import PointsModel, ShapesModel
 from spatialdata.transformations import Affine, set_transformation
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
@@ -48,7 +48,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes("blobs_circles").pl.render_shapes("blobs_polygons").pl.show()
 
     def test_plot_extent_of_img_is_correct_after_spatial_query(self, sdata_blobs: SpatialData):
-        cropped_blobs = sdata_blobs.pp.get_elements(["blobs_image"]).query.bounding_box(
+        cropped_blobs = sdata_blobs.query.bounding_box(
             axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[400, 400], target_coordinate_system="global"
         )
         cropped_blobs.pl.render_images().pl.show()
