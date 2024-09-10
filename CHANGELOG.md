@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.7] - 2024-09-04
+## [0.2.7] - tbd
 
 ### Added
 
--
+-   the datashader reduction method is now a user parameter (#309)
 
 ### Changed
 
@@ -20,7 +20,9 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--
+-   datashader now uses canvas size = image size which speeds up the rendering (#309)
+-   datashader now uses the linear version of continuous colormaps (#309)
+-   point sizes of datashader now agree with matplotlib also when dpi != 100 (#309)
 
 ## [0.2.6] - 2024-09-04
 
