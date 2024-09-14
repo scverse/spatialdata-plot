@@ -417,12 +417,18 @@ def _render_points(
     norm = copy(render_params.cmap_params.norm)
 
     method = render_params.method
+
     if method is None:
         method = "datashader" if len(points) > 10000 else "matplotlib"
-    elif method not in ["matplotlib", "datashader"]:
-        raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
-    if method == "datashader":
-        logger.info("Using datashader to render points.")
+
+    if method != "matplotlib":
+        # we only notify the user when we switched away from matplotlib
+        logger.info(
+            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
+            " method to speed up plotting. Depending on the reduction method, the value"
+            " range of the plot might change. Set method to 'matplotlib' do disable"
+            " this behaviour."
+        )
 
     if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
