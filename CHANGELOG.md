@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
--   the datashader reduction method is now a user parameter (#309)
+-   The user can now specify `datashader_reduction` to control the rendering behaviour (#309)
 
 ### Changed
 

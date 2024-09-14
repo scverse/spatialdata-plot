@@ -1507,7 +1507,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
-
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
     elif element_type == "labels":
@@ -1638,8 +1637,19 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
 
-    if param_dict.get("method") not in ["matplotlib", "datashader", None]:
+    # like this because the following would assign True/False to 'method'
+    # method := param_dict.get("method") not in ["matplotlib", "datashader", None]
+    method = param_dict.get("method")
+    if method not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
+    valid_ds_reduction_methods = ["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]
+    ds_reduction = param_dict.get("ds_reduction")
+    if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
+        raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
+
+    if method == "datashader" and ds_reduction is None:
+        param_dict["ds_reduction"] = "sum"
 
     return param_dict
 
@@ -1778,6 +1788,7 @@ def _validate_shape_render_params(
     scale: float | int,
     table_name: str | None,
     method: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1795,6 +1806,7 @@ def _validate_shape_render_params(
         "scale": scale,
         "table_name": table_name,
         "method": method,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
@@ -1828,6 +1840,7 @@ def _validate_shape_render_params(
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["method"] = param_dict["method"]
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -2041,9 +2054,10 @@ def _create_image_from_datashader_result(
     ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
 ) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.CompositeGenericTransform]:
     # create SpatialImage from datashader output to get it back to original size
-    rgba_image = np.transpose(ds_result.to_numpy().base, (2, 0, 1))
+    rgba_image_data = ds_result.to_numpy().base
+    rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
     rgba_image = Image2DModel.parse(
-        rgba_image,
+        rgba_image_data,
         dims=("c", "y", "x"),
         transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
     )
@@ -2085,40 +2099,47 @@ def _datashader_aggregate_with_function(
         reduction = "sum"
 
     reduction_function_map = {
-        "sum": ds.sum(column=col_for_color),
-        "mean": ds.mean(column=col_for_color),
-        "any": ds.any(column=col_for_color),
-        "count": ds.count(column=col_for_color),
-        "m2": ds.reductions.m2(column=col_for_color),
-        "mode": ds.reductions.mode(column=col_for_color),
-        "std": ds.std(column=col_for_color),
-        "var": ds.var(column=col_for_color),
-        "max": ds.max(column=col_for_color),
-        "min": ds.min(column=col_for_color),
+        "sum": ds.sum,
+        "mean": ds.mean,
+        "any": ds.any,
+        "count": ds.count,
+        "m2": ds.reductions.m2,
+        "mode": ds.reductions.mode,
+        "std": ds.std,
+        "var": ds.var,
+        "max": ds.max,
+        "min": ds.min,
     }
 
-    if reduction not in reduction_function_map:
+    try:
+        reduction_function = reduction_function_map[reduction](column=col_for_color)
+    except KeyError as e:
         raise ValueError(
-            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
-            ", std, var, max, min."
-        )
-    if element_type not in ["points", "shapes"]:
-        raise ValueError(
-            f"utils._datashader_aggregate_with_function() should only be called with points or shapes, not with"
-            f"  {element_type}."
-        )
+            f"Reduction '{reduction}' is not supported. Please use one of: {', '.join(reduction_function_map.keys())}."
+        ) from e
+
+    element_function_map = {
+        "points": cvs.points,
+        "shapes": cvs.polygons,
+    }
+
+    try:
+        element_function = element_function_map[element_type]
+    except KeyError as e:
+        raise ValueError(f"Element type '{element_type}' is not supported. Use 'points' or 'shapes'.") from e
 
     if element_type == "points":
-        return cvs.points(spatial_element, "x", "y", agg=reduction_function_map[reduction])
-    return cvs.polygons(spatial_element, geometry="geometry", agg=reduction_function_map[reduction])
+        return element_function(spatial_element, "x", "y", agg=reduction_function)
+
+    # is shapes
+    return element_function(spatial_element, geometry="geometry", agg=reduction_function)
 
 
 def _datshader_get_how_kw_for_spread(
     reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
-    if reduction is None:
-        reduction = "sum"
+    reduction = reduction or "sum"
 
     reduction_to_how_map = {
         "sum": "add",

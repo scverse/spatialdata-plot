@@ -158,13 +158,18 @@ def _render_shapes(
 
     # Determine which method to use for rendering
     method = render_params.method
+
     if method is None:
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
-    elif method not in ["matplotlib", "datashader"]:
-        raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+
     if method != "matplotlib":
         # we only notify the user when we switched away from matplotlib
-        logger.info(f"Using '{method}' as plotting backend.")
+        logger.info(
+            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
+            " method to speed up plotting. Depending on the reduction method, the value"
+            " range of the plot might change. Set method to 'matplotlib' do disable"
+            " this behaviour."
+        )
 
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
@@ -197,13 +202,13 @@ def _render_shapes(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                reduction_name = render_params.reduction if render_params.reduction is not None else "sum"
+                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
                 logger.info(
                     f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
+                    render_params.ds_reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
@@ -437,13 +442,13 @@ def _render_points(
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                reduction_name = render_params.reduction if render_params.reduction is not None else "sum"
+                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
                 logger.info(
                     f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.reduction, cvs, sdata_filt.points[element], col_for_color, "points"
+                    render_params.ds_reduction, cvs, sdata_filt.points[element], col_for_color, "points"
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
@@ -475,7 +480,7 @@ def _render_points(
                 how="linear",
             )
         else:
-            spread_how = _datshader_get_how_kw_for_spread(render_params.reduction)
+            spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
             agg = ds.tf.spread(agg, px=px, how=spread_how)
             aggregate_with_reduction = (agg.min(), agg.max())
             ds_result = ds.tf.shade(

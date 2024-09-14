@@ -227,10 +227,15 @@ class PlotAccessor:
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
+
         **kwargs : Any
-            Additional arguments to be passed to cmap and norm. And:
-            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]|None
-            reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
+            Additional arguments for customization. This can include:
+
+            datashader_reduction : Literal[
+                "sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"
+            ], default: "sum"
+                Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
+
 
         Notes
         -----
@@ -259,13 +264,13 @@ class PlotAccessor:
             scale=scale,
             table_name=table_name,
             method=method,
+            ds_reduction=kwargs.get("datashader_reduction", None),
         )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
         outline_params = _set_outline(outline_alpha > 0, outline_width, outline_color)
-
         for element, param_values in params_dict.items():
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
@@ -287,8 +292,8 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc", None),
                 table_name=param_values["table_name"],
                 zorder=n_steps,
-                method=method,
-                reduction=kwargs.get("datashader_reduction", None),
+                method=param_values["method"],
+                ds_reduction=param_values["ds_reduction"],
             )
             n_steps += 1
 
@@ -358,10 +363,14 @@ class PlotAccessor:
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
-        kwargs
-            Additional arguments to be passed to cmap and norm. And:
-            datashader_reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]|None
-            reduction method to use when using datashader and coloring by continuous values. Default: ds.sum()
+
+        **kwargs : Any
+            Additional arguments for customization. This can include:
+
+            datashader_reduction : Literal[
+                "sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"
+            ], default: "sum"
+                Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
 
         Returns
         -------
@@ -412,7 +421,7 @@ class PlotAccessor:
                 table_name=param_values["table_name"],
                 zorder=n_steps,
                 method=method,
-                reduction=kwargs.get("datashader_reduction", None),
+                ds_reduction=kwargs.get("datashader_reduction", None),
             )
             n_steps += 1
 
