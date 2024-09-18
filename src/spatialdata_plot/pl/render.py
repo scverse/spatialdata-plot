@@ -222,12 +222,22 @@ def _render_shapes(
             else None
         )
 
+        ds_cmap = None
+        if color_vector is not None:
+            ds_cmap = color_vector[0]
+            if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
+                ds_cmap = ds_cmap[:-2]
+        # if color_vector is not None and (
+        #     isinstance(color_vector[0], str) and len(color_vector[0]) == 9 and color_vector[0][0] == "#"
+        # ):
+        #     color_vector = [x[:-2] for x in color_vector]
+
         ds_result = (
             ds.tf.shade(
                 agg,
-                cmap=color_vector[0][:-2],
+                cmap=ds_cmap,
                 color_key=color_key,
-                min_alpha=np.min([150, render_params.fill_alpha * 255]),
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
                 how="linear",
             )
             if color_by_categorical or col_for_color is None
@@ -479,10 +489,9 @@ def _render_points(
         if color_by_categorical or col_for_color is None:
             ds_result = ds.tf.shade(
                 ds.tf.spread(agg, px=px),
-                rescale_discrete_levels=True,
                 cmap=color_vector[0],
                 color_key=color_key,
-                min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+                min_alpha=np.min([255, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
                 how="linear",
             )
         else:
@@ -491,7 +500,6 @@ def _render_points(
             aggregate_with_reduction = (agg.min(), agg.max())
             ds_result = ds.tf.shade(
                 agg,
-                rescale_discrete_levels=True,
                 cmap=render_params.cmap_params.cmap,
                 how="linear",
             )

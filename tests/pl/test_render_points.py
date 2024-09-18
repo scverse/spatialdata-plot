@@ -136,11 +136,6 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="count"
         ).pl.show()
 
-    def test_plot_datashader_can_use_m2_as_reduction(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="m2"
-        ).pl.show()
-
     def test_plot_datashader_can_use_mode_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
             element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="mode"

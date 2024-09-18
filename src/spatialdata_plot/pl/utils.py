@@ -1643,7 +1643,18 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if method not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
-    valid_ds_reduction_methods = ["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"]
+    valid_ds_reduction_methods = [
+        "sum",
+        "mean",
+        "any",
+        "count",
+        # "m2", -> not intended to be used alone (see https://datashader.org/api.html#datashader.reductions.m2)
+        "mode",
+        "std",
+        "var",
+        "max",
+        "min",
+    ]
     ds_reduction = param_dict.get("ds_reduction")
     if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
         raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
@@ -2075,7 +2086,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None,
+    reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2103,7 +2114,6 @@ def _datashader_aggregate_with_function(
         "mean": ds.mean,
         "any": ds.any,
         "count": ds.count,
-        "m2": ds.reductions.m2,
         "mode": ds.reductions.mode,
         "std": ds.std,
         "var": ds.var,
@@ -2136,7 +2146,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"] | None
+    reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2146,7 +2156,6 @@ def _datshader_get_how_kw_for_spread(
         "mean": "source",
         "any": "source",
         "count": "add",
-        "m2": "source",
         "mode": "source",
         "std": "source",
         "var": "source",
@@ -2156,7 +2165,7 @@ def _datshader_get_how_kw_for_spread(
 
     if reduction not in reduction_to_how_map:
         raise ValueError(
-            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, m2, mode"
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, mode"
             ", std, var, max, min."
         )
 

@@ -232,7 +232,7 @@ class PlotAccessor:
             Additional arguments for customization. This can include:
 
             datashader_reduction : Literal[
-                "sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"
+                "sum", "mean", "any", "count", "mode", "std", "var", "max", "min"
             ], default: "sum"
                 Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
 
@@ -368,7 +368,7 @@ class PlotAccessor:
             Additional arguments for customization. This can include:
 
             datashader_reduction : Literal[
-                "sum", "mean", "any", "count", "m2", "mode", "std", "var", "max", "min"
+                "sum", "mean", "any", "count", "mode", "std", "var", "max", "min"
             ], default: "sum"
                 Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
 
