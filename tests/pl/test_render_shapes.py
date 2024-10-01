@@ -342,7 +342,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_alpha=0.5).pl.show()
 
     def test_plot_datashader_can_render_with_diff_width_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_width=5.0).pl.show()
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1.0, outline_width=5.0
+        ).pl.show()
 
     def test_plot_datashader_can_render_with_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(

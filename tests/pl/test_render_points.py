@@ -158,5 +158,5 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_mpl_and_datashader_point_sizes_agree_after_altered_dpi(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points", size=400, color="blue").pl.render_points(
-            element="blobs_points", size=400, color="yellow", method="datashader", alpha=1
+            element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
         ).pl.show(dpi=200)
