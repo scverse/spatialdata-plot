@@ -1649,7 +1649,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         "any",
         "count",
         # "m2", -> not intended to be used alone (see https://datashader.org/api.html#datashader.reductions.m2)
-        "mode",
+        # "mode", -> not supported for points (see https://datashader.org/api.html#datashader.reductions.mode)
         "std",
         "var",
         "max",
@@ -2086,7 +2086,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None,
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2114,7 +2114,6 @@ def _datashader_aggregate_with_function(
         "mean": ds.mean,
         "any": ds.any,
         "count": ds.count,
-        "mode": ds.reductions.mode,
         "std": ds.std,
         "var": ds.var,
         "max": ds.max,
@@ -2139,14 +2138,19 @@ def _datashader_aggregate_with_function(
         raise ValueError(f"Element type '{element_type}' is not supported. Use 'points' or 'shapes'.") from e
 
     if element_type == "points":
-        return element_function(spatial_element, "x", "y", agg=reduction_function)
+        points_aggregate = element_function(spatial_element, "x", "y", agg=reduction_function)
+        if reduction == "any":
+            # replace False/True by nan/1
+            points_aggregate = points_aggregate.astype(int)
+            points_aggregate = points_aggregate.where(points_aggregate > 0)
+        return points_aggregate
 
     # is shapes
     return element_function(spatial_element, geometry="geometry", agg=reduction_function)
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2156,7 +2160,6 @@ def _datshader_get_how_kw_for_spread(
         "mean": "source",
         "any": "source",
         "count": "add",
-        "mode": "source",
         "std": "source",
         "var": "source",
         "max": "max",
@@ -2165,7 +2168,7 @@ def _datshader_get_how_kw_for_spread(
 
     if reduction not in reduction_to_how_map:
         raise ValueError(
-            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count, mode"
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count"
             ", std, var, max, min."
         )
 

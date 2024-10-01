@@ -214,6 +214,14 @@ def _render_shapes(
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
+        # render outlines if needed
+        render_outlines = render_params.outline_alpha > 0
+        if render_outlines:
+            agg_outlines = cvs.line(
+                sdata_filt.shapes[element],
+                geometry="geometry",
+                line_width=render_params.outline_params.linewidth,
+            )
 
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
@@ -222,36 +230,56 @@ def _render_shapes(
             else None
         )
 
-        ds_cmap = None
-        if color_vector is not None:
-            ds_cmap = color_vector[0]
-            if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
-                ds_cmap = ds_cmap[:-2]
-        # if color_vector is not None and (
-        #     isinstance(color_vector[0], str) and len(color_vector[0]) == 9 and color_vector[0][0] == "#"
-        # ):
-        #     color_vector = [x[:-2] for x in color_vector]
+        if color_by_categorical or col_for_color is None:
+            ds_cmap = None
+            if color_vector is not None:
+                ds_cmap = color_vector[0]
+                if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
+                    ds_cmap = ds_cmap[:-2]
 
-        ds_result = (
-            ds.tf.shade(
+            ds_result = ds.tf.shade(
                 agg,
                 cmap=ds_cmap,
                 color_key=color_key,
                 min_alpha=np.min([254, render_params.fill_alpha * 255]),
                 how="linear",
             )
-            if color_by_categorical or col_for_color is None
-            else ds.tf.shade(
+        elif aggregate_with_reduction is not None:  # to shut up mypy
+            ds_cmap = render_params.cmap_params.cmap
+            if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
+                ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
+                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+
+            ds_result = ds.tf.shade(
                 agg,
-                cmap=render_params.cmap_params.cmap,
+                cmap=ds_cmap,
+                how="linear",
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
+            )
+
+        # shade outlines if needed
+        outline_color = render_params.outline_params.outline_color
+        if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
+            outline_color = outline_color[:-2]
+
+        if render_outlines:
+            ds_outlines = ds.tf.shade(
+                agg_outlines,
+                cmap=outline_color,
+                min_alpha=np.min([254, render_params.outline_alpha * 255]),
                 how="linear",
             )
-        )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
             rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
         )
+        # render outline image if needed
+        if render_outlines:
+            rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
+            _ax_show_and_transform(
+                rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.outline_alpha
+            )
 
         cax = None
         if aggregate_with_reduction is not None:
@@ -491,16 +519,22 @@ def _render_points(
                 ds.tf.spread(agg, px=px),
                 cmap=color_vector[0],
                 color_key=color_key,
-                min_alpha=np.min([255, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+                min_alpha=np.min([254, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
                 how="linear",
             )
         else:
             spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
             agg = ds.tf.spread(agg, px=px, how=spread_how)
             aggregate_with_reduction = (agg.min(), agg.max())
+
+            ds_cmap = render_params.cmap_params.cmap
+            if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
+                ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
+                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+
             ds_result = ds.tf.shade(
                 agg,
-                cmap=render_params.cmap_params.cmap,
+                cmap=ds_cmap,
                 how="linear",
             )
 

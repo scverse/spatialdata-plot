@@ -89,7 +89,7 @@ class ShapesRenderParams:
     method: str | None = None
     zorder: int = 0
     table_name: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None = None
+    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
 @dataclass
@@ -108,7 +108,7 @@ class PointsRenderParams:
     method: str | None = None
     zorder: int = 0
     table_name: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "mode", "std", "var", "max", "min"] | None = None
+    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
 @dataclass

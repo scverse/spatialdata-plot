@@ -298,6 +298,12 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_datashader_can_render_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(method="datashader").pl.show()
 
+    def test_plot_datashader_can_render_colored_shapes(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", color="red").pl.show()
+
+    def test_plot_datashader_can_render_with_different_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", fill_alpha=0.7).pl.show()
+
     def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
         RNG = np.random.default_rng(seed=42)
         n_obs = len(sdata_blobs["blobs_polygons"])
@@ -317,8 +323,38 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
 
+    def test_plot_datashader_can_color_by_identical_value(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 1, 1, 1, 1]
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
     def test_plot_datashader_shades_with_linear_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 2, 1, 20, 1]
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_with_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_alpha=1).pl.show()
+
+    def test_plot_datashader_can_render_with_diff_alpha_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_alpha=0.5).pl.show()
+
+    def test_plot_datashader_can_render_with_diff_width_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_width=5.0).pl.show()
+
+    def test_plot_datashader_can_render_with_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color="red"
+        ).pl.show()
+
+    def test_plot_datashader_can_render_with_rgb_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 0.0, 1.0)
+        ).pl.show()
+
+    def test_plot_datashader_can_render_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 1.0, 0.0, 1.0)
+        ).pl.show()
