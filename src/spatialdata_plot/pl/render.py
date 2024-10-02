@@ -39,9 +39,13 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
+    _create_image_from_datashader_result,
+    _datashader_aggregate_with_function,
+    _datshader_get_how_kw_for_spread,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
+    _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _is_coercable_to_float,
     _map_color_seg,
@@ -129,8 +133,6 @@ def _render_shapes(
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
 
-    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
-
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
     # order of color in the palette should agree to order of occurence
@@ -156,27 +158,27 @@ def _render_shapes(
 
     # Determine which method to use for rendering
     method = render_params.method
+
     if method is None:
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
-    elif method not in ["matplotlib", "datashader"]:
-        raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+
     if method != "matplotlib":
         # we only notify the user when we switched away from matplotlib
-        logger.info(f"Using '{method}' as plotting backend.")
+        logger.info(
+            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
+            " method to speed up plotting. Depending on the reduction method, the value"
+            " range of the plot might change. Set method to 'matplotlib' do disable"
+            " this behaviour."
+        )
 
     if method == "datashader":
         trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
 
-        extent = get_extent(sdata.shapes[element])
-        x_ext = extent["x"][1]
-        y_ext = extent["y"][1]
-        x_range = [0, x_ext]
-        y_range = [0, y_ext]
-        # round because we need integers
-        plot_width = int(np.round(x_range[1] - x_range[0]))
-        plot_height = int(np.round(y_range[1] - y_range[0]))
+        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
+            sdata_filt.shapes[element], coordinate_system, ax, fig_params
+        )
 
-        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_range, y_range=y_range)
+        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
         _geometry = shapes["geometry"]
         is_point = _geometry.type == "Point"
@@ -193,18 +195,33 @@ def _render_shapes(
             )
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
-        aggregate_with_sum = None
+        aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.polygons(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.sum(column=col_for_color))
+                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
+                logger.info(
+                    f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
+                    "to the matplotlib result."
+                )
+                agg = _datashader_aggregate_with_function(
+                    render_params.ds_reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
+                )
                 # save min and max values for drawing the colorbar
-                aggregate_with_sum = (agg.min(), agg.max())
+                aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
+        # render outlines if needed
+        render_outlines = render_params.outline_alpha > 0
+        if render_outlines:
+            agg_outlines = cvs.line(
+                sdata_filt.shapes[element],
+                geometry="geometry",
+                line_width=render_params.outline_params.linewidth,
+            )
 
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
@@ -213,26 +230,64 @@ def _render_shapes(
             else None
         )
 
-        ds_result = (
-            ds.tf.shade(
+        if color_by_categorical or col_for_color is None:
+            ds_cmap = None
+            if color_vector is not None:
+                ds_cmap = color_vector[0]
+                if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
+                    ds_cmap = ds_cmap[:-2]
+
+            ds_result = ds.tf.shade(
                 agg,
-                cmap=color_vector[0][:-2],
+                cmap=ds_cmap,
                 color_key=color_key,
-                min_alpha=np.min([150, render_params.fill_alpha * 255]),
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
+                how="linear",
             )
-            if color_by_categorical or col_for_color is None
-            else ds.tf.shade(
+        elif aggregate_with_reduction is not None:  # to shut up mypy
+            ds_cmap = render_params.cmap_params.cmap
+            # in case all elements have the same value X: we render them using cmap(0.0),
+            # using an artificial "span" of [X, X + 1] for the color bar
+            # else: all elements would get alpha=0 and the color bar would have a weird range
+            if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
+                ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
+                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+
+            ds_result = ds.tf.shade(
                 agg,
-                cmap=render_params.cmap_params.cmap,
+                cmap=ds_cmap,
+                how="linear",
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
             )
+
+        # shade outlines if needed
+        outline_color = render_params.outline_params.outline_color
+        if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
+            outline_color = outline_color[:-2]
+
+        if render_outlines:
+            ds_outlines = ds.tf.shade(
+                agg_outlines,
+                cmap=outline_color,
+                min_alpha=np.min([254, render_params.outline_alpha * 255]),
+                how="linear",
+            )
+
+        rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
+        _cax = _ax_show_and_transform(
+            rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
         )
-        rgba_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-        _cax = ax.imshow(rgba_image, cmap=palette, zorder=render_params.zorder)
-        _cax.set_transform(trans)
-        cax = ax.add_image(_cax)
-        if aggregate_with_sum is not None:
+        # render outline image if needed
+        if render_outlines:
+            rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
+            _ax_show_and_transform(
+                rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.outline_alpha
+            )
+
+        cax = None
+        if aggregate_with_reduction is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 
@@ -403,50 +458,47 @@ def _render_points(
     norm = copy(render_params.cmap_params.norm)
 
     method = render_params.method
+
     if method is None:
         method = "datashader" if len(points) > 10000 else "matplotlib"
-    elif method not in ["matplotlib", "datashader"]:
-        raise ValueError("Method must be either 'matplotlib' or 'datashader'.")
+
+    if method != "matplotlib":
+        # we only notify the user when we switched away from matplotlib
+        logger.info(
+            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
+            " method to speed up plotting. Depending on the reduction method, the value"
+            " range of the plot might change. Set method to 'matplotlib' do disable"
+            " this behaviour."
+        )
 
     if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
-        px = int(np.round(np.sqrt(render_params.size)))
+        # use dpi/100 as a factor for cases where dpi!=100
+        px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
 
-        extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
-        x_ext = [min(0, extent["x"][0]), extent["x"][1]]
-        y_ext = [min(0, extent["y"][0]), extent["y"][1]]
-        previous_xlim = ax.get_xlim()
-        previous_ylim = ax.get_ylim()
-        # increase range if sth larger was rendered before
-        if _mpl_ax_contains_elements(ax):
-            x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
-            y_ext = (
-                [
-                    min(y_ext[0], previous_ylim[1]),
-                    max(y_ext[1], previous_ylim[0]),
-                ]
-                if ax.yaxis_inverted()
-                else [
-                    min(y_ext[0], previous_ylim[0]),
-                    max(y_ext[1], previous_ylim[1]),
-                ]
-            )
-        # round because we need integers
-        plot_width = int(np.round(x_ext[1] - x_ext[0]))
-        plot_height = int(np.round(y_ext[1] - y_ext[0]))
+        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
+            sdata_filt.points[element], coordinate_system, ax, fig_params
+        )
 
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
         color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
-        aggregate_with_sum = None
+        aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
-                agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.sum(column=col_for_color))
+                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
+                logger.info(
+                    f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
+                    "to the matplotlib result."
+                )
+                agg = _datashader_aggregate_with_function(
+                    render_params.ds_reduction, cvs, sdata_filt.points[element], col_for_color, "points"
+                )
                 # save min and max values for drawing the colorbar
-                aggregate_with_sum = (agg.min(), agg.max())
+                aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
@@ -465,26 +517,40 @@ def _render_points(
         ):
             color_vector = np.asarray([x[:-2] for x in color_vector])
 
-        ds_result = (
-            ds.tf.shade(
+        if color_by_categorical or col_for_color is None:
+            ds_result = ds.tf.shade(
                 ds.tf.spread(agg, px=px),
-                rescale_discrete_levels=True,
                 cmap=color_vector[0],
                 color_key=color_key,
-                min_alpha=np.min([150, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+                min_alpha=np.min([254, render_params.alpha * 255]),
+                how="linear",
             )
-            if color_by_categorical or col_for_color is None
-            else ds.tf.shade(
-                ds.tf.spread(agg, px=px),
-                rescale_discrete_levels=True,
-                cmap=render_params.cmap_params.cmap,
+        else:
+            spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
+            agg = ds.tf.spread(agg, px=px, how=spread_how)
+            aggregate_with_reduction = (agg.min(), agg.max())
+
+            ds_cmap = render_params.cmap_params.cmap
+            # in case all elements have the same value X: we render them using cmap(0.0),
+            # using an artificial "span" of [X, X + 1] for the color bar
+            # else: all elements would get alpha=0 and the color bar would have a weird range
+            if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
+                ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
+                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+
+            ds_result = ds.tf.shade(
+                agg,
+                cmap=ds_cmap,
+                how="linear",
             )
-        )
-        rbga_image = np.transpose(ds_result.to_numpy().base, (0, 1, 2))
-        cax = ax.imshow(rbga_image, zorder=render_params.zorder, alpha=render_params.alpha)
-        if aggregate_with_sum is not None:
+
+        rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
+        _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.alpha)
+
+        cax = None
+        if aggregate_with_reduction is not None:
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_sum[0], vmax=aggregate_with_sum[1]),
+                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
                 cmap=render_params.cmap_params.cmap,
             )
 

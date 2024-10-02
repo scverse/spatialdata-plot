@@ -115,3 +115,48 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(
             color="genes", groups="gene_b", palette="lightgreen", size=20, method="datashader"
         ).pl.show()
+
+    def test_plot_datashader_can_use_sum_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="sum"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_mean_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="mean"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_any_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="any"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_count_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="count"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_std_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_var_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="var"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_max_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="max"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_min_as_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="min"
+        ).pl.show()
+
+    def test_plot_mpl_and_datashader_point_sizes_agree_after_altered_dpi(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", size=400, color="blue").pl.render_points(
+            element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
+        ).pl.show(dpi=200)
