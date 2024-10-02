@@ -246,6 +246,9 @@ def _render_shapes(
             )
         elif aggregate_with_reduction is not None:  # to shut up mypy
             ds_cmap = render_params.cmap_params.cmap
+            # in case all elements have the same value X: we render them using cmap(0.0),
+            # using an artificial "span" of [X, X + 1] for the color bar
+            # else: all elements would get alpha=0 and the color bar would have a weird range
             if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
                 aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
@@ -519,7 +522,7 @@ def _render_points(
                 ds.tf.spread(agg, px=px),
                 cmap=color_vector[0],
                 color_key=color_key,
-                min_alpha=np.min([254, render_params.alpha * 255]),  # value 150 is arbitrarily chosen
+                min_alpha=np.min([254, render_params.alpha * 255]),
                 how="linear",
             )
         else:
@@ -528,6 +531,9 @@ def _render_points(
             aggregate_with_reduction = (agg.min(), agg.max())
 
             ds_cmap = render_params.cmap_params.cmap
+            # in case all elements have the same value X: we render them using cmap(0.0),
+            # using an artificial "span" of [X, X + 1] for the color bar
+            # else: all elements would get alpha=0 and the color bar would have a weird range
             if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
                 aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)

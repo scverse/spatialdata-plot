@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning][].
 ### Added
 
 -   The user can now specify `datashader_reduction` to control the rendering behaviour (#309)
+-   Rendering outlines of shapes with datashader works now (#309)
 
 ### Changed
 
