@@ -32,7 +32,6 @@ from matplotlib.colors import (
     LinearSegmentedColormap,
     ListedColormap,
     Normalize,
-    TwoSlopeNorm,
     to_rgba,
 )
 from matplotlib.figure import Figure
@@ -339,7 +338,7 @@ def _get_collection_shape(
                 c = cmap(c)
             else:
                 try:
-                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
                 except ValueError as e:
                     raise ValueError(
                         "Could not convert values in the `color` column to float, if `color` column represents"
@@ -353,7 +352,7 @@ def _get_collection_shape(
             c = cmap(c)
         else:
             try:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
             except ValueError as e:
                 raise ValueError(
                     "Could not convert values in the `color` column to float, if `color` column represents"
@@ -506,12 +505,6 @@ def _prepare_cmap_norm(
 
     if norm is None:
         norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
-    elif isinstance(norm, Normalize) or not norm:
-        pass  # TODO
-    elif vcenter is None:
-        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
-    else:
-        norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
 
     na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
     cmap.set_bad(na_color)
