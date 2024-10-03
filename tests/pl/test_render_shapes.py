@@ -316,3 +316,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_can_set_clims_clip(self, sdata_blobs: SpatialData):
+        table_shapes = sdata_blobs["table"][:5].copy()
+        table_shapes.obs.instance_id = list(range(5))
+        table_shapes.obs["region"] = "blobs_circles"
+        table_shapes.obs["dummy_gene_expression"] = [i * 10 for i in range(5)]
+        table_shapes.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["new_table"] = table_shapes
+
+        norm = Normalize(vmin=20, vmax=40, clip=True)
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="dummy_gene_expression", norm=norm, table_name="new_table"
+        ).pl.show()
