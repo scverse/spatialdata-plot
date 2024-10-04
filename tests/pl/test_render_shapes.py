@@ -138,7 +138,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_colorbar_respects_input_limits(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"]).pl.show()
