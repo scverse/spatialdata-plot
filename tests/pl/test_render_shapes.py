@@ -186,7 +186,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_plot_queried_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:5]
+        new_table = sdata_blobs["table"][:5].copy()
         new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
         new_table.obs["instance_id"] = np.array(range(5))
 
