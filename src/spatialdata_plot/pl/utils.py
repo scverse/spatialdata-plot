@@ -490,11 +490,8 @@ def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: Normalize | None = None,
     na_color: ColorLike | None = None,
-    vmin: float | None = None,
-    vmax: float | None = None,
-    vcenter: float | None = None,
-    **kwargs: Any,
 ) -> CmapParams:
+    # TODO: check refactoring norm out here as it gets overwritten later
     cmap_is_default = cmap is None
     if cmap is None:
         cmap = rcParams["image.cmap"]
@@ -504,7 +501,7 @@ def _prepare_cmap_norm(
     cmap = copy(cmap)
 
     if norm is None:
-        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
+        norm = Normalize(vmin=None, vmax=None, clip=True)
 
     na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
     cmap.set_bad(na_color)

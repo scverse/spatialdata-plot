@@ -269,7 +269,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
                 element=element,
@@ -392,7 +391,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
                 element=element,
@@ -498,7 +496,6 @@ class PlotAccessor:
                         cmap=c,
                         norm=norm,
                         na_color=param_values["na_color"],
-                        **kwargs,
                     )
                     for c in cmap
                 ]
@@ -623,7 +620,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
                 element=element,
