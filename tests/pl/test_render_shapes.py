@@ -97,7 +97,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
-        blob["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        blob["table"].obs["region"] = "blobs_polygons"
         blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         blob.pl.render_shapes(
@@ -111,7 +111,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
         sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
@@ -125,7 +125,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         )
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
         sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
@@ -141,7 +141,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"]).pl.show()
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster").pl.show()
 
     def test_plot_colorbar_can_be_normalised(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_polygons"
@@ -312,7 +312,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()
 
     def test_plot_datashader_can_color_by_value(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
