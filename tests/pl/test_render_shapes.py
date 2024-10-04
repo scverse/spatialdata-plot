@@ -214,7 +214,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:10]
+        new_table = sdata_blobs["table"][:10].copy()
         new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
         new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
 
@@ -230,7 +230,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_two_queried_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:10]
+        new_table = sdata_blobs["table"][:10].copy()
         new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
         new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
 
