@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Fixed
 
--
+-   Giving a custom colormap when rendering a multiscale image now works (#586)
 
 ## [0.2.6] - 2024-09-04
 
