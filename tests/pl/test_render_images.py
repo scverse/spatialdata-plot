@@ -125,3 +125,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_stick_to_zorder(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes().pl.render_images().pl.show()
+
+    def test_plot_can_render_multiscale_image_with_custom_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_multiscale_image", channel=0, scale="scale2", cmap="Greys").pl.show()
