@@ -501,7 +501,7 @@ def _prepare_cmap_norm(
     cmap = copy(cmap)
 
     if norm is None:
-        norm = Normalize(vmin=None, vmax=None, clip=True)
+        norm = Normalize(vmin=None, vmax=None, clip=False)
 
     na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
     cmap.set_bad(na_color)
