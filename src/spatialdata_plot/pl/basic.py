@@ -241,6 +241,12 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Use the matplotlib `Normalize` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
