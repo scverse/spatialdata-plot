@@ -241,9 +241,10 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
             warnings.warn(
-                "`vmin` and `vmax` are deprecated. Use the matplotlib `Normalize` instead.",
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -368,6 +369,13 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -477,6 +485,13 @@ class PlotAccessor:
         sd.SpatialData
             The SpatialData object with the rendered images.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -601,6 +616,13 @@ class PlotAccessor:
         -------
         None
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
