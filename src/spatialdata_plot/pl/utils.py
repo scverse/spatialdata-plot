@@ -1887,18 +1887,18 @@ def _validate_image_render_params(
 
         if isinstance(palette := param_dict["palette"], list):
             if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element.c)
+                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element.c):
+            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
                 palette = None
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
         if (cmap := param_dict["cmap"]) is not None:
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element.c)
+                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element.c):
+            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
