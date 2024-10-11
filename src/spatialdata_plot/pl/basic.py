@@ -248,6 +248,13 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
@@ -276,7 +283,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
                 element=element,
@@ -377,6 +383,13 @@ class PlotAccessor:
         sd.SpatialData
             The modified SpatialData object with the rendered shapes.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -406,7 +419,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
                 element=element,
@@ -488,6 +500,13 @@ class PlotAccessor:
         sd.SpatialData
             The SpatialData object with the rendered images.
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -513,7 +532,6 @@ class PlotAccessor:
                         cmap=c,
                         norm=norm,
                         na_color=param_values["na_color"],
-                        **kwargs,
                     )
                     for c in cmap
                 ]
@@ -613,6 +631,13 @@ class PlotAccessor:
         -------
         None
         """
+        # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if "vmin" in kwargs or "vmax" in kwargs:
+            warnings.warn(
+                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
@@ -638,7 +663,6 @@ class PlotAccessor:
                 cmap=cmap,
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
-                **kwargs,
             )
             sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
                 element=element,

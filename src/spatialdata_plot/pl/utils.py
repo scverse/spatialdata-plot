@@ -37,7 +37,6 @@ from matplotlib.colors import (
     LinearSegmentedColormap,
     ListedColormap,
     Normalize,
-    TwoSlopeNorm,
     to_rgba,
 )
 from matplotlib.figure import Figure
@@ -345,7 +344,7 @@ def _get_collection_shape(
                 c = cmap(c)
             else:
                 try:
-                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
                 except ValueError as e:
                     raise ValueError(
                         "Could not convert values in the `color` column to float, if `color` column represents"
@@ -359,7 +358,7 @@ def _get_collection_shape(
             c = cmap(c)
         else:
             try:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
             except ValueError as e:
                 raise ValueError(
                     "Could not convert values in the `color` column to float, if `color` column represents"
@@ -497,11 +496,8 @@ def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: Normalize | None = None,
     na_color: ColorLike | None = None,
-    vmin: float | None = None,
-    vmax: float | None = None,
-    vcenter: float | None = None,
-    **kwargs: Any,
 ) -> CmapParams:
+    # TODO: check refactoring norm out here as it gets overwritten later
     cmap_is_default = cmap is None
     if cmap is None:
         cmap = rcParams["image.cmap"]
@@ -511,13 +507,7 @@ def _prepare_cmap_norm(
     cmap = copy(cmap)
 
     if norm is None:
-        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
-    elif isinstance(norm, Normalize) or not norm:
-        pass  # TODO
-    elif vcenter is None:
-        norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
-    else:
-        norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
+        norm = Normalize(vmin=None, vmax=None, clip=False)
 
     na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
     cmap.set_bad(na_color)
@@ -1927,18 +1917,18 @@ def _validate_image_render_params(
 
         if isinstance(palette := param_dict["palette"], list):
             if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element.c)
+                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element.c):
+            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
                 palette = None
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
         if (cmap := param_dict["cmap"]) is not None:
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element.c)
+                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element.c):
+            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]

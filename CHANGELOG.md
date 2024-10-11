@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning][].
 -   datashader now uses canvas size = image size which speeds up the rendering (#309)
 -   datashader now uses the linear version of continuous colormaps (#309)
 -   point sizes of datashader now agree with matplotlib also when dpi != 100 (#309)
+-   Giving a custom colormap when rendering a multiscale image now works (#586)
 
 ## [0.2.6] - 2024-09-04
 
