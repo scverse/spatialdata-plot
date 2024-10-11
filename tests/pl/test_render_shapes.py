@@ -359,7 +359,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_datashader_can_render_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(
             method="datashader", element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 1.0, 0.0, 1.0)
-        )
+        ).pl.show()
 
     def test_plot_can_set_clims_clip(self, sdata_blobs: SpatialData):
         table_shapes = sdata_blobs["table"][:5].copy()
