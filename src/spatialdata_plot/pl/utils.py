@@ -1628,9 +1628,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         raise TypeError("Parameter 'table_name' must be a string .")
 
     # like this because the following would assign True/False to 'method'
-    # method := param_dict.get("method") not in ["matplotlib", "datashader", None]
-    method = param_dict.get("method")
-    if method not in ["matplotlib", "datashader", None]:
+    if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
     valid_ds_reduction_methods = [
@@ -1645,8 +1643,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         "max",
         "min",
     ]
-    ds_reduction = param_dict.get("ds_reduction")
-    if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
+    if (ds_reduction := param_dict.get("ds_reduction")) and (ds_reduction not in valid_ds_reduction_methods):
         raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
 
     if method == "datashader" and ds_reduction is None:
@@ -1728,6 +1725,7 @@ def _validate_points_render_params(
     norm: Normalize | None,
     size: float | int,
     table_name: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1741,6 +1739,7 @@ def _validate_points_render_params(
         "norm": norm,
         "size": size,
         "table_name": table_name,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "points")
 
@@ -1769,6 +1768,7 @@ def _validate_points_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -2063,11 +2063,7 @@ def _create_image_from_datashader_result(
         transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
     )
 
-    # prepare transformation
-    trans = get_transformation(rgba_image, get_all=True)["global"]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
-    trans_data = trans + ax.transData
+    _, trans_data = _prepare_transformation(rgba_image, ax)
 
     rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
     rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
@@ -2178,3 +2174,14 @@ def _robust_get_value(
         return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
     vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     return vals[value_to_plot]
+
+
+def _prepare_transformation(
+    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, ax: Axes | None = None
+) -> tuple[matplotlib.transforms.Affine2D, matplotlib.transforms.CompositeGenericTransform | None]:
+    trans = get_transformation(element, get_all=True)["global"]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans_data = trans + ax.transData if ax is not None else None
+
+    return trans, trans_data

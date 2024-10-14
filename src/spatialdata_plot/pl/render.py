@@ -10,7 +10,6 @@ import datashader as ds
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -23,7 +22,6 @@ from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent
 from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
-    get_transformation,
     set_transformation,
 )
 
@@ -52,6 +50,7 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
+    _prepare_transformation,
     _rasterize_if_necessary,
     _set_color_source_vec,
     to_hex,
@@ -150,9 +149,7 @@ def _render_shapes(
         colorbar = False if col_for_color is None else legend_params.colorbar
 
     # Apply the transformation to the PatchCollection's paths
-    trans = get_transformation(sdata_filt.shapes[element], get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans, _ = _prepare_transformation(sdata_filt.shapes[element])
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -172,7 +169,7 @@ def _render_shapes(
         )
 
     if method == "datashader":
-        trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+        trans += ax.transData
 
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
             sdata_filt.shapes[element], coordinate_system, ax, fig_params
@@ -215,8 +212,7 @@ def _render_shapes(
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
         # render outlines if needed
-        render_outlines = render_params.outline_alpha > 0
-        if render_outlines:
+        if render_outlines := render_params.outline_alpha > 0:
             agg_outlines = cvs.line(
                 sdata_filt.shapes[element],
                 geometry="geometry",
@@ -451,9 +447,7 @@ def _render_points(
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
 
-    trans = get_transformation(sdata.points[element], get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans) + ax.transData
+    _, trans_data = _prepare_transformation(sdata.points[element], ax)
 
     norm = copy(render_params.cmap_params.norm)
 
@@ -566,7 +560,7 @@ def _render_points(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans,
+            transform=trans_data,
             zorder=render_params.zorder,
         )
         cax = ax.add_collection(_cax)
@@ -664,11 +658,7 @@ def _render_images(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
-    # prepare transformations
-    trans = get_transformation(img, get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
-    trans_data = trans + ax.transData
+    _, trans_data = _prepare_transformation(img, ax)
 
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
@@ -825,10 +815,7 @@ def _render_labels(
         # get instance id based on subsetted table
         instance_id = np.unique(table.obs[instance_key].values)
 
-    trans = get_transformation(label, get_all=True)[coordinate_system]
-    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
-    trans = mtransforms.Affine2D(matrix=affine_trans)
-    trans_data = trans + ax.transData
+    _, trans_data = _prepare_transformation(label, ax)
 
     color_source_vector, color_vector, categorical = _set_color_source_vec(
         sdata=sdata_filt,

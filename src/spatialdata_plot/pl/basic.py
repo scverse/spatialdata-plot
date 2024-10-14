@@ -402,6 +402,7 @@ class PlotAccessor:
             norm=norm,
             size=size,
             table_name=table_name,
+            ds_reduction=kwargs.get("datashader_reduction", None),
         )
 
         if method is not None:
@@ -433,7 +434,7 @@ class PlotAccessor:
                 table_name=param_values["table_name"],
                 zorder=n_steps,
                 method=method,
-                ds_reduction=kwargs.get("datashader_reduction", None),
+                ds_reduction=param_values["ds_reduction"],
             )
             n_steps += 1
 
