@@ -2063,7 +2063,7 @@ def _create_image_from_datashader_result(
         transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
     )
 
-    _, trans_data = _prepare_transformation(rgba_image, ax)
+    _, trans_data = _prepare_transformation(rgba_image, "global", ax)
 
     rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
     rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
@@ -2177,9 +2177,9 @@ def _robust_get_value(
 
 
 def _prepare_transformation(
-    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, ax: Axes | None = None
+    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, coordinate_system: str, ax: Axes | None = None
 ) -> tuple[matplotlib.transforms.Affine2D, matplotlib.transforms.CompositeGenericTransform | None]:
-    trans = get_transformation(element, get_all=True)["global"]
+    trans = get_transformation(element, get_all=True)[coordinate_system]
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
     trans = mtransforms.Affine2D(matrix=affine_trans)
     trans_data = trans + ax.transData if ax is not None else None

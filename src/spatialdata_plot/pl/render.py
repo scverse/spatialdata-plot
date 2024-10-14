@@ -149,7 +149,7 @@ def _render_shapes(
         colorbar = False if col_for_color is None else legend_params.colorbar
 
     # Apply the transformation to the PatchCollection's paths
-    trans, _ = _prepare_transformation(sdata_filt.shapes[element])
+    trans, _ = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -447,7 +447,7 @@ def _render_points(
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
 
-    _, trans_data = _prepare_transformation(sdata.points[element], ax)
+    _, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
     norm = copy(render_params.cmap_params.norm)
 
@@ -658,7 +658,7 @@ def _render_images(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
-    _, trans_data = _prepare_transformation(img, ax)
+    _, trans_data = _prepare_transformation(img, coordinate_system, ax)
 
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
@@ -815,7 +815,7 @@ def _render_labels(
         # get instance id based on subsetted table
         instance_id = np.unique(table.obs[instance_key].values)
 
-    _, trans_data = _prepare_transformation(label, ax)
+    _, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
     color_source_vector, color_vector, categorical = _set_color_source_vec(
         sdata=sdata_filt,
