@@ -219,6 +219,19 @@ def _render_shapes(
                 line_width=render_params.outline_params.linewidth,
             )
 
+        if norm is not None:
+            norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
+            norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
+            norm.clip = True  # NOTE: mpl currently behaves like clip is always True
+            if norm.vmin == norm.vmax:
+                # data is mapped to 0
+                agg = agg - agg
+            else:
+                agg = (agg - norm.vmin) / (norm.vmax - norm.vmin)
+                if norm.clip:
+                    agg = np.maximum(agg, 0)
+                    agg = np.minimum(agg, 1)
+
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
@@ -282,8 +295,13 @@ def _render_shapes(
 
         cax = None
         if aggregate_with_reduction is not None:
+            vmin = aggregate_with_reduction[0].values if norm is None else norm.vmin
+            vmax = aggregate_with_reduction[1].values if norm is None else norm.vmax
+            if norm is not None and norm.vmin == norm.vmax:
+                vmin = norm.vmin
+                vmax = norm.vmin + 1
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
+                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
                 cmap=render_params.cmap_params.cmap,
             )
 
@@ -496,6 +514,19 @@ def _render_points(
         else:
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
+        if norm is not None:
+            norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
+            norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
+            norm.clip = True  # NOTE: mpl currently behaves like clip is always True
+            if norm.vmin == norm.vmax:
+                # data is mapped to 0
+                agg = agg - agg
+            else:
+                agg = (agg - norm.vmin) / (norm.vmax - norm.vmin)
+                if norm.clip:
+                    agg = np.maximum(agg, 0)
+                    agg = np.minimum(agg, 1)
+
         color_key = (
             list(color_vector.categories.values)
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
@@ -543,8 +574,13 @@ def _render_points(
 
         cax = None
         if aggregate_with_reduction is not None:
+            vmin = aggregate_with_reduction[0].values if norm is None else norm.vmin
+            vmax = aggregate_with_reduction[1].values if norm is None else norm.vmax
+            if norm is not None and norm.vmin == norm.vmax:
+                vmin = norm.vmin
+                vmax = norm.vmin + 1
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=aggregate_with_reduction[0], vmax=aggregate_with_reduction[1]),
+                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
                 cmap=render_params.cmap_params.cmap,
             )
 
