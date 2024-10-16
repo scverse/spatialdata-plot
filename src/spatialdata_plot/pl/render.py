@@ -219,7 +219,7 @@ def _render_shapes(
                 line_width=render_params.outline_params.linewidth,
             )
 
-        if norm is not None:
+        if norm.vmin is not None or norm.vmax is not None:
             norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
             norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
             norm.clip = True  # NOTE: mpl currently behaves like clip is always True
@@ -295,9 +295,9 @@ def _render_shapes(
 
         cax = None
         if aggregate_with_reduction is not None:
-            vmin = aggregate_with_reduction[0].values if norm is None else norm.vmin
-            vmax = aggregate_with_reduction[1].values if norm is None else norm.vmax
-            if norm is not None and norm.vmin == norm.vmax:
+            vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
+            vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
+            if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
                 vmin = norm.vmin
                 vmax = norm.vmin + 1
             cax = ScalarMappable(
@@ -514,7 +514,7 @@ def _render_points(
         else:
             agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
 
-        if norm is not None:
+        if norm.vmin is not None or norm.vmax is not None:
             norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
             norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
             norm.clip = True  # NOTE: mpl currently behaves like clip is always True
@@ -574,9 +574,9 @@ def _render_points(
 
         cax = None
         if aggregate_with_reduction is not None:
-            vmin = aggregate_with_reduction[0].values if norm is None else norm.vmin
-            vmax = aggregate_with_reduction[1].values if norm is None else norm.vmax
-            if norm is not None and norm.vmin == norm.vmax:
+            vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
+            vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
+            if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
                 vmin = norm.vmin
                 vmax = norm.vmin + 1
             cax = ScalarMappable(
