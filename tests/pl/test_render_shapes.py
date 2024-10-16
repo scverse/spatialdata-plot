@@ -324,6 +324,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
 
     def test_plot_datashader_can_color_by_identical_value(self, sdata_blobs: SpatialData):
+        """
+        We test this, because datashader internally scales the values, so when all shapes have the same value,
+        the scaling would lead to all of them being assigned an alpha of 0, so we wouldn't see anything
+        """
         sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 1, 1, 1, 1]

@@ -1,3 +1,4 @@
+import dask.dataframe
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -5,7 +6,7 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 from spatialdata import SpatialData
-from spatialdata.models import TableModel
+from spatialdata.models import PointsModel, TableModel
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -138,6 +139,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_datashader_can_use_std_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
+            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
+        ).pl.show()
+
+    def test_plot_datashader_can_use_std_as_reduction_not_all_zero(self, sdata_blobs: SpatialData):
+        # originally, all resulting std values are 0, here we alter the points to get at least one actual value
+        blob = sdata_blobs.copy()
+        temp = blob["blobs_points"].compute()
+        temp.loc[195, "x"] = 144
+        temp.loc[195, "y"] = 159
+        temp.loc[195, "instance_id"] = 13
+        blob["blobs_points"] = PointsModel.parse(dask.dataframe.from_pandas(temp, 1), coordinates={"x": "x", "y": "y"})
+        blob.pl.render_points(
             element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
         ).pl.show()
 

@@ -199,7 +199,7 @@ def _render_shapes(
                     sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
                 )
             else:
-                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
+                reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
                 logger.info(
                     f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
                     "to the matplotlib result."
@@ -212,7 +212,7 @@ def _render_shapes(
         else:
             agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
         # render outlines if needed
-        if render_outlines := render_params.outline_alpha > 0:
+        if (render_outlines := render_params.outline_alpha) > 0:
             agg_outlines = cvs.line(
                 sdata_filt.shapes[element],
                 geometry="geometry",
@@ -272,6 +272,10 @@ def _render_shapes(
         # shade outlines if needed
         outline_color = render_params.outline_params.outline_color
         if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
+            logger.info(
+                "alpha component of given RGBA value for outline color is discarded, because outline_alpha"
+                " takes precedent."
+            )
             outline_color = outline_color[:-2]
 
         if render_outlines:
