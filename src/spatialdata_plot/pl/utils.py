@@ -10,17 +10,22 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Union
 
+import dask
+import datashader as ds
 import matplotlib
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import shapely
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
+from datashader.core import Canvas
 from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
@@ -50,11 +55,12 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
+from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
+from spatialdata.transformations.transformations import Scale
 from xarray import DataArray
 
 from spatialdata_plot._logging import logger
@@ -1491,7 +1497,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
-
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
     elif element_type == "labels":
@@ -1622,8 +1627,27 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
 
-    if param_dict.get("method") not in ["matplotlib", "datashader", None]:
+    # like this because the following would assign True/False to 'method'
+    if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
+    valid_ds_reduction_methods = [
+        "sum",
+        "mean",
+        "any",
+        "count",
+        # "m2", -> not intended to be used alone (see https://datashader.org/api.html#datashader.reductions.m2)
+        # "mode", -> not supported for points (see https://datashader.org/api.html#datashader.reductions.mode)
+        "std",
+        "var",
+        "max",
+        "min",
+    ]
+    if (ds_reduction := param_dict.get("ds_reduction")) and (ds_reduction not in valid_ds_reduction_methods):
+        raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
+
+    if method == "datashader" and ds_reduction is None:
+        param_dict["ds_reduction"] = "sum"
 
     return param_dict
 
@@ -1701,6 +1725,7 @@ def _validate_points_render_params(
     norm: Normalize | None,
     size: float | int,
     table_name: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1714,6 +1739,7 @@ def _validate_points_render_params(
         "norm": norm,
         "size": size,
         "table_name": table_name,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "points")
 
@@ -1742,6 +1768,7 @@ def _validate_points_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -1762,6 +1789,7 @@ def _validate_shape_render_params(
     scale: float | int,
     table_name: str | None,
     method: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1779,6 +1807,7 @@ def _validate_shape_render_params(
         "scale": scale,
         "table_name": table_name,
         "method": method,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
@@ -1812,6 +1841,7 @@ def _validate_shape_render_params(
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["method"] = param_dict["method"]
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -1945,7 +1975,7 @@ def _ax_show_and_transform(
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
-) -> None:
+) -> matplotlib.image.AxesImage:
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
@@ -1960,6 +1990,7 @@ def _ax_show_and_transform(
             zorder=zorder,
         )
         im.set_transform(trans_data)
+    return im
 
 
 def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
@@ -1984,6 +2015,152 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
     return ListedColormap(colors)
 
 
+def _get_extent_and_range_for_datashader_canvas(
+    spatial_element: SpatialElement, coordinate_system: str, ax: Axes, fig_params: FigParams
+) -> tuple[Any, Any, list[Any], list[Any], Any]:
+    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
+    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+    previous_xlim = ax.get_xlim()
+    previous_ylim = ax.get_ylim()
+    # increase range if sth larger was rendered on the axis before
+    if _mpl_ax_contains_elements(ax):
+        x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
+        y_ext = (
+            [
+                min(y_ext[0], previous_ylim[1]),
+                max(y_ext[1], previous_ylim[0]),
+            ]
+            if ax.yaxis_inverted()
+            else [
+                min(y_ext[0], previous_ylim[0]),
+                max(y_ext[1], previous_ylim[1]),
+            ]
+        )
+
+    # compute canvas size in pixels close to the actual image size to speed up computation
+    plot_width = x_ext[1] - x_ext[0]
+    plot_height = y_ext[1] - y_ext[0]
+    plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
+    plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
+    factor: float
+    factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
+    plot_width = int(np.round(plot_width / factor))
+    plot_height = int(np.round(plot_height / factor))
+
+    return plot_width, plot_height, x_ext, y_ext, factor
+
+
+def _create_image_from_datashader_result(
+    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
+) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.CompositeGenericTransform]:
+    # create SpatialImage from datashader output to get it back to original size
+    rgba_image_data = ds_result.to_numpy().base
+    rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
+    rgba_image = Image2DModel.parse(
+        rgba_image_data,
+        dims=("c", "y", "x"),
+        transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
+    )
+
+    _, trans_data = _prepare_transformation(rgba_image, "global", ax)
+
+    rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
+    rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
+
+    return rgba_image, trans_data
+
+
+def _datashader_aggregate_with_function(
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    cvs: Canvas,
+    spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
+    col_for_color: str | None,
+    element_type: Literal["points", "shapes"],
+) -> DataArray:
+    """
+    When shapes or points are colored by a continuous value during rendering with datashader.
+
+    This function performs the aggregation using the user-specified reduction method.
+
+    Parameters
+    ----------
+    reduction: String specifying the datashader reduction method to be used.
+        If None, "sum" is used as default.
+    cvs: Canvas object previously created with ds.Canvas()
+    spatial_element: geo or dask dataframe with the shapes or points to render
+    col_for_color: name of the column containing the values by which to color
+    element_type: tells us if this function is called from _render_shapes() or _render_points()
+    """
+    if reduction is None:
+        reduction = "sum"
+
+    reduction_function_map = {
+        "sum": ds.sum,
+        "mean": ds.mean,
+        "any": ds.any,
+        "count": ds.count,
+        "std": ds.std,
+        "var": ds.var,
+        "max": ds.max,
+        "min": ds.min,
+    }
+
+    try:
+        reduction_function = reduction_function_map[reduction](column=col_for_color)
+    except KeyError as e:
+        raise ValueError(
+            f"Reduction '{reduction}' is not supported. Please use one of: {', '.join(reduction_function_map.keys())}."
+        ) from e
+
+    element_function_map = {
+        "points": cvs.points,
+        "shapes": cvs.polygons,
+    }
+
+    try:
+        element_function = element_function_map[element_type]
+    except KeyError as e:
+        raise ValueError(f"Element type '{element_type}' is not supported. Use 'points' or 'shapes'.") from e
+
+    if element_type == "points":
+        points_aggregate = element_function(spatial_element, "x", "y", agg=reduction_function)
+        if reduction == "any":
+            # replace False/True by nan/1
+            points_aggregate = points_aggregate.astype(int)
+            points_aggregate = points_aggregate.where(points_aggregate > 0)
+        return points_aggregate
+
+    # is shapes
+    return element_function(spatial_element, geometry="geometry", agg=reduction_function)
+
+
+def _datshader_get_how_kw_for_spread(
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+) -> str:
+    # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
+    reduction = reduction or "sum"
+
+    reduction_to_how_map = {
+        "sum": "add",
+        "mean": "source",
+        "any": "source",
+        "count": "add",
+        "std": "source",
+        "var": "source",
+        "max": "max",
+        "min": "min",
+    }
+
+    if reduction not in reduction_to_how_map:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count"
+            ", std, var, max, min."
+        )
+
+    return reduction_to_how_map[reduction]
+
+
 def _robust_get_value(
     sdata: sd.SpatialData,
     origin: _ValueOrigin,
@@ -1997,3 +2174,14 @@ def _robust_get_value(
         return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
     vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
     return vals[value_to_plot]
+
+
+def _prepare_transformation(
+    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, coordinate_system: str, ax: Axes | None = None
+) -> tuple[matplotlib.transforms.Affine2D, matplotlib.transforms.CompositeGenericTransform | None]:
+    trans = get_transformation(element, get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans_data = trans + ax.transData if ax is not None else None
+
+    return trans, trans_data
