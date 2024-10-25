@@ -7,6 +7,7 @@ import scanpy as sc
 from anndata import AnnData
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import PointsModel, TableModel
+from spatialdata.transformations import Scale
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -173,3 +174,16 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(element="blobs_points", size=400, color="blue").pl.render_points(
             element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
         ).pl.show(dpi=200)
+
+    def test_plot_datashader_points_are_transformed(self):
+        sdata = SpatialData(
+            points={
+                "points1": PointsModel.parse(
+                    pd.DataFrame({"y": [0, 0, 10, 10, 4, 6, 4, 6], "x": [0, 10, 10, 0, 4, 6, 6, 4]}),
+                    transformations={"global": Scale([2, 2], ("y", "x"))},
+                )
+            },
+        )
+        sdata.pl.render_points("points1", method="matplotlib", size=50, color="lightgrey").pl.render_points(
+            "points1", method="datashader", size=10, color="red"
+        ).pl.show()
