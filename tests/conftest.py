@@ -10,7 +10,6 @@ import pyarrow as pa
 import pytest
 import spatialdata as sd
 from anndata import AnnData
-from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
 from shapely.geometry import MultiPolygon, Polygon
@@ -25,7 +24,7 @@ from spatialdata.models import (
     ShapesModel,
     TableModel,
 )
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 import spatialdata_plot  # noqa: F401
 

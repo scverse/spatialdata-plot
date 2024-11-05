@@ -15,7 +15,6 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from datatree import DataTree
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
@@ -24,6 +23,7 @@ from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     set_transformation,
 )
+from xarray import DataTree
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (

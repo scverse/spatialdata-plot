@@ -26,7 +26,6 @@ import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
 from datashader.core import Canvas
-from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
@@ -61,7 +60,7 @@ from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
 from spatialdata.transformations.transformations import Scale
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
