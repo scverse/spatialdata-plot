@@ -75,7 +75,7 @@ filterwarnings = [
 
 [tool.black]
 line-length = 120
-target-version = ['py39']
+target-version = ['py310']
 include = '\.pyi?$'
 exclude = '''
 (
@@ -158,7 +158,7 @@ lint.select = [
     "PGH", # pygrep-hooks
 ]
 lint.unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
-target-version = "py39"
+target-version = "py310"
 [tool.ruff.lint.per-file-ignores]
     "tests/*" = ["D", "PT", "B024"]
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
