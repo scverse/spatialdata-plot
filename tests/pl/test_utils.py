@@ -1,5 +1,3 @@
-from typing import Union
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,7 +26,7 @@ _ = spatialdata_plot
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = Union[tuple[float, ...], str]
+ColorLike = tuple[float, ...] | str
 
 
 class TestUtils(PlotTester, metaclass=PlotTesterMeta):

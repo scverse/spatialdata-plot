@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 from collections import abc
 from copy import copy
-from typing import Union
 
 import dask
 import datashader as ds
@@ -56,7 +55,7 @@ from spatialdata_plot.pl.utils import (
     to_hex,
 )
 
-_Normalize = Union[Normalize, abc.Sequence[Normalize]]
+_Normalize = Normalize | abc.Sequence[Normalize]
 
 
 def _render_shapes(

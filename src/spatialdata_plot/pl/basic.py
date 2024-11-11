@@ -5,7 +5,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -61,7 +61,7 @@ from spatialdata_plot.pl.utils import (
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = Union[tuple[float, ...], str]
+ColorLike = tuple[float, ...] | str
 
 
 @register_spatial_data_accessor("pl")
