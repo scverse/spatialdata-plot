@@ -8,16 +8,16 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.7] - tbd
+## [0.2.8] - 2024-11-26
+
+- Support for `xarray.DataTree` (which moved from `datatree.DataTree`) 
+
+## [0.2.7] - 2024-10-24
 
 ### Added
 
 -   The user can now specify `datashader_reduction` to control the rendering behaviour (#309)
 -   Rendering outlines of shapes with datashader works now (#309)
-
-### Changed
-
--
 
 ### Fixed
 
@@ -27,10 +27,6 @@ and this project adheres to [Semantic Versioning][].
 -   Giving a custom colormap when rendering a multiscale image now works (#586)
 
 ## [0.2.6] - 2024-09-04
-
-### Added
-
--
 
 ### Changed
 
