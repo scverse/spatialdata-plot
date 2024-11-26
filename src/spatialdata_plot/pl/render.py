@@ -169,8 +169,13 @@ def _render_shapes(
     if method == "datashader":
         # trans += ax.transData # TODO: delete?
 
-        # TODO: what about circles? some sort of ellipsis object?
-        # or: if necessary, switch to polygons somehow (logging!)
+        _geometry = shapes["geometry"]
+        is_point = _geometry.type == "Point"
+
+        # Handle circles encoded as points with radius
+        if is_point.any():
+            scale = shapes[is_point]["radius"] * render_params.scale
+            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # TODO: test all transformations (scale, affine, mapaxis, translocation)
         # and of course sequence. What if scale in negative range?
@@ -186,21 +191,15 @@ def _render_shapes(
         flip_matrix = [[1, 0], [0, -1]]
         # flip the elements along the x-axis, then apply the transformation and flip back
         transformed_element = sdata_filt.shapes[element].transform(lambda x: x @ (flip_matrix @ tm @ flip_matrix))
-        transformed_element = ShapesModel.parse(gpd.GeoDataFrame(geometry=transformed_element))
+        transformed_element = ShapesModel.parse(
+            gpd.GeoDataFrame(data=sdata_filt.shapes[element].drop("geometry", axis=1), geometry=transformed_element)
+        )
 
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
             transformed_element, coordinate_system, ax, fig_params
         )
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
-
-        _geometry = shapes["geometry"]
-        is_point = _geometry.type == "Point"
-
-        # Handle circles encoded as points with radius
-        if is_point.any():
-            scale = shapes[is_point]["radius"] * render_params.scale
-            transformed_element.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in transformed_element.columns:
