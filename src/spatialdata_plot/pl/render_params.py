@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal, Union
+from typing import Literal
 
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, ListedColormap, Normalize
@@ -14,7 +14,7 @@ _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large"
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = Union[tuple[float, ...], str]
+ColorLike = tuple[float, ...] | str
 
 
 @dataclass

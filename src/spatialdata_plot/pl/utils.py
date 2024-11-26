@@ -8,7 +8,7 @@ from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import dask
 import datashader as ds
@@ -26,7 +26,6 @@ import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
 from datashader.core import Canvas
-from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
@@ -61,7 +60,7 @@ from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
 from spatialdata.transformations.operations import get_transformation
 from spatialdata.transformations.transformations import Scale
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -82,7 +81,7 @@ to_hex = partial(colors.to_hex, keep_alpha=True)
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = Union[tuple[float, ...], str]
+ColorLike = tuple[float, ...] | str
 
 
 def _verify_plotting_tree(sdata: SpatialData) -> SpatialData:
@@ -527,7 +526,7 @@ def _set_outline(
     outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    if not isinstance(outline_width, (int, float)):
+    if not isinstance(outline_width, int | float):
         raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `int` or `float`.")
     if outline_width == 0.0:
         outline = False
@@ -869,9 +868,9 @@ def _generate_base_categorial_color_mapping(
         na_color = to_hex(to_rgba(na_color)[:3])
 
         if na_color and len(categories) > len(colors):
-            return dict(zip(categories, colors + [na_color]))
+            return dict(zip(categories, colors + [na_color], strict=True))
 
-        return dict(zip(categories, colors))
+        return dict(zip(categories, colors, strict=True))
 
     return _get_default_categorial_color_mapping(color_source_vector)
 
@@ -888,7 +887,7 @@ def _modify_categorical_color_mapping(
         # subset base mapping to only those specified in groups
         modified_mapping = {key: mapping[key] for key in mapping if key in groups or key == "NaN"}
     elif len(palette) == len(groups) and isinstance(groups, list) and isinstance(palette, list):
-        modified_mapping = dict(zip(groups, palette))
+        modified_mapping = dict(zip(groups, palette, strict=True))
     else:
         raise ValueError(f"Expected palette to be of length `{len(groups)}`, found `{len(palette)}`.")
 
@@ -909,7 +908,10 @@ def _get_default_categorial_color_mapping(
         palette = ["grey" for _ in range(len_cat)]
         logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
 
-    return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(color_source_vector.categories, palette[:len_cat])}
+    return {
+        cat: to_hex(to_rgba(col)[:3])
+        for cat, col in zip(color_source_vector.categories, palette[:len_cat], strict=True)
+    }
 
 
 def _get_categorical_color_mapping(
@@ -1343,7 +1345,7 @@ def _multiscale_to_spatial_image(
             optimal_index_x -= 1
 
         # pick the scale with higher resolution (worst case: downscaled afterwards)
-        optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
+        optimal_scale = scales[min(int(optimal_index_x), int(optimal_index_y))]
 
     # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
@@ -1413,12 +1415,12 @@ def _validate_show_parameters(
     return_ax: bool,
     save: str | Path | None,
 ) -> None:
-    if coordinate_systems is not None and not isinstance(coordinate_systems, (list, str)):
+    if coordinate_systems is not None and not isinstance(coordinate_systems, list | str):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
 
     font_weights = ["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
     if legend_fontweight is not None and (
-        not isinstance(legend_fontweight, (int, str))
+        not isinstance(legend_fontweight, int | str)
         or (isinstance(legend_fontweight, str) and legend_fontweight not in font_weights)
     ):
         readable_font_weights = ", ".join(font_weights[:-1]) + ", or " + font_weights[-1]
@@ -1430,7 +1432,7 @@ def _validate_show_parameters(
     font_sizes = ["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
     if legend_fontsize is not None and (
-        not isinstance(legend_fontsize, (int, float, str))
+        not isinstance(legend_fontsize, int | float | str)
         or (isinstance(legend_fontsize, str) and legend_fontsize not in font_sizes)
     ):
         readable_font_sizes = ", ".join(font_sizes[:-1]) + ", or " + font_sizes[-1]
@@ -1472,22 +1474,22 @@ def _validate_show_parameters(
     if fig is not None and not isinstance(fig, Figure):
         raise TypeError("Parameter 'fig' must be a matplotlib.figure.Figure.")
 
-    if title is not None and not isinstance(title, (list, str)):
+    if title is not None and not isinstance(title, list | str):
         raise TypeError("Parameter 'title' must be a string or a list of strings.")
 
     if not isinstance(share_extent, bool):
         raise TypeError("Parameter 'share_extent' must be a boolean.")
 
-    if not isinstance(pad_extent, (int, float)):
+    if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")
 
-    if ax is not None and not isinstance(ax, (Axes, list)):
+    if ax is not None and not isinstance(ax, Axes | list):
         raise TypeError("Parameter 'ax' must be a matplotlib.axes.Axes or a list of Axes.")
 
     if not isinstance(return_ax, bool):
         raise TypeError("Parameter 'return_ax' must be a boolean.")
 
-    if save is not None and not isinstance(save, (str, Path)):
+    if save is not None and not isinstance(save, str | Path):
         raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
 
 
@@ -1506,10 +1508,10 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif element_type == "shapes":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
 
-    if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
+    if (channel := param_dict.get("channel")) is not None and not isinstance(channel, list | str | int):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
     if isinstance(channel, list):
-        if not all(isinstance(c, (str, int)) for c in channel):
+        if not all(isinstance(c, str | int) for c in channel):
             raise TypeError("Each item in 'channel' list must be a string or an integer.")
         if not all(isinstance(c, type(channel[0])) for c in channel):
             raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
@@ -1534,13 +1536,13 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["col_for_color"] = None
 
     if outline_width := param_dict.get("outline_width"):
-        if not isinstance(outline_width, (float, int)):
+        if not isinstance(outline_width, float | int):
             raise TypeError("Parameter 'outline_width' must be numeric.")
         if outline_width < 0:
             raise ValueError("Parameter 'outline_width' cannot be negative.")
 
     if (outline_alpha := param_dict.get("outline_alpha")) and (
-        not isinstance(outline_alpha, (float, int)) or not 0 <= outline_alpha <= 1
+        not isinstance(outline_alpha, float | int) or not 0 <= outline_alpha <= 1
     ):
         raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
 
@@ -1548,13 +1550,13 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         raise ValueError("Parameter 'contour_px' must be a positive number.")
 
     if (alpha := param_dict.get("alpha")) is not None:
-        if not isinstance(alpha, (float, int)):
+        if not isinstance(alpha, float | int):
             raise TypeError("Parameter 'alpha' must be numeric.")
         if not 0 <= alpha <= 1:
             raise ValueError("Parameter 'alpha' must be between 0 and 1.")
 
     if (fill_alpha := param_dict.get("fill_alpha")) is not None:
-        if not isinstance(fill_alpha, (float, int)):
+        if not isinstance(fill_alpha, float | int):
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
         if fill_alpha < 0:
             raise ValueError("Parameter 'fill_alpha' cannot be negative.")
@@ -1564,7 +1566,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     param_dict["cmap"] = cmap
 
     if (groups := param_dict.get("groups")) is not None:
-        if not isinstance(groups, (list, str)):
+        if not isinstance(groups, list | str):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
         if isinstance(groups, str):
             param_dict["groups"] = [groups]
@@ -1576,7 +1578,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if isinstance((palette := param_dict["palette"]), list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
-    elif isinstance(palette, (str, type(None))) and "palette" in param_dict:
+    elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
     if element_type in ["shapes", "points", "labels"] and (palette := param_dict.get("palette")) is not None:
@@ -1590,9 +1592,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             )
 
     if isinstance(cmap, list):
-        if not all(isinstance(c, (Colormap, str)) for c in cmap):
+        if not all(isinstance(c, Colormap | str) for c in cmap):
             raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
-    elif isinstance(cmap, (Colormap, str, type(None))):
+    elif isinstance(cmap, Colormap | str | type(None)):
         if "cmap" in param_dict:
             param_dict["cmap"] = [cmap] if cmap is not None else None
     else:
@@ -1606,20 +1608,20 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (norm := param_dict.get("norm")) is not None:
         if element_type in ["images", "labels"] and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
-        if element_type in ["shapes", "points"] and not isinstance(norm, (bool, Normalize)):
+        if element_type in ["shapes", "points"] and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
         if element_type in ["images", "labels"] and not isinstance(scale, str):
             raise TypeError("Parameter 'scale' must be a string if specified.")
         if element_type == "shapes":
-            if not isinstance(scale, (float, int)):
+            if not isinstance(scale, float | int):
                 raise TypeError("Parameter 'scale' must be numeric.")
             if scale < 0:
                 raise ValueError("Parameter 'scale' must be a positive number.")
 
     if size := param_dict.get("size"):
-        if not isinstance(size, (float, int)):
+        if not isinstance(size, float | int):
             raise TypeError("Parameter 'size' must be numeric.")
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
@@ -1969,7 +1971,7 @@ def _is_coercable_to_float(series: pd.Series) -> bool:
 
 
 def _ax_show_and_transform(
-    array: MaskedArray[np.float64, Any],
+    array: MaskedArray[tuple[int, ...], Any],
     trans_data: CompositeGenericTransform,
     ax: Axes,
     alpha: float | None = None,
@@ -2071,7 +2073,7 @@ def _get_extent_and_range_for_datashader_canvas(
 
 def _create_image_from_datashader_result(
     ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
-) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.Transform]:
+) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
     rgba_image_data = ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
