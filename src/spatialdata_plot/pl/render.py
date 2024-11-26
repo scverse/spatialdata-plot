@@ -21,7 +21,6 @@ from spatialdata import get_extent
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
 from spatialdata.transformations.transformations import Identity, Sequence
-
 from xarray import DataTree
 
 from spatialdata_plot._logging import logger
