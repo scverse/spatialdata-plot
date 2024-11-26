@@ -5,7 +5,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,14 +14,13 @@ import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from dask.dataframe import DataFrame as DaskDataFrame
-from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot.pl.render import (
@@ -62,7 +61,7 @@ from spatialdata_plot.pl.utils import (
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = Union[tuple[float, ...], str]
+ColorLike = tuple[float, ...] | str
 
 
 @register_spatial_data_accessor("pl")
@@ -950,7 +949,7 @@ class PlotAccessor:
                     if wanted_labels_on_this_cs:
                         if (table := params_copy.table_name) is not None:
                             colors = sc.get.obs_df(sdata[table], params_copy.color)
-                            if isinstance(colors.dtype, pd.CategoricalDtype):
+                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],

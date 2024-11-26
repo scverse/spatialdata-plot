@@ -1,7 +1,7 @@
 from abc import ABC, ABCMeta
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
-from typing import Callable, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +10,6 @@ import pyarrow as pa
 import pytest
 import spatialdata as sd
 from anndata import AnnData
-from datatree import DataTree
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
 from shapely.geometry import MultiPolygon, Polygon
@@ -25,7 +24,7 @@ from spatialdata.models import (
     ShapesModel,
     TableModel,
 )
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 import spatialdata_plot  # noqa: F401
 
@@ -217,7 +216,7 @@ def sdata(request) -> SpatialData:
     return s
 
 
-def _get_images() -> dict[str, Union[DataArray, DataTree]]:
+def _get_images() -> dict[str, DataArray | DataTree]:
     out = {}
     dims_2d = ("c", "y", "x")
     dims_3d = ("z", "y", "x", "c")
@@ -244,7 +243,7 @@ def _get_images() -> dict[str, Union[DataArray, DataTree]]:
     return out
 
 
-def _get_labels() -> dict[str, Union[DataArray, DataTree]]:
+def _get_labels() -> dict[str, DataArray | DataTree]:
     out = {}
     dims_2d = ("y", "x")
     dims_3d = ("z", "y", "x")
@@ -345,9 +344,9 @@ def _get_points() -> dict[str, pa.Table]:
 
 
 def _get_table(
-    region: Optional[AnnData] = None,
-    region_key: Optional[str] = None,
-    instance_key: Optional[str] = None,
+    region: AnnData | None = None,
+    region_key: str | None = None,
+    instance_key: str | None = None,
 ) -> AnnData:
     region_key = region_key or "annotated_region"
     instance_key = instance_key or "instance_id"
@@ -375,7 +374,7 @@ class PlotTesterMeta(ABCMeta):
 
 class PlotTester(ABC):  # noqa: B024
     @classmethod
-    def compare(cls, basename: str, tolerance: Optional[float] = None):
+    def compare(cls, basename: str, tolerance: float | None = None):
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
@@ -398,7 +397,7 @@ class PlotTester(ABC):  # noqa: B024
         assert res is None, res
 
 
-def _decorate(fn: Callable, clsname: str, name: Optional[str] = None) -> Callable:
+def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
     @wraps(fn)
     def save_and_compare(self, *args, **kwargs):
         fn(self, *args, **kwargs)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 from collections import abc
 from copy import copy
-from typing import Union
 
 import dask
 import datashader as ds
@@ -15,7 +14,6 @@ import pandas as pd
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from datatree import DataTree
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
@@ -24,6 +22,7 @@ from spatialdata.models import PointsModel, get_table_keys
 from spatialdata.transformations import (
     set_transformation,
 )
+from xarray import DataTree
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -56,7 +55,7 @@ from spatialdata_plot.pl.utils import (
     to_hex,
 )
 
-_Normalize = Union[Normalize, abc.Sequence[Normalize]]
+_Normalize = Normalize | abc.Sequence[Normalize]
 
 
 def _render_shapes(
@@ -442,7 +441,7 @@ def _render_points(
     if col_for_color is not None:
         cols = sc.get.obs_df(adata, col_for_color)
         # maybe set color based on type
-        if isinstance(cols.dtype, pd.CategoricalDtype):
+        if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
             _maybe_set_colors(
                 source=adata,
                 target=adata,
