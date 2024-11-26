@@ -1975,12 +1975,29 @@ def _ax_show_and_transform(
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
+    extent: list[float] | None = None,
 ) -> matplotlib.image.AxesImage:
+    # default extent in mpl:
+    image_extent = [-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5]
+    if extent is not None:
+        # make sure extent is [x_min, x_max, y_min, y_max]
+        if extent[3] < extent[2]:
+            extent[2], extent[3] = extent[3], extent[2]
+        if extent[0] < 0:
+            x_factor = array.shape[1] / (extent[1] - extent[0])
+            image_extent[0] = image_extent[0] + (extent[0] * x_factor)
+            image_extent[1] = image_extent[1] + (extent[0] * x_factor)
+        if extent[2] < 0:
+            y_factor = array.shape[0] / (extent[3] - extent[2])
+            image_extent[2] = image_extent[2] + (extent[2] * y_factor)
+            image_extent[3] = image_extent[3] + (extent[2] * y_factor)
+
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
             alpha=alpha,
             zorder=zorder,
+            extent=tuple(image_extent),
         )
         im.set_transform(trans_data)
     else:
@@ -1988,6 +2005,7 @@ def _ax_show_and_transform(
             array,
             cmap=cmap,
             zorder=zorder,
+            extent=tuple(image_extent),
         )
         im.set_transform(trans_data)
     return im
@@ -2053,7 +2071,7 @@ def _get_extent_and_range_for_datashader_canvas(
 
 def _create_image_from_datashader_result(
     ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
-) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.CompositeGenericTransform]:
+) -> tuple[MaskedArray[np.float64, Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
     rgba_image_data = ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
