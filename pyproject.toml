@@ -21,7 +21,7 @@ dynamic= [
 license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
-    "spatialdata>=0.2.1",
+    "spatialdata>=0.2.6",
     "matplotlib",
     "scikit-learn",
     "scanpy",
