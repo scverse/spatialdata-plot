@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning][].
 ## [0.2.8] - 2024-11-26
 
 ### Changed
-- Support for `xarray.DataTree` (which moved from `datatree.DataTree`) #380
+
+-   Support for `xarray.DataTree` (which moved from `datatree.DataTree`) #380
 
 ## [0.2.7] - 2024-10-24
 
