@@ -20,7 +20,7 @@ from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
-from spatialdata.transformations.transformations import Identity, Sequence
+from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
 from spatialdata_plot._logging import logger
@@ -43,6 +43,7 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
+    _get_transformation_matrix_for_datashader,
     _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
@@ -167,8 +168,6 @@ def _render_shapes(
         )
 
     if method == "datashader":
-        # trans += ax.transData # TODO: delete?
-
         _geometry = shapes["geometry"]
         is_point = _geometry.type == "Point"
 
@@ -177,20 +176,12 @@ def _render_shapes(
             scale = shapes[is_point]["radius"] * render_params.scale
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
-        # TODO: test all transformations (scale, affine, mapaxis, translocation)
-        # and of course sequence. What if scale in negative range?
-
-        # apply transformations to element
+        # apply transformations to the individual points
         element_trans = get_transformation(sdata_filt.shapes[element])
-        if isinstance(element_trans, Sequence):
-            temp = element_trans.transformations.copy()
-            temp.reverse()
-            element_trans = Sequence(temp)
-
-        tm = element_trans.to_affine_matrix(("x", "y"), ("x", "y"))[:2, :2]
-        flip_matrix = [[1, 0], [0, -1]]
-        # flip the elements along the x-axis, then apply the transformation and flip back
-        transformed_element = sdata_filt.shapes[element].transform(lambda x: x @ (flip_matrix @ tm @ flip_matrix))
+        tm = _get_transformation_matrix_for_datashader(element_trans)
+        transformed_element = sdata_filt.shapes[element].transform(
+            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
+        )
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(data=sdata_filt.shapes[element].drop("geometry", axis=1), geometry=transformed_element)
         )
