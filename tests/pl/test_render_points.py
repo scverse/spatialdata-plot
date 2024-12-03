@@ -1,3 +1,5 @@
+import math
+
 import dask.dataframe
 import matplotlib
 import matplotlib.pyplot as plt
@@ -7,7 +9,8 @@ import scanpy as sc
 from anndata import AnnData
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import PointsModel, TableModel
-from spatialdata.transformations import Scale
+from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
+from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -175,7 +178,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
         ).pl.show(dpi=200)
 
-    def test_plot_datashader_points_are_transformed(self):
+    def test_plot_points_transformed_ds_agrees_with_mpl(self):
         sdata = SpatialData(
             points={
                 "points1": PointsModel.parse(
@@ -187,3 +190,25 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata.pl.render_points("points1", method="matplotlib", size=50, color="lightgrey").pl.render_points(
             "points1", method="datashader", size=10, color="red"
         ).pl.show()
+
+    def test_plot_datashader_can_transform_points(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_points"], {"global": seq})
+
+        sdata_blobs.pl.render_points("blobs_points", method="datashader", color="black", size=5).pl.show()

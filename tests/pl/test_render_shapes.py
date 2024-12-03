@@ -1,3 +1,5 @@
+import math
+
 import anndata
 import geopandas as gpd
 import matplotlib
@@ -10,6 +12,8 @@ from matplotlib.colors import Normalize
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
+from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
+from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -377,3 +381,69 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(
             "blobs_circles", color="dummy_gene_expression", norm=norm, table_name="new_table"
         ).pl.show()
+
+    def test_plot_datashader_can_transform_polygons(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_polygons"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_polygons", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_datashader_can_transform_multipolygons(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_multipolygons"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_multipolygons", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_datashader_can_transform_circles(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_circles"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_circles", method="datashader", outline_alpha=1.0).pl.show()
