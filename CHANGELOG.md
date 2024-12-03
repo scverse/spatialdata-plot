@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
--
+- Support for `xarray.DataTree` (which moved from `datatree.DataTree`) (#380)
 
 ### Fixed
 
@@ -43,10 +43,6 @@ and this project adheres to [Semantic Versioning][].
 -   The user can now specify `datashader_reduction` to control the rendering behaviour (#309)
 -   Rendering outlines of shapes with datashader works now (#309)
 
-### Changed
-
--
-
 ### Fixed
 
 -   datashader now uses canvas size = image size which speeds up the rendering (#309)
@@ -55,10 +51,6 @@ and this project adheres to [Semantic Versioning][].
 -   Giving a custom colormap when rendering a multiscale image now works (#586)
 
 ## [0.2.6] - 2024-09-04
-
-### Added
-
--
 
 ### Changed
 
