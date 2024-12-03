@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
-- Support for `xarray.DataTree` (which moved from `datatree.DataTree`) (#380)
+-   Support for `xarray.DataTree` (which moved from `datatree.DataTree`) (#380)
 
 ### Fixed
 
