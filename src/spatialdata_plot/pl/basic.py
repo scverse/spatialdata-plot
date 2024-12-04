@@ -996,8 +996,6 @@ class PlotAccessor:
                 has_shapes=has_shapes and wants_shapes,
                 elements=wanted_elements,
             )
-            # TODO: fix get_extent???
-            # extent = {"x": (188.62348968860152, 461.8520923943867), "y": (-446.7026437060826, -149.92618678876786)}
             cs_x_min, cs_x_max = extent["x"]
             cs_y_min, cs_y_max = extent["y"]
 
