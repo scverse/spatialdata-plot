@@ -162,7 +162,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
         outline_width: float | int = 1.5,
-        outline_color: str | list[float] = "#000000ff",
+        outline_color: str | list[float] = "#000000",
         outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -208,9 +208,11 @@ class PlotAccessor:
             won't be shown.
         outline_width : float | int, default 1.5
             Width of the border.
-        outline_color : str | list[float], default "#000000ff"
-            Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
-            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
+        outline_color : str | list[float], default "#000000"
+            Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
+            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
+            "#000000ff", the last two positions are ignored, since the alpha of the outlines is solely controlled by
+            `outline_alpha`.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of shapes. Invisible by default.
         cmap : Colormap | str | None, optional
