@@ -8,15 +8,18 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## incoming version
+## [0.2.9] - tbd
 
 ### Fixed
 
+-   Transformations of Points and Shapes are now applied before rendering with datashader (#378)
 -   Fix bug due to `sc.get.obs_df()` returning a different type (#393)
 
 ## [0.2.8] - 2024-11-26
 
--   Support for `xarray.DataTree` (which moved from `datatree.DataTree`)
+### Changed
+
+-   Support for `xarray.DataTree` (which moved from `datatree.DataTree`) (#380)
 
 ## [0.2.7] - 2024-10-24
 
@@ -49,10 +52,6 @@ and this project adheres to [Semantic Versioning][].
 -   Several issues associated with `norm` and `colorbar` (#346)
 
 ## [0.2.5] - 2024-08-23
-
-### Added
-
--
 
 ### Changed
 
