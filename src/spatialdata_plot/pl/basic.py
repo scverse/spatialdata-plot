@@ -950,10 +950,9 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         if (table := params_copy.table_name) is not None:
-                            keys = [params_copy.color] if not isinstance(params_copy.color, list) else params_copy.color
-                            assert len(keys) == 1
-                            colors = sc.get.obs_df(sdata[table], keys)
-                            if isinstance(colors[keys[0]].dtype, pd.CategoricalDtype):
+                            assert isinstance(params_copy.color, str)
+                            colors = sc.get.obs_df(sdata[table], [params_copy.color])
+                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],

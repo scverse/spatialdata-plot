@@ -453,11 +453,10 @@ def _render_points(
     )
 
     if col_for_color is not None:
-        keys = [col_for_color] if not isinstance(col_for_color, list) else col_for_color
-        assert len(keys) == 1
-        cols = sc.get.obs_df(adata, keys)
+        assert isinstance(col_for_color, str)
+        cols = sc.get.obs_df(adata, [col_for_color])
         # maybe set color based on type
-        if isinstance(cols[keys[0]].dtype, pd.CategoricalDtype):
+        if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
             _maybe_set_colors(
                 source=adata,
                 target=adata,
