@@ -5,6 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 from anndata import AnnData
 from spatialdata import SpatialData, deepcopy
@@ -110,6 +111,14 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points(
             element="blobs_points", size=40, color="instance_id", alpha=0.6, method="datashader"
         ).pl.show()
+
+    @pytest.mark.parametrize("method", ["matplotlib", "datashader"])
+    def test_plot_points_categorical_color_column(self, sdata_blobs: SpatialData, method: str):
+        sdata_blobs.pl.render_points("blobs_points", color="genes", method=method).pl.show()
+
+    @pytest.mark.parametrize("method", ["matplotlib", "datashader"])
+    def test_plot_points_continuous_color_column(self, sdata_blobs: SpatialData, method: str):
+        sdata_blobs.pl.render_points("blobs_points", color="instance_id", method=method).pl.show()
 
     def test_plot_datashader_matplotlib_stack(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
