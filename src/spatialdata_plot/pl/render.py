@@ -17,7 +17,7 @@ from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata import get_extent
+from spatialdata import get_extent, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -76,13 +76,17 @@ def _render_shapes(
         filter_tables=bool(render_params.table_name),
     )
 
-    shapes = sdata[element]
-
     if (table_name := render_params.table_name) is None:
         table = None
+        shapes = sdata_filt[element]
     else:
+        element_dict, joined_table = join_spatialelement_table(sdata, spatial_element_names=element, table_name=table_name,
+                                                        how="inner", match_rows="left")
+        sdata_filt[element] = shapes = element_dict[element]
+        sdata_filt[table_name] = joined_table
         _, region_key, _ = get_table_keys(sdata[table_name])
-        table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
+        table = sdata_filt[table_name][sdata[table_name].obs[region_key].isin([element])]
+
 
     if (
         col_for_color is not None
