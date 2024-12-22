@@ -84,7 +84,9 @@ def _render_shapes(
             sdata, spatial_element_names=element, table_name=table_name, how="inner"
         )
         sdata_filt[element] = shapes = element_dict[element]
-        joined_table.uns["spatialdata_attrs"]["region"] = joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
+        joined_table.uns["spatialdata_attrs"]["region"] = (
+            joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
+        )
         sdata_filt[table_name] = table = joined_table
 
     if (
