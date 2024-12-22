@@ -455,4 +455,3 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["new_table"] = table_shapes
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="instance_id").pl.show()
-
