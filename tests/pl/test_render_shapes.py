@@ -169,7 +169,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         cropped_blob.pl.render_shapes().pl.show()
 
     def test_plot_can_plot_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
-        new_table = sdata_blobs["table"].copy()
         sdata_blobs["table"].obs["region"] = "blobs_circles"
         new_table = sdata_blobs["table"][:5]
         new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
