@@ -169,7 +169,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         cropped_blob.pl.render_shapes().pl.show()
 
     def test_plot_can_plot_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
-        new_table = sdata_blobs["table"].copy()
         sdata_blobs["table"].obs["region"] = "blobs_circles"
         new_table = sdata_blobs["table"][:5]
         new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
@@ -447,3 +446,12 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         _set_transformations(sdata_blobs["blobs_circles"], {"global": seq})
 
         sdata_blobs.pl.render_shapes("blobs_circles", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_can_do_non_matching_table(self, sdata_blobs: SpatialData):
+        table_shapes = sdata_blobs["table"][:3].copy()
+        table_shapes.obs.instance_id = list(range(3))
+        table_shapes.obs["region"] = "blobs_circles"
+        table_shapes.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["new_table"] = table_shapes
+
+        sdata_blobs.pl.render_shapes("blobs_circles", color="instance_id").pl.show()
