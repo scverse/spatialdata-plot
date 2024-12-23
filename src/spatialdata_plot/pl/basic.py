@@ -272,7 +272,7 @@ class PlotAccessor:
             scale=scale,
             table_name=table_name,
             method=method,
-            ds_reduction=kwargs.get("datashader_reduction", None),
+            ds_reduction=kwargs.get("datashader_reduction"),
         )
 
         sdata = self._copy()
@@ -296,7 +296,7 @@ class PlotAccessor:
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
                 zorder=n_steps,
                 method=param_values["method"],
@@ -403,7 +403,7 @@ class PlotAccessor:
             norm=norm,
             size=size,
             table_name=table_name,
-            ds_reduction=kwargs.get("datashader_reduction", None),
+            ds_reduction=kwargs.get("datashader_reduction"),
         )
 
         if method is not None:
@@ -430,7 +430,7 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 alpha=param_values["alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 size=param_values["size"],
                 table_name=param_values["table_name"],
                 zorder=n_steps,
@@ -675,7 +675,7 @@ class PlotAccessor:
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
                 zorder=n_steps,
