@@ -86,6 +86,7 @@ Many tests will produce plots and check that they are correct by comparing them 
 - the ground truth images need to be updated when a new test is passing, or when a test starts producing a slightly different (but consistent) plot.
 - please never replace the ground truth images without having manually reviewed them.
 - if you run the tests locally in macOS or Windows they will likely fail because the ground truth images are generated using Ubuntu. To overcome this you can use `act`, which will generate a Docker reproducing the environment used in the GitHub Action. After the Docker container is generated you can use it within IDEs to run tests and debug code.
+- in the case of PyCharm, it is easier to create a container from a `Dockerfile` instead of using `act`. Please in such case use the `Dockerfile` made availabel in the repository. If you encountering problems with `act` or `docker`, please [get in touch with the developers via Zulip](https://scverse.zulipchat.com/#narrow/channel/443514-spatialdata-dev) and we will help troubleshoot the issue. See also additional details [here](https://github.com/scverse/spatialdata-plot/pull/397).
 
 ## Publishing a release
 
