@@ -525,7 +525,12 @@ def _render_points(
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
-        color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
+        color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
+            object,
+            "categorical",
+        )
+        if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
+            transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
         aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
