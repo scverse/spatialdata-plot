@@ -111,6 +111,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_points", size=40, color="instance_id", alpha=0.6, method="datashader"
         ).pl.show()
 
+    def test_plot_points_categorical_color_column_matplotlib(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", color="genes", method="matplotlib").pl.show()
+
+    def test_plot_points_categorical_color_column_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", color="genes", method="datashader").pl.show()
+
+    def test_plot_points_continuous_color_column_matplotlib(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", color="instance_id", method="matplotlib").pl.show()
+
+    def test_plot_points_continuous_color_column_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", color="instance_id", method="datashader").pl.show()
+
     def test_plot_datashader_matplotlib_stack(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
             element="blobs_points", size=40, color="red", method="datashader"
