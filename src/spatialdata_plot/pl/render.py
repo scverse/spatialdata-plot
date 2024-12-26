@@ -719,6 +719,8 @@ def _render_images(
 
     channels = img.coords["c"].values if render_params.channel is None else render_params.channel
 
+    # the channel parameter has been previously validated, so when not None, render_params.channel is a list
+    assert isinstance(channels, list)
     n_channels = len(channels)
 
     # True if user gave n cmaps for n channels
