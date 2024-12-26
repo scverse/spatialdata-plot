@@ -11,6 +11,11 @@ from matplotlib.figure import Figure
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = tuple[float, ...] | str
+
 
 @dataclass
 class CmapParams:
@@ -18,8 +23,9 @@ class CmapParams:
 
     cmap: Colormap
     norm: Normalize
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0)
-    is_default: bool = True
+    na_color: ColorLike
+    na_color_modified_by_user: bool = False
+    cmap_is_default: bool = True
 
 
 @dataclass
@@ -80,7 +86,10 @@ class ShapesRenderParams:
     fill_alpha: float = 0.3
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    method: str | None = None
+    zorder: int = 0
     table_name: str | None = None
+    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
 @dataclass
@@ -96,7 +105,10 @@ class PointsRenderParams:
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
+    method: str | None = None
+    zorder: int = 0
     table_name: str | None = None
+    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
 @dataclass
@@ -110,6 +122,7 @@ class ImageRenderParams:
     alpha: float = 1.0
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
+    zorder: int = 0
 
 
 @dataclass
@@ -128,3 +141,4 @@ class LabelsRenderParams:
     transfunc: Callable[[float], float] | None = None
     scale: str | None = None
     table_name: str | None = None
+    zorder: int = 0

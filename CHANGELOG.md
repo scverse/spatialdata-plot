@@ -8,24 +8,99 @@ and this project adheres to [Semantic Versioning][].
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
-## [0.2.4] - tbd
+## [0.2.9] - tbd
 
-## [0.2.3] - 2024-07-03
+### Fixed
+
+-   Transformations of Points and Shapes are now applied before rendering with datashader (#378)
+-   Fix bug due to `sc.get.obs_df()` returning a different type (#393)
+-   Allowing instance mismatch between shapes and tables (#396)
+-   Fix bug when plotting categorical points with datashader (#395)
+
+## [0.2.8] - 2024-11-26
 
 ### Changed
 
--   All parameters are now provided for a single element. If element in pl.render is None then this value will be broadcasted
+-   Support for `xarray.DataTree` (which moved from `datatree.DataTree`) (#380)
+
+## [0.2.7] - 2024-10-24
+
+### Added
+
+-   The user can now specify `datashader_reduction` to control the rendering behavior (#309)
+-   Rendering outlines of shapes with datashader works now (#309)
+
+### Fixed
+
+-   datashader now uses canvas size = image size which speeds up the rendering (#309)
+-   datashader now uses the `linear` as interpolation method for colormaps instead of the default `eq_hist` to make it equivalent to matplotlib (#309)
+-   point sizes of datashader now agree with matplotlib also when dpi != 100 (#309)
+-   Giving a custom colormap when rendering a multiscale image now works (#586)
+
+## [0.2.6] - 2024-09-04
+
+### Changed
+
+-   Lowered RMSE-threshold for plot-based tests from 45 to 15 (#344)
+-   When subsetting to `groups`, `NA` isn't automatically added to legend (#344)
+-   When rendering a single image channel, a colorbar is now shown (#346)
+-   Removed `percentiles_for_norm` parameter (#346)
+-   Changed `norm` to no longer accept bools, only `mpl.colors.Normalise` or `None` (#346)
+
+### Fixed
+
+-   Filtering with `groups` now preserves original cmap (#344)
+-   Non-selected `groups` are now not shown in `na_color` (#344)
+-   Several issues associated with `norm` and `colorbar` (#346)
+
+## [0.2.5] - 2024-08-23
+
+### Changed
+
+-   Replaced `outline` parameter in `render_labels` with alpha-based logic (#323)
+-   Lowered RMSE-threshold for plot-based tests from 60 to 45 (#323)
+-   Removed `preprocessing` (.pp) accessor (#329)
+
+### Fixed
+
+-   Minor fixes for several tests as a result of the threshold change (#323)
+
+## [0.2.4] - 2024-08-07
+
+### Added
+
+-   Added utils function for 0-transparent cmaps (#302)
+
+### Fixed
+
+-   Took RNG out of categorical label test (#306)
+-   Performance bug when plotting shapes (#298)
+-   scale parameter was ignored for single-scale images (#301)
+-   Changes to support for dask-expr (#283)
+-   Added error handling for non-existent elements (#305)
+-   Specifying vmin and vmax properly clips image data (#307)
+-   import bug `get_cmap()` (8fd969c)
+
+## [0.2.3] - 2024-07-03
+
+### Added
+
+-   Datashader support for points and shapes (#244)
+
+### Changed
+
+-   All parameters are now provided for a single element (#272)
 
 ### Fixed
 
 -   Fix color assignment for NaN values (#257)
--   Fix channel str support #221
+-   Zorder of rendering now strictly follows the order of the render_x calls (#244)
 
 ## [0.2.2] - 2024-05-02
 
 ### Fixed
 
--   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap
+-   Fixed `fill_alpha` ignoring `alpha` channel from custom cmap (#236)
 -   Fix channel str support (#221)
 
 ## [0.2.1] - 2024-03-26

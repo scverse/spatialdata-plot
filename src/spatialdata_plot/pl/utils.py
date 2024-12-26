@@ -2,27 +2,31 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
+import dask
+import datashader as ds
 import matplotlib
 import matplotlib.patches as mpatches
-import matplotlib.patches as mplp
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
-import multiscale_spatial_image as msi
+import matplotlib.transforms as mtransforms
 import numpy as np
+import numpy.ma as ma
+import numpy.typing as npt
 import pandas as pd
 import shapely
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
-from datatree import DataTree
+from datashader.core import Canvas
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
@@ -33,7 +37,6 @@ from matplotlib.colors import (
     LinearSegmentedColormap,
     ListedColormap,
     Normalize,
-    TwoSlopeNorm,
     to_rgba,
 )
 from matplotlib.figure import Figure
@@ -43,20 +46,25 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype
+from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
+from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
-from shapely.geometry import LineString, Polygon
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import SpatialData, get_element_annotators, get_values, rasterize
+from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
+
+# from spatialdata.transformations.transformations import Scale
+from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Translation
+from spatialdata.transformations import Sequence as SDSequence
 from spatialdata.transformations.operations import get_transformation
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
@@ -71,11 +79,85 @@ from spatialdata_plot.pl.render_params import (
     _FontSize,
     _FontWeight,
 )
-from spatialdata_plot.pp.utils import _get_coordinate_system_mapping
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
 
-ColorLike = Union[tuple[float, ...], str]
+# replace with
+# from spatialdata._types import ColorLike
+# once https://github.com/scverse/spatialdata/pull/689/ is in a release
+ColorLike = tuple[float, ...] | str
+
+
+def _verify_plotting_tree(sdata: SpatialData) -> SpatialData:
+    """Verify that the plotting tree exists, and if not, create it."""
+    if not hasattr(sdata, "plotting_tree"):
+        sdata.plotting_tree = OrderedDict()
+
+    return sdata
+
+
+def _get_coordinate_system_mapping(sdata: SpatialData) -> dict[str, list[str]]:
+    coordsys_keys = sdata.coordinate_systems
+    image_keys = [] if sdata.images is None else sdata.images.keys()
+    label_keys = [] if sdata.labels is None else sdata.labels.keys()
+    shape_keys = [] if sdata.shapes is None else sdata.shapes.keys()
+    point_keys = [] if sdata.points is None else sdata.points.keys()
+
+    mapping: dict[str, list[str]] = {}
+
+    if len(coordsys_keys) < 1:
+        raise ValueError("SpatialData object must have at least one coordinate system to generate a mapping.")
+
+    for key in coordsys_keys:
+        mapping[key] = []
+
+        for image_key in image_keys:
+            transformations = get_transformation(sdata.images[image_key], get_all=True)
+
+            if key in list(transformations.keys()):
+                mapping[key].append(image_key)
+
+        for label_key in label_keys:
+            transformations = get_transformation(sdata.labels[label_key], get_all=True)
+
+            if key in list(transformations.keys()):
+                mapping[key].append(label_key)
+
+        for shape_key in shape_keys:
+            transformations = get_transformation(sdata.shapes[shape_key], get_all=True)
+
+            if key in list(transformations.keys()):
+                mapping[key].append(shape_key)
+
+        for point_key in point_keys:
+            transformations = get_transformation(sdata.points[point_key], get_all=True)
+
+            if key in list(transformations.keys()):
+                mapping[key].append(point_key)
+
+    return mapping
+
+
+def _is_color_like(color: Any) -> bool:
+    """Check if a value is a valid color, returns False for pseudo-bools.
+
+    For discussion, see: https://github.com/scverse/spatialdata-plot/issues/327.
+    matplotlib accepts strings in [0, 1] as grey-scale values - therefore,
+    "0" and "1" are considered valid colors. However, we won't do that
+    so we're filtering these out.
+    """
+    if isinstance(color, bool):
+        return False
+    if isinstance(color, str):
+        try:
+            num_value = float(color)
+            if 0 <= num_value <= 1:
+                return False
+        except ValueError:
+            # we're not dealing with what matplotlib considers greyscale
+            pass
+
+    return bool(colors.is_color_like(color))
 
 
 def _prepare_params_plot(
@@ -175,6 +257,61 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
     return cs_contents
 
 
+def _sanitise_na_color(na_color: ColorLike | None) -> tuple[str, bool]:
+    """Return the color's hex value and a boolean indicating if the user changed the default color.
+
+    Returns the hex representation of the color and a boolean indicating whether the
+    color was changed by the user or not. Our default is "lightgray", but when we
+    render labels, we give them random colors instead. However, the user could've
+    manually specified "lightgray" as the color, so we need to check for that.
+
+    Parameters
+    ----------
+        na_color (ColorLike | None): The color input specified by the user.
+
+    Returns
+    -------
+        tuple[str, bool]: A tuple containing the hex color code and a boolean
+        indicating if the color was user-specified.
+    """
+    if na_color == "default":
+        # user kept the default
+        return to_hex("lightgray"), False
+    if na_color is None:
+        # user wants to hide NAs
+        return "#FFFFFF00", True  # zero alpha so it's hidden
+    if colors.is_color_like(na_color):
+        # user specified a color (including "lightgray")
+        return to_hex(na_color), True
+
+    # Handle unexpected values (optional)
+    raise ValueError(f"Invalid na_color value: {na_color}")
+
+
+def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, float]:
+    # Extract the vertices from the PathPatch
+    path = pathpatch.get_path()
+    vertices = path.vertices
+    x = vertices[:, 0]
+    y = vertices[:, 1]
+
+    area = 0.5 * np.sum(x[:-1] * y[1:] - x[1:] * y[:-1])
+
+    # Calculate the centroid coordinates
+    centroid_x = np.sum((x[:-1] + x[1:]) * (x[:-1] * y[1:] - x[1:] * y[:-1])) / (6 * area)
+    centroid_y = np.sum((y[:-1] + y[1:]) * (x[:-1] * y[1:] - x[1:] * y[:-1])) / (6 * area)
+
+    return centroid_x, centroid_y
+
+
+def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
+
+    centroid = _get_centroid_of_pathpatch(pathpatch)
+    vertices = pathpatch.get_path().vertices
+    scaled_vertices = np.array([centroid + (vertex - centroid) * scale_factor for vertex in vertices])
+    pathpatch.get_path().vertices = scaled_vertices
+
+
 def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
@@ -210,7 +347,7 @@ def _get_collection_shape(
                 c = cmap(c)
             else:
                 try:
-                    norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                    norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
                 except ValueError as e:
                     raise ValueError(
                         "Could not convert values in the `color` column to float, if `color` column represents"
@@ -224,7 +361,7 @@ def _get_collection_shape(
             c = cmap(c)
         else:
             try:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c))
+                norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
             except ValueError as e:
                 raise ValueError(
                     "Could not convert values in the `color` column to float, if `color` column represents"
@@ -244,60 +381,64 @@ def _get_collection_shape(
     outline_c = outline_c * fill_c.shape[0]
 
     shapes_df = pd.DataFrame(shapes, copy=True)
-
-    # remove empty points/polygons
     shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
-
-    # reset index of shapes_df for case of spatial query
     shapes_df = shapes_df.reset_index(drop=True)
 
-    rows = []
-
-    def assign_fill_and_outline_to_row(
-        shapes: list[GeoDataFrame], fill_c: list[Any], outline_c: list[Any], row: pd.Series, idx: int
+    def _assign_fill_and_outline_to_row(
+        fill_c: list[Any], outline_c: list[Any], row: dict[str, Any], idx: int, is_multiple_shapes: bool
     ) -> None:
-        if len(shapes) > 1 and len(fill_c) == 1:
-            row["fill_c"] = fill_c
-            row["outline_c"] = outline_c
-        else:
-            row["fill_c"] = fill_c[idx]
-            row["outline_c"] = outline_c[idx]
+        try:
+            if is_multiple_shapes and len(fill_c) == 1:
+                row["fill_c"] = fill_c[0]
+                row["outline_c"] = outline_c[0]
+            else:
+                row["fill_c"] = fill_c[idx]
+                row["outline_c"] = outline_c[idx]
+        except IndexError as e:
+            raise IndexError("Could not assign fill and outline colors due to a mismatch in row numbers.") from e
 
-    # Match colors to the geometry, potentially expanding the row in case of
-    # multipolygons
-    for idx, row in shapes_df.iterrows():
-        geom = row["geometry"]
-        if geom.geom_type == "Polygon":
-            row = row.to_dict()
-            coords = np.array(geom.exterior.coords)
-            centroid = np.mean(coords, axis=0)
-            scaled_coords = [(centroid + (np.array(coord) - centroid) * s).tolist() for coord in geom.exterior.coords]
-            row["geometry"] = mplp.Polygon(scaled_coords, closed=True)
-            assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
-            rows.append(row)
+    def _process_polygon(row: pd.Series, s: float) -> dict[str, Any]:
+        coords = np.array(row["geometry"].exterior.coords)
+        centroid = np.mean(coords, axis=0)
+        scaled_coords = (centroid + (coords - centroid) * s).tolist()
+        return {**row.to_dict(), "geometry": mpatches.Polygon(scaled_coords, closed=True)}
 
-        elif geom.geom_type == "MultiPolygon":
-            # mp = _make_patch_from_multipolygon(geom)
-            for polygon in geom.geoms:
-                mp_copy = row.to_dict()
-                coords = np.array(polygon.exterior.coords)
-                centroid = np.mean(coords, axis=0)
-                scaled_coords = [(centroid + (coord - centroid) * s).tolist() for coord in coords]
-                mp_copy["geometry"] = mplp.Polygon(scaled_coords, closed=True)
-                assign_fill_and_outline_to_row(shapes, fill_c, outline_c, mp_copy, idx)
-                rows.append(mp_copy)
+    def _process_multipolygon(row: pd.Series, s: float) -> list[dict[str, Any]]:
+        mp = _make_patch_from_multipolygon(row["geometry"])
+        row_dict = row.to_dict()
+        for m in mp:
+            _scale_pathpatch_around_centroid(m, s)
 
-        elif geom.geom_type == "Point":
-            row = row.to_dict()
-            scaled_radius = row["radius"] * s
-            row["geometry"] = mplp.Circle(
-                (geom.x, geom.y), radius=scaled_radius
-            )  # Circle is always scaled from its center
-            assign_fill_and_outline_to_row(shapes, fill_c, outline_c, row, idx)
-            rows.append(row)
+        return [{**row_dict, "geometry": m} for m in mp]
 
-    patches = pd.DataFrame(rows)
+    def _process_point(row: pd.Series, s: float) -> dict[str, Any]:
+        return {
+            **row.to_dict(),
+            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * s),
+        }
 
+    def _create_patches(shapes_df: GeoDataFrame, fill_c: list[Any], outline_c: list[Any], s: float) -> pd.DataFrame:
+        rows = []
+        is_multiple_shapes = len(shapes_df) > 1
+
+        for idx, row in shapes_df.iterrows():
+            geom_type = row["geometry"].geom_type
+            processed_rows = []
+
+            if geom_type == "Polygon":
+                processed_rows.append(_process_polygon(row, s))
+            elif geom_type == "MultiPolygon":
+                processed_rows.extend(_process_multipolygon(row, s))
+            elif geom_type == "Point":
+                processed_rows.append(_process_point(row, s))
+
+            for processed_row in processed_rows:
+                _assign_fill_and_outline_to_row(fill_c, outline_c, processed_row, idx, is_multiple_shapes)
+                rows.append(processed_row)
+
+        return pd.DataFrame(rows)
+
+    patches = _create_patches(shapes_df, fill_c, outline_c, s)
     return PatchCollection(
         patches["geometry"].values.tolist(),
         snap=False,
@@ -356,14 +497,11 @@ def _get_scalebar(
 
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
-    norm: Normalize | bool = False,
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
-    vmin: float | None = None,
-    vmax: float | None = None,
-    vcenter: float | None = None,
-    **kwargs: Any,
+    norm: Normalize | None = None,
+    na_color: ColorLike | None = None,
 ) -> CmapParams:
-    is_default = cmap is None
+    # TODO: check refactoring norm out here as it gets overwritten later
+    cmap_is_default = cmap is None
     if cmap is None:
         cmap = rcParams["image.cmap"]
     if isinstance(cmap, str):
@@ -371,18 +509,19 @@ def _prepare_cmap_norm(
 
     cmap = copy(cmap)
 
-    cmap.set_bad("lightgray" if na_color is None else na_color)
-
     if norm is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
-    elif isinstance(norm, Normalize) or not norm:
-        pass  # TODO
-    elif vcenter is None:
-        norm = Normalize(vmin=vmin, vmax=vmax)
-    else:
-        norm = TwoSlopeNorm(vmin=vmin, vmax=vmax, vcenter=vcenter)
+        norm = Normalize(vmin=None, vmax=None, clip=False)
 
-    return CmapParams(cmap, norm, na_color, is_default)
+    na_color, na_color_modified_by_user = _sanitise_na_color(na_color)
+    cmap.set_bad(na_color)
+
+    return CmapParams(
+        cmap=cmap,
+        norm=norm,
+        na_color=na_color,
+        cmap_is_default=cmap_is_default,
+        na_color_modified_by_user=na_color_modified_by_user,
+    )
 
 
 def _set_outline(
@@ -391,11 +530,8 @@ def _set_outline(
     outline_color: str | list[float] = "#0000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    # Type checks for outline_width
-    if isinstance(outline_width, int):
-        outline_width = outline_width
-    if not isinstance(outline_width, float):
-        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `float`.")
+    if not isinstance(outline_width, int | float):
+        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `int` or `float`.")
     if outline_width == 0.0:
         outline = False
     if outline_width < 0.0:
@@ -430,9 +566,6 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     Union[plt.Figure, plt.Axes]
         Matplotlib figure and axes object.
     """
-    # if num_images <= 1:
-    # raise ValueError("Number of images must be greater than 1.")
-
     if num_images < ncols:
         nrows = 1
         ncols = num_images
@@ -452,51 +585,6 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     # get rid of the empty axes
     _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
     return fig, axes
-
-
-def _get_random_hex_colors(num_colors: int, seed: int | None = None) -> set[str]:
-    """Return a list of random hex-color.
-
-    Parameters
-    ----------
-    num_colors
-        Number of colors to generate.
-
-    Returns
-    -------
-    list
-        List of random colors.
-    """
-    rng = default_rng(seed)
-    colors: set[str] = set()
-    while len(colors) < num_colors:
-        r, g, b = rng.integers(0, 255), rng.integers(0, 255), rng.integers(0, 255)
-        color = f"#{r:02x}{g:02x}{b:02x}"
-        colors.add(color)
-
-    return colors
-
-
-def _get_hex_colors_for_continous_values(values: pd.Series, cmap_name: str = "viridis") -> list[str]:
-    """Convert a series of continuous numerical values to hex color values using a colormap.
-
-    Parameters
-    ----------
-    values
-        The values to be converted to colors.
-    cmap_name
-        The name of the colormap to be used, by default 'viridis'.
-
-    Returns
-    -------
-    pd.Series
-        The converted color values as hex strings.
-    """
-    cmap = plt.get_cmap(cmap_name)
-    norm = plt.Normalize(vmin=values.min(), vmax=values.max())
-    colors = cmap(norm(values))
-
-    return [colors.to_hex(color) for color in colors]
 
 
 def _normalize(
@@ -534,7 +622,15 @@ def _normalize(
 
     perc = np.percentile(img, [pmin, pmax])
 
-    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)
+    # Ensure perc is an array of two elements
+    if np.isscalar(perc):
+        logger.warning(
+            "Percentile range is too small, using the same percentile for both min "
+            "and max. Consider using a larger percentile range."
+        )
+        perc = np.array([perc, perc])
+
+    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)  # type: ignore
 
     if clip:
         norm = np.clip(norm, 0, 1)
@@ -568,7 +664,7 @@ def _get_colors_for_categorical_obs(
 
     # check if default matplotlib palette has enough colors
     if palette is None:
-        if cmap_params is not None and not cmap_params.is_default:
+        if cmap_params is not None and not cmap_params.cmap_is_default:
             palette = cmap_params.cmap
         elif len(rcParams["axes.prop_cycle"].by_key()["color"]) >= len_cat:
             cc = rcParams["axes.prop_cycle"]()
@@ -622,18 +718,16 @@ def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
     value_to_plot: str | None,
+    na_color: ColorLike,
     element_name: list[str] | str | None = None,
-    groups: Sequence[str | None] | str | None = None,
-    palette: list[str | None] | list[str] | None = None,
-    na_color: str | tuple[float, ...] | None = None,
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
-    if value_to_plot is None:
-        color = np.full(len(element), to_hex(na_color))  # type: ignore[arg-type]
+    if value_to_plot is None and element is not None:
+        color = np.full(len(element), na_color)
         return color, color, False
-
-    model = get_model(sdata[element_name])
 
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
@@ -644,11 +738,13 @@ def _set_color_source_vec(
         )
 
     if len(origins) == 1:
-        if model == PointsModel and table_name is not None:
-            color_source_vector = get_values_point_table(sdata=sdata, origin=origins[0], table_name=table_name)
-        else:
-            vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
-            color_source_vector = vals[value_to_plot]
+        color_source_vector = _robust_get_value(
+            sdata=sdata,
+            origin=origins[0],
+            value_to_plot=value_to_plot,
+            element_name=element_name,
+            table_name=table_name,
+        )
 
         # numerical case, return early
         # TODO temporary split until refactor is complete
@@ -667,59 +763,22 @@ def _set_color_source_vec(
             return None, color_source_vector, False
 
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
-        categories = color_source_vector.categories
 
-        if (
-            groups is not None
-            and not isinstance(element, GeoDataFrame)
-            and groups[0] is not None
-            or groups is not None
-            and isinstance(element, GeoDataFrame)
-        ):
-            color_source_vector = color_source_vector.remove_categories(categories.difference(groups))
-            categories = groups
-
-        palette_input: list[str] | str | None
-        if not isinstance(element, GeoDataFrame):
-            if groups is not None and groups[0] is not None:
-                if isinstance(palette, list):
-                    palette_input = (
-                        palette[0]
-                        if palette[0] is None
-                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                    )
-            elif palette is not None and isinstance(palette, list):
-                palette_input = palette[0]
-
-            else:
-                palette_input = palette
-
-        if isinstance(element, GeoDataFrame):
-            if groups is not None:
-                if isinstance(palette, list):
-                    palette_input = (
-                        palette[0]
-                        if palette[0] is None
-                        else [color_palette for color_palette in palette if isinstance(color_palette, str)]
-                    )
-            elif palette is not None and isinstance(palette, list):
-                palette_input = palette[0]
-            else:
-                palette_input = palette
-
-        color_map = dict(
-            zip(categories, _get_colors_for_categorical_obs(categories, palette_input, cmap_params=cmap_params))
+        color_mapping = _get_categorical_color_mapping(
+            adata=sdata.table,
+            cluster_key=value_to_plot,
+            color_source_vector=color_source_vector,
+            groups=groups,
+            palette=palette,
+            na_color=na_color,
         )
 
-        if color_map is None:
+        color_source_vector = color_source_vector.set_categories(color_mapping.keys())
+        if color_mapping is None:
             raise ValueError("Unable to create color palette.")
 
         # do not rename categories, as colors need not be unique
-        color_vector = color_source_vector.map(color_map)
-        if color_vector.isna().any():
-            if (na_cat_color := to_hex(na_color)) not in color_vector.categories:
-                color_vector = color_vector.add_categories([na_cat_color])
-            color_vector = color_vector.fillna(to_hex(na_color))
+        color_vector = color_source_vector.map(color_mapping)
 
         return color_source_vector, color_vector, True
 
@@ -734,43 +793,55 @@ def _map_color_seg(
     color_vector: ArrayLike | pd.Series[CategoricalDtype],
     color_source_vector: pd.Series[CategoricalDtype],
     cmap_params: CmapParams,
+    na_color: ColorLike,
+    na_color_modified_by_user: bool = False,
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
-    na_color: str | tuple[float, ...] = (0, 0, 0, 0),
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    if color_vector is not None and isinstance(color_vector.dtype, pd.CategoricalDtype):
-        if isinstance(na_color, tuple) and len(na_color) == 4 and np.any(color_source_vector.isna()):
+    if pd.api.types.is_categorical_dtype(color_vector.dtype):
+        # Case A: users wants to plot a categorical column
+        if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
-        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
+        val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
-
+    elif pd.api.types.is_numeric_dtype(color_vector.dtype):
+        # Case B: user wants to plot a continous column
+        if isinstance(color_vector, pd.Series):
+            color_vector = color_vector.to_numpy()
+        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
-        val_im = map_array(seg.copy(), cell_id, cell_id)  # replace with same seg id to remove missing segs
-
-        if val_im.shape[0] == 1:
-            val_im = np.squeeze(val_im, axis=0)
-        try:
-            cols = cmap_params.cmap(cmap_params.norm(color_vector))
-        except TypeError:
-            assert all(colors.is_color_like(c) for c in color_vector), "Not all values are color-like."
-            cols = colors.to_rgba_array(color_vector)
+        # Case C: User didn't specify any colors
+        if color_source_vector is not None and (
+            set(color_vector) == set(color_source_vector)
+            and len(set(color_vector)) == 1
+            and set(color_vector) == {na_color}
+            and not na_color_modified_by_user
+        ):
+            val_im = map_array(seg.copy(), cell_id, cell_id)
+            RNG = default_rng(42)
+            cols = RNG.random((len(color_vector), 3))
+        else:
+            # Case D: User didn't specify a column to color by, but modified the na_color
+            val_im = map_array(seg.copy(), cell_id, cell_id)
+            if "#" in str(color_vector[0]):
+                # we have hex colors
+                assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
+                cols = colors.to_rgba_array(color_vector)
+            else:
+                cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
-
-    # check if no color is assigned, compute random colors
-    unique_cols = np.unique(cols)
-    if len(unique_cols) == 1 and unique_cols == 0:
-        RNG = default_rng(42)
-        cols = RNG.random((len(cols), 3))
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
         colors=cols,
         bg_label=0,
         bg_color=(1, 1, 1),  # transparency doesn't really work
+        image_alpha=0,
     )
 
     if seg_boundaries:
@@ -784,59 +855,98 @@ def _map_color_seg(
     return np.dstack((seg_im, val_im))
 
 
-def _get_palette(
-    categories: Sequence[Any],
-    adata: AnnData | None = None,
-    cluster_key: None | str = None,
-    palette: ListedColormap | str | list[str] | None = None,
-    alpha: float = 1.0,
-) -> Mapping[str, str] | None:
-    palette = None if isinstance(palette, list) and palette[0] is None else palette
-    if adata is not None and palette is None:
-        try:
-            palette = adata.uns[f"{cluster_key}_colors"]  # type: ignore[arg-type]
-            if len(palette) != len(categories):
-                raise ValueError(
-                    f"Expected palette to be of length `{len(categories)}`, found `{len(palette)}`. "
-                    + f"Removing the colors in `adata.uns` with `adata.uns.pop('{cluster_key}_colors')` may help."
-                )
-            return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette)}
-        except KeyError as e:
-            logger.warning(e)
-            return None
+def _generate_base_categorial_color_mapping(
+    adata: AnnData,
+    cluster_key: str,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+    na_color: ColorLike,
+) -> Mapping[str, str]:
+    if adata is not None and cluster_key in adata.uns and f"{cluster_key}_colors" in adata.uns:
+        colors = adata.uns[f"{cluster_key}_colors"]
+        categories = color_source_vector.categories.tolist() + ["NaN"]
+        if "#" not in na_color:
+            # should be unreachable, but just for safety
+            raise ValueError("Expected `na_color` to be a hex color, but got a non-hex color.")
 
-    len_cat = len(categories)
+        colors = [to_hex(to_rgba(color)[:3]) for color in colors]
+        na_color = to_hex(to_rgba(na_color)[:3])
 
-    if palette is None:
-        if len_cat <= 20:
-            palette = default_20
-        elif len_cat <= 28:
-            palette = default_28
-        elif len_cat <= len(default_102):  # 103 colors
-            palette = default_102
-        else:
-            palette = ["grey" for _ in range(len_cat)]
-            logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
-        return {cat: to_hex(to_rgba(col)[:3]) for cat, col in zip(categories, palette[:len_cat])}
+        if na_color and len(categories) > len(colors):
+            return dict(zip(categories, colors + [na_color], strict=True))
+
+        return dict(zip(categories, colors, strict=True))
+
+    return _get_default_categorial_color_mapping(color_source_vector)
+
+
+def _modify_categorical_color_mapping(
+    mapping: Mapping[str, str],
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
+) -> Mapping[str, str]:
+    if groups is None or isinstance(groups, list) and groups[0] is None:
+        return mapping
+
+    if palette is None or isinstance(palette, list) and palette[0] is None:
+        # subset base mapping to only those specified in groups
+        modified_mapping = {key: mapping[key] for key in mapping if key in groups or key == "NaN"}
+    elif len(palette) == len(groups) and isinstance(groups, list) and isinstance(palette, list):
+        modified_mapping = dict(zip(groups, palette, strict=True))
+    else:
+        raise ValueError(f"Expected palette to be of length `{len(groups)}`, found `{len(palette)}`.")
+
+    return modified_mapping
+
+
+def _get_default_categorial_color_mapping(
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+) -> Mapping[str, str]:
+    len_cat = len(color_source_vector.categories.unique())
+    if len_cat <= 20:
+        palette = default_20
+    elif len_cat <= 28:
+        palette = default_28
+    elif len_cat <= len(default_102):  # 103 colors
+        palette = default_102
+    else:
+        palette = ["grey" for _ in range(len_cat)]
+        logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
+
+    return {
+        cat: to_hex(to_rgba(col)[:3])
+        for cat, col in zip(color_source_vector.categories, palette[:len_cat], strict=True)
+    }
+
+
+def _get_categorical_color_mapping(
+    adata: AnnData,
+    na_color: ColorLike,
+    cluster_key: str | None = None,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
+    groups: list[str] | str | None = None,
+    palette: list[str] | str | None = None,
+) -> Mapping[str, str]:
+    if not isinstance(color_source_vector, Categorical):
+        raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
+
+    if isinstance(groups, str):
+        groups = [groups]
 
     if isinstance(palette, str):
-        cmap = ListedColormap([palette])
-    elif isinstance(palette, list):
-        cmap = ListedColormap(palette)
-    elif isinstance(palette, ListedColormap):
-        cmap = palette
-    else:
-        raise TypeError(f"Palette is {type(palette)} but should be string or list.")
-    palette = [to_hex(np.round(x, 5)) for x in cmap(np.linspace(0, 1, len_cat), alpha=alpha)]
+        palette = [palette]
 
-    return dict(zip(categories, palette))
+    if cluster_key is None:
+        # user didn't specify a column to use for coloring
+        base_mapping = _get_default_categorial_color_mapping(color_source_vector)
+    else:
+        base_mapping = _generate_base_categorial_color_mapping(adata, cluster_key, color_source_vector, na_color)
+
+    return _modify_categorical_color_mapping(mapping=base_mapping, groups=groups, palette=palette)
 
 
 def _maybe_set_colors(
     source: AnnData, target: AnnData, key: str, palette: str | ListedColormap | Cycler | Sequence[Any] | None = None
 ) -> None:
-    from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
-
     color_key = f"{key}_colors"
     try:
         if palette is not None:
@@ -856,11 +966,12 @@ def _decorate_axs(
     cax: PatchCollection,
     fig_params: FigParams,
     value_to_plot: str | None,
-    color_source_vector: pd.Series[CategoricalDtype],
+    color_source_vector: pd.Series[CategoricalDtype] | Categorical,
+    color_vector: pd.Series[CategoricalDtype] | Categorical,
     adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
-    na_color: str | tuple[float, ...] = (0.0, 0.0, 0.0, 0.0),
+    na_color: ColorLike | None = "#d3d3d3",  # lightgray
     legend_fontsize: int | float | _FontSize | None = None,
     legend_fontweight: int | _FontWeight = "bold",
     legend_loc: str | None = "right margin",
@@ -883,16 +994,20 @@ def _decorate_axs(
         # Adding legends
         if color_source_vector is not None and isinstance(color_source_vector.dtype, pd.CategoricalDtype):
             # order of clusters should agree to palette order
-            clusters = color_source_vector.unique()
+            clusters = color_source_vector.remove_unused_categories().unique()
             clusters = clusters[~clusters.isnull()]
-            palette = None if isinstance(palette, list) and palette[0] else palette
-            palette = _get_palette(
-                adata=adata, cluster_key=value_to_plot, categories=clusters, palette=palette, alpha=alpha
+            # derive mapping from color_source_vector and color_vector
+            group_to_color_matching = pd.DataFrame(
+                {
+                    "cats": color_source_vector.remove_unused_categories(),
+                    "color": color_vector,
+                }
             )
+            color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
             _add_categorical_legend(
                 ax,
-                color_source_vector,
-                palette=palette,
+                pd.Categorical(values=color_source_vector, categories=clusters),
+                palette=color_mapping,
                 legend_loc=legend_loc,
                 legend_fontweight=legend_fontweight,
                 legend_fontsize=legend_fontsize,
@@ -903,7 +1018,8 @@ def _decorate_axs(
             )
         elif colorbar:
             # TODO: na_in_legend should have some effect here
-            plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+            cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
+            cb.solids.set_alpha(alpha)
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
@@ -995,34 +1111,6 @@ def save_fig(fig: Figure, path: str | Path, make_dir: bool = True, ext: str = "p
     fig.savefig(path, **kwargs)
 
 
-def _get_cs_element_map(
-    element: str | Sequence[str] | None,
-    element_map: Mapping[str, Any],
-) -> Mapping[str, str]:
-    """Get the mapping between the coordinate system and the class."""
-    # from spatialdata.models import Image2DModel, Image3DModel, Labels2DModel, Labels3DModel, PointsModel, ShapesModel
-    element = list(element_map.keys())[0] if element is None else element
-    element = [element] if isinstance(element, str) else element
-    d = {}
-    for e in element:
-        cs = list(element_map[e].attrs["transform"].keys())[0]
-        d[cs] = e
-        # model = get_model(element_map["blobs_labels"])
-        # if model in [Image2DModel, Image3DModel, Labels2DModel, Labels3DModel]
-    return d
-
-
-def _multiscale_to_image(sdata: sd.SpatialData) -> sd.SpatialData:
-    if sdata.images is None:
-        raise ValueError("No images found in the SpatialData object.")
-
-    for k, v in sdata.images.items():
-        if isinstance(v, msi.multiscale_spatial_image.DataTree):
-            sdata.images[k] = Image2DModel.parse(v["scale0"].ds.to_array().squeeze(axis=0))
-
-    return sdata
-
-
 def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
@@ -1032,62 +1120,6 @@ def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
     colors = [color_dict[k] for k in sorted_labels]
 
     return ListedColormap(["black"] + colors, N=len(colors) + 1)
-
-
-def _translate_image(
-    image: DataArray,
-    translation: sd.transformations.transformations.Translation,
-) -> DataArray:
-    shifts: dict[str, int] = {axis: int(translation.translation[idx]) for idx, axis in enumerate(translation.axes)}
-    img = image.values.copy()
-    # for yx images (important for rasterized MultiscaleImages as labels)
-    expanded_dims = False
-    if len(img.shape) == 2:
-        img = np.expand_dims(img, axis=0)
-        expanded_dims = True
-
-    shifted_channels = []
-
-    # split channels, shift axes individually, them recombine
-    if len(img.shape) == 3:
-        for c in range(img.shape[0]):
-            channel = img[c, :, :]
-
-            # iterates over [x, y]
-            for axis, shift in shifts.items():
-                pad_x, pad_y = (0, 0), (0, 0)
-                if axis == "x" and shift > 0:
-                    pad_x = (abs(shift), 0)
-                elif axis == "x" and shift < 0:
-                    pad_x = (0, abs(shift))
-
-                if axis == "y" and shift > 0:
-                    pad_y = (abs(shift), 0)
-                elif axis == "y" and shift < 0:
-                    pad_y = (0, abs(shift))
-
-                channel = np.pad(channel, (pad_y, pad_x), mode="constant")
-
-            shifted_channels.append(channel)
-
-    if expanded_dims:
-        return Labels2DModel.parse(
-            np.array(shifted_channels[0]),
-            dims=["y", "x"],
-            transformations=image.attrs["transform"],
-        )
-    return Image2DModel.parse(
-        np.array(shifted_channels),
-        dims=["c", "y", "x"],
-        transformations=image.attrs["transform"],
-    )
-
-
-def _convert_polygon_to_linestrings(polygon: Polygon) -> list[LineString]:
-    b = polygon.boundary.coords
-    linestrings = [LineString(b[k : k + 2]) for k in range(len(b) - 1)]
-
-    return [list(ls.coords) for ls in linestrings]
 
 
 def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
@@ -1238,6 +1270,7 @@ def _rasterize_if_necessary(
         do_rasterization = False
 
     if do_rasterization:
+        logger.info("Rasterizing image for faster rendering.")
         # TODO: do we want min here?
         target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
         image = rasterize(
@@ -1316,7 +1349,7 @@ def _multiscale_to_spatial_image(
             optimal_index_x -= 1
 
         # pick the scale with higher resolution (worst case: downscaled afterwards)
-        optimal_scale = scales[min(optimal_index_x, optimal_index_y)]
+        optimal_scale = scales[min(int(optimal_index_x), int(optimal_index_y))]
 
     # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
@@ -1386,12 +1419,12 @@ def _validate_show_parameters(
     return_ax: bool,
     save: str | Path | None,
 ) -> None:
-    if coordinate_systems is not None and not isinstance(coordinate_systems, (list, str)):
+    if coordinate_systems is not None and not isinstance(coordinate_systems, list | str):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
 
     font_weights = ["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
     if legend_fontweight is not None and (
-        not isinstance(legend_fontweight, (int, str))
+        not isinstance(legend_fontweight, int | str)
         or (isinstance(legend_fontweight, str) and legend_fontweight not in font_weights)
     ):
         readable_font_weights = ", ".join(font_weights[:-1]) + ", or " + font_weights[-1]
@@ -1403,7 +1436,7 @@ def _validate_show_parameters(
     font_sizes = ["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 
     if legend_fontsize is not None and (
-        not isinstance(legend_fontsize, (int, float, str))
+        not isinstance(legend_fontsize, int | float | str)
         or (isinstance(legend_fontsize, str) and legend_fontsize not in font_sizes)
     ):
         readable_font_sizes = ", ".join(font_sizes[:-1]) + ", or " + font_sizes[-1]
@@ -1445,22 +1478,22 @@ def _validate_show_parameters(
     if fig is not None and not isinstance(fig, Figure):
         raise TypeError("Parameter 'fig' must be a matplotlib.figure.Figure.")
 
-    if title is not None and not isinstance(title, (list, str)):
+    if title is not None and not isinstance(title, list | str):
         raise TypeError("Parameter 'title' must be a string or a list of strings.")
 
     if not isinstance(share_extent, bool):
         raise TypeError("Parameter 'share_extent' must be a boolean.")
 
-    if not isinstance(pad_extent, (int, float)):
+    if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")
 
-    if ax is not None and not isinstance(ax, (Axes, list)):
+    if ax is not None and not isinstance(ax, Axes | list):
         raise TypeError("Parameter 'ax' must be a matplotlib.axes.Axes or a list of Axes.")
 
     if not isinstance(return_ax, bool):
         raise TypeError("Parameter 'return_ax' must be a boolean.")
 
-    if save is not None and not isinstance(save, (str, Path)):
+    if save is not None and not isinstance(save, str | Path):
         raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
 
 
@@ -1470,20 +1503,19 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
         )
-
     if element_type == "images":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].images.keys())
-    if element_type == "labels":
+    elif element_type == "labels":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].labels.keys())
-    if element_type == "shapes":
-        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
-    if element_type == "points":
+    elif element_type == "points":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].points.keys())
+    elif element_type == "shapes":
+        param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
 
-    if (channel := param_dict.get("channel")) is not None and not isinstance(channel, (list, str, int)):
+    if (channel := param_dict.get("channel")) is not None and not isinstance(channel, list | str | int):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
     if isinstance(channel, list):
-        if not all(isinstance(c, (str, int)) for c in channel):
+        if not all(isinstance(c, str | int) for c in channel):
             raise TypeError("Each item in 'channel' list must be a string or an integer.")
         if not all(isinstance(c, type(channel[0])) for c in channel):
             raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
@@ -1494,11 +1526,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in ["shapes", "points", "labels"]:
+    if (color := param_dict.get("color")) and element_type in {"shapes", "points", "labels"}:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
-        if element_type in ["shapes", "points"]:
-            if colors.is_color_like(color):
+        if element_type in {"shapes", "points"}:
+            if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
             else:
@@ -1507,37 +1539,38 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif "color" in param_dict and element_type != "labels":
         param_dict["col_for_color"] = None
 
-    if (outline := param_dict.get("outline")) is not None and not isinstance(outline, bool):
-        raise TypeError("Parameter 'outline' must be a boolean.")
-
     if outline_width := param_dict.get("outline_width"):
-        if not isinstance(outline_width, (float, int)):
+        if not isinstance(outline_width, float | int):
             raise TypeError("Parameter 'outline_width' must be numeric.")
         if outline_width < 0:
             raise ValueError("Parameter 'outline_width' cannot be negative.")
 
     if (outline_alpha := param_dict.get("outline_alpha")) and (
-        not isinstance(outline_alpha, (float, int)) or not 0 <= outline_alpha <= 1
+        not isinstance(outline_alpha, float | int) or not 0 <= outline_alpha <= 1
     ):
         raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
 
+    if contour_px is not None and contour_px <= 0:
+        raise ValueError("Parameter 'contour_px' must be a positive number.")
+
     if (alpha := param_dict.get("alpha")) is not None:
-        if not isinstance(alpha, (float, int)):
+        if not isinstance(alpha, float | int):
             raise TypeError("Parameter 'alpha' must be numeric.")
         if not 0 <= alpha <= 1:
             raise ValueError("Parameter 'alpha' must be between 0 and 1.")
 
     if (fill_alpha := param_dict.get("fill_alpha")) is not None:
-        if not isinstance(fill_alpha, (float, int)):
+        if not isinstance(fill_alpha, float | int):
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
         if fill_alpha < 0:
             raise ValueError("Parameter 'fill_alpha' cannot be negative.")
 
     if (cmap := param_dict.get("cmap")) is not None and (palette := param_dict.get("palette")) is not None:
         raise ValueError("Both `palette` and `cmap` are specified. Please specify only one of them.")
+    param_dict["cmap"] = cmap
 
     if (groups := param_dict.get("groups")) is not None:
-        if not isinstance(groups, (list, str)):
+        if not isinstance(groups, list | str):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
         if isinstance(groups, str):
             param_dict["groups"] = [groups]
@@ -1546,19 +1579,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if (groups := param_dict.get("groups")) is not None and palette is None:
-        warnings.warn(
-            "Groups is specified but palette is not. Setting palette to default 'lightgray'", UserWarning, stacklevel=2
-        )
-        param_dict["palette"] = ["lightgray" for _ in range(len(groups))]
-
     if isinstance((palette := param_dict["palette"]), list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
-    elif isinstance(palette, (str, type(None))) and "palette" in param_dict:
+    elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
     if element_type in ["shapes", "points", "labels"] and (palette := param_dict.get("palette")) is not None:
+        groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
         if len(groups) != len(palette):
@@ -1568,63 +1596,64 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             )
 
     if isinstance(cmap, list):
-        if not all(isinstance(c, (Colormap, str)) for c in cmap):
+        if not all(isinstance(c, Colormap | str) for c in cmap):
             raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
-    elif isinstance(cmap, (Colormap, str, type(None))):
+    elif isinstance(cmap, Colormap | str | type(None)):
         if "cmap" in param_dict:
             param_dict["cmap"] = [cmap] if cmap is not None else None
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    if (na_color := param_dict.get("na_color")) is not None and not colors.is_color_like(na_color):
+    if (na_color := param_dict.get("na_color")) != "default" and (
+        na_color is not None and not _is_color_like(na_color)
+    ):
         raise ValueError("Parameter 'na_color' must be color-like.")
 
     if (norm := param_dict.get("norm")) is not None:
         if element_type in ["images", "labels"] and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
-        if element_type in ["shapes", "points"] and not isinstance(norm, (bool, Normalize)):
+        if element_type in ["shapes", "points"] and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
         if element_type in ["images", "labels"] and not isinstance(scale, str):
             raise TypeError("Parameter 'scale' must be a string if specified.")
         if element_type == "shapes":
-            if not isinstance(scale, (float, int)):
+            if not isinstance(scale, float | int):
                 raise TypeError("Parameter 'scale' must be numeric.")
             if scale < 0:
                 raise ValueError("Parameter 'scale' must be a positive number.")
 
-    if (percentiles_for_norm := param_dict.get("percentiles_for_norm")) is None:
-        percentiles_for_norm = (None, None)
-    elif not (isinstance(percentiles_for_norm, (list, tuple)) or len(percentiles_for_norm) != 2):
-        raise TypeError("Parameter 'percentiles_for_norm' must be a list or tuple of exactly two floats or None.")
-    elif not all(
-        isinstance(p, (float, int, type(None)))
-        and isinstance(p, type(percentiles_for_norm[0]))
-        and (p is None or 0 <= p <= 100)
-        for p in percentiles_for_norm
-    ):
-        raise TypeError(
-            "Each item in 'percentiles_for_norm' must be of the same dtype and must be a float or int within [0, 100], "
-            "or None"
-        )
-    elif (
-        percentiles_for_norm[0] is not None
-        and percentiles_for_norm[1] is not None
-        and percentiles_for_norm[0] > percentiles_for_norm[1]
-    ):
-        raise ValueError("The first number in 'percentiles_for_norm' must not be smaller than the second.")
-    if "percentiles_for_norm" in param_dict:
-        param_dict["percentiles_for_norm"] = percentiles_for_norm
-
     if size := param_dict.get("size"):
-        if not isinstance(size, (float, int)):
+        if not isinstance(size, float | int):
             raise TypeError("Parameter 'size' must be numeric.")
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
 
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string .")
+
+    # like this because the following would assign True/False to 'method'
+    if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
+        raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
+    valid_ds_reduction_methods = [
+        "sum",
+        "mean",
+        "any",
+        "count",
+        # "m2", -> not intended to be used alone (see https://datashader.org/api.html#datashader.reductions.m2)
+        # "mode", -> not supported for points (see https://datashader.org/api.html#datashader.reductions.mode)
+        "std",
+        "var",
+        "max",
+        "min",
+    ]
+    if (ds_reduction := param_dict.get("ds_reduction")) and (ds_reduction not in valid_ds_reduction_methods):
+        raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
+
+    if method == "datashader" and ds_reduction is None:
+        param_dict["ds_reduction"] = "sum"
 
     return param_dict
 
@@ -1635,8 +1664,7 @@ def _validate_label_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     color: str | None,
     fill_alpha: float | int,
-    contour_px: int,
-    outline: bool,
+    contour_px: int | None,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
     na_color: ColorLike | None,
@@ -1654,7 +1682,6 @@ def _validate_label_render_params(
         "palette": palette,
         "color": color,
         "na_color": na_color,
-        "outline": outline,
         "outline_alpha": outline_alpha,
         "cmap": cmap,
         "norm": norm,
@@ -1665,6 +1692,10 @@ def _validate_label_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
@@ -1672,7 +1703,6 @@ def _validate_label_render_params(
         element_params[el]["color"] = param_dict["color"]
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["scale"] = param_dict["scale"]
-        element_params[el]["outline"] = param_dict["outline"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
         element_params[el]["contour_px"] = param_dict["contour_px"]
 
@@ -1701,6 +1731,7 @@ def _validate_points_render_params(
     norm: Normalize | None,
     size: float | int,
     table_name: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1714,11 +1745,16 @@ def _validate_points_render_params(
         "norm": norm,
         "size": size,
         "table_name": table_name,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "points")
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
@@ -1738,6 +1774,7 @@ def _validate_points_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -1750,7 +1787,6 @@ def _validate_shape_render_params(
     palette: list[str] | str | None,
     color: list[str] | str | None,
     na_color: ColorLike | None,
-    outline: bool,
     outline_width: float | int,
     outline_color: str | list[float],
     outline_alpha: float | int,
@@ -1758,6 +1794,8 @@ def _validate_shape_render_params(
     norm: Normalize | None,
     scale: float | int,
     table_name: str | None,
+    method: str | None,
+    ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1767,7 +1805,6 @@ def _validate_shape_render_params(
         "palette": palette,
         "color": color,
         "na_color": na_color,
-        "outline": outline,
         "outline_width": outline_width,
         "outline_color": outline_color,
         "outline_alpha": outline_alpha,
@@ -1775,15 +1812,20 @@ def _validate_shape_render_params(
         "norm": norm,
         "scale": scale,
         "table_name": table_name,
+        "method": method,
+        "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
+
+        # ensure that the element exists in the SpatialData object
+        _ = param_dict["sdata"][el]
+
         element_params[el] = {}
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["na_color"] = param_dict["na_color"]
-        element_params[el]["outline"] = param_dict["outline"]
         element_params[el]["outline_width"] = param_dict["outline_width"]
         element_params[el]["outline_color"] = param_dict["outline_color"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
@@ -1804,6 +1846,8 @@ def _validate_shape_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        element_params[el]["method"] = param_dict["method"]
+        element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
 
     return element_params
 
@@ -1845,7 +1889,6 @@ def _validate_image_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
-    percentiles_for_norm: tuple[float | None, float | None] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1857,7 +1900,6 @@ def _validate_image_render_params(
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
-        "percentiles_for_norm": percentiles_for_norm,
     }
     param_dict = _type_check_params(param_dict, "images")
 
@@ -1881,18 +1923,18 @@ def _validate_image_render_params(
 
         if isinstance(palette := param_dict["palette"], list):
             if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element.c)
+                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element.c):
+            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
                 palette = None
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
         if (cmap := param_dict["cmap"]) is not None:
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element.c)
+                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element.c):
+            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
@@ -1902,9 +1944,7 @@ def _validate_image_render_params(
             else:
                 element_params[el]["scale"] = scale
         else:
-            element_params[el]["scale"] = None
-
-        element_params[el]["percentiles_for_norm"] = param_dict["percentiles_for_norm"]
+            element_params[el]["scale"] = scale
 
     return element_params
 
@@ -1935,21 +1975,268 @@ def _is_coercable_to_float(series: pd.Series) -> bool:
 
 
 def _ax_show_and_transform(
-    array: MaskedArray[np.float64, Any],
+    array: MaskedArray[tuple[int, ...], Any],
     trans_data: CompositeGenericTransform,
     ax: Axes,
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
-) -> None:
+    zorder: int = 0,
+    extent: list[float] | None = None,
+) -> matplotlib.image.AxesImage:
+    # default extent in mpl:
+    image_extent = [-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5]
+    if extent is not None:
+        # make sure extent is [x_min, x_max, y_min, y_max]
+        if extent[3] < extent[2]:
+            extent[2], extent[3] = extent[3], extent[2]
+        if extent[0] < 0:
+            x_factor = array.shape[1] / (extent[1] - extent[0])
+            image_extent[0] = image_extent[0] + (extent[0] * x_factor)
+            image_extent[1] = image_extent[1] + (extent[0] * x_factor)
+        if extent[2] < 0:
+            y_factor = array.shape[0] / (extent[3] - extent[2])
+            image_extent[2] = image_extent[2] + (extent[2] * y_factor)
+            image_extent[3] = image_extent[3] + (extent[2] * y_factor)
+
     if not cmap and alpha is not None:
         im = ax.imshow(
             array,
             alpha=alpha,
+            zorder=zorder,
+            extent=tuple(image_extent),
         )
         im.set_transform(trans_data)
     else:
         im = ax.imshow(
             array,
             cmap=cmap,
+            zorder=zorder,
+            extent=tuple(image_extent),
         )
         im.set_transform(trans_data)
+    return im
+
+
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
+    """
+    Modify colormap so that 0s are transparent.
+
+    Parameters
+    ----------
+    cmap (Colormap | str): A matplotlib Colormap instance or a colormap name string.
+    steps (int): The number of steps in the colormap.
+
+    Returns
+    -------
+    ListedColormap: A new colormap instance with modified alpha values.
+    """
+    if isinstance(cmap, str):
+        cmap = plt.get_cmap(cmap)
+
+    colors = cmap(np.arange(steps or cmap.N))
+    colors[0, :] = [1.0, 1.0, 1.0, 0.0]
+
+    return ListedColormap(colors)
+
+
+def _get_extent_and_range_for_datashader_canvas(
+    spatial_element: SpatialElement, coordinate_system: str, ax: Axes, fig_params: FigParams
+) -> tuple[Any, Any, list[Any], list[Any], Any]:
+    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
+    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+    previous_xlim = ax.get_xlim()
+    previous_ylim = ax.get_ylim()
+    # increase range if sth larger was rendered on the axis before
+    if _mpl_ax_contains_elements(ax):
+        x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
+        y_ext = (
+            [
+                min(y_ext[0], previous_ylim[1]),
+                max(y_ext[1], previous_ylim[0]),
+            ]
+            if ax.yaxis_inverted()
+            else [
+                min(y_ext[0], previous_ylim[0]),
+                max(y_ext[1], previous_ylim[1]),
+            ]
+        )
+
+    # compute canvas size in pixels close to the actual image size to speed up computation
+    plot_width = x_ext[1] - x_ext[0]
+    plot_height = y_ext[1] - y_ext[0]
+    plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
+    plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
+    factor: float
+    factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
+    plot_width = int(np.round(plot_width / factor))
+    plot_height = int(np.round(plot_height / factor))
+
+    return plot_width, plot_height, x_ext, y_ext, factor
+
+
+def _create_image_from_datashader_result(
+    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
+) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
+    # create SpatialImage from datashader output to get it back to original size
+    rgba_image_data = ds_result.to_numpy().base
+    rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
+    rgba_image = Image2DModel.parse(
+        rgba_image_data,
+        dims=("c", "y", "x"),
+        transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
+    )
+
+    _, trans_data = _prepare_transformation(rgba_image, "global", ax)
+
+    rgba_image = np.transpose(rgba_image.data.compute(), (1, 2, 0))  # type: ignore[attr-defined]
+    rgba_image = ma.masked_array(rgba_image)  # type conversion for mypy
+
+    return rgba_image, trans_data
+
+
+def _datashader_aggregate_with_function(
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    cvs: Canvas,
+    spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
+    col_for_color: str | None,
+    element_type: Literal["points", "shapes"],
+) -> DataArray:
+    """
+    When shapes or points are colored by a continuous value during rendering with datashader.
+
+    This function performs the aggregation using the user-specified reduction method.
+
+    Parameters
+    ----------
+    reduction: String specifying the datashader reduction method to be used.
+        If None, "sum" is used as default.
+    cvs: Canvas object previously created with ds.Canvas()
+    spatial_element: geo or dask dataframe with the shapes or points to render
+    col_for_color: name of the column containing the values by which to color
+    element_type: tells us if this function is called from _render_shapes() or _render_points()
+    """
+    if reduction is None:
+        reduction = "sum"
+
+    reduction_function_map = {
+        "sum": ds.sum,
+        "mean": ds.mean,
+        "any": ds.any,
+        "count": ds.count,
+        "std": ds.std,
+        "var": ds.var,
+        "max": ds.max,
+        "min": ds.min,
+    }
+
+    try:
+        reduction_function = reduction_function_map[reduction](column=col_for_color)
+    except KeyError as e:
+        raise ValueError(
+            f"Reduction '{reduction}' is not supported. Please use one of: {', '.join(reduction_function_map.keys())}."
+        ) from e
+
+    element_function_map = {
+        "points": cvs.points,
+        "shapes": cvs.polygons,
+    }
+
+    try:
+        element_function = element_function_map[element_type]
+    except KeyError as e:
+        raise ValueError(f"Element type '{element_type}' is not supported. Use 'points' or 'shapes'.") from e
+
+    if element_type == "points":
+        points_aggregate = element_function(spatial_element, "x", "y", agg=reduction_function)
+        if reduction == "any":
+            # replace False/True by nan/1
+            points_aggregate = points_aggregate.astype(int)
+            points_aggregate = points_aggregate.where(points_aggregate > 0)
+        return points_aggregate
+
+    # is shapes
+    return element_function(spatial_element, geometry="geometry", agg=reduction_function)
+
+
+def _datshader_get_how_kw_for_spread(
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+) -> str:
+    # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
+    reduction = reduction or "sum"
+
+    reduction_to_how_map = {
+        "sum": "add",
+        "mean": "source",
+        "any": "source",
+        "count": "add",
+        "std": "source",
+        "var": "source",
+        "max": "max",
+        "min": "min",
+    }
+
+    if reduction not in reduction_to_how_map:
+        raise ValueError(
+            f"Reduction {reduction} is not supported, please use one of the following: sum, mean, any, count"
+            ", std, var, max, min."
+        )
+
+    return reduction_to_how_map[reduction]
+
+
+def _robust_get_value(
+    sdata: sd.SpatialData,
+    origin: _ValueOrigin,
+    value_to_plot: str | None,
+    element_name: list[str] | str | None = None,
+    table_name: str | None = None,
+) -> pd.Series | None:
+    """Locate the value to plot in the spatial data object."""
+    model = get_model(sdata[element_name])
+    if model == PointsModel and table_name is not None:
+        return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
+    vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+    return vals[value_to_plot]
+
+
+def _prepare_transformation(
+    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, coordinate_system: str, ax: Axes | None = None
+) -> tuple[matplotlib.transforms.Affine2D, matplotlib.transforms.CompositeGenericTransform | None]:
+    trans = get_transformation(element, get_all=True)[coordinate_system]
+    affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    trans = mtransforms.Affine2D(matrix=affine_trans)
+    trans_data = trans + ax.transData if ax is not None else None
+
+    return trans, trans_data
+
+
+def _get_datashader_trans_matrix_of_single_element(
+    trans: Identity | Scale | Affine | MapAxis | Translation,
+) -> npt.NDArray[Any]:
+    flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+    tm: npt.NDArray[Any] = trans.to_affine_matrix(("x", "y"), ("x", "y"))
+
+    if isinstance(trans, Identity):
+        return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    if isinstance(trans, (Scale | Affine)):
+        # idea: "flip the y-axis", apply transformation, flip back
+        flip_and_transform: npt.NDArray[Any] = flip_matrix @ tm @ flip_matrix
+        return flip_and_transform
+    if isinstance(trans, MapAxis):
+        # no flipping needed
+        return tm
+    # for a Translation, we need the transposed transformation matrix
+    return tm.T
+
+
+def _get_transformation_matrix_for_datashader(
+    trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
+) -> npt.NDArray[Any]:
+    """Get the affine matrix needed to transform shapes for rendering with datashader."""
+    if isinstance(trans, SDSequence):
+        tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        for x in trans.transformations:
+            tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
+        return tm
+    return _get_datashader_trans_matrix_of_single_element(trans)

@@ -1,15 +1,21 @@
+import math
+
 import anndata
 import geopandas as gpd
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import spatialdata_plot  # noqa: F401
 from anndata import AnnData
+from matplotlib.colors import Normalize
 from shapely.geometry import MultiPolygon, Point, Polygon
-from spatialdata import SpatialData
+from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
+from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
+from spatialdata.transformations._utils import _set_transformations
 
+import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
@@ -31,28 +37,28 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
 
     def test_plot_can_render_circles_with_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles", outline=True).pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1).pl.show()
 
     def test_plot_can_render_circles_with_colored_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles", outline=True, outline_color="red").pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1, outline_color="red").pl.show()
 
     def test_plot_can_render_polygons(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_polygons").pl.show()
 
     def test_plot_can_render_polygons_with_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline=True).pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline_alpha=1).pl.show()
 
     def test_plot_can_render_polygons_with_str_colored_outline(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline=True, outline_color="red").pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", outline_alpha=1, outline_color="red").pl.show()
 
     def test_plot_can_render_polygons_with_rgb_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(
-            element="blobs_polygons", outline=True, outline_color=(0.0, 0.0, 1.0, 1.0)
+            element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 0.0, 1.0, 1.0)
         ).pl.show()
 
     def test_plot_can_render_polygons_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(
-            element="blobs_polygons", outline=True, outline_color=(0.0, 1.0, 0.0, 1.0)
+            element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 1.0, 0.0, 1.0)
         ).pl.show()
 
     def test_plot_can_render_empty_geometry(self, sdata_blobs: SpatialData):
@@ -60,10 +66,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes().pl.show()
 
     def test_plot_can_render_circles_with_default_outline_width(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles", outline=True).pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1).pl.show()
 
     def test_plot_can_render_circles_with_specified_outline_width(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles", outline=True, outline_width=3.0).pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1, outline_width=3.0).pl.show()
 
     def test_plot_can_render_multipolygons(self):
         def _make_multi():
@@ -91,11 +97,11 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata.obs.loc[:, "val"] = [0, 1, 2, 3]
         table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
         sdata["table"] = table
-        sdata.pl.render_shapes(color="val", outline=True, fill_alpha=0.3).pl.show()
+        sdata.pl.render_shapes(color="val", fill_alpha=0.3).pl.show()
 
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
-        blob = sdata_blobs
-        blob["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = "blobs_polygons"
         blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
         blob.pl.render_shapes(
@@ -107,7 +113,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_circles", scale=0.5).pl.show()
 
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
         sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
@@ -115,10 +123,13 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             "category"
         )
 
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups="c1").pl.show()
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster").pl.show(ax=axs[0], legend_fontsize=6)
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups="c1").pl.show(
+            ax=axs[1], legend_fontsize=6
+        )
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
         sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
@@ -131,16 +142,17 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_colorbar_respects_input_limits(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"]).pl.show()
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster").pl.show()
 
     def test_plot_colorbar_can_be_normalised(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["cluster"] = [1, 2, 3, 5, 20]
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=True).pl.show()
+        norm = Normalize(vmin=0, vmax=5, clip=True)
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
@@ -157,7 +169,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         cropped_blob.pl.render_shapes().pl.show()
 
     def test_plot_can_plot_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
-        new_table = sdata_blobs["table"].copy()
         sdata_blobs["table"].obs["region"] = "blobs_circles"
         new_table = sdata_blobs["table"][:5]
         new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
@@ -178,7 +189,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_plot_queried_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:5]
+        new_table = sdata_blobs["table"][:5].copy()
         new_table.uns["spatialdata_attrs"]["region"] = "blobs_circles"
         new_table.obs["instance_id"] = np.array(range(5))
 
@@ -206,7 +217,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:10]
+        new_table = sdata_blobs["table"][:10].copy()
         new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
         new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
 
@@ -222,7 +233,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_color_two_queried_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_circles"
-        new_table = sdata_blobs["table"][:10]
+        new_table = sdata_blobs["table"][:10].copy()
         new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
         new_table.obs["instance_id"] = np.concatenate((np.array(range(5)), np.array(range(5))))
 
@@ -286,3 +297,161 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs["table"].obs["category"] = sdata_blobs["table"].obs["category"].astype("category")
         sdata_blobs.pl.render_shapes("blobs_polygons", color="category").pl.show()
+
+    def test_plot_datashader_can_render_shapes(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_colored_shapes(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", color="red").pl.show()
+
+    def test_plot_datashader_can_render_with_different_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", fill_alpha=0.7).pl.show()
+
+    def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
+        RNG = np.random.default_rng(seed=42)
+        n_obs = len(sdata_blobs["blobs_polygons"])
+        adata = AnnData(RNG.normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_polygons"
+        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
+        sdata_blobs["table"] = table
+
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()
+
+    def test_plot_datashader_can_color_by_value(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = "blobs_polygons"
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_datashader_can_color_by_identical_value(self, sdata_blobs: SpatialData):
+        """
+        We test this, because datashader internally scales the values, so when all shapes have the same value,
+        the scaling would lead to all of them being assigned an alpha of 0, so we wouldn't see anything
+        """
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 1, 1, 1, 1]
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_datashader_shades_with_linear_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["value"] = [1, 2, 1, 20, 1]
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="value", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_with_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_alpha=1).pl.show()
+
+    def test_plot_datashader_can_render_with_diff_alpha_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(method="datashader", element="blobs_polygons", outline_alpha=0.5).pl.show()
+
+    def test_plot_datashader_can_render_with_diff_width_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1.0, outline_width=5.0
+        ).pl.show()
+
+    def test_plot_datashader_can_render_with_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color="red"
+        ).pl.show()
+
+    def test_plot_datashader_can_render_with_rgb_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 0.0, 1.0)
+        ).pl.show()
+
+    def test_plot_datashader_can_render_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            method="datashader", element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 1.0, 0.0, 1.0)
+        ).pl.show()
+
+    def test_plot_can_set_clims_clip(self, sdata_blobs: SpatialData):
+        table_shapes = sdata_blobs["table"][:5].copy()
+        table_shapes.obs.instance_id = list(range(5))
+        table_shapes.obs["region"] = "blobs_circles"
+        table_shapes.obs["dummy_gene_expression"] = [i * 10 for i in range(5)]
+        table_shapes.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["new_table"] = table_shapes
+
+        norm = Normalize(vmin=20, vmax=40, clip=True)
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="dummy_gene_expression", norm=norm, table_name="new_table"
+        ).pl.show()
+
+    def test_plot_datashader_can_transform_polygons(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_polygons"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_polygons", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_datashader_can_transform_multipolygons(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_multipolygons"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_multipolygons", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_datashader_can_transform_circles(self, sdata_blobs: SpatialData):
+        theta = math.pi / 1.7
+        rotation = Affine(
+            [
+                [math.cos(theta), -math.sin(theta), 0],
+                [math.sin(theta), math.cos(theta), 0],
+                [0, 0, 1],
+            ],
+            input_axes=("x", "y"),
+            output_axes=("x", "y"),
+        )
+
+        scale = Scale([-1.3, 1.8], axes=("x", "y"))
+        identity = Identity()
+        mapaxis = MapAxis({"x": "y", "y": "x"})
+        translation = Translation([20, -65], ("x", "y"))
+        seq = Sequence([mapaxis, scale, identity, translation, rotation])
+
+        _set_transformations(sdata_blobs["blobs_circles"], {"global": seq})
+
+        sdata_blobs.pl.render_shapes("blobs_circles", method="datashader", outline_alpha=1.0).pl.show()
+
+    def test_plot_can_do_non_matching_table(self, sdata_blobs: SpatialData):
+        table_shapes = sdata_blobs["table"][:3].copy()
+        table_shapes.obs.instance_id = list(range(3))
+        table_shapes.obs["region"] = "blobs_circles"
+        table_shapes.uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["new_table"] = table_shapes
+
+        sdata_blobs.pl.render_shapes("blobs_circles", color="instance_id").pl.show()
