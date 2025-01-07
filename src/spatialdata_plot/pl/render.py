@@ -17,11 +17,10 @@ from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata import get_extent, get_values
-from spatialdata.models import PointsModel, get_table_keys
-from spatialdata.transformations import (
-    set_transformation,
-)
+from spatialdata import get_extent, get_values, join_spatialelement_table
+from spatialdata.models import PointsModel, ShapesModel, get_table_keys
+from spatialdata.transformations import get_transformation, set_transformation
+from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
 from spatialdata_plot._logging import logger
@@ -44,6 +43,7 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
+    _get_transformation_matrix_for_datashader,
     _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
@@ -77,13 +77,18 @@ def _render_shapes(
         filter_tables=bool(render_params.table_name),
     )
 
-    shapes = sdata[element]
-
     if (table_name := render_params.table_name) is None:
         table = None
+        shapes = sdata_filt[element]
     else:
-        _, region_key, _ = get_table_keys(sdata[table_name])
-        table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
+        element_dict, joined_table = join_spatialelement_table(
+            sdata, spatial_element_names=element, table_name=table_name, how="inner"
+        )
+        sdata_filt[element] = shapes = element_dict[element]
+        joined_table.uns["spatialdata_attrs"]["region"] = (
+            joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
+        )
+        sdata_filt[table_name] = table = joined_table
 
     if (
         col_for_color is not None
@@ -150,7 +155,7 @@ def _render_shapes(
         colorbar = False if col_for_color is None else legend_params.colorbar
 
     # Apply the transformation to the PatchCollection's paths
-    trans, _ = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
+    trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -170,14 +175,6 @@ def _render_shapes(
         )
 
     if method == "datashader":
-        trans += ax.transData
-
-        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            sdata_filt.shapes[element], coordinate_system, ax, fig_params
-        )
-
-        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
-
         _geometry = shapes["geometry"]
         is_point = _geometry.type == "Point"
 
@@ -186,19 +183,31 @@ def _render_shapes(
             scale = shapes[is_point]["radius"] * render_params.scale
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
+        # apply transformations to the individual points
+        element_trans = get_transformation(sdata_filt.shapes[element])
+        tm = _get_transformation_matrix_for_datashader(element_trans)
+        transformed_element = sdata_filt.shapes[element].transform(
+            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
+        )
+        transformed_element = ShapesModel.parse(
+            gpd.GeoDataFrame(data=sdata_filt.shapes[element].drop("geometry", axis=1), geometry=transformed_element)
+        )
+
+        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
+            transformed_element, coordinate_system, ax, fig_params
+        )
+
+        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
+
         # in case we are coloring by a column in table
-        if col_for_color is not None and col_for_color not in sdata_filt.shapes[element].columns:
-            sdata_filt.shapes[element][col_for_color] = (
-                color_vector if color_source_vector is None else color_source_vector
-            )
+        if col_for_color is not None and col_for_color not in transformed_element.columns:
+            transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
         aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
-                agg = cvs.polygons(
-                    sdata_filt.shapes[element], geometry="geometry", agg=ds.by(col_for_color, ds.count())
-                )
+                agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
                 logger.info(
@@ -206,16 +215,16 @@ def _render_shapes(
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.ds_reduction, cvs, sdata_filt.shapes[element], col_for_color, "shapes"
+                    render_params.ds_reduction, cvs, transformed_element, col_for_color, "shapes"
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
-            agg = cvs.polygons(sdata_filt.shapes[element], geometry="geometry", agg=ds.count())
+            agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
         # render outlines if needed
         if (render_outlines := render_params.outline_alpha) > 0:
             agg_outlines = cvs.line(
-                sdata_filt.shapes[element],
+                transformed_element,
                 geometry="geometry",
                 line_width=render_params.outline_params.linewidth,
             )
@@ -289,13 +298,23 @@ def _render_shapes(
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
-            rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.fill_alpha
+            rgba_image,
+            trans_data,
+            ax,
+            zorder=render_params.zorder,
+            alpha=render_params.fill_alpha,
+            extent=x_ext + y_ext,
         )
         # render outline image if needed
         if render_outlines:
             rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
             _ax_show_and_transform(
-                rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.outline_alpha
+                rgba_image,
+                trans_data,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.outline_alpha,
+                extent=x_ext + y_ext,
             )
 
         cax = None
@@ -332,7 +351,7 @@ def _render_shapes(
 
     if not values_are_categorical:
         # If the user passed a Normalize object with vmin/vmax we'll use those,
-        # # if not we'll use the min/max of the color_vector
+        # if not we'll use the min/max of the color_vector
         _cax.set_clim(
             vmin=render_params.cmap_params.norm.vmin or min(color_vector),
             vmax=render_params.cmap_params.norm.vmax or max(color_vector),
@@ -469,7 +488,8 @@ def _render_points(
     )
 
     if col_for_color is not None:
-        cols = sc.get.obs_df(adata, col_for_color)
+        assert isinstance(col_for_color, str)
+        cols = sc.get.obs_df(adata, [col_for_color])
         # maybe set color based on type
         if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
             _maybe_set_colors(
@@ -498,7 +518,7 @@ def _render_points(
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
 
-    _, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
+    trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
     norm = copy(render_params.cmap_params.norm)
 
@@ -521,18 +541,30 @@ def _render_points(
         # use dpi/100 as a factor for cases where dpi!=100
         px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
 
+        # apply transformations
+        transformed_element = PointsModel.parse(
+            trans.transform(sdata_filt.points[element][["x", "y"]]),
+            annotation=sdata_filt.points[element][sdata_filt.points[element].columns.drop(["x", "y"])],
+            transformations={coordinate_system: Identity()},
+        )
+
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            sdata_filt.points[element], coordinate_system, ax, fig_params
+            transformed_element, coordinate_system, ax, fig_params
         )
 
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
-        color_by_categorical = col_for_color is not None and points[col_for_color].values.dtype == object
+        color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
+            object,
+            "categorical",
+        )
+        if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
+            transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
         aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
-                agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.by(col_for_color, ds.count()))
+                agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
                 logger.info(
@@ -540,12 +572,12 @@ def _render_points(
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.ds_reduction, cvs, sdata_filt.points[element], col_for_color, "points"
+                    render_params.ds_reduction, cvs, transformed_element, col_for_color, "points"
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
-            agg = cvs.points(sdata_filt.points[element], "x", "y", agg=ds.count())
+            agg = cvs.points(transformed_element, "x", "y", agg=ds.count())
 
         if norm.vmin is not None or norm.vmax is not None:
             norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
@@ -603,7 +635,14 @@ def _render_points(
             )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
-        _ax_show_and_transform(rgba_image, trans_data, ax, zorder=render_params.zorder, alpha=render_params.alpha)
+        _ax_show_and_transform(
+            rgba_image,
+            trans_data,
+            ax,
+            zorder=render_params.zorder,
+            alpha=render_params.alpha,
+            extent=x_ext + y_ext,
+        )
 
         cax = None
         if aggregate_with_reduction is not None:
@@ -708,8 +747,10 @@ def _render_images(
             extent=extent,
         )
 
-    channels = img.coords["c"].values if render_params.channel is None else render_params.channel
+    channels = img.coords["c"].values.tolist() if render_params.channel is None else render_params.channel
 
+    # the channel parameter has been previously validated, so when not None, render_params.channel is a list
+    assert isinstance(channels, list)
     n_channels = len(channels)
 
     # True if user gave n cmaps for n channels
