@@ -414,7 +414,7 @@ class PlotAccessor:
             size=size,
             table_name=table_name,
             table_layer=table_layer,
-            ds_reduction=kwargs.get("datashader_reduction", None),
+            ds_reduction=kwargs.get("datashader_reduction"),
         )
 
         if method is not None:
