@@ -700,13 +700,19 @@ def _get_colors_for_categorical_obs(
 
 
 # TODO consider move to relational query in spatialdata
-def get_values_point_table(sdata: SpatialData, origin: _ValueOrigin, table_name: str) -> pd.Series:
+def get_values_point_table(  # TODO: remove???
+    sdata: SpatialData, origin: _ValueOrigin, table_name: str, table_layer: str | None
+) -> pd.Series:
     """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
     table = sdata[table_name]
     if origin.origin == "obs":
         return table.obs[origin.value_key]
     if origin.origin == "var":
-        return table[:, table.var_names.isin([origin.value_key])].X.copy()
+        if table_layer is None:
+            return table[:, table.var_names.isin([origin.value_key])].X.copy()
+        if table_layer not in table.layers:
+            raise ValueError(f"Layer `{table_layer}` not found in table {table_name}.")
+        return table[:, table.var_names.isin([origin.value_key])].layers[table_layer].copy()
     raise ValueError(f"Color column `{origin.value_key}` not found in table {table_name}")
 
 
@@ -720,6 +726,7 @@ def _set_color_source_vec(
     palette: list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
+    table_layer: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)
@@ -740,6 +747,7 @@ def _set_color_source_vec(
             value_to_plot=value_to_plot,
             element_name=element_name,
             table_name=table_name,
+            table_layer=table_layer,
         )
 
         # numerical case, return early
@@ -1627,7 +1635,10 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise ValueError("Parameter 'size' must be a positive number.")
 
     if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
-        raise TypeError("Parameter 'table_name' must be a string .")
+        raise TypeError("Parameter 'table_name' must be a string.")
+
+    if param_dict.get("table_layer") and not isinstance(param_dict["table_layer"], str):
+        raise TypeError("Parameter 'table_layer' must be a string.")
 
     # like this because the following would assign True/False to 'method'
     if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
@@ -1668,6 +1679,7 @@ def _validate_label_render_params(
     outline_alpha: float | int,
     scale: str | None,
     table_name: str | None,
+    table_layer: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1683,6 +1695,7 @@ def _validate_label_render_params(
         "norm": norm,
         "scale": scale,
         "table_name": table_name,
+        "table_layer": table_layer,
     }
     param_dict = _type_check_params(param_dict, "labels")
 
@@ -1696,11 +1709,12 @@ def _validate_label_render_params(
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
         element_params[el]["norm"] = param_dict["norm"]
-        element_params[el]["color"] = param_dict["color"]
+        # element_params[el]["color"] = param_dict["color"] # TODO: remove?
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["scale"] = param_dict["scale"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
         element_params[el]["contour_px"] = param_dict["contour_px"]
+        element_params[el]["table_layer"] = param_dict["table_layer"]
 
         element_params[el]["table_name"] = None
         element_params[el]["color"] = None
@@ -1727,6 +1741,7 @@ def _validate_points_render_params(
     norm: Normalize | None,
     size: float | int,
     table_name: str | None,
+    table_layer: str | None,
     ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
@@ -1741,6 +1756,7 @@ def _validate_points_render_params(
         "norm": norm,
         "size": size,
         "table_name": table_name,
+        "table_layer": table_layer,
         "ds_reduction": ds_reduction,
     }
     param_dict = _type_check_params(param_dict, "points")
@@ -1758,6 +1774,7 @@ def _validate_points_render_params(
         element_params[el]["color"] = param_dict["color"]
         element_params[el]["size"] = param_dict["size"]
         element_params[el]["alpha"] = param_dict["alpha"]
+        element_params[el]["table_layer"] = param_dict["table_layer"]
 
         element_params[el]["table_name"] = None
         element_params[el]["col_for_color"] = None
@@ -1790,6 +1807,7 @@ def _validate_shape_render_params(
     norm: Normalize | None,
     scale: float | int,
     table_name: str | None,
+    table_layer: str | None,
     method: str | None,
     ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
@@ -1808,6 +1826,7 @@ def _validate_shape_render_params(
         "norm": norm,
         "scale": scale,
         "table_name": table_name,
+        "table_layer": table_layer,
         "method": method,
         "ds_reduction": ds_reduction,
     }
@@ -1828,6 +1847,7 @@ def _validate_shape_render_params(
         element_params[el]["cmap"] = param_dict["cmap"]
         element_params[el]["norm"] = param_dict["norm"]
         element_params[el]["scale"] = param_dict["scale"]
+        element_params[el]["table_layer"] = param_dict["table_layer"]
 
         element_params[el]["color"] = param_dict["color"]
 
@@ -2169,12 +2189,23 @@ def _robust_get_value(
     value_to_plot: str | None,
     element_name: list[str] | str | None = None,
     table_name: str | None = None,
+    table_layer: str | None = None,
 ) -> pd.Series | None:
     """Locate the value to plot in the spatial data object."""
     model = get_model(sdata[element_name])
     if model == PointsModel and table_name is not None:
-        return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name)
-    vals = get_values(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+        # return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name, table_layer=table_layer)
+        return get_values(
+            value_key=value_to_plot,
+            sdata=sdata,
+            element_name=element_name,
+            table_name=table_name,
+            table_layer=table_layer,
+        )[value_to_plot]
+    # TODO: this will only work with a spatialdata version that includes PR #818
+    vals = get_values(
+        value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name, table_layer=table_layer
+    )
     return vals[value_to_plot]
 
 
