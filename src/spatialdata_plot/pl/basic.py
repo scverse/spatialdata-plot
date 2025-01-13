@@ -162,7 +162,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
         outline_width: float | int = 1.5,
-        outline_color: str | list[float] = "#000000ff",
+        outline_color: str | list[float] = "#000000",
         outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -209,9 +209,11 @@ class PlotAccessor:
             won't be shown.
         outline_width : float | int, default 1.5
             Width of the border.
-        outline_color : str | list[float], default "#000000ff"
-            Color of the border. Can either be a named color ("red"), a hex representation ("#000000ff") or a list of
-            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0).
+        outline_color : str | list[float], default "#000000"
+            Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
+            floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
+            "#000000ff", the last two positions are ignored, since the alpha of the outlines is solely controlled by
+            `outline_alpha`.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of shapes. Invisible by default.
         cmap : Colormap | str | None, optional
@@ -275,7 +277,7 @@ class PlotAccessor:
             table_name=table_name,
             table_layer=table_layer,
             method=method,
-            ds_reduction=kwargs.get("datashader_reduction", None),
+            ds_reduction=kwargs.get("datashader_reduction"),
         )
 
         sdata = self._copy()
@@ -299,7 +301,7 @@ class PlotAccessor:
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
                 zorder=n_steps,
@@ -412,7 +414,7 @@ class PlotAccessor:
             size=size,
             table_name=table_name,
             table_layer=table_layer,
-            ds_reduction=kwargs.get("datashader_reduction", None),
+            ds_reduction=kwargs.get("datashader_reduction"),
         )
 
         if method is not None:
@@ -439,7 +441,7 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 alpha=param_values["alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 size=param_values["size"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
@@ -690,7 +692,7 @@ class PlotAccessor:
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc", None),
+                transfunc=kwargs.get("transfunc"),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
@@ -966,7 +968,8 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         if (table := params_copy.table_name) is not None:
-                            colors = sc.get.obs_df(sdata[table], params_copy.color)
+                            assert isinstance(params_copy.color, str)
+                            colors = sc.get.obs_df(sdata[table], [params_copy.color])
                             if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
