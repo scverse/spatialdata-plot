@@ -393,6 +393,16 @@ def _render_points(
     points = sdata.points[element]
     coords = ["x", "y"]
 
+    # TODO: warn if table_name not None and column not in points.columns
+    # inefficient to store annotations for points in Anndata, please add directly to parquet
+    if table_name is not None and col_for_color not in points.columns:
+        warnings.warn(
+            f"Annotating points with {col_for_color} which is stored in the table `{table_name}`. "
+            f"To improve performance, it is advisable to store point annotations directly in the .parquet file.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     if col_for_color is None or (
         table_name is not None
         and (col_for_color in sdata_filt[table_name].obs.columns or col_for_color in sdata_filt[table_name].var_names)
@@ -426,7 +436,6 @@ def _render_points(
                 table_name=table_name,
                 table_layer=table_layer,
             )
-            # TODO: merge necessary to ensure correct order?
             points_color_values = points.merge(points_color_values, how="left", left_index=True, right_index=True)[
                 col_for_color
             ]
