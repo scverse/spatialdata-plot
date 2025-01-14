@@ -412,8 +412,6 @@ def _render_points(
     points = sdata.points[element]
     coords = ["x", "y"]
 
-    # TODO: warn if table_name not None and column not in points.columns
-    # inefficient to store annotations for points in Anndata, please add directly to parquet
     if table_name is not None and col_for_color not in points.columns:
         warnings.warn(
             f"Annotating points with {col_for_color} which is stored in the table `{table_name}`. "

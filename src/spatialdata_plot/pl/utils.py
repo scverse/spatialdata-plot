@@ -58,7 +58,7 @@ from skimage.util import map_array
 from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
 from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, PointsModel, SpatialElement, get_model
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
 # from spatialdata.transformations.transformations import Scale
 from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Translation
@@ -701,23 +701,6 @@ def _get_colors_for_categorical_obs(
         raise TypeError(f"Palette is {type(palette)} but should be string or list.")
 
     return palette[:len_cat]  # type: ignore[return-value]
-
-
-# TODO consider move to relational query in spatialdata
-def get_values_point_table(  # TODO: remove???
-    sdata: SpatialData, origin: _ValueOrigin, table_name: str, table_layer: str | None
-) -> pd.Series:
-    """Get a particular column stored in _ValueOrigin from the table in the spatialdata object."""
-    table = sdata[table_name]
-    if origin.origin == "obs":
-        return table.obs[origin.value_key]
-    if origin.origin == "var":
-        if table_layer is None:
-            return table[:, table.var_names.isin([origin.value_key])].X.copy()
-        if table_layer not in table.layers:
-            raise ValueError(f"Layer `{table_layer}` not found in table {table_name}.")
-        return table[:, table.var_names.isin([origin.value_key])].layers[table_layer].copy()
-    raise ValueError(f"Color column `{origin.value_key}` not found in table {table_name}")
 
 
 def _set_color_source_vec(
@@ -1713,7 +1696,6 @@ def _validate_label_render_params(
         element_params[el]["na_color"] = param_dict["na_color"]
         element_params[el]["cmap"] = param_dict["cmap"]
         element_params[el]["norm"] = param_dict["norm"]
-        # element_params[el]["color"] = param_dict["color"] # TODO: remove?
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["scale"] = param_dict["scale"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
@@ -2205,7 +2187,7 @@ def _datshader_get_how_kw_for_spread(
     return reduction_to_how_map[reduction]
 
 
-def _robust_get_value(
+def _robust_get_value(  # TODO: remove this method?
     sdata: sd.SpatialData,
     origin: _ValueOrigin,
     value_to_plot: str | None,
@@ -2214,21 +2196,19 @@ def _robust_get_value(
     table_layer: str | None = None,
 ) -> pd.Series | None:
     """Locate the value to plot in the spatial data object."""
-    model = get_model(sdata[element_name])
-    if model == PointsModel and table_name is not None:
-        # return get_values_point_table(sdata=sdata, origin=origin, table_name=table_name, table_layer=table_layer)
-        return get_values(
-            value_key=value_to_plot,
-            sdata=sdata,
-            element_name=element_name,
-            table_name=table_name,
-            table_layer=table_layer,
-        )[value_to_plot]
+    # model = get_model(sdata[element_name])
+    # if model == PointsModel and table_name is not None:
+    #     return get_values(
+    #         value_key=value_to_plot,
+    #         sdata=sdata,
+    #         element_name=element_name,
+    #         table_name=table_name,
+    #         table_layer=table_layer,
+    #     )[value_to_plot]
     # TODO: this will only work with a spatialdata version that includes PR #818
-    vals = get_values(
+    return get_values(
         value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name, table_layer=table_layer
-    )
-    return vals[value_to_plot]
+    )[value_to_plot]
 
 
 def _prepare_transformation(
