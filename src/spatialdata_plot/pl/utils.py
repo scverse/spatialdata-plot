@@ -56,7 +56,7 @@ from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
-from spatialdata._core.query.relational_query import _locate_value, _ValueOrigin
+from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
@@ -728,14 +728,13 @@ def _set_color_source_vec(
         )
 
     if len(origins) == 1:
-        color_source_vector = _robust_get_value(
+        color_source_vector = get_values(
+            value_key=value_to_plot,
             sdata=sdata,
-            origin=origins[0],
-            value_to_plot=value_to_plot,
             element_name=element_name,
             table_name=table_name,
             table_layer=table_layer,
-        )
+        )[value_to_plot]
 
         # numerical case, return early
         # TODO temporary split until refactor is complete
@@ -2185,30 +2184,6 @@ def _datshader_get_how_kw_for_spread(
         )
 
     return reduction_to_how_map[reduction]
-
-
-def _robust_get_value(  # TODO: remove this method?
-    sdata: sd.SpatialData,
-    origin: _ValueOrigin,
-    value_to_plot: str | None,
-    element_name: list[str] | str | None = None,
-    table_name: str | None = None,
-    table_layer: str | None = None,
-) -> pd.Series | None:
-    """Locate the value to plot in the spatial data object."""
-    # model = get_model(sdata[element_name])
-    # if model == PointsModel and table_name is not None:
-    #     return get_values(
-    #         value_key=value_to_plot,
-    #         sdata=sdata,
-    #         element_name=element_name,
-    #         table_name=table_name,
-    #         table_layer=table_layer,
-    #     )[value_to_plot]
-    # TODO: this will only work with a spatialdata version that includes PR #818
-    return get_values(
-        value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name, table_layer=table_layer
-    )[value_to_plot]
 
 
 def _prepare_transformation(
