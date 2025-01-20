@@ -169,6 +169,7 @@ class PlotAccessor:
         scale: float | int = 1.0,
         method: str | None = None,
         table_name: str | None = None,
+        table_layer: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -228,6 +229,9 @@ class PlotAccessor:
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
+        table_layer: str | None
+            Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
+            :attr:`sdata.table.X` is used for coloring.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -271,6 +275,7 @@ class PlotAccessor:
             norm=norm,
             scale=scale,
             table_name=table_name,
+            table_layer=table_layer,
             method=method,
             ds_reduction=kwargs.get("datashader_reduction"),
         )
@@ -298,6 +303,7 @@ class PlotAccessor:
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
+                table_layer=param_values["table_layer"],
                 zorder=n_steps,
                 method=param_values["method"],
                 ds_reduction=param_values["ds_reduction"],
@@ -320,6 +326,7 @@ class PlotAccessor:
         size: float | int = 1.0,
         method: str | None = None,
         table_name: str | None = None,
+        table_layer: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -370,6 +377,9 @@ class PlotAccessor:
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
+        table_layer: str | None
+            Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
+            :attr:`sdata.table.X` is used for coloring.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -403,6 +413,7 @@ class PlotAccessor:
             norm=norm,
             size=size,
             table_name=table_name,
+            table_layer=table_layer,
             ds_reduction=kwargs.get("datashader_reduction"),
         )
 
@@ -433,6 +444,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc"),
                 size=param_values["size"],
                 table_name=param_values["table_name"],
+                table_layer=param_values["table_layer"],
                 zorder=n_steps,
                 method=method,
                 ds_reduction=param_values["ds_reduction"],
@@ -573,6 +585,7 @@ class PlotAccessor:
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
         table_name: str | None = None,
+        table_layer: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -590,10 +603,10 @@ class PlotAccessor:
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
         color : list[str] | str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
-            color by categorical or continuous variables. If the color column is found in multiple locations, please
-            provide the table_name to be used for the element if you would like a specific table to be used. By default
-            one table will automatically be choosen.
+            Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
+            :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
+            color column is found in multiple locations, please provide the table_name to be used for the element if you
+            would like a specific table to be used. By default one table will automatically be choosen.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. The list can contain multiple discrete labels to be visualized.
@@ -626,6 +639,9 @@ class PlotAccessor:
                 with the highest resolution is selected. This can lead to long computing times for large images!
         table_name: str | None
             Name of the table containing the color columns.
+        table_layer: str | None
+            Layer of the AnnData table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None,
+            :attr:`sdata.table.X` of the default table is used for coloring.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -654,6 +670,7 @@ class PlotAccessor:
             palette=palette,
             scale=scale,
             table_name=table_name,
+            table_layer=table_layer,
         )
 
         sdata = self._copy()
@@ -678,6 +695,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc"),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
+                table_layer=param_values["table_layer"],
                 zorder=n_steps,
             )
             n_steps += 1
@@ -811,7 +829,6 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]

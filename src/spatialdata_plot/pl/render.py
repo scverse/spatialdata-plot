@@ -17,7 +17,7 @@ from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata import get_extent, join_spatialelement_table
+from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -70,6 +70,7 @@ def _render_shapes(
     element = render_params.element
     col_for_color = render_params.col_for_color
     groups = render_params.groups
+    table_layer = render_params.table_layer
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -115,6 +116,7 @@ def _render_shapes(
         na_color=render_params.color or render_params.cmap_params.na_color,
         cmap_params=render_params.cmap_params,
         table_name=table_name,
+        table_layer=table_layer,
     )
 
     values_are_categorical = color_source_vector is not None
@@ -397,6 +399,7 @@ def _render_points(
     element = render_params.element
     col_for_color = render_params.col_for_color
     table_name = render_params.table_name
+    table_layer = render_params.table_layer
     color = render_params.color
     groups = render_params.groups
     palette = render_params.palette
@@ -409,10 +412,22 @@ def _render_points(
     points = sdata.points[element]
     coords = ["x", "y"]
 
-    if col_for_color is None or (table_name is not None and col_for_color in sdata_filt[table_name].obs.columns):
+    if table_name is not None and col_for_color not in points.columns:
+        warnings.warn(
+            f"Annotating points with {col_for_color} which is stored in the table `{table_name}`. "
+            f"To improve performance, it is advisable to store point annotations directly in the .parquet file.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    if col_for_color is None or (
+        table_name is not None
+        and (col_for_color in sdata_filt[table_name].obs.columns or col_for_color in sdata_filt[table_name].var_names)
+    ):
         points = points[coords].compute()
         if (
             col_for_color
+            and col_for_color in sdata_filt[table_name].obs.columns
             and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
             and not _is_coercable_to_float(color_col)
         ):
@@ -428,7 +443,20 @@ def _render_points(
         points = points[coords].compute()
 
     if groups is not None and col_for_color is not None:
-        points = points[points[col_for_color].isin(groups)]
+        if col_for_color in points.columns:
+            points_color_values = points[col_for_color]
+        else:
+            points_color_values = get_values(
+                value_key=col_for_color,
+                sdata=sdata_filt,
+                element_name=element,
+                table_name=table_name,
+                table_layer=table_layer,
+            )
+            points_color_values = points.merge(points_color_values, how="left", left_index=True, right_index=True)[
+                col_for_color
+            ]
+        points = points[points_color_values.isin(groups)]
         if len(points) <= 0:
             raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
 
@@ -438,9 +466,18 @@ def _render_points(
             X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
         )
     else:
+        adata_obs = sdata_filt[table_name].obs
+        # if the points are colored by values in X (or a different layer), add the values to obs
+        if col_for_color in sdata_filt[table_name].var_names:
+            if table_layer is None:
+                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
+            else:
+                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
+        if groups is not None:
+            adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
         adata = AnnData(
             X=points[["x", "y"]].values,
-            obs=sdata_filt[table_name].obs,
+            obs=adata_obs,
             dtype=points[["x", "y"]].values.dtype,
             uns=sdata_filt[table_name].uns,
         )
@@ -847,6 +884,7 @@ def _render_labels(
 ) -> None:
     element = render_params.element
     table_name = render_params.table_name
+    table_layer = render_params.table_layer
     palette = render_params.palette
     color = render_params.color
     groups = render_params.groups
@@ -882,7 +920,7 @@ def _render_labels(
             extent=extent,
         )
 
-        # the avove adds a useless c dimension of 1 (y, x) -> (1, y, x)
+        # the above adds a useless c dimension of 1 (y, x) -> (1, y, x)
         label = label.squeeze()
 
     if table_name is None:
@@ -907,6 +945,7 @@ def _render_labels(
         na_color=render_params.cmap_params.na_color,
         cmap_params=render_params.cmap_params,
         table_name=table_name,
+        table_layer=table_layer,
     )
 
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
