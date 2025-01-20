@@ -640,8 +640,8 @@ class PlotAccessor:
         table_name: str | None
             Name of the table containing the color columns.
         table_layer: str | None
-            Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
-            :attr:`sdata.table.X` is used for coloring.
+            Layer of the AnnData table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None,
+            :attr:`sdata.table.X` of the default table is used for coloring.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -829,7 +829,6 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        # handle coordinate system
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]

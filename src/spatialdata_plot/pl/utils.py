@@ -1600,13 +1600,13 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         raise ValueError("Parameter 'na_color' must be color-like.")
 
     if (norm := param_dict.get("norm")) is not None:
-        if element_type in ["images", "labels"] and not isinstance(norm, Normalize):
+        if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
         if element_type in ["shapes", "points"] and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
-        if element_type in ["images", "labels"] and not isinstance(scale, str):
+        if element_type in {"images", "labels"} and not isinstance(scale, str):
             raise TypeError("Parameter 'scale' must be a string if specified.")
         if element_type == "shapes":
             if not isinstance(scale, float | int):
@@ -1620,13 +1620,53 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
 
-    if param_dict.get("table_name") and not isinstance(param_dict["table_name"], str):
+    table_name = param_dict.get("table_name")
+    table_layer = param_dict.get("table_layer")
+    if table_name and not isinstance(param_dict["table_name"], str):
         raise TypeError("Parameter 'table_name' must be a string.")
 
-    if param_dict.get("table_layer") and not isinstance(param_dict["table_layer"], str):
+    if table_layer and not isinstance(param_dict["table_layer"], str):
         raise TypeError("Parameter 'table_layer' must be a string.")
 
-    # like this because the following would assign True/False to 'method'
+    def _ensure_table_and_layer_exist_in_sdata(
+        sdata: SpatialData, table_name: str | None, table_layer: str | None
+    ) -> bool:
+        """Ensure that table_name and table_layer are valid; throw error if not."""
+        if table_name:
+            if table_layer:
+                if table_layer in sdata.tables[table_name].layers:
+                    return True
+                raise ValueError(f"Layer '{table_layer}' not found in table '{table_name}'.")
+            return True  # using sdata.tables[table_name].X
+
+        if table_layer:
+            # user specified a layer but we have no tables => invalid
+            if len(sdata.tables) == 0:
+                raise ValueError("Trying to use 'table_layer' but no tables are present in the SpatialData object.")
+            if len(sdata.tables) == 1:
+                single_table_name = list(sdata.tables.keys())[0]
+                if table_layer in sdata.tables[single_table_name].layers:
+                    return True
+                raise ValueError(f"Layer '{table_layer}' not found in table '{single_table_name}'.")
+            # more than one tables, try to find which one has the given layer
+            found_table = False
+            for tname in sdata.tables:
+                if table_layer in sdata.tables[tname].layers:
+                    if found_table:
+                        raise ValueError(
+                            "Trying to guess 'table_name' based on 'table_layer', " "but found multiple matches."
+                        )
+                    found_table = True
+
+            if found_table:
+                return True
+
+            raise ValueError(f"Layer '{table_layer}' not found in any table.")
+
+        return True  # not using any table
+
+    assert _ensure_table_and_layer_exist_in_sdata(param_dict.get("sdata"), table_name, table_layer)
+
     if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
