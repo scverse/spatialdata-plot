@@ -755,7 +755,7 @@ def _set_color_source_vec(
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
 
         color_mapping = _get_categorical_color_mapping(
-            adata=sdata.tables[table_name],
+            adata=sdata.tables[table_name] if table_name is not None else sdata.table,
             cluster_key=value_to_plot,
             color_source_vector=color_source_vector,
             groups=groups,
