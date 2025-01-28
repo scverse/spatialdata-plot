@@ -10,13 +10,15 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import TableModel
 
+from spatialdata import bounding_box_query
+
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
-matplotlib.use("agg")  # same as GitHub action runner
+#matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
 # WARNING:
@@ -212,6 +214,61 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_label_categorical_color(self, sdata_blobs: SpatialData):
         self._make_tablemodel_with_categorical_labels(sdata_blobs, labels_name="blobs_labels")
+        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+
+    def test_plot_label_categorical_color_and_colors_in_uns(self, sdata_blobs: SpatialData):
+        self._make_tablemodel_with_categorical_labels(sdata_blobs, labels_name="blobs_labels")
+         # purple, green, yellow
+        sdata_blobs[ "other_table" ].uns[ "category_colors"] = [ "#800080", "#008000", "#FFFF00" ]
+        # placeholder, otherwise "category_colors" will be ignored
+        sdata_blobs[ "other_table" ].uns[ "category" ] = "__value__"
+        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+
+    def test_plot_label_categorical_color_and_colors_in_uns_query_uns_colors_removed(self, sdata_blobs: SpatialData):
+        self._make_tablemodel_with_categorical_labels(sdata_blobs, labels_name="blobs_labels")
+         # purple, green, yellow
+        sdata_blobs[ "other_table" ].uns[ "category_colors"] = [ "#800080", "#008000", "#FFFF00" ]
+        # placeholder, otherwise "category_colors" will be ignored
+        sdata_blobs[ "other_table" ].uns[ "category" ] = "__value__"
+        sdata_blobs = bounding_box_query(
+            sdata_blobs,
+            axes=("y", "x"),
+            min_coordinate=[0, 0],
+            max_coordinate=[100, 100],
+            target_coordinate_system="global",
+        )
+         # we would expect colors purple and yellow for a and c, but we see default colors blue en orange,
+         # Reason: "category_colors" is removed by `.filter_by_coordinate_system` in
+         # `spatialdata_plot.pl.render._render_labels`.
+         # Why? Because `.bounding_box_query` removes "category_colors" that are not in the query,
+         # but restores original number of catergories in `.obs["category"]`, see https://github.com/scverse/anndata/issues/997,
+         # leading to mismatch and removal of "category_colors" by `.filter_by_coordinate_system`.
+        assert all(sdata_blobs[ "other_table" ].obs[ "category" ].unique() == [ "a", "c" ])
+        assert all(sdata_blobs[ "other_table" ].uns["category_colors" ] == [ "#800080", "#FFFF00" ])
+        # but due to https://github.com/scverse/anndata/issues/997:
+        assert all(sdata_blobs[ "other_table" ].obs["category"].cat.categories == ["a", "b", "c" ])
+        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+
+    def test_plot_label_categorical_color_and_colors_in_uns_query_workaround(self, sdata_blobs: SpatialData):
+        self._make_tablemodel_with_categorical_labels(sdata_blobs, labels_name="blobs_labels")
+         # purple, green, yellow
+        sdata_blobs[ "other_table" ].uns[ "category_colors"] = [ "#800080", "#008000", "#FFFF00" ]
+        # placeholder, otherwise "category_colors" will be ignored
+        sdata_blobs[ "other_table" ].uns[ "category" ] = "__value__"
+        sdata_blobs = bounding_box_query(
+            sdata_blobs,
+            axes=("y", "x"),
+            min_coordinate=[0, 0],
+            max_coordinate=[100, 100],
+            target_coordinate_system="global",
+        )
+        assert all(sdata_blobs[ "other_table" ].obs[ "category" ].unique() == [ "a", "c" ])
+        assert all(sdata_blobs[ "other_table" ].uns["category_colors" ] == [ "#800080", "#FFFF00" ])
+        # but due to https://github.com/scverse/anndata/issues/997:
+        assert all(sdata_blobs[ "other_table" ].obs["category"].cat.categories == ["a", "b", "c" ])
+        sdata_blobs["other_table"].obs[ "category" ]= \
+        sdata_blobs[ "other_table" ].obs[ "category" ].cat.remove_unused_categories()
+        assert all(sdata_blobs[ "other_table" ].obs["category"].cat.categories == ["a", "c" ])
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, labels_name: str):
