@@ -16,7 +16,7 @@ from tests.conftest import DPI, PlotTester, PlotTesterMeta
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
-#matplotlib.use("agg")  # same as GitHub action runner
+matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
 # WARNING:
