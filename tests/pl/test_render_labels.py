@@ -7,10 +7,8 @@ import pytest
 import scanpy as sc
 from anndata import AnnData
 from spatial_image import to_spatial_image
-from spatialdata import SpatialData, deepcopy, get_element_instances
+from spatialdata import SpatialData, bounding_box_query, deepcopy, get_element_instances
 from spatialdata.models import TableModel
-
-from spatialdata import bounding_box_query
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -18,7 +16,7 @@ from tests.conftest import DPI, PlotTester, PlotTesterMeta
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
-#matplotlib.use("agg")  # same as GitHub action runner
+matplotlib.use("agg")  # same as GitHub action runner
 _ = spatialdata_plot
 
 # WARNING:
