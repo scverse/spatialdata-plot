@@ -240,7 +240,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         # Why? Because `.bounding_box_query` removes "category_colors" that are not in the query,
         # but restores original number of catergories in `.obs["category"]`, see https://github.com/scverse/anndata/issues/997,
         # leading to mismatch and removal of "category_colors" by `.filter_by_coordinate_system`.
-        assert all(sdata_blobs["other_table"].obs["category"].unique() == [ "a", "c" ])
+        assert all(sdata_blobs["other_table"].obs["category"].unique() == ["a", "c"])
         assert all(sdata_blobs["other_table"].uns["category_colors"] == ["#800080", "#FFFF00"])
         # but due to https://github.com/scverse/anndata/issues/997:
         assert all(sdata_blobs["other_table"].obs["category"].cat.categories == ["a", "b", "c"])
@@ -259,7 +259,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             max_coordinate=[100, 100],
             target_coordinate_system="global",
         )
-        assert all(sdata_blobs["other_table"].obs["category"].unique() == [ "a", "c" ])
+        assert all(sdata_blobs["other_table"].obs["category"].unique() == ["a", "c"])
         assert all(sdata_blobs["other_table"].uns["category_colors"] == ["#800080", "#FFFF00"])
         # but due to https://github.com/scverse/anndata/issues/997:
         assert all(sdata_blobs["other_table"].obs["category"].cat.categories == ["a", "b", "c"])
