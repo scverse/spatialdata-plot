@@ -13,7 +13,6 @@ from spatialdata.models import TableModel
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -241,8 +240,8 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         # Why? Because `.bounding_box_query` removes "category_colors" that are not in the query,
         # but restores original number of catergories in `.obs["category"]`, see https://github.com/scverse/anndata/issues/997,
         # leading to mismatch and removal of "category_colors" by `.filter_by_coordinate_system`.
-        assert len(sdata_blobs["other_table"].obs["category"].unique()) == 2
-        assert len(sdata_blobs["other_table"].uns["category_colors"]) == 2
+        assert all(sdata_blobs["other_table"].obs["category"].unique() == [ "a", "c" ])
+        assert all(sdata_blobs["other_table"].uns["category_colors"] == ["#800080", "#FFFF00"])
         # but due to https://github.com/scverse/anndata/issues/997:
         assert all(sdata_blobs["other_table"].obs["category"].cat.categories == ["a", "b", "c"])
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
@@ -260,8 +259,8 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             max_coordinate=[100, 100],
             target_coordinate_system="global",
         )
-        assert len(sdata_blobs["other_table"].obs["category"].unique()) == 2
-        assert len(sdata_blobs["other_table"].uns["category_colors"]) == 2
+        assert all(sdata_blobs["other_table"].obs["category"].unique() == [ "a", "c" ])
+        assert all(sdata_blobs["other_table"].uns["category_colors"] == ["#800080", "#FFFF00"])
         # but due to https://github.com/scverse/anndata/issues/997:
         assert all(sdata_blobs["other_table"].obs["category"].cat.categories == ["a", "b", "c"])
         sdata_blobs["other_table"].obs["category"] = (
@@ -270,6 +269,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
     def _make_tablemodel_with_categorical_labels(self, sdata_blobs, labels_name: str):
+        RNG = np.random.default_rng(seed=42)
         instances = get_element_instances(sdata_blobs[labels_name])
         n_obs = len(instances)
         adata = AnnData(
@@ -290,5 +290,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
 
     def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
+        RNG = np.random.default_rng(seed=42)
         sdata_blobs["table"].layers["normalized"] = RNG.random(sdata_blobs["table"].X.shape)
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()
