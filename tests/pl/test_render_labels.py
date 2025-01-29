@@ -235,7 +235,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             max_coordinate=[100, 100],
             target_coordinate_system="global",
         )
-        # we would expect colors purple and yellow for a and c, but we see default colors blue en orange,
+        # we would expect colors purple and yellow for a and c, but we see default colors blue and orange,
         # Reason: "category_colors" is removed by `.filter_by_coordinate_system` in
         # `spatialdata_plot.pl.render._render_labels`.
         # Why? Because `.bounding_box_query` removes "category_colors" that are not in the query,
