@@ -1982,6 +1982,7 @@ def _ax_show_and_transform(
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
     extent: list[float] | None = None,
+    norm: Normalize | None = None,
 ) -> matplotlib.image.AxesImage:
     # default extent in mpl:
     image_extent = [-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5]
@@ -2004,6 +2005,7 @@ def _ax_show_and_transform(
             alpha=alpha,
             zorder=zorder,
             extent=tuple(image_extent),
+            norm=norm,
         )
         im.set_transform(trans_data)
     else:
@@ -2012,6 +2014,7 @@ def _ax_show_and_transform(
             cmap=cmap,
             zorder=zorder,
             extent=tuple(image_extent),
+            norm=norm,
         )
         im.set_transform(trans_data)
     return im

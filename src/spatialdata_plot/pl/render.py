@@ -549,18 +549,26 @@ def _render_points(
         else:
             agg = cvs.points(transformed_element, "x", "y", agg=ds.count())
 
+        ds_span = None
         if norm.vmin is not None or norm.vmax is not None:
             norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
             norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
-            norm.clip = True  # NOTE: mpl currently behaves like clip is always True
+            ds_span = [norm.vmin, norm.vmax]
             if norm.vmin == norm.vmax:
-                # data is mapped to 0
-                agg = agg - agg
-            else:
-                agg = (agg - norm.vmin) / (norm.vmax - norm.vmin)
                 if norm.clip:
-                    agg = np.maximum(agg, 0)
-                    agg = np.minimum(agg, 1)
+                    # all data is mapped to 0
+                    agg = agg - agg
+                else:
+                    # values equal to norm.vmin are mapped to 0, the rest to -1 or 1
+                    agg = agg.where((agg >= norm.vmin) | (np.isnan(agg)), other=-1)
+                    agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=1)
+                    agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0)
+                    ds_span = [-1, 1]
+            # else:
+            #     agg = (agg - norm.vmin) / (norm.vmax - norm.vmin)
+            #     if norm.clip:
+            #         agg = np.maximum(agg, 0)
+            #         agg = np.minimum(agg, 1)
 
         color_key = (
             list(color_vector.categories.values)
@@ -602,6 +610,7 @@ def _render_points(
                 agg,
                 cmap=ds_cmap,
                 how="linear",
+                span=ds_span,
             )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
@@ -619,8 +628,12 @@ def _render_points(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
-                vmin = norm.vmin
-                vmax = norm.vmin + 1
+                if norm.clip:
+                    vmin = norm.vmin
+                    vmax = norm.vmin + 1
+                else:
+                    vmin = norm.vmin - 0.5
+                    vmax = norm.vmin + 0.5
             cax = ScalarMappable(
                 norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
                 cmap=render_params.cmap_params.cmap,
@@ -744,8 +757,9 @@ def _render_images(
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
 
-        if render_params.cmap_params.norm:  # type: ignore[attr-defined]
-            layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
+        # TODO: remove, pushed norm to imshow()
+        # if render_params.cmap_params.norm:  # type: ignore[attr-defined]
+        #     layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
         cmap = (
             _get_linear_colormap(palette, "k")[0]
@@ -757,7 +771,9 @@ def _render_images(
         cmap._init()
         cmap._lut[:, -1] = render_params.alpha
 
-        _ax_show_and_transform(layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder)
+        _ax_show_and_transform(
+            layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder, norm=render_params.cmap_params.norm
+        )
 
         if legend_params.colorbar:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
