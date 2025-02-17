@@ -2079,10 +2079,10 @@ def _get_extent_and_range_for_datashader_canvas(
 
 
 def _create_image_from_datashader_result(
-    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
+    ds_result: ds.transfer_functions.Image | np.ndarray[Any, np.dtype[np.uint8]], factor: float, ax: Axes
 ) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
-    rgba_image_data = ds_result.to_numpy().base
+    rgba_image_data = ds_result.copy() if isinstance(ds_result, np.ndarray) else ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
     rgba_image = Image2DModel.parse(
         rgba_image_data,
@@ -2243,3 +2243,45 @@ def _get_transformation_matrix_for_datashader(
             tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
         return tm
     return _get_datashader_trans_matrix_of_single_element(trans)
+
+
+def _datashader_shade(
+    agg: DataArray,
+    cmap: str | list[str] | ListedColormap,
+    color_key: None | list[str] = None,  # TODO: set to ds default?
+    min_alpha: float = 40,
+    span: None | list[float] = None,
+    clip: bool = True,
+) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
+    """If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results."""
+    if not clip and isinstance(cmap, Colormap) and span is not None:
+        agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
+        img_in = ds.tf.shade(
+            agg_in,
+            cmap=cmap,
+            span=(span[0], span[1]),
+            how="linear",
+            color_key=color_key,
+            min_alpha=min_alpha,
+        )
+
+        agg_under = agg.where(agg < span[0])
+        img_under = ds.tf.shade(
+            agg_under, cmap=[to_hex(cmap.get_under())[:7]], min_alpha=min_alpha, color_key=color_key
+        )
+
+        agg_over = agg.where(agg > span[1])
+        img_over = ds.tf.shade(agg_over, cmap=[to_hex(cmap.get_over())[:7]], min_alpha=min_alpha, color_key=color_key)
+
+        # stack the 3 arrays manually: go from under, through in to over and always overlay the values where alpha=0
+        stack = img_under.to_numpy().base
+        if stack is None:
+            stack = img_in.to_numpy().base
+        else:
+            stack[stack[:, :, 3] == 0] = img_in.to_numpy().base[stack[:, :, 3] == 0]
+        img_over = img_over.to_numpy().base
+        if img_over is not None:
+            stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
+        return stack
+
+    return ds.tf.shade(agg, cmap=cmap, color_key=color_key, min_alpha=min_alpha, span=span, how="linear")
