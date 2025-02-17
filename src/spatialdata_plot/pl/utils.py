@@ -2235,34 +2235,3 @@ def _prepare_transformation(
     trans_data = trans + ax.transData if ax is not None else None
 
     return trans, trans_data
-
-
-# def _get_datashader_trans_matrix_of_single_element(
-#     trans: Identity | Scale | Affine | MapAxis | Translation,
-# ) -> npt.NDArray[Any]:
-#     flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-#     tm: npt.NDArray[Any] = trans.to_affine_matrix(("x", "y"), ("x", "y"))
-#
-#     if isinstance(trans, Identity):
-#         return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-#     if isinstance(trans, (Scale | Affine)):
-#         # idea: "flip the y-axis", apply transformation, flip back
-#         flip_and_transform: npt.NDArray[Any] = flip_matrix @ tm @ flip_matrix
-#         return flip_and_transform
-#     if isinstance(trans, MapAxis):
-#         # no flipping needed
-#         return tm
-#     # for a Translation, we need the transposed transformation matrix
-#     return tm.T
-#
-#
-# def _get_transformation_matrix_for_datashader(
-#     trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
-# ) -> npt.NDArray[Any]:
-#     """Get the affine matrix needed to transform shapes for rendering with datashader."""
-#     if isinstance(trans, SDSequence):
-#         tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-#         for x in trans.transformations:
-#             tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
-#         return tm
-#     return _get_datashader_trans_matrix_of_single_element(trans)
