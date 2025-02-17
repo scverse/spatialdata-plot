@@ -826,7 +826,7 @@ def _map_color_seg(
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
             val_im = map_array(seg.copy(), cell_id, cell_id)
-            if "#" in str(color_vector[0]):
+            if "#" in str(color_vector.tolist()[0]):
                 # we have hex colors
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
