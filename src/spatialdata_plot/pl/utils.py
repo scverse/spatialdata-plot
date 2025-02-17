@@ -58,10 +58,8 @@ from spatialdata import SpatialData, get_element_annotators, get_extent, get_val
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-
-# from spatialdata.transformations.transformations import Scale
-from spatialdata.transformations import Scale
 from spatialdata.transformations.operations import get_transformation
+from spatialdata.transformations.transformations import Scale
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
