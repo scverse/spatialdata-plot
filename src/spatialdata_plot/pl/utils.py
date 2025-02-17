@@ -2120,8 +2120,6 @@ def _create_image_from_datashader_result(
     # create SpatialImage from datashader output to get it back to original size
     rgba_image_data = ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
-    # # flip y axis data since datashader renders assuming that the origin is at the top left corner
-    # rgba_image_data = rgba_image_data[:, ::-1, :]
     rgba_image = Image2DModel.parse(
         rgba_image_data,
         dims=("c", "y", "x"),
