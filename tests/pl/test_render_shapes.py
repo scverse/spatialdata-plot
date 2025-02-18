@@ -501,3 +501,22 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
+        
+    def test_plot_can_annotate_shapes_with_table_layer(self, sdata_blobs: SpatialData):
+        nrows, ncols = 5, 3
+        feature_matrix = RNG.random((nrows, ncols))
+        var_names = [f"feature{i}" for i in range(ncols)]
+
+        obs_indices = sdata_blobs["blobs_circles"].index
+
+        obs = pd.DataFrame()
+        obs["instance_id"] = obs_indices
+        obs["region"] = "blobs_circles"
+        obs["region"].astype("category")
+
+        table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
+        table = TableModel.parse(table, region="blobs_circles", region_key="region", instance_key="instance_id")
+        sdata_blobs["circle_table"] = table
+        sdata_blobs["circle_table"].layers["normalized"] = RNG.random((nrows, ncols))
+
+        sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()

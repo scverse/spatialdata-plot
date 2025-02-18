@@ -250,3 +250,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", norm=Normalize(400, 1000, clip=False), cmap=cmap
         ).pl.show()
+        
+    def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].layers["normalized"] = RNG.random(sdata_blobs["table"].X.shape)
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()

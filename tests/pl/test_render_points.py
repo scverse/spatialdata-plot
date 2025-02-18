@@ -265,3 +265,78 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
+        
+    def test_plot_can_annotate_points_with_table_obs(self, sdata_blobs: SpatialData):
+        nrows, ncols = 200, 3
+        feature_matrix = RNG.random((nrows, ncols))
+        var_names = [f"feature{i}" for i in range(ncols)]
+
+        obs_indices = sdata_blobs["blobs_points"].index
+
+        obs = pd.DataFrame()
+        obs["instance_id"] = obs_indices
+        obs["region"] = "blobs_points"
+        obs["region"].astype("category")
+        obs["extra_feature"] = [1, 2] * 100
+
+        table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
+        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        sdata_blobs["points_table"] = table
+
+        sdata_blobs.pl.render_points("blobs_points", color="extra_feature", size=10).pl.show()
+
+    def test_plot_can_annotate_points_with_table_X(self, sdata_blobs: SpatialData):
+        nrows, ncols = 200, 3
+        feature_matrix = RNG.random((nrows, ncols))
+        var_names = [f"feature{i}" for i in range(ncols)]
+
+        obs_indices = sdata_blobs["blobs_points"].index
+
+        obs = pd.DataFrame()
+        obs["instance_id"] = obs_indices
+        obs["region"] = "blobs_points"
+        obs["region"].astype("category")
+
+        table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
+        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        sdata_blobs["points_table"] = table
+
+        sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10).pl.show()
+
+    def test_plot_can_annotate_points_with_table_and_groups(self, sdata_blobs: SpatialData):
+        nrows, ncols = 200, 3
+        feature_matrix = RNG.random((nrows, ncols))
+        var_names = [f"feature{i}" for i in range(ncols)]
+
+        obs_indices = sdata_blobs["blobs_points"].index
+
+        obs = pd.DataFrame()
+        obs["instance_id"] = obs_indices
+        obs["region"] = "blobs_points"
+        obs["region"].astype("category")
+        obs["extra_feature_cat"] = ["one", "two"] * 100
+
+        table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
+        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        sdata_blobs["points_table"] = table
+
+        sdata_blobs.pl.render_points("blobs_points", color="extra_feature_cat", groups="two", size=10).pl.show()
+
+    def test_plot_can_annotate_points_with_table_layer(self, sdata_blobs: SpatialData):
+        nrows, ncols = 200, 3
+        feature_matrix = RNG.random((nrows, ncols))
+        var_names = [f"feature{i}" for i in range(ncols)]
+
+        obs_indices = sdata_blobs["blobs_points"].index
+
+        obs = pd.DataFrame()
+        obs["instance_id"] = obs_indices
+        obs["region"] = "blobs_points"
+        obs["region"].astype("category")
+
+        table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
+        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        sdata_blobs["points_table"] = table
+        sdata_blobs["points_table"].layers["normalized"] = RNG.random((nrows, ncols))
+
+        sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()

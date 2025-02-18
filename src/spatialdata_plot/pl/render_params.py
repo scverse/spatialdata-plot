@@ -89,6 +89,7 @@ class ShapesRenderParams:
     method: str | None = None
     zorder: int = 0
     table_name: str | None = None
+    table_layer: str | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
@@ -108,6 +109,7 @@ class PointsRenderParams:
     method: str | None = None
     zorder: int = 0
     table_name: str | None = None
+    table_layer: str | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
@@ -141,4 +143,5 @@ class LabelsRenderParams:
     transfunc: Callable[[float], float] | None = None
     scale: str | None = None
     table_name: str | None = None
+    table_layer: str | None = None
     zorder: int = 0
