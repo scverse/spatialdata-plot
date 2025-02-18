@@ -265,7 +265,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
-        
+
     def test_plot_can_annotate_points_with_table_obs(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
         feature_matrix = RNG.random((nrows, ncols))

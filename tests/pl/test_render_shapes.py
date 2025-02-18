@@ -501,7 +501,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
-        
+
     def test_plot_can_annotate_shapes_with_table_layer(self, sdata_blobs: SpatialData):
         nrows, ncols = 5, 3
         feature_matrix = RNG.random((nrows, ncols))
