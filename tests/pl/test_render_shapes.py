@@ -455,3 +455,49 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["new_table"] = table_shapes
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="instance_id").pl.show()
+
+    def test_plot_can_color_with_norm_no_clipping(self, sdata_blobs: SpatialData):
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = "blobs_polygons"
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        blob.pl.render_shapes(
+            element="blobs_polygons", color="value", norm=Normalize(2, 4, clip=False), cmap=cmap
+        ).pl.show()
+
+    def test_plot_datashader_can_color_with_norm_and_clipping(self, sdata_blobs: SpatialData):
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = "blobs_polygons"
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        blob.pl.render_shapes(
+            element="blobs_polygons",
+            color="value",
+            norm=Normalize(2, 4, clip=True),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()
+
+    def test_plot_datashader_can_color_with_norm_no_clipping(self, sdata_blobs: SpatialData):
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = "blobs_polygons"
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        blob.pl.render_shapes(
+            element="blobs_polygons",
+            color="value",
+            norm=Normalize(2, 4, clip=False),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()

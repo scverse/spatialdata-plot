@@ -258,13 +258,6 @@ def _render_shapes(
                 if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
                     ds_cmap = ds_cmap[:-2]
 
-            # ds_result = ds.tf.shade(
-            #     agg,
-            #     cmap=ds_cmap,
-            #     color_key=color_key,
-            #     min_alpha=np.min([254, render_params.fill_alpha * 255]),
-            #     how="linear",
-            # )
             ds_result = _datashader_shade(
                 agg,
                 cmap=ds_cmap,
@@ -280,13 +273,6 @@ def _render_shapes(
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
                 aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
 
-            # ds_result = ds.tf.shade(
-            #     agg,
-            #     cmap=ds_cmap,
-            #     how="linear",
-            #     min_alpha=np.min([254, render_params.fill_alpha * 255]),
-            #     span=ds_span,
-            # )
             ds_result = _datashader_shade(
                 agg,
                 cmap=ds_cmap,
@@ -599,13 +585,6 @@ def _render_points(
             color_vector = np.asarray([x[:-2] for x in color_vector])
 
         if color_by_categorical or col_for_color is None:
-            # ds_result = ds.tf.shade(
-            #     ds.tf.spread(agg, px=px),
-            #     cmap=color_vector[0],
-            #     color_key=color_key,
-            #     min_alpha=np.min([254, render_params.alpha * 255]),
-            #     how="linear",
-            # )
             ds_result = _datashader_shade(
                 ds.tf.spread(agg, px=px),
                 cmap=color_vector[0],
@@ -625,12 +604,6 @@ def _render_points(
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
                 aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
 
-            # ds_result = ds.tf.shade(
-            #     agg,
-            #     cmap=ds_cmap,
-            #     how="linear",
-            #     span=ds_span,
-            # )
             ds_result = _datashader_shade(
                 agg,
                 cmap=ds_cmap,
@@ -781,10 +754,6 @@ def _render_images(
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
-
-        # TODO: remove, pushed norm to imshow()
-        # if render_params.cmap_params.norm:  # type: ignore[attr-defined]
-        #     layer = render_params.cmap_params.norm(layer)  # type: ignore[attr-defined]
 
         cmap = (
             _get_linear_colormap(palette, "k")[0]

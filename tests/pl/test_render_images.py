@@ -67,12 +67,18 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs_str.pl.render_images(element="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
 
     def test_plot_can_pass_normalize_clip_True(self, sdata_blobs: SpatialData):
-        norm = Normalize(vmin=0, vmax=0.4, clip=True)
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()
+        norm = Normalize(vmin=0.1, vmax=0.5, clip=True)
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm, cmap=cmap).pl.show()
 
     def test_plot_can_pass_normalize_clip_False(self, sdata_blobs: SpatialData):
-        norm = Normalize(vmin=0, vmax=0.4, clip=False)
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()
+        norm = Normalize(vmin=0.1, vmax=0.5, clip=False)
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm, cmap=cmap).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()

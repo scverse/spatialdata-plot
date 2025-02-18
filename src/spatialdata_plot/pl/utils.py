@@ -2248,7 +2248,7 @@ def _get_transformation_matrix_for_datashader(
 def _datashader_shade(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] = None,  # TODO: set to ds default?
+    color_key: None | list[str] = None,
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,

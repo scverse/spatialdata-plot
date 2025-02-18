@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
+from matplotlib.colors import Normalize
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import PointsModel, TableModel
 from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
@@ -224,3 +225,43 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         _set_transformations(sdata_blobs["blobs_points"], {"global": seq})
 
         sdata_blobs.pl.render_points("blobs_points", method="datashader", color="black", size=5).pl.show()
+
+    def test_plot_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(color="instance_id", size=40, norm=Normalize(3, 7, clip=True), cmap=cmap).pl.show()
+
+    def test_plot_can_use_norm_without_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(
+            color="instance_id", size=40, norm=Normalize(3, 7, clip=False), cmap=cmap
+        ).pl.show()
+
+    def test_plot_datashader_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(
+            color="instance_id",
+            size=40,
+            norm=Normalize(3, 7, clip=True),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()
+
+    def test_plot_datashader_can_use_norm_without_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(
+            color="instance_id",
+            size=40,
+            norm=Normalize(3, 7, clip=False),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()
