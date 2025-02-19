@@ -2279,8 +2279,14 @@ def _datashader_shade(
     span: None | list[float] = None,
     clip: bool = True,
 ) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
-    """If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results."""
+    """ds.tf.shade() part, ensuring correct clipping behavior.
+
+    If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results.
+    This ensures the correct clipping behavior, because else datashader would always automatically clip.
+    """
     if not clip and isinstance(cmap, Colormap) and span is not None:
+        # in case we use datashader together with a Normalize object where clip=False
+        # why we need this is documented in https://github.com/scverse/spatialdata-plot/issues/372
         agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
         img_in = ds.tf.shade(
             agg_in,

@@ -236,15 +236,14 @@ def _render_shapes(
             norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
             ds_span = [norm.vmin, norm.vmax]
             if norm.vmin == norm.vmax:
+                # edge case, value vmin is rendered as the middle of the cmap
+                ds_span = [0, 1]
                 if norm.clip:
-                    # all data is mapped to 0
-                    agg = agg - agg
+                    agg = (agg - agg) + 0.5
                 else:
-                    # values equal to norm.vmin are mapped to 0, the rest to -1 or 1
                     agg = agg.where((agg >= norm.vmin) | (np.isnan(agg)), other=-1)
-                    agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=1)
-                    agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0)
-                    ds_span = [-1, 1]
+                    agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
+                    agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key = (
             [x[:-2] for x in color_vector.categories.values]
@@ -326,8 +325,8 @@ def _render_shapes(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
-                vmin = norm.vmin
-                vmax = norm.vmin + 1
+                vmin = norm.vmin - 0.5
+                vmax = norm.vmin + 0.5
             cax = ScalarMappable(
                 norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
                 cmap=render_params.cmap_params.cmap,
@@ -596,15 +595,15 @@ def _render_points(
             norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
             ds_span = [norm.vmin, norm.vmax]
             if norm.vmin == norm.vmax:
+                ds_span = [0, 1]
                 if norm.clip:
-                    # all data is mapped to 0
-                    agg = agg - agg
+                    # all data is mapped to 0.5
+                    agg = (agg - agg) + 0.5
                 else:
-                    # values equal to norm.vmin are mapped to 0, the rest to -1 or 1
+                    # values equal to norm.vmin are mapped to 0.5, the rest to -1 or 2
                     agg = agg.where((agg >= norm.vmin) | (np.isnan(agg)), other=-1)
-                    agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=1)
-                    agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0)
-                    ds_span = [-1, 1]
+                    agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
+                    agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key = (
             list(color_vector.categories.values)
@@ -637,7 +636,7 @@ def _render_points(
             # in case all elements have the same value X: we render them using cmap(0.0),
             # using an artificial "span" of [X, X + 1] for the color bar
             # else: all elements would get alpha=0 and the color bar would have a weird range
-            if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
+            if aggregate_with_reduction[0] == aggregate_with_reduction[1] and (ds_span is None or ds_span != [0, 1]):
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
                 aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
 
@@ -646,6 +645,7 @@ def _render_points(
                 cmap=ds_cmap,
                 span=ds_span,
                 clip=norm.clip,
+                min_alpha=np.min([254, render_params.alpha * 255]),
             )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
@@ -663,12 +663,14 @@ def _render_points(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
-                if norm.clip:
-                    vmin = norm.vmin
-                    vmax = norm.vmin + 1
-                else:
-                    vmin = norm.vmin - 0.5
-                    vmax = norm.vmin + 0.5
+                vmin = norm.vmin - 0.5
+                vmax = norm.vmin + 0.5
+                # if norm.clip:
+                #     vmin = norm.vmin
+                #     vmax = norm.vmin + 1
+                # else:
+                #     vmin = norm.vmin - 0.5
+                #     vmax = norm.vmin + 0.5
             cax = ScalarMappable(
                 norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
                 cmap=render_params.cmap_params.cmap,

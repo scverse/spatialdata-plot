@@ -266,6 +266,32 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             datashader_reduction="max",
         ).pl.show()
 
+    def test_plot_datashader_norm_vmin_eq_vmax_with_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(
+            color="instance_id",
+            size=40,
+            norm=Normalize(5, 5, clip=True),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()
+
+    def test_plot_datashader_norm_vmin_eq_vmax_without_clip(self, sdata_blobs: SpatialData):
+        cmap = matplotlib.colormaps["viridis"]
+        cmap.set_under("black")
+        cmap.set_over("grey")
+        sdata_blobs.pl.render_points(
+            color="instance_id",
+            size=40,
+            norm=Normalize(5, 5, clip=False),
+            cmap=cmap,
+            method="datashader",
+            datashader_reduction="max",
+        ).pl.show()
+
     def test_plot_can_annotate_points_with_table_obs(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
         feature_matrix = RNG.random((nrows, ncols))
