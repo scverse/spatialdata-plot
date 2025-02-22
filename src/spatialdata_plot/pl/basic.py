@@ -29,6 +29,7 @@ from spatialdata_plot.pl.render import (
     _render_points,
     _render_shapes,
 )
+from spatialdata_plot.pl._viewconfig import create_viewconfig
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     ImageRenderParams,
@@ -723,6 +724,7 @@ class PlotAccessor:
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
+        store_viewconfig: bool = True,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -830,7 +832,17 @@ class PlotAccessor:
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+
+        # Only reason for multiple coordinate systems is to show quick overview, but this would complicate the view config
+        # implementation. For testing now, global is used as default.
+        if not isinstance(coordinate_systems, str) and store_viewconfig:
+            # TODO: change this when having full implementation.
+            store_viewconfig_cs = "global"
+            #raise ValueError("If wanting to store the view configuration. A single coordinate system must be provided")
+
         if isinstance(coordinate_systems, str):
+            if store_viewconfig:
+                store_viewconfig_cs = coordinate_systems
             coordinate_systems = [coordinate_systems]
 
         for cs in coordinate_systems:
@@ -1028,6 +1040,9 @@ class PlotAccessor:
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
+
+        if store_viewconfig:
+            create_viewconfig(sdata, fig_params, legend_params, store_viewconfig_cs)
 
         # Manually show plot if we're not in interactive mode
         # https://stackoverflow.com/a/64523765
