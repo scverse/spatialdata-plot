@@ -219,16 +219,14 @@ def _create_axis_block(ax, axis_scales_block, dpi):
         axis_config["scale"] = scale["name"]
         if scale["name"] == "X_scale":
             axis = ax.xaxis
-            label = ax.get_xlabel()
         elif scale["name"] == "Y_scale":
             axis = ax.yaxis
-            label = ax.get_ylabel()
+
+        axis_props = axis.properties()
 
         axis_config["orient"] = axis.get_label_position()
 
         axis_line_props = ax.spines[axis_config["orient"]].properties()
-        axis_props = axis.properties()
-        axis_config["title"] = label
         axis_config["domain"] = axis_line_props['visible'] # domain is whether axis line should be visible.
         axis_config["domainOpacity"] = axis_line_props["alpha"] if axis_line_props["alpha"] else 1
         axis_config["domainColor"] = mcolors.to_hex(axis_line_props["edgecolor"])[:-2]
@@ -257,15 +255,22 @@ def _create_axis_block(ax, axis_scales_block, dpi):
                 axis_config["tickWidth"] = (tick_props['linewidth'] * dpi) / 72
                 axis_config["tickSize"] = (tick_props['markersize'] * dpi) / 72 #also marker edge width, but vega doesn't have an equivalent for that.
 
+        label = axis_props["label_text"]
+        if label == "":
+            axis_config["title"] = label
+            label_props = axis_props["label"].properties()
 
+            axis_config["titleAlign"] = label_props["horizontalalignment"]
+            axis_config["titleBaseline"] = label_props["verticalalignment"]
+            axis_config["titleColor"] = mcolors.to_hex(label_props["color"])
+            axis_config["titleFont"] = label_props["fontname"]
+            axis_config["titleFontSize"] = (label_props["fontsize"] * dpi) / 72
+            axis_config["titleFontWeight"] = label_props["fontweight"]
+            axis_config["titleOpacity"] = label_props["alpha"] if label_props["alpha"] else 1
+            axis_config["zindex"] = axis_props["zorder"]
 
-        # view={"grid": true,
-        # "tickCount": 5,
-        # "labelFontSize": 12,
-        # "titleFontSize": 14
-        # }
         axis_array.append(axis_config)
-    return axis_config
+    return axis_array
 
 def create_viewconfig(sdata, fig_params, legend_params, cs):
     fig = fig_params.fig
@@ -273,7 +278,7 @@ def create_viewconfig(sdata, fig_params, legend_params, cs):
     data_block = _create_data_configs(sdata.plotting_tree, cs, sdata._path)
 
     axis_scales_block = _create_axis_scale_block(ax)
-    axis_block = _create_axis_block(ax, axis_scales_block, fig.dpi)
+    axis_array = _create_axis_block(ax, axis_scales_block, fig.dpi)
 
     viewconfig = {
         "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
@@ -283,6 +288,7 @@ def create_viewconfig(sdata, fig_params, legend_params, cs):
         "title": _create_title_config(ax, fig),
         "data": data_block,
         "scales": axis_scales_block,
+        "axes": axis_array
 
     }
     print()
