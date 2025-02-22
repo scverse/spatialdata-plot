@@ -288,7 +288,7 @@ def create_viewconfig(sdata, fig_params, legend_params, cs):
         "title": _create_title_config(ax, fig),
         "data": data_block,
         "scales": axis_scales_block,
-        "axes": axis_array
+        "axes": axis_array,
 
     }
     print()
