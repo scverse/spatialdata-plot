@@ -11,7 +11,7 @@ from spatialdata_plot.pl.render_params import (
     PointsRenderParams,
     ShapesRenderParams,
 )
-from typing import OrderedDict
+from collections import OrderedDict
 
 Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams
 
@@ -103,7 +103,7 @@ def _create_base_level_sdata_block(url: Path):
     This config is to be added to the vega data field block.
     """
     base_block = {}
-    base_block["name"] = uuid4()
+    base_block["name"] = str(uuid4())
     base_block["url"] = str(url)
     base_block["format"] = {"type": "SpatialData",
                             "version": spatialdata.__version__}
@@ -132,7 +132,7 @@ def _create_derived_data_block(call: str, params: Params, base_uuid: UUID, cs: s
     """
     data_block = {}
 
-    data_block["name"] = uuid4()
+    data_block["name"] = str(uuid4())
     # TODO: think about versioning of individual spatialdata elements
     if "render_images" in call:
         data_block["format"] = {"type": "spatialdata_image", "version": 0.1}
@@ -271,6 +271,63 @@ def _create_axis_block(ax, axis_scales_block, dpi):
 
         axis_array.append(axis_config)
     return axis_array
+
+# def plotting_tree_dict_to_marks(plotting_tree_dict):
+#     out = [] # caller will set { ..., "marks": out }
+#     for pl_call_id, pl_call_params in plotting_tree_dict.items():
+#         if pl_call_id.endswith("_render_images"):
+#             for channel_index in pl_call_params["channel"]:
+#                 out.append({
+#                   "type": "raster_image",
+#                   "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                   "zindex": pl_call_params["zorder"],
+#                   "encode": {
+#                       "opacity": { "value": pl_call_params.get("alpha") },
+#                       "color": {"scale": get_scale_name(pl_call_params), "field": channel_index }
+#                   }
+#                 })
+#         if pl_call_id.endswith("_render_shapes"):
+#             out.append({
+#                 "type": "shape",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
+#                     "fillColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeWidth": {"value": pl_call_params.get("outline_width")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
+#                     "strokeColor": {"value": pl_call_params.get("outline_color")},
+#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
+#                 }
+#             })
+#         if pl_call_id.endswith("_render_points"):
+#             out.append({
+#                 "type": "point",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "opacity": {"value": pl_call_params.get("alpha")},
+#                     "color": get_shapes_color_encoding(pl_call_params),
+#                     "size": {"value": pl_call_params.get("size")},
+#                 }
+#             })
+#         if pl_call_id.endswith("_render_labels"):
+#             out.append({
+#                 "type": "raster_labels",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "opacity": {"value": pl_call_params.get("alpha")},
+#                     "fillColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeWidth": {"value": pl_call_params.get("contour_px")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                 }
+#             })
 
 def create_viewconfig(sdata, fig_params, legend_params, cs):
     fig = fig_params.fig
