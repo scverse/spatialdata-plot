@@ -1076,9 +1076,6 @@ class PlotAccessor:
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
-        if fig_params.fig is not None and save is not None:
-            save_fig(fig_params.fig, path=save)
-
         def get_current_ax_uuid(ax: Axes) -> str:
             return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(id(ax))))
 
@@ -1105,6 +1102,9 @@ class PlotAccessor:
         if store_viewconfig_to_disk:
             with open(store_viewconfig_to_disk, "w") as outfile:
                 json.dump(viewconfig, outfile)
+
+        if fig_params.fig is not None and save is not None:
+            save_fig(fig_params.fig, path=save)
 
         # Manually show plot if we're not in interactive mode
         # https://stackoverflow.com/a/64523765

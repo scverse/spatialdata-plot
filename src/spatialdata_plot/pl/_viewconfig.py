@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
@@ -12,6 +13,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from spatialdata_plot.pl.render_params import (
+    CmapParams,
     FigParams,
     ImageRenderParams,
     LabelsRenderParams,
@@ -99,6 +101,25 @@ def _create_padding_object(fig: Figure) -> dict[str, float]:
     }
 
 
+def _create_colorscale_image(cmap_params: CmapParams) -> dict[str, Any]:
+    cmap = cmap_params.cmap
+    if isinstance(cmap, mcolors.ListedColormap):
+        type_scale = "ordinal"
+        if cmap.name == "from_list":  # default name when cmap is custom.
+            pass
+        else:
+            color_range = {"scheme": cmap.name, "count": cmap.N}
+
+    return {
+        "name": f"color_{str(uuid4())}",
+        "type": type_scale,
+        # The domain in matplotlib seems to be 0-1 always for images, but for example for napari should be
+        # interpreted as relative
+        "domain": [0, 1],
+        "range": color_range,
+    }
+
+
 def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
     """Create the vega json object for the SpatialData zarr store.
 
@@ -117,8 +138,8 @@ def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
 
 
 def _create_derived_data_block(
-    ax: Axes, call: str, params: Params, base_uuid: str, cs: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
+    ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Create vega like data object for SpatialData elements.
 
     Each object for a SpatialData element contains an additional transform that
@@ -140,15 +161,14 @@ def _create_derived_data_block(
         The name of the coordinate system in which the SpatialData element was plotted.
     """
     data_object: dict[str, Any] = {}
-    img_counter = 0
+    marks_object: dict[str, Any] = {}
+    color_scale_object: dict[str, Any] = {}
 
     data_object["name"] = params.element + "_" + str(uuid4())
 
     # TODO: think about versioning of individual spatialdata elements
     if "render_images" in call and isinstance(params, ImageRenderParams):
         data_object["format"] = {"type": "spatialdata_image", "version": 0.1}
-        marks_object = _create_raster_image_marks_object(ax, call, params, data_object["name"], img_counter)
-        img_counter += 1
     elif "render_labels" in call:
         data_object["format"] = {"type": "spatialdata_label", "version": 0.1}
         marks_object = {"a": 5}
@@ -164,87 +184,54 @@ def _create_derived_data_block(
     data_object["source"] = base_uuid
     data_object["transform"] = [{"type": "filter_element", "expr": params.element}, {"type": "filter_cs", "expr": cs}]
 
-    # TODO: complete this part
     if "render_images" in call and isinstance(params, ImageRenderParams):  # second part to shut up mypy
         multiscale = "full" if not params.scale else params.scale
         data_object["transform"].append({"type": "filter_scale", "expr": multiscale})
         data_object["transform"].append({"type": "filter_channel", "expr": params.channel})
-    return data_object, marks_object
+        # Use isinstance because of possible 0 value
+        if isinstance(vmin := params.cmap_params.norm.vmin, float) and isinstance(
+            vmax := params.cmap_params.norm.vmax, float
+        ):
+
+            if params.cmap_params.norm.clip:
+                formula = f"clamp((datum.value - {vmin}) / ({vmax} - {vmin}), 0, 1)"
+            else:
+                formula = f"(datum.value - {vmin}) / ({vmax} - {vmin})"
+            data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
+
+        color_scale_object = _create_colorscale_image(params.cmap_params)
+
+        marks_object = _create_raster_image_marks_object(
+            ax, call, params, data_object, call_count, color_scale_object["name"]
+        )
+    return data_object, marks_object, color_scale_object
 
 
 def _create_raster_image_marks_object(
-    ax: Axes, call: str, params: ImageRenderParams, element_uuid: str, counter: int
+    ax: Axes, call: str, params: ImageRenderParams, data_object: dict[str, Any], call_count: int, scale_id: str
 ) -> dict[str, Any]:
 
     return {
         "type": "raster_image",
-        "from": {"data": element_uuid},
-        "zindex": ax.properties()["images"][counter].zorder,
-        "encode": {"enter": {"opacity": {"value": ax.properties()["images"][counter].properties()["alpha"]}}},
+        "from": {"data": data_object["name"]},
+        "zindex": ax.properties()["images"][call_count].zorder,
+        "encode": {
+            "enter": {
+                "opacity": {"value": ax.properties()["images"][call_count].properties()["alpha"]},
+                "fill": [{"scale": scale_id, "value": "intensity_value"}],
+            }
+        },
     }
 
 
-# def plotting_tree_dict_to_marks(plotting_tree_dict):
-#     out = [] # caller will set { ..., "marks": out }
-#     for pl_call_id, pl_call_params in plotting_tree_dict.items():
-#         if pl_call_id.endswith("_render_images"):
-#             for channel_index in pl_call_params["channel"]:
-#                 out.append({
-#                   "type": "raster_image",
-#                   "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                   "zindex": pl_call_params["zorder"],
-#                   "encode": {
-#                       "opacity": { "value": pl_call_params.get("alpha") },
-#                       "color": {"scale": get_scale_name(pl_call_params), "field": channel_index }
-#                   }
-#                 })
-#         if pl_call_id.endswith("_render_shapes"):
-#             out.append({
-#                 "type": "shape",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
-#                     "fillColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeWidth": {"value": pl_call_params.get("outline_width")},
-#                   # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
-#                     "strokeColor": {"value": pl_call_params.get("outline_color")},
-#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
-#                 }
-#             })
-#         if pl_call_id.endswith("_render_points"):
-#             out.append({
-#                 "type": "point",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "opacity": {"value": pl_call_params.get("alpha")},
-#                     "color": get_shapes_color_encoding(pl_call_params),
-#                     "size": {"value": pl_call_params.get("size")},
-#                 }
-#             })
-#         if pl_call_id.endswith("_render_labels"):
-#             out.append({
-#                 "type": "raster_labels",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "opacity": {"value": pl_call_params.get("alpha")},
-#                     "fillColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeWidth": {"value": pl_call_params.get("contour_px")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                 }
-#             })
+def strip_call(s: str) -> str:
+    """Strip leading digit and underscore from call."""
+    return re.sub(r"^\d+_", "", s)
 
 
 def _create_data_configs(
     plotting_tree: OrderedDict[str, Params], ax: Axes, cs: str, sdata_path: str
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create the vega json array value to the data key.
 
     The data array in the SpatialData vegalike viewconfig consists out of
@@ -262,19 +249,29 @@ def _create_data_configs(
     sdata_path: str
         The location of the SpatialData zarr store.
     """
-    data = []
+    data_array = []
+    marks_array = []
+    color_scale_array = []
     url = str(Path("sdata.zarr"))
 
     if sdata_path:
         url = sdata_path
 
     base_block = _create_base_level_sdata_block(url)
-    data.append(base_block)
-    for call, params in plotting_tree.items():
-        data_object, marks_object = _create_derived_data_block(ax, call, params, base_block["name"], cs)
-        data.append(data_object)
+    data_array.append(base_block)
 
-    return data
+    counters = {"render_images": 0, "render_labels": 0, "render_points": 0, "render_shapes": 0}
+    for call, params in plotting_tree.items():
+        call = strip_call(call)
+        data_object, marks_object, color_scale_object = _create_derived_data_block(
+            ax, call, params, base_block["name"], cs, counters[call]
+        )
+        data_array.append(data_object)
+        marks_array.append(marks_object)
+        color_scale_array.append(color_scale_object)
+        counters[call] += 1
+
+    return data_array, marks_array, color_scale_array
 
 
 def _create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
@@ -373,10 +370,10 @@ def _create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: f
 def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: Any, cs: str) -> dict[str, Any]:
     fig = fig_params.fig
     ax = fig_params.ax
-    data_block = _create_data_configs(sdata.plotting_tree, ax, cs, sdata._path)
+    data_array, marks_array, color_scale_array = _create_data_configs(sdata.plotting_tree, ax, cs, sdata._path)
 
-    axis_scales_block = _create_axis_scale_block(ax)
-    axis_array = _create_axis_block(ax, axis_scales_block, fig.dpi)
+    scales_array = _create_axis_scale_block(ax)
+    axis_array = _create_axis_block(ax, scales_array, fig.dpi)
 
     # TODO: check why attrs does not respect ordereddict when writing sdata
     return {
@@ -385,7 +382,66 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
         "width": fig.get_figwidth() * fig.dpi,
         "padding": _create_padding_object(fig),
         "title": _create_title_config(ax, fig),
-        "data": data_block,
-        "scales": axis_scales_block,
+        "data": data_array,
+        "scales": axis_array + color_scale_array,
         "axes": axis_array,
+        "marks": marks_array,
     }
+
+
+# def plotting_tree_dict_to_marks(plotting_tree_dict):
+#     out = [] # caller will set { ..., "marks": out }
+#     for pl_call_id, pl_call_params in plotting_tree_dict.items():
+#         if pl_call_id.endswith("_render_images"):
+#             for channel_index in pl_call_params["channel"]:
+#                 out.append({
+#                   "type": "raster_image",
+#                   "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                   "zindex": pl_call_params["zorder"],
+#                   "encode": {
+#                       "opacity": { "value": pl_call_params.get("alpha") },
+#                       "color": {"scale": get_scale_name(pl_call_params), "field": channel_index }
+#                   }
+#                 })
+#         if pl_call_id.endswith("_render_shapes"):
+#             out.append({
+#                 "type": "shape",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
+#                     "fillColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeWidth": {"value": pl_call_params.get("outline_width")},
+#                   # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
+#                     "strokeColor": {"value": pl_call_params.get("outline_color")},
+#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
+#                 }
+#             })
+#         if pl_call_id.endswith("_render_points"):
+#             out.append({
+#                 "type": "point",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "opacity": {"value": pl_call_params.get("alpha")},
+#                     "color": get_shapes_color_encoding(pl_call_params),
+#                     "size": {"value": pl_call_params.get("size")},
+#                 }
+#             })
+#         if pl_call_id.endswith("_render_labels"):
+#             out.append({
+#                 "type": "raster_labels",
+#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
+#                 "zindex": pl_call_params["zorder"],
+#                 "encode": {
+#                     "opacity": {"value": pl_call_params.get("alpha")},
+#                     "fillColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeColor": get_shapes_color_encoding(pl_call_params),
+#                     "strokeWidth": {"value": pl_call_params.get("contour_px")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
+#                     # TODO: check whether this is the key used in the spatial plotting tree
+#                 }
+#             })
