@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+import uuid
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
@@ -22,14 +24,15 @@ from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
+import spatialdata_plot.config
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot.pl._viewconfig import create_viewconfig
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
 )
-from spatialdata_plot.pl._viewconfig import create_viewconfig
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     ImageRenderParams,
@@ -150,6 +153,7 @@ class PlotAccessor:
             tables=self._sdata.tables if tables is None else tables,
         )
         sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+        sdata._sdata = self._sdata
 
         return sdata
 
@@ -724,7 +728,8 @@ class PlotAccessor:
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
-        store_viewconfig: bool = True,
+        store_viewconfig_in_attrs: bool | None = None,
+        store_viewconfig_to_disk: Path | None = None,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -735,6 +740,27 @@ class PlotAccessor:
             Name(s) of the coordinate system(s) to be plotted. If None, all coordinate systems are plotted.
             If a coordinate system doesn't contain any relevant elements (as specified in the render_* calls),
             it is automatically not plotted.
+        legend_fontsize :
+            Font size of the legend text.
+        legend_fontweight :
+            Font weight of the legend text.
+        legend_loc :
+            Location of the legend on the plot.
+        legend_fontoutline :
+            Width of the outline around the legend text.
+        na_in_legend :
+            Whether to include 'NA' values in the legend.
+        colorbar :
+            Whether to plot the colorbar.
+        wspace :
+            The amount of width reserved for space between subplots, expressed as a fraction of the average axis width.
+        hspace :
+            The amount of height reserved for space between subplots, expressed as a fraction of the average axis
+            height.
+        ncols :
+            Number of columns in the figure.
+        frameon :
+            Whether to draw the frame around the plot.
         figsize :
             Size of the figure (width, height) in inches. The size of the actual canvas may deviate from this,
             depending on the dpi! In matplotlib, the actual figure size (in pixels) is dpi * figsize.
@@ -742,17 +768,25 @@ class PlotAccessor:
         dpi :
             Resolution of the plot in dots per inch (as in matplotlib).
             If None, the default of matplotlib is used (100.0).
-        ax :
-            Matplotlib axes object to plot on. If None, a new figure is created.
-            Works only if there is one image in the SpatialData object.
-        ncols :
-            Number of columns in the figure. Default is 4.
-        return_ax :
-            Whether to return the axes object created. False by default.
-        colorbar :
-            Whether to plot the colorbar. True by default.
+        fig :
+            Matplotlib Figure object to use for plotting.
         title :
-            The title of the plot. If not provided the plot will have the name of the coordinate system as title.
+            The title of the plot. If not provided, the plot will have the name of the coordinate system as the title.
+        share_extent :
+            Whether to share the extent of the plots.
+        pad_extent :
+            Padding around the extent of the plots, expressed as an integer or float.
+        ax :
+            Matplotlib Axes object to plot on. Works only if there is one image in the SpatialData object.
+        return_ax :
+            Whether to return the axes object created.
+        save :
+            Path to save the plot to a file.
+        store_viewconfig_in_attrs :
+            Whether to store the view configuration in `.attrs` slot of the `SpatialData` object. It defaults to
+            `spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS`.
+        store_viewconfig_to_disk :
+            Path to store the view configuration on disk. By default, the view configuration is not stored on disk.
 
         Returns
         -------
@@ -789,6 +823,9 @@ class PlotAccessor:
             return_ax,
             save,
         )
+
+        if store_viewconfig_in_attrs is None:
+            store_viewconfig_in_attrs = spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS
 
         sdata = self._copy()
 
@@ -833,15 +870,16 @@ class PlotAccessor:
 
         coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
 
-        # Only reason for multiple coordinate systems is to show quick overview, but this would complicate the view config
-        # implementation. For testing now, global is used as default.
-        if not isinstance(coordinate_systems, str) and store_viewconfig:
+        # Only reason for multiple coordinate systems is to show quick overview, but this would complicate the
+        # view config implementation. For testing now, global is used as default.
+        if not isinstance(coordinate_systems, str) and store_viewconfig_in_attrs:
             # TODO: change this when having full implementation.
             store_viewconfig_cs = "global"
-            #raise ValueError("If wanting to store the view configuration. A single coordinate system must be provided")
+            # raise ValueError("If wanting to store the view configuration. A single coordinate system must be
+            # provided")
 
         if isinstance(coordinate_systems, str):
-            if store_viewconfig:
+            if store_viewconfig_in_attrs:
                 store_viewconfig_cs = coordinate_systems
             coordinate_systems = [coordinate_systems]
 
@@ -1041,8 +1079,32 @@ class PlotAccessor:
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
 
-        if store_viewconfig:
-            create_viewconfig(sdata, fig_params, legend_params, store_viewconfig_cs)
+        def get_current_ax_uuid(ax: Axes) -> str:
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(id(ax))))
+
+        def _concat_viewconfig(
+            old_viewconfig: list[dict[str, Any]], new_viewconfig: list[dict[str, Any]]
+        ) -> list[dict[str, Any]]:
+            return old_viewconfig + new_viewconfig
+
+        viewconfig: list[dict[str, Any]] | None = None
+        if store_viewconfig_in_attrs or store_viewconfig_to_disk:
+            viewconfig = [create_viewconfig(sdata, fig_params, legend_params, store_viewconfig_cs)]
+        if store_viewconfig_in_attrs:
+            root = sdata
+            while hasattr(root, "_sdata"):
+                root = root._sdata
+
+            assert isinstance(viewconfig, list)
+            viewconfig[0]["usermeta"] = {"axis_uuid": get_current_ax_uuid(ax)}
+            if "viewconfig" not in root.attrs:
+                root.attrs["viewconfig"] = viewconfig
+            else:
+                merged_viewconfig = _concat_viewconfig(root.attrs["viewconfig"], viewconfig)
+                root.attrs["viewconfig"] = merged_viewconfig
+        if store_viewconfig_to_disk:
+            with open(store_viewconfig_to_disk, "w") as outfile:
+                json.dump(viewconfig, outfile)
 
         # Manually show plot if we're not in interactive mode
         # https://stackoverflow.com/a/64523765

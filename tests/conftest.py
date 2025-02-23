@@ -1,3 +1,5 @@
+import json
+import warnings
 from abc import ABC, ABCMeta
 from collections.abc import Callable
 from functools import wraps
@@ -27,11 +29,13 @@ from spatialdata.models import (
 from xarray import DataArray, DataTree
 
 import spatialdata_plot  # noqa: F401
+import spatialdata_plot.config
 
 HERE: Path = Path(__file__).parent
 
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
+VIEWCONFIG_ACTUAL = HERE / "figures_viewconfig"
 TOL = 15
 DPI = 80
 
@@ -62,6 +66,11 @@ def sdata_blobs_str() -> SpatialData:
 @pytest.fixture()
 def sdata_raccoon() -> SpatialData:
     return raccoon()
+
+
+@pytest.fixture()
+def sdata_empty() -> SpatialData:
+    return SpatialData()
 
 
 @pytest.fixture
@@ -386,6 +395,7 @@ class PlotTester(ABC):  # noqa: B024
         # Apply constrained layout and save the plot
         fig.set_constrained_layout(True)
         plt.savefig(out_path, dpi=DPI)
+
         plt.close()
 
         if tolerance is None:
@@ -400,8 +410,34 @@ class PlotTester(ABC):  # noqa: B024
 def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
     @wraps(fn)
     def save_and_compare(self, *args, **kwargs):
+        # we need the test to contain one of these parameters as argument; the view configuration will be saved there
+        keys_to_check = ["sdata_blobs", "sdata_blobs_str", "sdata_raccoon", "sdata_empty"]
+        sdata = None
+        for key in keys_to_check:
+            sdata = kwargs.get(key)
+            if sdata is not None:
+                break
+
+        if sdata is not None:
+            old_config = spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS
+            spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = True
         fn(self, *args, **kwargs)
         self.compare(fig_name)
+
+        if sdata is not None:
+            spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = old_config
+            if "viewconfig" in sdata.attrs:
+                viewconfig = sdata.attrs["viewconfig"]
+                VIEWCONFIG_ACTUAL.mkdir(parents=True, exist_ok=True)
+                with open(VIEWCONFIG_ACTUAL / f"{fig_name}.json", "w") as outfile:
+                    json.dump(viewconfig, outfile, indent=4)
+                return
+
+        # uncomment to catch tests that do not save the viewconfig
+        # raise ValueError("No viewconfig saved for the test")
+        warnings.warn(
+            f"No viewconfig found in {keys_to_check} object. Skipping viewconfig generation.", UserWarning, stacklevel=2
+        )
 
     if not callable(fn):
         raise TypeError(f"Expected a `callable` for class `{clsname}`, found `{type(fn).__name__}`.")

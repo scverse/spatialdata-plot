@@ -1,19 +1,29 @@
-from pathlib import Path
-import spatialdata
-from uuid import uuid4, UUID
+from __future__ import annotations
+
+from collections import OrderedDict
 from enum import Enum
-from matplotlib.figure import Figure
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
+
 import matplotlib.colors as mcolors
+import spatialdata
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+
 from spatialdata_plot.pl.render_params import (
+    FigParams,
     ImageRenderParams,
     LabelsRenderParams,
     PointsRenderParams,
     ShapesRenderParams,
 )
-from collections import OrderedDict
 
 Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams
+
+if TYPE_CHECKING:
+    from spatialdata import SpatialData
+
 
 class VegaAlignment(Enum):
     LEFT = "start"
@@ -21,16 +31,13 @@ class VegaAlignment(Enum):
     RIGHT = "end"
 
     @classmethod
-    def from_matplotlib(cls, alignment: str):
+    def from_matplotlib(cls, alignment: str) -> str:
         """Convert Matplotlib horizontal alignment to Vega alignment."""
-        mapping = {
-            "left": cls.LEFT,
-            "center": cls.CENTER,
-            "right": cls.RIGHT
-        }
+        mapping = {"left": cls.LEFT, "center": cls.CENTER, "right": cls.RIGHT}
         return mapping.get(alignment, cls.CENTER).value
 
-def _create_axis_scale_block(ax: Axes):
+
+def _create_axis_scale_block(ax: Axes) -> list[dict[str, Any]]:
     """Create vega scales object pertaining to both the x and the y axis.
 
     Parameters
@@ -44,7 +51,7 @@ def _create_axis_scale_block(ax: Axes):
     return scales
 
 
-def _get_axis_scale_config(ax: Axes, axis_name: str):
+def _get_axis_scale_config(ax: Axes, axis_name: str) -> dict[str, Any]:
     """Provide a vega like scales object particular for one of the plotting axes.
 
     Note that in vega, this config also contains the fields reverse and zero.
@@ -57,20 +64,20 @@ def _get_axis_scale_config(ax: Axes, axis_name: str):
     axis_name: str
         Which axis the config should be made for, either "x" or "y".
     """
-    scale = {}
+    scale: dict[str, Any] = {}
     scale["name"] = f"{axis_name.upper()}_scale"
     if axis_name == "x":
         scale["type"] = ax.get_xaxis().get_scale()
-        scale["domain"] = [ax.get_xlim()[0], ax.get_xlim()[1]]
+        scale["domain"] = [ax.get_xlim()[0].item(), ax.get_xlim()[1].item()]
         scale["range"] = "width"
     if axis_name == "y":
         scale["type"] = ax.get_yaxis().get_scale()
-        scale["domain"] = [ax.get_ylim()[0], ax.get_ylim()[1]]
+        scale["domain"] = [ax.get_ylim()[0].item(), ax.get_ylim()[1].item()]
         scale["range"] = "height"
     return scale
 
 
-def _create_padding_object(fig: Figure):
+def _create_padding_object(fig: Figure) -> dict[str, float]:
     """Get the padding parameters for a vega viewconfiguration.
 
     Given that matplotlib gives the padding parameters as a fraction of the the figure width or height and
@@ -84,15 +91,15 @@ def _create_padding_object(fig: Figure):
     fig_width_pixels, fig_height_pixels = fig.get_size_inches() * fig.dpi
     # contains also wspace and hspace but does not seem to be used by vega here.
     padding_obj = fig.subplotpars
-    padding = {
-        "left": padding_obj.left * fig_width_pixels,
-        "top": (1 - padding_obj.top) * fig_height_pixels,
-        "right": (1 - padding_obj.right) * fig_width_pixels,
-        "bottom": padding_obj.bottom * fig_height_pixels,
+    return {
+        "left": (padding_obj.left * fig_width_pixels).item(),
+        "top": ((1 - padding_obj.top) * fig_height_pixels).item(),
+        "right": ((1 - padding_obj.right) * fig_width_pixels).item(),
+        "bottom": (padding_obj.bottom * fig_height_pixels).item(),
     }
-    return padding
 
-def _create_base_level_sdata_block(url: Path):
+
+def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
     """Create the vega json object for the SpatialData zarr store.
 
     Parameters
@@ -102,14 +109,16 @@ def _create_base_level_sdata_block(url: Path):
 
     This config is to be added to the vega data field block.
     """
-    base_block = {}
-    base_block["name"] = str(uuid4())
-    base_block["url"] = str(url)
-    base_block["format"] = {"type": "SpatialData",
-                            "version": spatialdata.__version__}
-    return base_block
+    return {
+        "name": str(uuid4()),
+        "url": url,
+        "format": {"type": "SpatialData", "version": spatialdata.__version__},
+    }
 
-def _create_derived_data_block(ax, call: str, params: Params, base_uuid: UUID, cs: str):
+
+def _create_derived_data_block(
+    ax: Axes, call: str, params: Params, base_uuid: str, cs: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Create vega like data object for SpatialData elements.
 
     Each object for a SpatialData element contains an additional transform that
@@ -124,52 +133,57 @@ def _create_derived_data_block(ax, call: str, params: Params, base_uuid: UUID, c
     params: Params
         The render parameters used in spatialdata-plot for the particular type of SpatialData
         element.
-    base_uuid: UUID
+    base_uuid: str
         Unique identifier used to refer to the base level SpatialData zarr store in the vega
         like view configuration.
     cs: str
         The name of the coordinate system in which the SpatialData element was plotted.
     """
-    data_object = {}
-    marks_array = {}
+    data_object: dict[str, Any] = {}
     img_counter = 0
 
     data_object["name"] = params.element + "_" + str(uuid4())
+
     # TODO: think about versioning of individual spatialdata elements
-    if "render_images" in call:
+    if "render_images" in call and isinstance(params, ImageRenderParams):
         data_object["format"] = {"type": "spatialdata_image", "version": 0.1}
-        marks_object = _create_raster_image_marks_object(ax,call, params, data_object["name"], img_counter)
+        marks_object = _create_raster_image_marks_object(ax, call, params, data_object["name"], img_counter)
         img_counter += 1
     elif "render_labels" in call:
         data_object["format"] = {"type": "spatialdata_label", "version": 0.1}
+        marks_object = {"a": 5}
     elif "render_points" in call:
         data_object["format"] = {"type": "spatialdata_point", "version": 0.1}
+        marks_object = {"a": 5}
     elif "render_shapes" in call:
         data_object["format"] = {"type": "spatialdata_shape", "version": 0.1}
+        marks_object = {"a": 5}
     else:
         raise ValueError(f"Unknown call: {call}")
 
     data_object["source"] = base_uuid
-    data_object["transform"] = [{"type": "filter_element", "expr": params.element},
-                               {"type": "filter_cs", "expr": cs}]
+    data_object["transform"] = [{"type": "filter_element", "expr": params.element}, {"type": "filter_cs", "expr": cs}]
 
     # TODO: complete this part
-    if "render_images" in call:
+    if "render_images" in call and isinstance(params, ImageRenderParams):  # second part to shut up mypy
         multiscale = "full" if not params.scale else params.scale
         data_object["transform"].append({"type": "filter_scale", "expr": multiscale})
         data_object["transform"].append({"type": "filter_channel", "expr": params.channel})
-    return data_object, marks_array
+    return data_object, marks_object
 
-def _create_raster_image_marks_object(ax, call: str, params: ImageRenderParams, element_uuid: str, counter):
-    image_object = OrderedDict()
-    image_object["type"] = "raster_image"
-    image_object["from"] = {"data": element_uuid}
-    image_object["zindex"] = ax.properties()['images'][counter].zorder
-    image_object["encode"] = {"enter": {
 
-        "opacity": {"value": ax.properties()['images'][counter].properties()['alpha']}
-    }}
-    return image_object
+def _create_raster_image_marks_object(
+    ax: Axes, call: str, params: ImageRenderParams, element_uuid: str, counter: int
+) -> dict[str, Any]:
+
+    return {
+        "type": "raster_image",
+        "from": {"data": element_uuid},
+        "zindex": ax.properties()["images"][counter].zorder,
+        "encode": {"enter": {"opacity": {"value": ax.properties()["images"][counter].properties()["alpha"]}}},
+    }
+
+
 # def plotting_tree_dict_to_marks(plotting_tree_dict):
 #     out = [] # caller will set { ..., "marks": out }
 #     for pl_call_id, pl_call_params in plotting_tree_dict.items():
@@ -193,7 +207,7 @@ def _create_raster_image_marks_object(ax, call: str, params: ImageRenderParams, 
 #                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
 #                     "fillColor": get_shapes_color_encoding(pl_call_params),
 #                     "strokeWidth": {"value": pl_call_params.get("outline_width")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
+#                   # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
 #                     "strokeColor": {"value": pl_call_params.get("outline_color")},
 #                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
 #                 }
@@ -228,7 +242,9 @@ def _create_raster_image_marks_object(ax, call: str, params: ImageRenderParams, 
 #             })
 
 
-def _create_data_configs(plotting_tree: OrderedDict[str, Params], ax, cs: str, sdata_path: str):
+def _create_data_configs(
+    plotting_tree: OrderedDict[str, Params], ax: Axes, cs: str, sdata_path: str
+) -> list[dict[str, Any]]:
     """Create the vega json array value to the data key.
 
     The data array in the SpatialData vegalike viewconfig consists out of
@@ -247,7 +263,7 @@ def _create_data_configs(plotting_tree: OrderedDict[str, Params], ax, cs: str, s
         The location of the SpatialData zarr store.
     """
     data = []
-    url = Path("sdata.zarr")
+    url = str(Path("sdata.zarr"))
 
     if sdata_path:
         url = sdata_path
@@ -261,7 +277,7 @@ def _create_data_configs(plotting_tree: OrderedDict[str, Params], ax, cs: str, s
     return data
 
 
-def _create_title_config(ax, fig):
+def _create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
     """Create a vega title object for a spatialdata view configuration.
 
     Note that not all field values as obtained from matplotlib are supported by the official
@@ -278,19 +294,20 @@ def _create_title_config(ax, fig):
     title_obj = ax.title
     title_font = title_obj.get_fontproperties()
 
-    title_config = {"text": title_text,
-                    "orient": "top", # there is not really a nice conversion here of matplotlib to vega
-                    "anchor": VegaAlignment.from_matplotlib(title_obj.get_horizontalalignment()),
-                    "baseline": title_obj.get_va(),
-                    "color": title_obj.get_color(),
-                    "font": title_obj.get_fontname(),
-                    "fontSize": (title_font.get_size() * fig.dpi) / 72,
-                    "fontStyle": title_obj.get_fontstyle(),
-                    "fontWeight": title_font.get_weight(),
-                    }
-    return title_config
+    return {
+        "text": title_text,
+        "orient": "top",  # there is not really a nice conversion here of matplotlib to vega
+        "anchor": VegaAlignment.from_matplotlib(title_obj.get_horizontalalignment()),
+        "baseline": title_obj.get_va(),
+        "color": title_obj.get_color(),
+        "font": title_obj.get_fontname(),
+        "fontSize": (title_font.get_size() * fig.dpi) / 72,
+        "fontStyle": title_obj.get_fontstyle(),
+        "fontWeight": title_font.get_weight(),
+    }
 
-def _create_axis_block(ax, axis_scales_block, dpi):
+
+def _create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: float) -> list[dict[str, Any]]:
     axis_array = []
     for scale in axis_scales_block:
         axis_config = {}
@@ -305,7 +322,7 @@ def _create_axis_block(ax, axis_scales_block, dpi):
         axis_config["orient"] = axis.get_label_position()
 
         axis_line_props = ax.spines[axis_config["orient"]].properties()
-        axis_config["domain"] = axis_line_props['visible'] # domain is whether axis line should be visible.
+        axis_config["domain"] = axis_line_props["visible"]  # domain is whether axis line should be visible.
         axis_config["domainOpacity"] = axis_line_props["alpha"] if axis_line_props["alpha"] else 1
         axis_config["domainColor"] = mcolors.to_hex(axis_line_props["edgecolor"])[:-2]
         axis_config["domainWidth"] = (axis_line_props["linewidth"] * dpi) / 72
@@ -313,15 +330,15 @@ def _create_axis_block(ax, axis_scales_block, dpi):
 
         # making the assumption here that all gridlines look the same
         if axis_config["grid"]:
-            axis_config["gridOpacity"] = axis_props["gridlines"][0].properties()['alpha']
-            axis_config["gridCap"] = axis_props["gridlines"][0].properties()['dash_capstyle']
-            grid_color = float(axis_props["gridlines"][0].properties()['markeredgecolor'])
-            axis_config["gridColor"] = mcolors.to_hex([grid_color]*3)
+            axis_config["gridOpacity"] = axis_props["gridlines"][0].properties()["alpha"]
+            axis_config["gridCap"] = axis_props["gridlines"][0].properties()["dash_capstyle"]
+            grid_color = float(axis_props["gridlines"][0].properties()["markeredgecolor"])
+            axis_config["gridColor"] = mcolors.to_hex([grid_color] * 3)
             axis_config["gridWidth"] = (axis_props["gridlines"][0].properties()["markeredgewidth"] * dpi) / 72
-        axis_config["labelFont"] = axis_props['majorticklabels'][0].get_fontname()
-        axis_config["labelFontSize"] = (axis_props['majorticklabels'][0].get_size() * dpi) / 72
-        axis_config["labelFontStyle"] = axis_props['majorticklabels'][0].get_fontstyle()
-        axis_config["labelFontWeight"] = axis_props['majorticklabels'][0].get_fontweight()
+        axis_config["labelFont"] = axis_props["majorticklabels"][0].get_fontname()
+        axis_config["labelFontSize"] = (axis_props["majorticklabels"][0].get_size() * dpi) / 72
+        axis_config["labelFontStyle"] = axis_props["majorticklabels"][0].get_fontstyle()
+        axis_config["labelFontWeight"] = axis_props["majorticklabels"][0].get_fontweight()
         axis_config["tickCount"] = len(axis_props["ticklocs"])
         if axis_config["tickCount"] != 0:
             tick_props = axis_props["ticklines"][0].properties()
@@ -330,8 +347,10 @@ def _create_axis_block(ax, axis_scales_block, dpi):
             if axis_config["ticks"] and axis_config["tickOpacity"] != 0:
                 axis_config["tickColor"] = mcolors.to_hex(tick_props["color"])
                 axis_config["tickCap"] = tick_props["dash_capstyle"]
-                axis_config["tickWidth"] = (tick_props['linewidth'] * dpi) / 72
-                axis_config["tickSize"] = (tick_props['markersize'] * dpi) / 72 #also marker edge width, but vega doesn't have an equivalent for that.
+                axis_config["tickWidth"] = (tick_props["linewidth"] * dpi) / 72
+                axis_config["tickSize"] = (
+                    tick_props["markersize"] * dpi
+                ) / 72  # also marker edge width, but vega doesn't have an equivalent for that.
 
         label = axis_props["label_text"]
         if label == "":
@@ -351,7 +370,7 @@ def _create_axis_block(ax, axis_scales_block, dpi):
     return axis_array
 
 
-def create_viewconfig(sdata, fig_params, legend_params, cs):
+def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: Any, cs: str) -> dict[str, Any]:
     fig = fig_params.fig
     ax = fig_params.ax
     data_block = _create_data_configs(sdata.plotting_tree, ax, cs, sdata._path)
@@ -360,14 +379,13 @@ def create_viewconfig(sdata, fig_params, legend_params, cs):
     axis_array = _create_axis_block(ax, axis_scales_block, fig.dpi)
 
     # TODO: check why attrs does not respect ordereddict when writing sdata
-    viewconfig = OrderedDict()
-    viewconfig["$schema"] = "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-    viewconfig["height"] = fig.get_figheight() * fig.dpi # matplotlib uses inches, but vega uses absolute pixels
-    viewconfig["width"] = fig.get_figwidth() * fig.dpi
-    viewconfig["padding"] = _create_padding_object(fig)
-    viewconfig["title"] = _create_title_config(ax, fig)
-    viewconfig["data"] = data_block
-    viewconfig["scales"] = axis_scales_block
-    viewconfig["axes"] = axis_array
-
-    print()
+    return {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": fig.get_figheight() * fig.dpi,  # matplotlib uses inches, but vega uses absolute pixels
+        "width": fig.get_figwidth() * fig.dpi,
+        "padding": _create_padding_object(fig),
+        "title": _create_title_config(ax, fig),
+        "data": data_block,
+        "scales": axis_scales_block,
+        "axes": axis_array,
+    }

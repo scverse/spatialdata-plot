@@ -51,9 +51,10 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
         cropped_blobs = sdata_blobs.query.bounding_box(
             axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[400, 400], target_coordinate_system="global"
         )
+        cropped_blobs._sdata = sdata_blobs
         cropped_blobs.pl.render_images().pl.show()
 
-    def test_plot_correct_plot_after_transformations(self):
+    def test_plot_correct_plot_after_transformations(self, sdata_empty):
         # inspired by https://github.com/scverse/spatialdata/blob/ef0a2dc7f9af8d4c84f15eec503177f1d08c3d46/tests/core/test_data_extent.py#L125
 
         circles = [Point(p) for p in [[0.5, 0.1], [0.9, 0.5], [0.5, 0.9], [0.1, 0.5]]]
@@ -98,6 +99,7 @@ class TestExtent(PlotTester, metaclass=PlotTesterMeta):
             },
             points={"points": points_df, "points_pi3": points_df, "points_pi4": points_df},
         )
+        sdata._sdata = sdata_empty
 
         for i in [3, 4]:
             theta = math.pi / i

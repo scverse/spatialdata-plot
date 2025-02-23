@@ -71,7 +71,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_circles_with_specified_outline_width(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1, outline_width=3.0).pl.show()
 
-    def test_plot_can_render_multipolygons(self):
+    def test_plot_can_render_multipolygons(self, sdata_empty):
         def _make_multi():
             hole = MultiPolygon(
                 [(((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)), [((0.2, 0.2), (0.2, 0.8), (0.8, 0.8), (0.8, 0.2))])]
@@ -92,6 +92,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             return sd_polygons
 
         sdata = SpatialData(shapes={"p": _make_multi()})
+        sdata._sdata = sdata_empty
         adata = anndata.AnnData(pd.DataFrame({"p": ["hole", "overlap", "square", "circle"]}))
         adata.obs.loc[:, "region"] = "p"
         adata.obs.loc[:, "val"] = [0, 1, 2, 3]
@@ -104,6 +105,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         blob["table"].obs["region"] = "blobs_polygons"
         blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         blob.shapes["blobs_polygons"]["value"] = [1, 10, 1, 20, 1]
+        blob._sdata = sdata_blobs
         blob.pl.render_shapes(
             element="blobs_polygons",
             color="value",
@@ -166,6 +168,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         cropped_blob = blob.query.bounding_box(
             axes=["x", "y"], min_coordinate=[100, 100], max_coordinate=[300, 300], target_coordinate_system="global"
         )
+        cropped_blob._sdata = sdata_blobs
         cropped_blob.pl.render_shapes().pl.show()
 
     def test_plot_can_plot_with_annotation_despite_random_shuffling(self, sdata_blobs: SpatialData):
@@ -213,6 +216,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             filter_table=True,
         )
 
+        sdata_cropped._sdata = sdata_blobs
         sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.show()
 
     def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
@@ -257,6 +261,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             filter_table=True,
         )
 
+        sdata_cropped._sdata = sdata_blobs
         sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.render_shapes(
             "blobs_polygons", color="annotation"
         ).pl.show()

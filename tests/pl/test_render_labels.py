@@ -120,6 +120,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             sdata_blobs.pl.render_labels(label, color="channel_1_sum", table="other_table", scale="scale0").pl.show(
                 ax=axs[0], title="ch_1_sum", colorbar=False
             )
+            sdata_blobs.pl.render_labels(label, color="channel_1_sum", table="other_table", scale="scale0").pl.show(
+                ax=axs[0], title="ch_1_sum", colorbar=False
+            )
             sdata_blobs.pl.render_labels(label, color="channel_2_sum", table="other_table", scale="scale0").pl.show(
                 ax=axs[1], title="ch_2_sum", colorbar=False
             )
@@ -130,6 +133,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         # we're modifying the data here, so we need an independent copy
         sdata_blobs_local = deepcopy(sdata_blobs)
 
+        sdata_blobs_local._sdata = sdata_blobs
         _make_tablemodel_with_categorical_labels(sdata_blobs_local, label)
 
     def test_plot_two_calls_with_coloring_result_in_two_colorbars(self, sdata_blobs: SpatialData):
@@ -141,6 +145,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
         table = table[:, ~table.var_names.isin(["channel_0_sum"])]
         sdata_blobs_local["multi_table"] = table
+        sdata_blobs_local._sdata = sdata_blobs
         sdata_blobs_local.pl.render_labels("blobs_labels", color="channel_0_sum", table_name="table").pl.render_labels(
             "blobs_multiscale_labels", color="channel_1_sum", table_name="multi_table"
         ).pl.show()
