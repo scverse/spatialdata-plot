@@ -166,6 +166,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         temp.loc[195, "y"] = 159
         temp.loc[195, "instance_id"] = 13
         blob["blobs_points"] = PointsModel.parse(dask.dataframe.from_pandas(temp, 1), coordinates={"x": "x", "y": "y"})
+        blob._sdata = sdata_blobs
         blob.pl.render_points(
             element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
         ).pl.show()
@@ -190,7 +191,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
         ).pl.show(dpi=200)
 
-    def test_plot_points_transformed_ds_agrees_with_mpl(self):
+    def test_plot_points_transformed_ds_agrees_with_mpl(self, sdata_empty):
         sdata = SpatialData(
             points={
                 "points1": PointsModel.parse(
@@ -199,6 +200,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
                 )
             },
         )
+        sdata._sdata = sdata_empty
         sdata.pl.render_points("points1", method="matplotlib", size=50, color="lightgrey").pl.render_points(
             "points1", method="datashader", size=10, color="red"
         ).pl.show()
