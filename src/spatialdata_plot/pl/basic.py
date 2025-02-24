@@ -953,7 +953,9 @@ class PlotAccessor:
             wants_shapes = False
             wanted_elements: list[str] = []
 
-            for cmd, params in render_cmds:
+            for prefix, cmd_params in enumerate(render_cmds):
+                cmd, params = cmd_params
+                prefix += 1
                 # We create a copy here as the wanted elements can change from one cs to another.
                 params_copy = deepcopy(params)
                 if cmd == "render_images" and has_images:
@@ -976,6 +978,7 @@ class PlotAccessor:
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             rasterize=rasterize,
+                            render_count=prefix,
                         )
 
                 elif cmd == "render_shapes" and has_shapes:

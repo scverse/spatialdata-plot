@@ -722,6 +722,7 @@ def _render_images(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     rasterize: bool,
+    render_count: int,
 ) -> None:
 
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -794,6 +795,9 @@ def _render_images(
         cmap._init()
         cmap._lut[:, -1] = render_params.alpha
 
+        # Required for viewconfig
+        sdata.plotting_tree[f"{render_count}_render_images"].cmap_params.cmap = cmap
+
         _ax_show_and_transform(layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder)
 
         if legend_params.colorbar:
@@ -854,6 +858,8 @@ def _render_images(
                 raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
+
+            sdata.plotting_tree[f"{render_count}_render_images"].cmap_params.cmap = channel_cmaps
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
             colored = colored[:, :, :3]
 
