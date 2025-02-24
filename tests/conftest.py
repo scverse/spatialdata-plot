@@ -422,7 +422,6 @@ def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
             old_config = spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS
             spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = True
         fn(self, *args, **kwargs)
-        self.compare(fig_name)
 
         if sdata is not None:
             spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = old_config
@@ -438,6 +437,8 @@ def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
         warnings.warn(
             f"No viewconfig found in {keys_to_check} object. Skipping viewconfig generation.", UserWarning, stacklevel=2
         )
+
+        self.compare(fig_name)
 
     if not callable(fn):
         raise TypeError(f"Expected a `callable` for class `{clsname}`, found `{type(fn).__name__}`.")
