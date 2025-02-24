@@ -2201,7 +2201,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
