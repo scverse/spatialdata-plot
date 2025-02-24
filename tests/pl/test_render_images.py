@@ -70,6 +70,10 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         norm = Normalize(vmin=0, vmax=0.4, clip=True)
         sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()
 
+    def test_plot_can_pass_normalize_clip_true_list_cmap(self, sdata_blobs: SpatialData):
+        norm = Normalize(vmin=0, vmax=0.4, clip=True)
+        sdata_blobs.pl.render_images(element="blobs_image", cmap=["seismic", "Reds", "Blues"], norm=norm).pl.show()
+
     def test_plot_can_pass_normalize_clip_False(self, sdata_blobs: SpatialData):
         norm = Normalize(vmin=0, vmax=0.4, clip=False)
         sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()

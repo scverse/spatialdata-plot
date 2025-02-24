@@ -101,23 +101,36 @@ def _create_padding_object(fig: Figure) -> dict[str, float]:
     }
 
 
-def _create_colorscale_image(cmap_params: CmapParams) -> dict[str, Any]:
-    cmap = cmap_params.cmap
-    if isinstance(cmap, mcolors.ListedColormap):
-        type_scale = "ordinal"
-        if cmap.name == "from_list":  # default name when cmap is custom.
-            pass
-        else:
-            color_range = {"scheme": cmap.name, "count": cmap.N}
+def _create_colorscale_image(cmap_params: CmapParams) -> tuple[list[dict[str, Any]], float]:
+    cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
+    color_scale_array: list[dict[str, Any]] = []
+    for cmap in cmaps:
+        if isinstance(cmap, mcolors.ListedColormap):
+            type_scale = "ordinal"
+            if cmap.name == "from_list":  # default name when cmap is custom.
+                # TODO: complete this for all types of cmaps
+                pass
+            else:
+                color_range = {"scheme": cmap.name, "count": cmap.N}
+        elif isinstance(cmap, mcolors.LinearSegmentedColormap):
+            # image_alpha = cmap._lut[0][-1]
+            type_scale = "linear"
+            if cmap.name == "custom_colormap":
+                pass
+            else:
+                color_range = {"scheme": cmap.name, "count": cmap.N}
+        color_scale_object = {
+            "name": f"color_{str(uuid4())}",
+            "type": type_scale,
+            # The domain in matplotlib seems to be 0-1 always for images, but for example for napari should be
+            # interpreted as relative
+            "domain": [0, 1],
+            "range": color_range,
+        }
 
-    return {
-        "name": f"color_{str(uuid4())}",
-        "type": type_scale,
-        # The domain in matplotlib seems to be 0-1 always for images, but for example for napari should be
-        # interpreted as relative
-        "domain": [0, 1],
-        "range": color_range,
-    }
+        color_scale_array.append(color_scale_object)
+
+    return color_scale_array
 
 
 def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
@@ -139,7 +152,7 @@ def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
 
 def _create_derived_data_block(
     ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Create vega like data object for SpatialData elements.
 
     Each object for a SpatialData element contains an additional transform that
@@ -162,7 +175,7 @@ def _create_derived_data_block(
     """
     data_object: dict[str, Any] = {}
     marks_object: dict[str, Any] = {}
-    color_scale_object: dict[str, Any] = {}
+    color_scale_array: list[dict[str, Any]] = []
 
     data_object["name"] = params.element + "_" + str(uuid4())
 
@@ -189,27 +202,37 @@ def _create_derived_data_block(
         data_object["transform"].append({"type": "filter_scale", "expr": multiscale})
         data_object["transform"].append({"type": "filter_channel", "expr": params.channel})
         # Use isinstance because of possible 0 value
-        if isinstance(vmin := params.cmap_params.norm.vmin, float) and isinstance(
-            vmax := params.cmap_params.norm.vmax, float
-        ):
+        norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
+        if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
 
-            if params.cmap_params.norm.clip:
+            if norm.clip:
                 formula = f"clamp((datum.value - {vmin}) / ({vmax} - {vmin}), 0, 1)"
             else:
                 formula = f"(datum.value - {vmin}) / ({vmax} - {vmin})"
             data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
 
-        color_scale_object = _create_colorscale_image(params.cmap_params)
+        color_scale_array = _create_colorscale_image(params.cmap_params)
 
-        marks_object = _create_raster_image_marks_object(
-            ax, call, params, data_object, call_count, color_scale_object["name"]
-        )
-    return data_object, marks_object, color_scale_object
+        marks_object = _create_raster_image_marks_object(ax, call, params, data_object, call_count, color_scale_array)
+    return data_object, marks_object, color_scale_array
 
 
 def _create_raster_image_marks_object(
-    ax: Axes, call: str, params: ImageRenderParams, data_object: dict[str, Any], call_count: int, scale_id: str
+    ax: Axes,
+    call: str,
+    params: ImageRenderParams,
+    data_object: dict[str, Any],
+    call_count: int,
+    color_scale_array: list[dict[str, Any]],
+    # image_alpha : float
 ) -> dict[str, Any]:
+    if len(color_scale_array) == 1:
+        fill_color = [{"scale": color_scale_array[0]["name"], "value": "intensity_value"}]
+    else:
+        fill_color = [
+            {"scale": color_scale["name"], "field": f"channel_{index}"}
+            for index, color_scale in enumerate(color_scale_array)
+        ]
 
     return {
         "type": "raster_image",
@@ -217,8 +240,8 @@ def _create_raster_image_marks_object(
         "zindex": ax.properties()["images"][call_count].zorder,
         "encode": {
             "enter": {
-                "opacity": {"value": ax.properties()["images"][call_count].properties()["alpha"]},
-                "fill": [{"scale": scale_id, "value": "intensity_value"}],
+                "opacity": {"value": params.alpha},
+                "fill": fill_color,
             }
         },
     }
@@ -251,7 +274,7 @@ def _create_data_configs(
     """
     data_array = []
     marks_array = []
-    color_scale_array = []
+    color_scale_array_full = []
     url = str(Path("sdata.zarr"))
 
     if sdata_path:
@@ -263,15 +286,15 @@ def _create_data_configs(
     counters = {"render_images": 0, "render_labels": 0, "render_points": 0, "render_shapes": 0}
     for call, params in plotting_tree.items():
         call = strip_call(call)
-        data_object, marks_object, color_scale_object = _create_derived_data_block(
+        data_object, marks_object, color_scale_array = _create_derived_data_block(
             ax, call, params, base_block["name"], cs, counters[call]
         )
         data_array.append(data_object)
         marks_array.append(marks_object)
-        color_scale_array.append(color_scale_object)
+        color_scale_array_full += color_scale_array
         counters[call] += 1
 
-    return data_array, marks_array, color_scale_array
+    return data_array, marks_array, color_scale_array_full
 
 
 def _create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
