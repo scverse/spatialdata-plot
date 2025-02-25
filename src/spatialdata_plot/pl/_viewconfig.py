@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,6 +10,7 @@ import matplotlib.colors as mcolors
 import spatialdata
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from spatialdata.models import get_table_keys
 
 from spatialdata_plot.pl.render_params import (
     CmapParams,
@@ -203,7 +203,7 @@ def _create_colorbar_legend(fig, color_scale_array):
     for col_config in color_scale_array:
         cbar = None
         for ax in axes:
-            cbar = getattr(ax.properties()["axes_locator"], "_cbar") if ax.properties()["axes_locator"] else None
+            cbar = getattr(ax.properties()["axes_locator"], "_cbar", None) if ax.properties()["axes_locator"] else None
             if not cbar:
                 continue
             if cbar.cmap.name != col_config["range"]["scheme"]:
@@ -259,7 +259,7 @@ def _create_colorbar_legend(fig, color_scale_array):
 
 
 def _create_derived_data_block(
-    fig, ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int
+    sdata, fig, ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int, table_id=None
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Create vega like data object for SpatialData elements.
 
@@ -322,13 +322,26 @@ def _create_derived_data_block(
 
         color_scale_array = _create_colorscale_image(params.cmap_params)
         legend_array = _create_colorbar_legend(fig, color_scale_array)
-        marks_object = _create_raster_image_marks_object(ax, call, params, data_object, call_count, color_scale_array)
+        marks_object = _create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
+    if "render_labels" in call and isinstance(params, LabelsRenderParams):
+        data_object["transform"].append({"type": "filter_scale", "expr": params.scale})
+    if table_id:
+        _, _, instance_key = get_table_keys(sdata[params.table_name])
+        data_object["transform"].append(
+            {
+                "type": "lookup",
+                "from": table_id,
+                "key": instance_key,
+                "fields": [params.color],
+                "as": ["id_color_map"],
+                "default": None,
+            }
+        )
     return data_object, marks_object, color_scale_array, legend_array
 
 
 def _create_raster_image_marks_object(
     ax: Axes,
-    call: str,
     params: ImageRenderParams,
     data_object: dict[str, Any],
     call_count: int,
@@ -361,8 +374,17 @@ def strip_call(s: str) -> str:
     return re.sub(r"^\d+_", "", s)
 
 
+def _create_table_data_object(table_name, base_uuid):
+    return {
+        "name": str(uuid4()),
+        "format": {"type": "spatialdata_table", "version": 0.1},
+        "source": base_uuid,
+        "transform": [{"type": "filter_element", "expr": table_name}],
+    }
+
+
 def _create_data_configs(
-    plotting_tree: OrderedDict[str, Params], fig, ax: Axes, cs: str, sdata_path: str
+    sdata: SpatialData, fig, ax: Axes, cs: str, sdata_path: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create the vega json array value to the data key.
 
@@ -394,11 +416,16 @@ def _create_data_configs(
     data_array.append(base_block)
 
     counters = {"render_images": 0, "render_labels": 0, "render_points": 0, "render_shapes": 0}
-    for call, params in plotting_tree.items():
+    for call, params in sdata.plotting_tree.items():
         call = strip_call(call)
+        table_id = None
+        if table := getattr(params, "table_name", None):
+            data_array.append(_create_table_data_object(table, base_block["name"]))
+            table_id = data_array[-1]["name"]
         data_object, marks_object, color_scale_array, legend_array = _create_derived_data_block(
-            fig, ax, call, params, base_block["name"], cs, counters[call]
+            sdata, fig, ax, call, params, base_block["name"], cs, counters[call], table_id
         )
+
         data_array.append(data_object)
         marks_array.append(marks_object)
         color_scale_array_full += color_scale_array
@@ -504,9 +531,7 @@ def _create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: f
 def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: Any, cs: str) -> dict[str, Any]:
     fig = fig_params.fig
     ax = fig_params.ax
-    data_array, marks_array, color_scale_array, legend_array = _create_data_configs(
-        sdata.plotting_tree, fig, ax, cs, sdata._path
-    )
+    data_array, marks_array, color_scale_array, legend_array = _create_data_configs(sdata, fig, ax, cs, sdata._path)
 
     scales_array = _create_axis_scale_block(ax)
     axis_array = _create_axis_block(ax, scales_array, fig.dpi)
