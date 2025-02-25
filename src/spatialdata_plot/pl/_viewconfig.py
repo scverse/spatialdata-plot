@@ -101,19 +101,51 @@ def _create_padding_object(fig: Figure) -> dict[str, float]:
     }
 
 
+def _get_colorbar_orient(ax, cbar):
+    """
+    Determine the Vega legend orientation based on the position of a Matplotlib colorbar relative to the main plot.
+
+    Parameters
+    ----------
+    ax: matplotlib.axes.Axes
+        The main plot axes containing the actual plotted data.
+    cbar : Colorbar
+        The matplotlib colorbar object.
+
+    Returns
+    -------
+    str
+        Vega `legend.orient` value ('top', 'bottom', 'left', 'right', or 'overlapping').
+    """
+    main_bbox = ax.get_position()  # Main plot bounding box
+    cbar_bbox = cbar.ax.get_position()  # Colorbar bounding box
+
+    if cbar_bbox.y1 <= main_bbox.y0:
+        return "bottom"  # Colorbar is below
+    if cbar_bbox.y0 >= main_bbox.y1:
+        return "top"  # Colorbar is above
+    if cbar_bbox.x1 <= main_bbox.x0:
+        return "left"  # Colorbar is to the left
+    if cbar_bbox.x0 >= main_bbox.x1:
+        return "right"  # Colorbar is to the right
+
+    return "overlapping"  # Unusual case
+
+
 def _create_colorscale_image(cmap_params: CmapParams) -> tuple[list[dict[str, Any]], float]:
     cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
+    cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
     color_scale_array: list[dict[str, Any]] = []
     for cmap in cmaps:
+        # TODO: check why listedcolormap is only passed on when we specify channel.
         if isinstance(cmap, mcolors.ListedColormap):
-            type_scale = "ordinal"
+            type_scale = "linear"
             if cmap.name == "from_list":  # default name when cmap is custom.
                 # TODO: complete this for all types of cmaps
                 pass
             else:
                 color_range = {"scheme": cmap.name, "count": cmap.N}
         elif isinstance(cmap, mcolors.LinearSegmentedColormap):
-            # image_alpha = cmap._lut[0][-1]
             type_scale = "linear"
             if cmap.name == "custom_colormap":
                 pass
@@ -150,8 +182,84 @@ def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
     }
 
 
+def _create_legend_title_config(title_obj, dpi):
+    title_props = title_obj.properties()
+    return {
+        "title": title_props["text"],
+        "titleOrient": "top",
+        "titleAlign": title_props["horizontalalignment"],
+        "titleBaseline": title_props["verticalalignment"],
+        "titleColor": title_props["color"],
+        "titleFont": title_props["fontname"],
+        "titleFontSize": (title_props["fontsize"] * dpi) / 72,
+        "titleFontStyle": title_props["fontstyle"],
+        "titleFontWeight": title_props["fontweight"],
+    }
+
+
+def _create_colorbar_legend(fig, color_scale_array):
+    legend_array: list[dict[str, Any]] = []
+    axes = fig.get_axes()
+    for col_config in color_scale_array:
+        cbar = None
+        for ax in axes:
+            cbar = getattr(ax.properties()["axes_locator"], "_cbar") if ax.properties()["axes_locator"] else None
+            if not cbar:
+                continue
+            if cbar.cmap.name != col_config["range"]["scheme"]:
+                cbar = None
+                continue
+            break
+
+        if not cbar:
+            continue
+
+        axis_props = cbar.ax.properties()
+        if cbar.orientation == "vertical":
+            gradient_length = cbar.ax.get_position().bounds[-1] * fig.get_figheight() * fig.dpi
+            label = axis_props["yticklabels"][0].properties()
+        else:
+            gradient_length = cbar.ax.get_position().bounds[-2] * fig.get_figwidth() * fig.dpi
+            label = axis_props["xticklabels"][0].properties()
+        if col_config["type"] == "linear":
+            legend_type = "gradient"
+        spine_outline = cbar.outline.properties()  # outline of the colorbar lining
+
+        stroke_color = mcolors.to_hex(spine_outline["facecolor"]) if spine_outline["facecolor"][-1] > 0 else None
+        legend_title_object = _create_legend_title_config(cbar.ax.title, fig.dpi)
+        # TODO: do we require padding? it is not obvious to get from matplotlib
+        legend_object = {
+            "type": legend_type,
+            "direction": cbar.orientation,
+            "orient": "none",  # Required in vega in order to use the x and y position
+            "fill": color_scale_array[0]["name"],
+            "fillColor": mcolors.to_hex(cbar.ax.get_facecolor()),
+            "gradientLength": gradient_length,
+            "gradientOpacity": cbar.cmap._lut[-0][-1],
+            "gradientThickness": (cbar.ax.get_position().bounds[2] * fig.dpi) / 72,
+            "gradientStrokeColor": stroke_color,
+            "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
+            "values": list(cbar.ax.get_yticks()),
+            "labelAlign": label["horizontalalignment"],
+            "labelColor": mcolors.to_hex(label["color"]),
+            "labelFont": label["fontname"],
+            "labelFontSize": (label["fontsize"] * fig.dpi) / 72,
+            "labelFontStyle": label["fontstyle"],
+            "labelFontWeight": label["fontweight"],
+            "legendX": cbar.ax.get_position().bounds[0] * fig.get_figwidth() * fig.dpi,
+            "legendY": (1 - (cbar.ax.get_position().bounds[1] + cbar.ax.get_position().bounds[-1]))
+            * fig.get_figheight()
+            * fig.dpi,
+            "zindex": axis_props["zorder"],
+        }
+        if legend_title_object["title"] != "":
+            legend_object.update(legend_title_object)
+        legend_array.append(legend_object)
+    return legend_array
+
+
 def _create_derived_data_block(
-    ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int
+    fig, ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Create vega like data object for SpatialData elements.
 
@@ -176,6 +284,7 @@ def _create_derived_data_block(
     data_object: dict[str, Any] = {}
     marks_object: dict[str, Any] = {}
     color_scale_array: list[dict[str, Any]] = []
+    legend_array: list[dict[str, Any]] = []
 
     data_object["name"] = params.element + "_" + str(uuid4())
 
@@ -212,9 +321,9 @@ def _create_derived_data_block(
             data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
 
         color_scale_array = _create_colorscale_image(params.cmap_params)
-
+        legend_array = _create_colorbar_legend(fig, color_scale_array)
         marks_object = _create_raster_image_marks_object(ax, call, params, data_object, call_count, color_scale_array)
-    return data_object, marks_object, color_scale_array
+    return data_object, marks_object, color_scale_array, legend_array
 
 
 def _create_raster_image_marks_object(
@@ -253,7 +362,7 @@ def strip_call(s: str) -> str:
 
 
 def _create_data_configs(
-    plotting_tree: OrderedDict[str, Params], ax: Axes, cs: str, sdata_path: str
+    plotting_tree: OrderedDict[str, Params], fig, ax: Axes, cs: str, sdata_path: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create the vega json array value to the data key.
 
@@ -275,6 +384,7 @@ def _create_data_configs(
     data_array = []
     marks_array = []
     color_scale_array_full = []
+    legend_array_full = []
     url = str(Path("sdata.zarr"))
 
     if sdata_path:
@@ -286,15 +396,16 @@ def _create_data_configs(
     counters = {"render_images": 0, "render_labels": 0, "render_points": 0, "render_shapes": 0}
     for call, params in plotting_tree.items():
         call = strip_call(call)
-        data_object, marks_object, color_scale_array = _create_derived_data_block(
-            ax, call, params, base_block["name"], cs, counters[call]
+        data_object, marks_object, color_scale_array, legend_array = _create_derived_data_block(
+            fig, ax, call, params, base_block["name"], cs, counters[call]
         )
         data_array.append(data_object)
         marks_array.append(marks_object)
         color_scale_array_full += color_scale_array
+        legend_array_full += legend_array
         counters[call] += 1
 
-    return data_array, marks_array, color_scale_array_full
+    return data_array, marks_array, color_scale_array_full, legend_array_full
 
 
 def _create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
@@ -393,23 +504,31 @@ def _create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: f
 def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: Any, cs: str) -> dict[str, Any]:
     fig = fig_params.fig
     ax = fig_params.ax
-    data_array, marks_array, color_scale_array = _create_data_configs(sdata.plotting_tree, ax, cs, sdata._path)
+    data_array, marks_array, color_scale_array, legend_array = _create_data_configs(
+        sdata.plotting_tree, fig, ax, cs, sdata._path
+    )
 
     scales_array = _create_axis_scale_block(ax)
     axis_array = _create_axis_block(ax, scales_array, fig.dpi)
 
+    scales = axis_array + color_scale_array if len(color_scale_array) > 0 else axis_array
     # TODO: check why attrs does not respect ordereddict when writing sdata
-    return {
+    viewconfig = {
         "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
         "height": fig.get_figheight() * fig.dpi,  # matplotlib uses inches, but vega uses absolute pixels
         "width": fig.get_figwidth() * fig.dpi,
         "padding": _create_padding_object(fig),
         "title": _create_title_config(ax, fig),
         "data": data_array,
-        "scales": axis_array + color_scale_array,
-        "axes": axis_array,
-        "marks": marks_array,
+        "scales": scales,
     }
+
+    viewconfig["axes"] = axis_array
+    if len(legend_array) > 0:
+        viewconfig["legend"] = legend_array
+    viewconfig["marks"] = marks_array
+
+    return viewconfig
 
 
 # def plotting_tree_dict_to_marks(plotting_tree_dict):
