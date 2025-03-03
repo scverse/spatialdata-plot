@@ -7,7 +7,7 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
@@ -68,17 +68,15 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_pass_normalize_clip_True(self, sdata_blobs: SpatialData):
         norm = Normalize(vmin=0.1, vmax=0.5, clip=True)
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm, cmap=cmap).pl.show()
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=0, norm=norm, cmap=_viridis_with_under_over()
+        ).pl.show()
 
     def test_plot_can_pass_normalize_clip_False(self, sdata_blobs: SpatialData):
         norm = Normalize(vmin=0.1, vmax=0.5, clip=False)
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm, cmap=cmap).pl.show()
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=0, norm=norm, cmap=_viridis_with_under_over()
+        ).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()

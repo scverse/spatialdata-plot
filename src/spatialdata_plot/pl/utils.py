@@ -2271,7 +2271,7 @@ def _get_transformation_matrix_for_datashader(
     return _get_datashader_trans_matrix_of_single_element(trans)
 
 
-def _datashader_shade(
+def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
     color_key: None | list[str] = None,

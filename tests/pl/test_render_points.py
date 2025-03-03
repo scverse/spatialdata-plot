@@ -14,7 +14,7 @@ from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequen
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
@@ -227,67 +227,51 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points("blobs_points", method="datashader", color="black", size=5).pl.show()
 
     def test_plot_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
-        sdata_blobs.pl.render_points(color="instance_id", size=40, norm=Normalize(3, 7, clip=True), cmap=cmap).pl.show()
+        sdata_blobs.pl.render_points(
+            color="instance_id", size=40, norm=Normalize(3, 7, clip=True), cmap=_viridis_with_under_over()
+        ).pl.show()
 
     def test_plot_can_use_norm_without_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
         sdata_blobs.pl.render_points(
-            color="instance_id", size=40, norm=Normalize(3, 7, clip=False), cmap=cmap
+            color="instance_id", size=40, norm=Normalize(3, 7, clip=False), cmap=_viridis_with_under_over()
         ).pl.show()
 
     def test_plot_datashader_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
         sdata_blobs.pl.render_points(
             color="instance_id",
             size=40,
             norm=Normalize(3, 7, clip=True),
-            cmap=cmap,
+            cmap=_viridis_with_under_over(),
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
 
     def test_plot_datashader_can_use_norm_without_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
         sdata_blobs.pl.render_points(
             color="instance_id",
             size=40,
             norm=Normalize(3, 7, clip=False),
-            cmap=cmap,
+            cmap=_viridis_with_under_over(),
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
 
     def test_plot_datashader_norm_vmin_eq_vmax_with_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
         sdata_blobs.pl.render_points(
             color="instance_id",
             size=40,
             norm=Normalize(5, 5, clip=True),
-            cmap=cmap,
+            cmap=_viridis_with_under_over(),
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
 
     def test_plot_datashader_norm_vmin_eq_vmax_without_clip(self, sdata_blobs: SpatialData):
-        cmap = matplotlib.colormaps["viridis"]
-        cmap.set_under("black")
-        cmap.set_over("grey")
         sdata_blobs.pl.render_points(
             color="instance_id",
             size=40,
             norm=Normalize(5, 5, clip=False),
-            cmap=cmap,
+            cmap=_viridis_with_under_over(),
             method="datashader",
             datashader_reduction="max",
         ).pl.show()
