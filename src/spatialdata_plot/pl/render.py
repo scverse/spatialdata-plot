@@ -263,8 +263,7 @@ def _render_shapes(
                 agg,
                 cmap=ds_cmap,
                 color_key=color_key,
-                # min_alpha=np.min([254, render_params.fill_alpha * 255]),
-                min_alpha=render_params.fill_alpha * 255,
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
             )
         elif aggregate_with_reduction is not None:  # to shut up mypy
             ds_cmap = render_params.cmap_params.cmap
@@ -278,8 +277,7 @@ def _render_shapes(
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
                 cmap=ds_cmap,
-                # min_alpha=np.min([254, render_params.fill_alpha * 255]),
-                min_alpha=render_params.fill_alpha * 255,
+                min_alpha=np.min([254, render_params.fill_alpha * 255]),
                 span=ds_span,
                 clip=norm.clip,
             )
@@ -297,8 +295,7 @@ def _render_shapes(
             ds_outlines = ds.tf.shade(
                 agg_outlines,
                 cmap=outline_color,
-                # min_alpha=np.min([254, render_params.outline_alpha * 255]),
-                min_alpha=render_params.outline_alpha * 255,
+                min_alpha=np.min([254, render_params.outline_alpha * 255]),
                 how="linear",
             )
 
@@ -628,8 +625,7 @@ def _render_points(
                 ds.tf.spread(agg, px=px),
                 cmap=color_vector[0],
                 color_key=color_key,
-                # min_alpha=np.min([254, render_params.alpha * 255]),
-                min_alpha=render_params.alpha * 255,
+                min_alpha=np.min([254, render_params.alpha * 255]),
             )
         else:
             spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
@@ -649,8 +645,7 @@ def _render_points(
                 cmap=ds_cmap,
                 span=ds_span,
                 clip=norm.clip,
-                # min_alpha=np.min([254, render_params.alpha * 255]),
-                min_alpha=render_params.alpha * 255,
+                min_alpha=np.min([254, render_params.alpha * 255]),
             )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
