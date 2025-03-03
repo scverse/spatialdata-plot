@@ -361,13 +361,15 @@ def _get_collection_shape(
             c = cmap(c)
         else:
             try:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
+                norm = colors.Normalize(vmin=np.nanmin(c), vmax=np.nanmax(c)) if norm is None else norm
             except ValueError as e:
                 raise ValueError(
                     "Could not convert values in the `color` column to float, if `color` column represents"
                     " categories, set the column to categorical dtype."
                 ) from e
-            c = cmap(norm(c))
+            # normalize only the not nan values, else the whole array would contain only nan values
+            c[~c.isnull()] = norm(c[~c.isnull()])
+            c = cmap(c)
 
     fill_c = ColorConverter().to_rgba_array(c)
     fill_c[..., -1] *= render_params.fill_alpha
@@ -769,6 +771,9 @@ def _set_color_source_vec(
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
+        # nan handling
+        color_vector = color_vector.add_categories(na_color)
+        color_vector[pd.isna(color_vector)] = na_color
 
         return color_source_vector, color_vector, True
 
