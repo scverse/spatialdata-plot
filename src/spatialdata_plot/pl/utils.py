@@ -305,7 +305,6 @@ def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, fl
 
 
 def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
-
     centroid = _get_centroid_of_pathpatch(pathpatch)
     vertices = pathpatch.get_path().vertices
     scaled_vertices = np.array([centroid + (vertex - centroid) * scale_factor for vertex in vertices])
@@ -677,7 +676,7 @@ def _get_colors_for_categorical_obs(
             palette = default_102
         else:
             palette = ["grey" for _ in range(len_cat)]
-            logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+            logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
     else:
         # raise error when user didn't provide the right number of colors in palette
         if isinstance(palette, list) and len(palette) != len(categories):
@@ -1654,7 +1653,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 if table_layer in sdata.tables[tname].layers:
                     if found_table:
                         raise ValueError(
-                            "Trying to guess 'table_name' based on 'table_layer', " "but found multiple matches."
+                            "Trying to guess 'table_name' based on 'table_layer', but found multiple matches."
                         )
                     found_table = True
 
@@ -1727,7 +1726,6 @@ def _validate_label_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1788,7 +1786,6 @@ def _validate_points_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1859,7 +1856,6 @@ def _validate_shape_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1896,7 +1892,6 @@ def _validate_shape_render_params(
 def _validate_col_for_column_table(
     sdata: SpatialData, element_name: str, col_for_color: str | None, table_name: str | None, labels: bool = False
 ) -> tuple[str | None, str | None]:
-
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:
@@ -2204,7 +2199,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"

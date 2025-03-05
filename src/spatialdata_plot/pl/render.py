@@ -730,7 +730,6 @@ def _render_images(
     legend_params: LegendParams,
     rasterize: bool,
 ) -> None:
-
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
