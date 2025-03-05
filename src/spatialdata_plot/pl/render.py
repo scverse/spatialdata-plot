@@ -264,7 +264,7 @@ def _render_shapes(
                 cmap=ds_cmap,
                 color_key=color_key,
                 min_alpha=np.min([254, render_params.fill_alpha * 255]),
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
         elif aggregate_with_reduction is not None:  # to shut up mypy
             ds_cmap = render_params.cmap_params.cmap
             # in case all elements have the same value X: we render them using cmap(0.0),
@@ -280,7 +280,7 @@ def _render_shapes(
                 min_alpha=np.min([254, render_params.fill_alpha * 255]),
                 span=ds_span,
                 clip=norm.clip,
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
         # shade outlines if needed
         outline_color = render_params.outline_params.outline_color
@@ -297,7 +297,7 @@ def _render_shapes(
                 cmap=outline_color,
                 min_alpha=np.min([254, render_params.outline_alpha * 255]),
                 how="linear",
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
@@ -325,6 +325,8 @@ def _render_shapes(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
+                # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
+                # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
                 vmin = norm.vmin - 0.5
                 vmax = norm.vmin + 0.5
             cax = ScalarMappable(
@@ -626,7 +628,7 @@ def _render_points(
                 cmap=color_vector[0],
                 color_key=color_key,
                 min_alpha=np.min([254, render_params.alpha * 255]),
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
         else:
             spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
             agg = ds.tf.spread(agg, px=px, how=spread_how)
@@ -646,7 +648,7 @@ def _render_points(
                 span=ds_span,
                 clip=norm.clip,
                 min_alpha=np.min([254, render_params.alpha * 255]),
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _ax_show_and_transform(
@@ -663,6 +665,8 @@ def _render_points(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
+                # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
+                # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
                 vmin = norm.vmin - 0.5
                 vmax = norm.vmin + 0.5
             cax = ScalarMappable(
