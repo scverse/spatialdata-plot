@@ -305,7 +305,6 @@ def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, fl
 
 
 def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
-
     centroid = _get_centroid_of_pathpatch(pathpatch)
     vertices = pathpatch.get_path().vertices
     scaled_vertices = np.array([centroid + (vertex - centroid) * scale_factor for vertex in vertices])
@@ -677,7 +676,7 @@ def _get_colors_for_categorical_obs(
             palette = default_102
         else:
             palette = ["grey" for _ in range(len_cat)]
-            logger.info("input has more than 103 categories. Uniform " "'grey' color will be used for all categories.")
+            logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
     else:
         # raise error when user didn't provide the right number of colors in palette
         if isinstance(palette, list) and len(palette) != len(categories):
@@ -1654,7 +1653,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 if table_layer in sdata.tables[tname].layers:
                     if found_table:
                         raise ValueError(
-                            "Trying to guess 'table_name' based on 'table_layer', " "but found multiple matches."
+                            "Trying to guess 'table_name' based on 'table_layer', but found multiple matches."
                         )
                     found_table = True
 
@@ -1727,7 +1726,6 @@ def _validate_label_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1788,7 +1786,6 @@ def _validate_points_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1859,7 +1856,6 @@ def _validate_shape_render_params(
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
-
         # ensure that the element exists in the SpatialData object
         _ = param_dict["sdata"][el]
 
@@ -1896,7 +1892,6 @@ def _validate_shape_render_params(
 def _validate_col_for_column_table(
     sdata: SpatialData, element_name: str, col_for_color: str | None, table_name: str | None, labels: bool = False
 ) -> tuple[str | None, str | None]:
-
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:
@@ -2023,6 +2018,7 @@ def _ax_show_and_transform(
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
     extent: list[float] | None = None,
+    norm: Normalize | None = None,
 ) -> matplotlib.image.AxesImage:
     # default extent in mpl:
     image_extent = [-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5]
@@ -2045,6 +2041,7 @@ def _ax_show_and_transform(
             alpha=alpha,
             zorder=zorder,
             extent=tuple(image_extent),
+            norm=norm,
         )
         im.set_transform(trans_data)
     else:
@@ -2053,6 +2050,7 @@ def _ax_show_and_transform(
             cmap=cmap,
             zorder=zorder,
             extent=tuple(image_extent),
+            norm=norm,
         )
         im.set_transform(trans_data)
     return im
@@ -2117,10 +2115,10 @@ def _get_extent_and_range_for_datashader_canvas(
 
 
 def _create_image_from_datashader_result(
-    ds_result: ds.transfer_functions.Image, factor: float, ax: Axes
+    ds_result: ds.transfer_functions.Image | np.ndarray[Any, np.dtype[np.uint8]], factor: float, ax: Axes
 ) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
-    rgba_image_data = ds_result.to_numpy().base
+    rgba_image_data = ds_result.copy() if isinstance(ds_result, np.ndarray) else ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
     rgba_image = Image2DModel.parse(
         rgba_image_data,
@@ -2266,3 +2264,51 @@ def _get_transformation_matrix_for_datashader(
             tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
         return tm
     return _get_datashader_trans_matrix_of_single_element(trans)
+
+
+def _datashader_map_aggregate_to_color(
+    agg: DataArray,
+    cmap: str | list[str] | ListedColormap,
+    color_key: None | list[str] = None,
+    min_alpha: float = 40,
+    span: None | list[float] = None,
+    clip: bool = True,
+) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
+    """ds.tf.shade() part, ensuring correct clipping behavior.
+
+    If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results.
+    This ensures the correct clipping behavior, because else datashader would always automatically clip.
+    """
+    if not clip and isinstance(cmap, Colormap) and span is not None:
+        # in case we use datashader together with a Normalize object where clip=False
+        # why we need this is documented in https://github.com/scverse/spatialdata-plot/issues/372
+        agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
+        img_in = ds.tf.shade(
+            agg_in,
+            cmap=cmap,
+            span=(span[0], span[1]),
+            how="linear",
+            color_key=color_key,
+            min_alpha=min_alpha,
+        )
+
+        agg_under = agg.where(agg < span[0])
+        img_under = ds.tf.shade(
+            agg_under, cmap=[to_hex(cmap.get_under())[:7]], min_alpha=min_alpha, color_key=color_key
+        )
+
+        agg_over = agg.where(agg > span[1])
+        img_over = ds.tf.shade(agg_over, cmap=[to_hex(cmap.get_over())[:7]], min_alpha=min_alpha, color_key=color_key)
+
+        # stack the 3 arrays manually: go from under, through in to over and always overlay the values where alpha=0
+        stack = img_under.to_numpy().base
+        if stack is None:
+            stack = img_in.to_numpy().base
+        else:
+            stack[stack[:, :, 3] == 0] = img_in.to_numpy().base[stack[:, :, 3] == 0]
+        img_over = img_over.to_numpy().base
+        if img_over is not None:
+            stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
+        return stack
+
+    return ds.tf.shade(agg, cmap=cmap, color_key=color_key, min_alpha=min_alpha, span=span, how="linear")
