@@ -677,6 +677,7 @@ def _render_points(
             alpha=render_params.alpha,
             transform=trans_data,
             zorder=render_params.zorder,
+            plotnonfinite=True,  # nan points should be rendered as well
         )
         cax = ax.add_collection(_cax)
         if update_parameters:
