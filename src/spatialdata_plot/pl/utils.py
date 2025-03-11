@@ -797,15 +797,25 @@ def _map_color_seg(
 
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
-        if np.any(color_source_vector.isna()):
-            cell_id[color_source_vector.isna()] = 0
+
+        # TODO: remove
+        # in seg, the value 0 depicts the background, so this leads to the bg being mapped to the NaN color
+        # the actual label(s) with na in the color_source_vector don't have their id in cell_id anymore, so they're
+        # mapped to nothing! => would look like background
+        # if np.any(color_source_vector.isna()):
+        # cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        # normalize only the not nan values, else the whole array would contain only nan values
+        normed_color_vector = color_vector.copy()
+        normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
+            normed_color_vector[~np.isnan(normed_color_vector)]
+        )
+        cols = cmap_params.cmap(normed_color_vector)
         val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors
