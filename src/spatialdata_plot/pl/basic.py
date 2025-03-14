@@ -1044,6 +1044,7 @@ class PlotAccessor:
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             rasterize=rasterize,
+                            render_count=prefix,
                         )
 
                 if title is None:

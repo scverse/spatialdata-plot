@@ -106,7 +106,7 @@ def _render_shapes(
         sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
 
     # get color vector (categorical or continuous)
-    color_source_vector, color_vector, _ = _set_color_source_vec(
+    color_source_vector, color_vector, _, color_mapping = _set_color_source_vec(
         sdata=sdata_filt,
         element=sdata_filt[element],
         element_name=element,
@@ -887,6 +887,7 @@ def _render_labels(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     rasterize: bool,
+    render_count: int,
 ) -> None:
     element = render_params.element
     table_name = render_params.table_name
@@ -941,7 +942,7 @@ def _render_labels(
 
     _, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
-    color_source_vector, color_vector, categorical = _set_color_source_vec(
+    color_source_vector, color_vector, categorical, color_mapping = _set_color_source_vec(
         sdata=sdata_filt,
         element=label,
         element_name=element,
@@ -955,7 +956,7 @@ def _render_labels(
     )
 
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
-        labels = _map_color_seg(
+        labels, variable_type = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
             color_vector=color_vector,
@@ -978,7 +979,7 @@ def _render_labels(
         )
         _cax.set_transform(trans_data)
         cax = ax.add_image(_cax)
-        return cax  # noqa: RET504
+        return cax, variable_type  # noqa: RET504
 
     # default case: no contour, just fill
     # since contour_px is passed to skimage.morphology.erosion to create the contour,
@@ -987,12 +988,12 @@ def _render_labels(
     if (render_params.fill_alpha > 0.0 and render_params.outline_alpha == 0.0) or (
         render_params.fill_alpha == render_params.outline_alpha
     ):
-        cax = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
+        cax, variable_type = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
         alpha_to_decorate_ax = render_params.fill_alpha
 
     # outline-only case
     elif render_params.fill_alpha == 0.0 and render_params.outline_alpha > 0.0:
-        cax = _draw_labels(
+        cax, variable_type = _draw_labels(
             seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
         )
         alpha_to_decorate_ax = render_params.outline_alpha
@@ -1000,10 +1001,10 @@ def _render_labels(
     # pretty case: both outline and infill
     elif render_params.fill_alpha > 0.0 and render_params.outline_alpha > 0.0:
         # first plot the infill ...
-        cax_infill = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
+        cax_infill, _ = _draw_labels(seg_erosionpx=None, seg_boundaries=False, alpha=render_params.fill_alpha)
 
         # ... then overlay the contour
-        cax_contour = _draw_labels(
+        cax_contour, variable_type = _draw_labels(
             seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
         )
 
@@ -1013,7 +1014,8 @@ def _render_labels(
 
     else:
         raise ValueError("Parameters 'fill_alpha' and 'outline_alpha' cannot both be 0.")
-
+    variable_type = color_mapping if variable_type == "categorical" else variable_type
+    sdata.plotting_tree[f"{render_count}_render_labels"].colortype = variable_type
     _ = _decorate_axs(
         ax=ax,
         cax=cax,

@@ -131,12 +131,30 @@ def _get_colorbar_orient(ax, cbar):
 
     return "overlapping"  # Unusual case
 
+def _create_random_colorscale(data_id, field):
+    return [{
+        "name": f"color_{str(uuid4())}",
+        "type": "ordinal",
+        "domain": {"data": data_id, "field": field},
+        "range": ["random"], # TODO: decide how to better do this to simulate label2rgb
+    }]
 
-def _create_colorscale_image(cmap_params: CmapParams) -> tuple[list[dict[str, Any]], float]:
+
+def _create_categorical_colorscale(color_mapping) -> list[dict[str, Any]]:
+    """Create a categorical vega like color scale array."""
+    return [{
+        "name": f"color_{str(uuid4())}",
+        "type": "ordinal",
+        "domain": list(color_mapping.keys()),
+        "range": list(color_mapping.values()),
+    }]
+
+
+def _create_colorscale_image(cmap_params: CmapParams, data_id, field) -> tuple[list[dict[str, Any]], float]:
     cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
     cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
     color_scale_array: list[dict[str, Any]] = []
-    for cmap in cmaps:
+    for index, cmap in enumerate(cmaps):
         # TODO: check why listedcolormap is only passed on when we specify channel.
         if isinstance(cmap, mcolors.ListedColormap):
             type_scale = "linear"
@@ -151,12 +169,14 @@ def _create_colorscale_image(cmap_params: CmapParams) -> tuple[list[dict[str, An
                 pass
             else:
                 color_range = {"scheme": cmap.name, "count": cmap.N}
+        if isinstance(field, (int, list)):
+            field = f"channel_{index}"
+        if not field:
+            field = "value"
         color_scale_object = {
             "name": f"color_{str(uuid4())}",
             "type": type_scale,
-            # The domain in matplotlib seems to be 0-1 always for images, but for example for napari should be
-            # interpreted as relative
-            "domain": [0, 1],
+            "domain": {"data": data_id, "field": field},
             "range": color_range,
         }
 
@@ -195,6 +215,25 @@ def _create_legend_title_config(title_obj, dpi):
         "titleFontStyle": title_props["fontstyle"],
         "titleFontWeight": title_props["fontweight"],
     }
+
+
+def _create_categorical_legend(fig, color_scale_array):
+    legend_array: list[dict[str, Any]] = []
+    ax = fig.get_axes()[0]
+    legend = ax.legend()
+
+    for color_object in color_scale_array:
+        fill_color = legend.get_frame().get_facecolor()
+        legend_object = {
+            "type": "discrete",
+            "direction": "horizontal" if legend._ncols == 0 else "vertical",
+            "fill": color_object["name"],
+            "orient": "none",
+            "columns": legend._ncols,
+            "columnPadding":
+            "fillColor": fill_color,
+            }
+
 
 
 def _create_colorbar_legend(fig, color_scale_array):
@@ -257,6 +296,32 @@ def _create_colorbar_legend(fig, color_scale_array):
         legend_array.append(legend_object)
     return legend_array
 
+def _add_norm_transform(params, data_object):
+    norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
+    if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
+
+        if norm.clip:
+            formula = f"clamp((datum.value - {vmin}) / ({vmax} - {vmin}), 0, 1)"
+        else:
+            formula = f"(datum.value - {vmin}) / ({vmax} - {vmin})"
+        data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
+    return data_object
+
+def _add_table_lookup(sdata, params, data_object, table_id):
+    if table_id:
+        _, _, instance_key = get_table_keys(sdata[params.table_name])
+        data_object["transform"].append(
+            {
+                "type": "lookup",
+                "from": table_id,
+                "key": instance_key,
+                "fields": ["instance_ids"],
+                "values": [params.color],
+                "as": [params.color],
+                "default": None,
+            }
+        )
+    return data_object
 
 def _create_derived_data_block(
     sdata, fig, ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int, table_id=None
@@ -293,7 +358,6 @@ def _create_derived_data_block(
         data_object["format"] = {"type": "spatialdata_image", "version": 0.1}
     elif "render_labels" in call:
         data_object["format"] = {"type": "spatialdata_label", "version": 0.1}
-        marks_object = {"a": 5}
     elif "render_points" in call:
         data_object["format"] = {"type": "spatialdata_point", "version": 0.1}
         marks_object = {"a": 5}
@@ -311,32 +375,30 @@ def _create_derived_data_block(
         data_object["transform"].append({"type": "filter_scale", "expr": multiscale})
         data_object["transform"].append({"type": "filter_channel", "expr": params.channel})
         # Use isinstance because of possible 0 value
-        norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
-        if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
+        data_object = _add_norm_transform(params, data_object)
 
-            if norm.clip:
-                formula = f"clamp((datum.value - {vmin}) / ({vmax} - {vmin}), 0, 1)"
-            else:
-                formula = f"(datum.value - {vmin}) / ({vmax} - {vmin})"
-            data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
-
-        color_scale_array = _create_colorscale_image(params.cmap_params)
+        color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], params.channel)
         legend_array = _create_colorbar_legend(fig, color_scale_array)
         marks_object = _create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_labels" in call and isinstance(params, LabelsRenderParams):
         data_object["transform"].append({"type": "filter_scale", "expr": params.scale})
-    if table_id:
-        _, _, instance_key = get_table_keys(sdata[params.table_name])
-        data_object["transform"].append(
-            {
-                "type": "lookup",
-                "from": table_id,
-                "key": instance_key,
-                "fields": [params.color],
-                "as": ["id_color_map"],
-                "default": None,
-            }
-        )
+        data_object = _add_table_lookup(sdata, params, data_object, table_id)
+        if data_object["transform"][-1]["type"] == "lookup":
+            color_field = data_object["transform"][-1]["values"][0]
+        data_object = _add_norm_transform(params, data_object)
+        if params.colortype == "continuous":
+            color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], color_field)
+            legend_array = _create_colorbar_legend(fig, color_scale_array)
+        if params.colortype == "categorical":
+            print("yo")
+        if isinstance(params.colortype, dict):
+            color_scale_array = _create_categorical_colorscale(params.colortype)
+            legend_array = _create_categorical_legend(fig, color_scale_array)
+            print()
+        if params.colortype == "random":
+            color_scale_array = _create_random_colorscale(data_object["name"], "value")
+        marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
+
     return data_object, marks_object, color_scale_array, legend_array
 
 
@@ -346,10 +408,9 @@ def _create_raster_image_marks_object(
     data_object: dict[str, Any],
     call_count: int,
     color_scale_array: list[dict[str, Any]],
-    # image_alpha : float
 ) -> dict[str, Any]:
     if len(color_scale_array) == 1:
-        fill_color = [{"scale": color_scale_array[0]["name"], "value": "intensity_value"}]
+        fill_color = [{"scale": color_scale_array[0]["name"], "value": "value"}]
     else:
         fill_color = [
             {"scale": color_scale["name"], "field": f"channel_{index}"}
@@ -368,6 +429,49 @@ def _create_raster_image_marks_object(
         },
     }
 
+def _create_raster_label_marks_object(
+    ax: Axes,
+    params: ImageRenderParams,
+    data_object: dict[str, Any],
+    call_count: int,
+    color_scale_array: list[dict[str, Any]],
+) -> dict[str, Any]:
+
+    if params.colortype == "continuous":
+        color_col = color_scale_array[0]["domain"]["field"]
+        fill_color = [{"scale": color_scale_array[0]["name"], "value": color_col}]
+        encode_update = {
+            "fill": [
+                {
+                    "test": f"isValid(datum.value)",
+                    "scale": color_scale_array[0]["name"],
+                    "field": color_col
+                },
+                {
+                    "value": params.cmap_params.na_color}]}
+    if params.colortype == "random" or isinstance(params.colortype, dict):
+        fill_color = [{"scale": color_scale_array[0]["name"], "value": "value"}]
+    elif params.colortype.startswith("#"):
+        fill_color = [{"value": params.colortype}]
+
+    labels_object = {
+        "type": "raster_label",
+        "from": {"data": data_object["name"]},
+        "zindex": ax.properties()["images"][call_count].zorder,
+        "encode": {
+            "enter": {
+                "stroke": fill_color,
+                "fill": fill_color,
+                "fillOpacity": {"value": params.fill_alpha},
+                "strokeOpacity": {"value": params.outline_alpha},
+                "strokeWidth": {"value": params.contour_px}
+            }
+        },
+    }
+
+    if params.colortype == "continuous":
+        labels_object["encode"]["update"] = encode_update
+    return labels_object
 
 def strip_call(s: str) -> str:
     """Strip leading digit and underscore from call."""
@@ -482,7 +586,7 @@ def _create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: f
         axis_line_props = ax.spines[axis_config["orient"]].properties()
         axis_config["domain"] = axis_line_props["visible"]  # domain is whether axis line should be visible.
         axis_config["domainOpacity"] = axis_line_props["alpha"] if axis_line_props["alpha"] else 1
-        axis_config["domainColor"] = mcolors.to_hex(axis_line_props["edgecolor"])[:-2]
+        axis_config["domainColor"] = mcolors.to_hex(axis_line_props["edgecolor"])
         axis_config["domainWidth"] = (axis_line_props["linewidth"] * dpi) / 72
         axis_config["grid"] = axis_props["tick_params"]["gridOn"]
 
@@ -536,7 +640,7 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
     scales_array = _create_axis_scale_block(ax)
     axis_array = _create_axis_block(ax, scales_array, fig.dpi)
 
-    scales = axis_array + color_scale_array if len(color_scale_array) > 0 else axis_array
+    scales = scales_array + color_scale_array if len(color_scale_array) > 0 else scales_array
     # TODO: check why attrs does not respect ordereddict when writing sdata
     viewconfig = {
         "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",

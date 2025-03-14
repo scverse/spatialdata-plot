@@ -144,3 +144,4 @@ class LabelsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     zorder: int = 0
+    colortype: str | None = None

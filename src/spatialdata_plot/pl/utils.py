@@ -715,9 +715,10 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
+    color_mapping = None
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)
-        return color, color, False
+        return color, color, False, color_mapping
 
     # Figure out where to get the color from
     origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
@@ -750,7 +751,7 @@ def _set_color_source_vec(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
                 )
-            return None, color_source_vector, False
+            return None, color_source_vector, False, color_mapping
 
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
 
@@ -770,11 +771,11 @@ def _set_color_source_vec(
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
 
-        return color_source_vector, color_vector, True
+        return color_source_vector, color_vector, True, color_mapping
 
     logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
     color = np.full(sdata[table_name].n_obs, to_hex(na_color))
-    return color, color, False
+    return color, color, False, color_mapping
 
 
 def _map_color_seg(
@@ -790,18 +791,22 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
+    variable_type = None
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
         if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
+        variable_type = "categorical"
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
         cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        # TODO: ask why this mapping is even required if we map from 2 that are the same
         val_im = map_array(seg.copy(), cell_id, cell_id)
+        variable_type = "continuous"
     else:
         # Case C: User didn't specify any colors
         if color_source_vector is not None and (
@@ -813,6 +818,7 @@ def _map_color_seg(
             val_im = map_array(seg.copy(), cell_id, cell_id)
             RNG = default_rng(42)
             cols = RNG.random((len(color_vector), 3))
+            variable_type = "random"
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
             val_im = map_array(seg.copy(), cell_id, cell_id)
@@ -820,6 +826,7 @@ def _map_color_seg(
                 # we have hex colors
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
+                variable_type = color_vector[0][:-2]
             else:
                 cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
@@ -838,11 +845,11 @@ def _map_color_seg(
         if seg.shape[0] == 1:
             seg = np.squeeze(seg, axis=0)
         seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
-        return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
+        return np.dstack((seg_bound, np.where(val_im > 0, 1, 0))), variable_type  # add transparency here
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
-    return np.dstack((seg_im, val_im))
+    return np.dstack((seg_im, val_im)), variable_type
 
 
 def _generate_base_categorial_color_mapping(
