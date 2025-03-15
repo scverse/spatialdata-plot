@@ -509,7 +509,7 @@ def _render_points(
     # when user specified a single color, we emulate the form of `na_color` and use it
     default_color = color if col_for_color is None and color is not None else render_params.cmap_params.na_color
 
-    color_source_vector, color_vector, _ = _set_color_source_vec(
+    color_source_vector, color_vector, _, _ = _set_color_source_vec(
         sdata=sdata_filt,
         element=points,
         element_name=element,

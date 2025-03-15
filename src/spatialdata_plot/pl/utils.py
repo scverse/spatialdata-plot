@@ -714,7 +714,7 @@ def _set_color_source_vec(
     cmap_params: CmapParams | None = None,
     table_name: str | None = None,
     table_layer: str | None = None,
-) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
+) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool, dict[str, str] | None]:
     color_mapping = None
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)

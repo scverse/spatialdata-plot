@@ -24,6 +24,7 @@ from spatialdata_plot.pl.render_params import (
 Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams
 
 if TYPE_CHECKING:
+    from matplotlib.text import Text
     from spatialdata import SpatialData
 
 
@@ -101,56 +102,75 @@ def _create_padding_object(fig: Figure) -> dict[str, float]:
     }
 
 
-def _get_colorbar_orient(ax, cbar):
-    """
-    Determine the Vega legend orientation based on the position of a Matplotlib colorbar relative to the main plot.
+def _create_random_colorscale(data_id: str, field: str) -> list[dict[str, Any]]:
+    """Create a vega like colorscale for random colors.
+
+    This scale is used in case there is a label image for which the labels are visualized by random colors.
 
     Parameters
     ----------
-    ax: matplotlib.axes.Axes
-        The main plot axes containing the actual plotted data.
-    cbar : Colorbar
-        The matplotlib colorbar object.
+    data_id : str
+        The ID of the derived data object that pertains to a spatialdata label element.
+    field : str
+        The value of the derived datablock to which the color scale gets applied. Typically `value`.
 
     Returns
     -------
-    str
-        Vega `legend.orient` value ('top', 'bottom', 'left', 'right', or 'overlapping').
+    The array containing the vega like random color scale object.
     """
-    main_bbox = ax.get_position()  # Main plot bounding box
-    cbar_bbox = cbar.ax.get_position()  # Colorbar bounding box
-
-    if cbar_bbox.y1 <= main_bbox.y0:
-        return "bottom"  # Colorbar is below
-    if cbar_bbox.y0 >= main_bbox.y1:
-        return "top"  # Colorbar is above
-    if cbar_bbox.x1 <= main_bbox.x0:
-        return "left"  # Colorbar is to the left
-    if cbar_bbox.x0 >= main_bbox.x1:
-        return "right"  # Colorbar is to the right
-
-    return "overlapping"  # Unusual case
-
-def _create_random_colorscale(data_id, field):
-    return [{
-        "name": f"color_{str(uuid4())}",
-        "type": "ordinal",
-        "domain": {"data": data_id, "field": field},
-        "range": ["random"], # TODO: decide how to better do this to simulate label2rgb
-    }]
+    return [
+        {
+            "name": f"color_{str(uuid4())}",
+            "type": "ordinal",
+            "domain": {"data": data_id, "field": field},
+            "range": ["random"],  # TODO: decide how to better do this to simulate label2rgb
+        }
+    ]
 
 
-def _create_categorical_colorscale(color_mapping) -> list[dict[str, Any]]:
-    """Create a categorical vega like color scale array."""
-    return [{
-        "name": f"color_{str(uuid4())}",
-        "type": "ordinal",
-        "domain": list(color_mapping.keys()),
-        "range": list(color_mapping.values()),
-    }]
+def _create_categorical_colorscale(color_mapping: dict[str, str]) -> list[dict[str, Any]]:
+    """Create a categorical vega like color scale array.
+
+    Parameters
+    ----------
+    color_mapping : dict[str, str]
+        The mapping of categorical values to colors as hex string.
+
+    Returns
+    -------
+    The array containing the vega like ordinal color scale object.
+    """
+    return [
+        {
+            "name": f"color_{str(uuid4())}",
+            "type": "ordinal",
+            "domain": list(color_mapping.keys()),
+            "range": list(color_mapping.values()),
+        }
+    ]
 
 
-def _create_colorscale_image(cmap_params: CmapParams, data_id, field) -> tuple[list[dict[str, Any]], float]:
+def _create_colorscale_image(
+    cmap_params: list[CmapParams] | CmapParams, data_id: str, field: list[str] | list[int] | int | str | None
+) -> list[dict[str, Any]]:
+    """Create a vega like color scale array to be applied to an image.
+
+    This in particular creates a color scale array based on the colormaps that are part of the ImageRenderParams.
+
+    Parameters
+    ----------
+    cmap_params : CmapParams
+        The colormap parameters used to plot the spatialdata image element.
+    data_id: str
+        The ID of the derived data object that pertains to a spatialdata image element.
+    field:
+        The value of the derived datablock to which the color scale is applied. In case of an image
+        can be a channel or list of channels or the index thereof.
+
+    Returns
+    -------
+    The array containing the vega like color scale array.
+    """
     cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
     cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
     color_scale_array: list[dict[str, Any]] = []
@@ -169,7 +189,7 @@ def _create_colorscale_image(cmap_params: CmapParams, data_id, field) -> tuple[l
                 pass
             else:
                 color_range = {"scheme": cmap.name, "count": cmap.N}
-        if isinstance(field, (int, list)):
+        if isinstance(field, int | list):
             field = f"channel_{index}"
         if not field:
             field = "value"
@@ -202,7 +222,23 @@ def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
     }
 
 
-def _create_legend_title_config(title_obj, dpi):
+def _create_legend_title_config(title_obj: Text, dpi: float) -> dict[str, Any]:
+    """Create the vega like legend title object.
+
+    This creates the object containing information pertaining to the legend title. This will be added to the legend
+    object.
+
+    Parameters
+    ----------
+    title_obj : Text
+        The legend title object in matplotlib.
+    dpi: float
+        dots per inch used to convert fontsizes to from standard unit to size in pixels.
+
+    Returns
+    -------
+    The legend title object.
+    """
     title_props = title_obj.properties()
     return {
         "title": title_props["text"],
@@ -217,10 +253,25 @@ def _create_legend_title_config(title_obj, dpi):
     }
 
 
-def _create_categorical_legend(fig, color_scale_array):
+def _create_categorical_legend(fig: Figure, color_scale_array: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create vega like categorical legend array.
+
+    Parameters
+    ----------
+    fig : Figure
+        The matplotlib figure.
+    color_scale_array : list[dict[str, Any]]
+        The vega like color scale array for which the vega like legend array will be created.
+
+    Returns
+    -------
+    The vega like categorical legend array.
+    """
     legend_array: list[dict[str, Any]] = []
     ax = fig.get_axes()[0]
     legend = ax.legend()
+    legend_bbox_props = legend.get_frame().properties()
+    legend_bbox = legend.get_tightbbox()
 
     for color_object in color_scale_array:
         fill_color = legend.get_frame().get_facecolor()
@@ -230,28 +281,59 @@ def _create_categorical_legend(fig, color_scale_array):
             "fill": color_object["name"],
             "orient": "none",
             "columns": legend._ncols,
-            "columnPadding":
-            "fillColor": fill_color,
-            }
+            "columnPadding": (legend.columnspacing * fig.dpi) / 72,
+            "rowPadding": (legend.labelspacing * fig.dpi) / 72,
+            "fillColor": mcolors.to_hex(fill_color),
+            "padding": (legend.borderpad * fig.dpi) / 72,
+            "strokeColor": mcolors.to_hex(legend_bbox_props["edgecolor"]),
+            "strokeWidth": (legend_bbox_props["linewidth"] * fig.dpi)
+            / 72,  # Different from Vega as vega expects a vega scale here!
+            "labelAlign": legend.get_texts()[0].get_ha(),
+            "labelColor": mcolors.to_hex(legend.get_texts()[0].get_color()),
+            "labelFont": legend.get_texts()[0].get_fontname(),
+            "labelFontSize": (legend.get_texts()[0].get_fontsize() * fig.dpi) / 72,
+            "labelFontStyle": legend.get_texts()[0].get_fontstyle(),
+            "labelFontWeight": legend.get_texts()[0].get_fontweight(),
+            "labelOffset": (legend.handletextpad * fig.dpi) / 72,
+            "legendX": legend_bbox.bounds[0],
+            "legendY": fig.bbox.height - legend_bbox.bounds[1] - legend_bbox.bounds[3],
+        }
+
+        if legend.get_title().get_text() != "":
+            legend_title_object = _create_legend_title_config(legend.get_title(), fig.dpi)
+            legend_object.update(legend_title_object)
+
+        legend_array.append(legend_object)
+    return legend_array
 
 
+def _create_colorbar_legend(
+    fig: Figure, color_scale_array: list[dict[str, Any]], legend_count: int
+) -> list[dict[str, Any]]:
+    """Create the vega like legend array containing the colorbar information.
 
-def _create_colorbar_legend(fig, color_scale_array):
+    Parameters
+    ----------
+    fig : Figure
+        The matplotlib figure.
+    color_scale_array : list[dict[str, Any]]
+        The vega like color scale array for which the vega like legend array will be created.
+    legend_count : int
+        The number of already created legend objects.
+
+    Returns
+    -------
+    The vega like colorbar legend array.
+    """
     legend_array: list[dict[str, Any]] = []
-    axes = fig.get_axes()
-    for col_config in color_scale_array:
-        cbar = None
-        for ax in axes:
-            cbar = getattr(ax.properties()["axes_locator"], "_cbar", None) if ax.properties()["axes_locator"] else None
-            if not cbar:
-                continue
-            if cbar.cmap.name != col_config["range"]["scheme"]:
-                cbar = None
-                continue
-            break
+    cbars = []
+    for ax in fig.axes:
+        cbar = getattr(ax.properties()["axes_locator"], "_cbar", None) if ax.properties()["axes_locator"] else None
+        if cbar:
+            cbars.append(cbar)
 
-        if not cbar:
-            continue
+    for col_config in color_scale_array:
+        cbar = cbars[legend_count]
 
         axis_props = cbar.ax.properties()
         if cbar.orientation == "vertical":
@@ -285,10 +367,8 @@ def _create_colorbar_legend(fig, color_scale_array):
             "labelFontSize": (label["fontsize"] * fig.dpi) / 72,
             "labelFontStyle": label["fontstyle"],
             "labelFontWeight": label["fontweight"],
-            "legendX": cbar.ax.get_position().bounds[0] * fig.get_figwidth() * fig.dpi,
-            "legendY": (1 - (cbar.ax.get_position().bounds[1] + cbar.ax.get_position().bounds[-1]))
-            * fig.get_figheight()
-            * fig.dpi,
+            "legendX": cbar.ax.get_tightbbox().bounds[0],
+            "legendY": fig.bbox.height - cbar.ax.get_tightbbox().bounds[1] - cbar.ax.get_tightbbox().bounds[3],
             "zindex": axis_props["zorder"],
         }
         if legend_title_object["title"] != "":
@@ -296,7 +376,22 @@ def _create_colorbar_legend(fig, color_scale_array):
         legend_array.append(legend_object)
     return legend_array
 
-def _add_norm_transform(params, data_object):
+
+def _add_norm_transform(params: Params, data_object: dict[str, Any]) -> dict[str, Any]:
+    """Add a normalization transform to a vega like derived data object.
+
+    Parameters
+    ----------
+    params : Params
+        The render parameters used to plot the particular spatialdata element.
+    data_object: dict[str, Any]
+        The vega like derived data object.
+
+    Returns
+    -------
+    The vega like derived data object with an added normalization transform if normalization was defined
+    in the render parameters.
+    """
     norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
     if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
 
@@ -307,8 +402,28 @@ def _add_norm_transform(params, data_object):
         data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
     return data_object
 
-def _add_table_lookup(sdata, params, data_object, table_id):
-    if table_id:
+
+def _add_table_lookup(
+    sdata: SpatialData, params: Params, data_object: dict[str, Any], table_id: str | None
+) -> dict[str, Any]:
+    """Add a lookup transform to a vega like derived data object.
+
+    Parameters
+    ----------
+    sdata : SpatialData
+        The spatialdata object containing the table.
+    params: params
+        The render parameters used to plot the particular spatialdata element.
+    data_object: dict[str, Any]
+        The vega like derived data object.
+    table_id: str
+        The ID of the vega data object pertaining to the spatialdata table.
+
+    Returns
+    -------
+    The vega like derived data object with the added lookup transform.
+    """
+    if table_id and not isinstance(params, ImageRenderParams):
         _, _, instance_key = get_table_keys(sdata[params.table_name])
         data_object["transform"].append(
             {
@@ -323,9 +438,19 @@ def _add_table_lookup(sdata, params, data_object, table_id):
         )
     return data_object
 
+
 def _create_derived_data_block(
-    sdata, fig, ax: Axes, call: str, params: Params, base_uuid: str, cs: str, call_count: int, table_id=None
-) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    sdata: SpatialData,
+    fig: Figure,
+    ax: Axes,
+    call: str,
+    params: Params,
+    base_uuid: str,
+    cs: str,
+    call_count: int,
+    table_id: str | None = None,
+    legend_count: int = 0,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create vega like data object for SpatialData elements.
 
     Each object for a SpatialData element contains an additional transform that
@@ -378,7 +503,7 @@ def _create_derived_data_block(
         data_object = _add_norm_transform(params, data_object)
 
         color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], params.channel)
-        legend_array = _create_colorbar_legend(fig, color_scale_array)
+        legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
         marks_object = _create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_labels" in call and isinstance(params, LabelsRenderParams):
         data_object["transform"].append({"type": "filter_scale", "expr": params.scale})
@@ -388,13 +513,12 @@ def _create_derived_data_block(
         data_object = _add_norm_transform(params, data_object)
         if params.colortype == "continuous":
             color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], color_field)
-            legend_array = _create_colorbar_legend(fig, color_scale_array)
+            legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
         if params.colortype == "categorical":
-            print("yo")
+            pass
         if isinstance(params.colortype, dict):
             color_scale_array = _create_categorical_colorscale(params.colortype)
             legend_array = _create_categorical_legend(fig, color_scale_array)
-            print()
         if params.colortype == "random":
             color_scale_array = _create_random_colorscale(data_object["name"], "value")
         marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
@@ -429,9 +553,10 @@ def _create_raster_image_marks_object(
         },
     }
 
+
 def _create_raster_label_marks_object(
     ax: Axes,
-    params: ImageRenderParams,
+    params: LabelsRenderParams,
     data_object: dict[str, Any],
     call_count: int,
     color_scale_array: list[dict[str, Any]],
@@ -442,13 +567,10 @@ def _create_raster_label_marks_object(
         fill_color = [{"scale": color_scale_array[0]["name"], "value": color_col}]
         encode_update = {
             "fill": [
-                {
-                    "test": f"isValid(datum.value)",
-                    "scale": color_scale_array[0]["name"],
-                    "field": color_col
-                },
-                {
-                    "value": params.cmap_params.na_color}]}
+                {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": color_col},
+                {"value": params.cmap_params.na_color},
+            ]
+        }
     if params.colortype == "random" or isinstance(params.colortype, dict):
         fill_color = [{"scale": color_scale_array[0]["name"], "value": "value"}]
     elif params.colortype.startswith("#"):
@@ -464,7 +586,7 @@ def _create_raster_label_marks_object(
                 "fill": fill_color,
                 "fillOpacity": {"value": params.fill_alpha},
                 "strokeOpacity": {"value": params.outline_alpha},
-                "strokeWidth": {"value": params.contour_px}
+                "strokeWidth": {"value": params.contour_px},
             }
         },
     }
@@ -473,12 +595,27 @@ def _create_raster_label_marks_object(
         labels_object["encode"]["update"] = encode_update
     return labels_object
 
+
 def strip_call(s: str) -> str:
     """Strip leading digit and underscore from call."""
     return re.sub(r"^\d+_", "", s)
 
 
-def _create_table_data_object(table_name, base_uuid):
+def _create_table_data_object(table_name: str, base_uuid: str) -> dict[str, Any]:
+    """Create the vega like data object for a spatialdata table.
+
+    Parameters
+    ----------
+    table_name : str
+        Name of the table in the SpatialData object.
+    base_uuid : str
+        The ID of the vega like data object pertaining to the SpatialData zarr store containing
+        the table to be added.
+
+    Returns
+    -------
+    The vega like data object for the SpatialData table.
+    """
     return {
         "name": str(uuid4()),
         "format": {"type": "spatialdata_table", "version": 0.1},
@@ -488,7 +625,7 @@ def _create_table_data_object(table_name, base_uuid):
 
 
 def _create_data_configs(
-    sdata: SpatialData, fig, ax: Axes, cs: str, sdata_path: str
+    sdata: SpatialData, fig: Figure, ax: Axes, cs: str, sdata_path: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create the vega json array value to the data key.
 
@@ -527,7 +664,7 @@ def _create_data_configs(
             data_array.append(_create_table_data_object(table, base_block["name"]))
             table_id = data_array[-1]["name"]
         data_object, marks_object, color_scale_array, legend_array = _create_derived_data_block(
-            sdata, fig, ax, call, params, base_block["name"], cs, counters[call], table_id
+            sdata, fig, ax, call, params, base_block["name"], cs, counters[call], table_id, len(color_scale_array_full)
         )
 
         data_array.append(data_object)
@@ -644,8 +781,8 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
     # TODO: check why attrs does not respect ordereddict when writing sdata
     viewconfig = {
         "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-        "height": fig.get_figheight() * fig.dpi,  # matplotlib uses inches, but vega uses absolute pixels
-        "width": fig.get_figwidth() * fig.dpi,
+        "height": fig.bbox.height,  # matplotlib uses inches, but vega uses absolute pixels
+        "width": fig.bbox.width,
         "padding": _create_padding_object(fig),
         "title": _create_title_config(ax, fig),
         "data": data_array,
