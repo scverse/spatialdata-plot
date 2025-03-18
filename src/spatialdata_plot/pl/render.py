@@ -207,6 +207,8 @@ def _render_shapes(
         aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
+                # add nan as a category so that shapes with nan value are colored in the nan color
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
                 agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
@@ -562,6 +564,14 @@ def _render_points(
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
+        # in case we are coloring by a column in table
+        if col_for_color is not None and col_for_color not in transformed_element.columns:
+            if color_source_vector is not None:
+                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_source_vector))
+            else:
+                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_vector))
+            transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
+
         color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
             object,
             "categorical",
@@ -571,6 +581,9 @@ def _render_points(
         aggregate_with_reduction = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
+                # add nan as category so that nan points are shown in the nan color
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.as_known()
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -580,7 +593,8 @@ def _render_points(
                 )
                 agg = _datashader_aggregate_with_function(
                     render_params.ds_reduction, cvs, transformed_element, col_for_color, "points"
-                )
+                )  # TODO: if color column contains NaN values, compute a second aggregation (only with NaN),
+                # maybe using ==NaN and then "any" as reduction => render grey and then layer colored points on top
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
