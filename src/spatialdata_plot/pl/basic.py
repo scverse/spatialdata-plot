@@ -1011,6 +1011,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
+                            render_count=prefix,
                         )
 
                 elif cmd == "render_labels" and has_labels:

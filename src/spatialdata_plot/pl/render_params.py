@@ -101,6 +101,7 @@ class PointsRenderParams:
     element: str
     color: str | None = None
     col_for_color: str | None = None
+    colortype: str | None = None
     groups: str | list[str] | None = None
     palette: ListedColormap | list[str] | None = None
     alpha: float = 1.0

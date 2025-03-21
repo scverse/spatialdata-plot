@@ -150,6 +150,25 @@ def _create_categorical_colorscale(color_mapping: dict[str, str]) -> list[dict[s
     ]
 
 
+def _create_colorscale_points(
+    cmap_params: list[CmapParams] | CmapParams, color_mapping: None | dict[str, str], params, data_id: str
+) -> list[dict[str, Any]]:
+    cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
+    cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
+    color_scale_array: list[dict[str, Any]] = []
+
+    if color_mapping and params.table_name is None:
+        color_scale_object = {
+            "name": f"color_{str(uuid4())}",
+            "type": "ordinal",
+            "domain": list(color_mapping.keys()),
+            "range": [mcolors.to_hex(col) for col in color_mapping.values()],
+        }
+
+    color_scale_array.append(color_scale_object)
+    return color_scale_array
+
+
 def _create_colorscale_image(
     cmap_params: list[CmapParams] | CmapParams, data_id: str, field: list[str] | list[int] | int | str | None
 ) -> list[dict[str, Any]]:
@@ -485,7 +504,6 @@ def _create_derived_data_block(
         data_object["format"] = {"type": "spatialdata_label", "version": 0.1}
     elif "render_points" in call:
         data_object["format"] = {"type": "spatialdata_point", "version": 0.1}
-        marks_object = {"a": 5}
     elif "render_shapes" in call:
         data_object["format"] = {"type": "spatialdata_shape", "version": 0.1}
         marks_object = {"a": 5}
@@ -522,6 +540,14 @@ def _create_derived_data_block(
         if params.colortype == "random":
             color_scale_array = _create_random_colorscale(data_object["name"], "value")
         marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
+    if "render_points" in call and isinstance(params, PointsRenderParams):
+        data_object = _add_table_lookup(sdata, params, data_object, table_id)
+        color_scale_array = None
+        if params.colortype:
+            color_scale_array = _create_colorscale_points(
+                params.cmap_params, params.colortype, params, data_object["name"]
+            )
+        marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
 
     return data_object, marks_object, color_scale_array, legend_array
 
@@ -552,6 +578,52 @@ def _create_raster_image_marks_object(
             }
         },
     }
+
+
+def strip_alpha(hex_color: str) -> str:
+    if isinstance(hex_color, str) and hex_color.startswith("#") and len(hex_color) == 9:
+        return hex_color[:7]
+    return hex_color
+
+
+def _create_points_symbol_marks_object(
+    ax: Axes,
+    params: LabelsRenderParams,
+    data_object: dict[str, Any],
+    call_count: int,
+    color_scale_array: list[dict[str, Any]] | None,
+):
+    encode_update = None
+    if not color_scale_array:
+        fill_color = {"value": strip_alpha(params.cmap_params.na_color)}
+    elif params.color:
+        fill_color = {"value": mcolors.to_hex(params.color)}
+    else:
+        encode_update = {
+            "fill": [
+                {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": params.col_for_color},
+                {"value": strip_alpha(params.cmap_params.na_color)},
+            ]
+        }
+        fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
+    points_object = {
+        "type": "symbol",
+        "from": {"data": data_object["name"]},
+        "zindex": params.zorder,
+        "encode": {
+            "enter": {
+                "stroke": fill_color,
+                "fill": fill_color,
+                "fillOpacity": {"value": params.alpha},
+                "size": {"value": params.size},
+            }
+        },
+    }
+    if encode_update:
+        # TODO: check if we can give info that na-color is used prior to adding this. If so then add if conditional.
+        points_object["encode"]["update"] = encode_update
+
+    return points_object
 
 
 def _create_raster_label_marks_object(
@@ -669,7 +741,8 @@ def _create_data_configs(
 
         data_array.append(data_object)
         marks_array.append(marks_object)
-        color_scale_array_full += color_scale_array
+        if color_scale_array:
+            color_scale_array_full += color_scale_array
         legend_array_full += legend_array
         counters[call] += 1
 

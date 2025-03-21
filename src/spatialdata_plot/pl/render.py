@@ -395,6 +395,7 @@ def _render_points(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    render_count: int,
 ) -> None:
     element = render_params.element
     col_for_color = render_params.col_for_color
@@ -509,7 +510,7 @@ def _render_points(
     # when user specified a single color, we emulate the form of `na_color` and use it
     default_color = color if col_for_color is None and color is not None else render_params.cmap_params.na_color
 
-    color_source_vector, color_vector, _, _ = _set_color_source_vec(
+    color_source_vector, color_vector, _, color_mapping = _set_color_source_vec(
         sdata=sdata_filt,
         element=points,
         element_name=element,
@@ -679,6 +680,8 @@ def _render_points(
             zorder=render_params.zorder,
         )
         cax = ax.add_collection(_cax)
+
+        sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
             extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
@@ -690,6 +693,8 @@ def _render_points(
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
             palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
+
+        sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
 
         _ = _decorate_axs(
             ax=ax,
