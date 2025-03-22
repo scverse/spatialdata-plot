@@ -929,9 +929,9 @@ def _get_categorical_color_mapping(
     if isinstance(groups, str):
         groups = [groups]
 
-    if not palette and render_type == "points":
-        if cmap_params is not None and not cmap_params.cmap_is_default:
-            palette = cmap_params.cmap
+    if not palette and render_type == "points" and cmap_params is not None and not cmap_params.cmap_is_default:
+        palette = cmap_params.cmap
+
         color_idx = color_idx = np.linspace(0, 1, len(color_source_vector.categories))
         if isinstance(palette, ListedColormap):
             palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
