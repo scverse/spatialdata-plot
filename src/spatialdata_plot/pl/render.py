@@ -523,7 +523,9 @@ def _render_points(
         palette=palette,
         na_color=default_color,
         cmap_params=render_params.cmap_params,
+        alpha=render_params.alpha,
         table_name=table_name,
+        render_type="points",
     )
 
     # color_source_vector is None when the values aren't categorical

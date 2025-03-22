@@ -84,9 +84,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
     def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData):
-        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
-        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
-        sdata_blobs.table.obs["which_max"] = max_col
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True)
+        sdata_blobs["table"].obs["which_max"] = max_col
 
         sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show()
 
