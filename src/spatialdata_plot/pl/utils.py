@@ -714,6 +714,7 @@ def _set_color_source_vec(
     alpha: float = 1.0,
     table_name: str | None = None,
     table_layer: str | None = None,
+    render_type: Literal["points"] | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)
@@ -763,6 +764,7 @@ def _set_color_source_vec(
             groups=groups,
             palette=palette,
             na_color=na_color,
+            render_type=render_type,
         )
 
         color_source_vector = color_source_vector.set_categories(color_mapping.keys())
@@ -919,6 +921,7 @@ def _get_categorical_color_mapping(
     alpha: float = 1,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
+    render_type: Literal["points"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
@@ -926,7 +929,7 @@ def _get_categorical_color_mapping(
     if isinstance(groups, str):
         groups = [groups]
 
-    if not palette:
+    if not palette and render_type == "points":
         if cmap_params is not None and not cmap_params.cmap_is_default:
             palette = cmap_params.cmap
         color_idx = color_idx = np.linspace(0, 1, len(color_source_vector.categories))
