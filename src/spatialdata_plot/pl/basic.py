@@ -295,7 +295,7 @@ class PlotAccessor:
                 norm=norm,
                 na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
             )
-            sdata.plotting_tree[f"{n_steps+1}_render_shapes"] = ShapesRenderParams(
+            sdata.plotting_tree[f"{n_steps + 1}_render_shapes"] = ShapesRenderParams(
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
@@ -438,7 +438,7 @@ class PlotAccessor:
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
             )
-            sdata.plotting_tree[f"{n_steps+1}_render_points"] = PointsRenderParams(
+            sdata.plotting_tree[f"{n_steps + 1}_render_points"] = PointsRenderParams(
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
@@ -543,7 +543,6 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
 
         for element, param_values in params_dict.items():
-
             cmap_params: list[CmapParams] | CmapParams
             if isinstance(cmap, list):
                 cmap_params = [
@@ -562,7 +561,7 @@ class PlotAccessor:
                     na_color=param_values["na_color"],
                     **kwargs,
                 )
-            sdata.plotting_tree[f"{n_steps+1}_render_images"] = ImageRenderParams(
+            sdata.plotting_tree[f"{n_steps + 1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],
                 cmap_params=cmap_params,
@@ -688,7 +687,7 @@ class PlotAccessor:
                 norm=norm,
                 na_color=param_values["na_color"],  # type: ignore[arg-type]
             )
-            sdata.plotting_tree[f"{n_steps+1}_render_labels"] = LabelsRenderParams(
+            sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],
                 groups=param_values["groups"],

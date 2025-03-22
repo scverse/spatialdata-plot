@@ -7,7 +7,7 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
@@ -67,16 +67,20 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs_str.pl.render_images(element="blobs_multiscale_image", channel=["c1", "c2"]).pl.show()
 
     def test_plot_can_pass_normalize_clip_True(self, sdata_blobs: SpatialData):
-        norm = Normalize(vmin=0, vmax=0.4, clip=True)
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()
+        norm = Normalize(vmin=0.1, vmax=0.5, clip=True)
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=0, norm=norm, cmap=_viridis_with_under_over()
+        ).pl.show()
 
     def test_plot_can_pass_normalize_clip_true_list_cmap(self, sdata_blobs: SpatialData):
         norm = Normalize(vmin=0, vmax=0.4, clip=True)
         sdata_blobs.pl.render_images(element="blobs_image", cmap=["seismic", "Reds", "Blues"], norm=norm).pl.show()
 
     def test_plot_can_pass_normalize_clip_False(self, sdata_blobs: SpatialData):
-        norm = Normalize(vmin=0, vmax=0.4, clip=False)
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, norm=norm).pl.show()
+        norm = Normalize(vmin=0.1, vmax=0.5, clip=False)
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=0, norm=norm, cmap=_viridis_with_under_over()
+        ).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()

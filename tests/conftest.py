@@ -5,6 +5,7 @@ from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -156,6 +157,23 @@ def test_sdata_multiple_images_diverging_dims():
     }
     sdata = sd.SpatialData(images=images)
     return sdata
+
+
+@pytest.fixture
+def sdata_blobs_shapes_annotated() -> SpatialData:
+    """Get blobs sdata with continuous annotation of polygons."""
+    blob = blobs()
+    blob["table"].obs["region"] = "blobs_polygons"
+    blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
+    return blob
+
+
+def _viridis_with_under_over() -> matplotlib.colors.ListedColormap:
+    cmap = matplotlib.colormaps["viridis"]
+    cmap.set_under("black")
+    cmap.set_over("grey")
+    return cmap
 
 
 # Code below taken from spatialdata main repo
