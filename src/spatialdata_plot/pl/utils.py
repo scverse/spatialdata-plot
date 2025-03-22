@@ -711,6 +711,7 @@ def _set_color_source_vec(
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
+    alpha: float = 1.0,
     table_name: str | None = None,
     table_layer: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
@@ -757,6 +758,8 @@ def _set_color_source_vec(
             adata=sdata.table,
             cluster_key=value_to_plot,
             color_source_vector=color_source_vector,
+            cmap_params=cmap_params,
+            alpha=alpha,
             groups=groups,
             palette=palette,
             na_color=na_color,
@@ -912,6 +915,8 @@ def _get_categorical_color_mapping(
     na_color: ColorLike,
     cluster_key: str | None = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
+    cmap_params: CmapParams | None = None,
+    alpha: float = 1,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
 ) -> Mapping[str, str]:
@@ -920,6 +925,16 @@ def _get_categorical_color_mapping(
 
     if isinstance(groups, str):
         groups = [groups]
+
+    if not palette:
+        if cmap_params is not None and not cmap_params.cmap_is_default:
+            palette = cmap_params.cmap
+        color_idx = color_idx = np.linspace(0, 1, len(color_source_vector.categories))
+        if isinstance(palette, ListedColormap):
+            palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
+        elif isinstance(palette, LinearSegmentedColormap):
+            palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
+        return dict(zip(color_source_vector.categories, palette, strict=True))
 
     if isinstance(palette, str):
         palette = [palette]
@@ -2011,7 +2026,7 @@ def _is_coercable_to_float(series: pd.Series) -> bool:
 
 
 def _ax_show_and_transform(
-    array: MaskedArray[tuple[int, ...], Any],
+    array: MaskedArray[tuple[int, ...], Any] | npt.NDArray[Any],
     trans_data: CompositeGenericTransform,
     ax: Axes,
     alpha: float | None = None,
