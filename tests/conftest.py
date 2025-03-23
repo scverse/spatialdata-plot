@@ -448,7 +448,6 @@ def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
                 VIEWCONFIG_ACTUAL.mkdir(parents=True, exist_ok=True)
                 with open(VIEWCONFIG_ACTUAL / f"{fig_name}.json", "w") as outfile:
                     json.dump(viewconfig, outfile, indent=4)
-                return
 
         # uncomment to catch tests that do not save the viewconfig
         # raise ValueError("No viewconfig saved for the test")
