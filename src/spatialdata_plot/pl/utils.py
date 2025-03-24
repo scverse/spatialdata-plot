@@ -811,7 +811,7 @@ def _map_color_seg(
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
         # normalize only the not nan values, else the whole array would contain only nan values
-        normed_color_vector = color_vector.copy()
+        normed_color_vector = color_vector.copy().astype(float)
         normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
             normed_color_vector[~np.isnan(normed_color_vector)]
         )
