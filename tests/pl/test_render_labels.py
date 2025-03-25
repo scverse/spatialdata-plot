@@ -98,9 +98,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ],
     )
     def test_plot_can_color_labels_by_categorical_variable_in_other_table(self, sdata_blobs: SpatialData, label: str):
-
         def _make_tablemodel_with_categorical_labels(sdata_blobs, label):
-
             adata = sdata_blobs.tables["table"].copy()
             max_col = adata.to_df().idxmax(axis=1)
             max_col = max_col.str.replace("channel_", "ch").str.replace("_sum", "")
@@ -163,7 +161,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self,
         sdata_blobs: SpatialData,
     ):
-
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7, contour_px=15
         ).pl.show()
@@ -172,7 +169,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self,
         sdata_blobs: SpatialData,
     ):
-
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show()
 
     def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
