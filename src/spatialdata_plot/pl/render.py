@@ -699,7 +699,7 @@ def _render_points(
                 nan_color = render_params.cmap_params.na_color
                 if isinstance(nan_color, str) and nan_color.startswith("#") and len(nan_color) == 9:
                     nan_color = nan_color[:7]
-                continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how=spread_how)
+                continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how="max")
                 continuous_nan_points = ds.tf.shade(
                     continuous_nan_points,
                     cmap=nan_color,
