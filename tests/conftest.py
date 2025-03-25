@@ -188,6 +188,7 @@ def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
     return blob
 
 
+@pytest.fixture
 def sdata_blobs_shapes_annotated() -> SpatialData:
     """Get blobs sdata with continuous annotation of polygons."""
     blob = blobs()
