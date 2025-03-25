@@ -395,10 +395,10 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_points"]["cat_color"] = pd.Series([np.nan, "a", "b", "c"] * 50, dtype="category")
         sdata_blobs.pl.render_points("blobs_points", color="cat_color", size=40, method="datashader").pl.show()
 
-    def test_plot_can_annotate_points_with_nan_in_de_continuous(self, sdata_blobs: SpatialData):
+    def test_plot_can_annotate_points_with_nan_in_df_continuous(self, sdata_blobs: SpatialData):
         sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=30).pl.show()
 
-    def test_plot_can_annotate_points_with_nan_in_de_continuous_datashader(self, sdata_blobs: SpatialData):
+    def test_plot_can_annotate_points_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
         sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
