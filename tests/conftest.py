@@ -214,8 +214,7 @@ def empty_table() -> SpatialData:
 
 @pytest.fixture(
     # params=["labels"]
-    params=["full", "empty"]
-    + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
+    params=["full", "empty"] + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
     # + ["empty_" + x for x in ["table"]] # TODO: empty table not supported yet
 )
 def sdata(request) -> SpatialData:
