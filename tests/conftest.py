@@ -3,6 +3,7 @@ from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -185,6 +186,20 @@ def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
     table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
     blob["table"] = table
     return blob
+def sdata_blobs_shapes_annotated() -> SpatialData:
+    """Get blobs sdata with continuous annotation of polygons."""
+    blob = blobs()
+    blob["table"].obs["region"] = "blobs_polygons"
+    blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
+    return blob
+
+
+def _viridis_with_under_over() -> matplotlib.colors.ListedColormap:
+    cmap = matplotlib.colormaps["viridis"]
+    cmap.set_under("black")
+    cmap.set_over("grey")
+    return cmap
 
 
 # Code below taken from spatialdata main repo
@@ -234,8 +249,7 @@ def empty_table() -> SpatialData:
 
 @pytest.fixture(
     # params=["labels"]
-    params=["full", "empty"]
-    + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
+    params=["full", "empty"] + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
     # + ["empty_" + x for x in ["table"]] # TODO: empty table not supported yet
 )
 def sdata(request) -> SpatialData:

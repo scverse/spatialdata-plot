@@ -6,12 +6,13 @@ import pandas as pd
 import pytest
 import scanpy as sc
 from anndata import AnnData
+from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import TableModel
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
@@ -83,9 +84,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
     def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData):
-        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
-        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
-        sdata_blobs.table.obs["which_max"] = max_col
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True)
+        sdata_blobs["table"].obs["which_max"] = max_col
 
         sdata_blobs.pl.render_labels("blobs_labels", color="which_max").pl.show()
 
@@ -97,9 +98,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ],
     )
     def test_plot_can_color_labels_by_categorical_variable_in_other_table(self, sdata_blobs: SpatialData, label: str):
-
         def _make_tablemodel_with_categorical_labels(sdata_blobs, label):
-
             adata = sdata_blobs.tables["table"].copy()
             max_col = adata.to_df().idxmax(axis=1)
             max_col = max_col.str.replace("channel_", "ch").str.replace("_sum", "")
@@ -162,7 +161,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self,
         sdata_blobs: SpatialData,
     ):
-
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7, contour_px=15
         ).pl.show()
@@ -171,7 +169,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self,
         sdata_blobs: SpatialData,
     ):
-
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show()
 
     def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
@@ -233,6 +230,19 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
+
+    def test_plot_can_color_with_norm_and_clipping(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="channel_0_sum", norm=Normalize(400, 1000, clip=True), cmap=_viridis_with_under_over()
+        ).pl.show()
+
+    def test_plot_can_color_with_norm_no_clipping(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels(
+            "blobs_labels",
+            color="channel_0_sum",
+            norm=Normalize(400, 1000, clip=False),
+            cmap=_viridis_with_under_over(),
+        ).pl.show()
 
     def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].layers["normalized"] = RNG.random(sdata_blobs["table"].X.shape)

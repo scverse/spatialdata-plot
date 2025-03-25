@@ -73,27 +73,6 @@ filterwarnings = [
     #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
 ]
 
-[tool.black]
-line-length = 120
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-(
-  /(
-      \.eggs
-    | \.git
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | buck-out
-    | build
-    | dist
-  )/
-)
-'''
-
 [tool.jupytext]
 formats = "ipynb,md"
 
@@ -110,6 +89,7 @@ version-file = "_version.py"
 allow-direct-references = true
 
 [tool.ruff]
+line-length = 120
 exclude = [
     ".git",
     ".tox",
@@ -119,7 +99,8 @@ exclude = [
     "dist",
     "setup.py",
 ]
-lint.ignore = [
+[tool.ruff.lint]
+ignore = [
     # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E731",
     # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
@@ -137,8 +118,7 @@ lint.ignore = [
     # Missing docstring in magic method
     "D105",
 ]
-line-length = 120
-lint.select = [
+select = [
     "D", # flake8-docstrings
     "I", # isort
     "E", # pycodestyle
@@ -157,8 +137,8 @@ lint.select = [
     "RET", # flake8-raise
     "PGH", # pygrep-hooks
 ]
-lint.unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
-target-version = "py310"
+unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
+
 [tool.ruff.lint.per-file-ignores]
     "tests/*" = ["D", "PT", "B024"]
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
@@ -166,6 +146,7 @@ target-version = "py310"
     # "src/spatialdata/transformations/transformations.py" = ["D101","D102", "D106", "B024", "T201", "RET504"]
     "tests/conftest.py"= ["E402", "RET504"]
     "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
@@ -189,4 +170,3 @@ push = false
     "{version}",
     "{pep440_version}",
 ]
-
