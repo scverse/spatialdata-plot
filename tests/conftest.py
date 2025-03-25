@@ -186,6 +186,8 @@ def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
     table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
     blob["table"] = table
     return blob
+
+
 def sdata_blobs_shapes_annotated() -> SpatialData:
     """Get blobs sdata with continuous annotation of polygons."""
     blob = blobs()
