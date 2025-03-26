@@ -112,6 +112,7 @@ class PointsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_pixel_spread: float | None = None
 
 
 @dataclass

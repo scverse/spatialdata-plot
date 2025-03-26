@@ -552,9 +552,11 @@ def _render_points(
         )
 
     if method == "datashader":
+        sdata.plotting_tree[f"{render_count}_render_points"].method = "datashader"
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
         px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
+        sdata.plotting_tree[f"{render_count}_render_points"].ds_pixel_spread = px
 
         # apply transformations
         transformed_element = PointsModel.parse(
@@ -577,11 +579,16 @@ def _render_points(
         if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
         aggregate_with_reduction = None
+        # TODO: ask Sonja whether length of list is supposed to be checked here.
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
+                sdata.plotting_tree[f"{render_count}_render_points"].ds_reduction = "count"
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
+
+                sdata.plotting_tree[f"{render_count}_render_points"].ds_reduction = reduction_name
+                sdata.plotting_tree[f"{render_count}_render_points"].colortype = "continuous"
                 logger.info(
                     f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
                     "to the matplotlib result."
@@ -593,6 +600,7 @@ def _render_points(
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.points(transformed_element, "x", "y", agg=ds.count())
+            sdata.plotting_tree[f"{render_count}_render_points"].ds_reduction = "count"
 
         ds_span = None
         if norm.vmin is not None or norm.vmax is not None:
@@ -673,11 +681,14 @@ def _render_points(
                 vmin = norm.vmin - 0.5
                 vmax = norm.vmin + 0.5
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
+                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax, clip=norm.clip),
                 cmap=render_params.cmap_params.cmap,
             )
+            sdata.plotting_tree[f"{render_count}_render_points"].cmap_params.cmap = cax.cmap
+            sdata.plotting_tree[f"{render_count}_render_points"].cmap_params.norm = cax.norm
 
     elif method == "matplotlib":
+        sdata.plotting_tree[f"{render_count}_render_points"].method = "matplotlib"
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
         _cax = ax.scatter(
@@ -694,7 +705,7 @@ def _render_points(
         )
         cax = ax.add_collection(_cax)
 
-        sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
+        # sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
             extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
@@ -704,10 +715,12 @@ def _render_points(
     if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
+            sdata.plotting_tree[f"{render_count}_render_points"].colortype = "continuous"
         else:
             palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-        sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
+        if not sdata.plotting_tree[f"{render_count}_render_points"].colortype:
+            sdata.plotting_tree[f"{render_count}_render_points"].colortype = color_mapping
 
         _ = _decorate_axs(
             ax=ax,

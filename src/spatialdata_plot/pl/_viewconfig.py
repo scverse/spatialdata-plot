@@ -151,19 +151,33 @@ def _create_categorical_colorscale(color_mapping: dict[str, str]) -> list[dict[s
 
 
 def _create_colorscale_points(
-    cmap_params: list[CmapParams] | CmapParams, color_mapping: None | dict[str, str], params, data_id: str
+    cmap_params: list[CmapParams] | CmapParams, color_mapping: None | dict[str, str], params, data_object: str
 ) -> list[dict[str, Any]]:
     cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
     cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
     color_scale_array: list[dict[str, Any]] = []
 
-    if color_mapping and params.table_name is None:
-        color_scale_object = {
-            "name": f"color_{str(uuid4())}",
-            "type": "ordinal",
-            "domain": list(color_mapping.keys()),
-            "range": [mcolors.to_hex(col) for col in color_mapping.values()],
-        }
+    color_scale_object = {"name": f"color_{str(uuid4())}"}
+    if isinstance(color_mapping, dict):
+        color_scale_object.update(
+            {
+                "type": "ordinal",
+                "domain": list(color_mapping.keys()),
+                "range": [mcolors.to_hex(col) for col in color_mapping.values()],
+            }
+        )
+    elif color_mapping == "continuous":
+        data_id = data_object["name"]
+        field = data_object["transform"][-1].get("as")
+        if not field:
+            field = [params.col_for_color]
+        color_scale_object.update(
+            {
+                "type": "linear",
+                "domain": {"data": data_id, "field": field},
+                "range": {"scheme": params.cmap_params.cmap.name, "count": params.cmap_params.cmap.N},
+            }
+        )
 
     color_scale_array.append(color_scale_object)
     return color_scale_array
@@ -374,8 +388,8 @@ def _create_colorbar_legend(
             "orient": "none",  # Required in vega in order to use the x and y position
             "fill": color_scale_array[0]["name"],
             "fillColor": mcolors.to_hex(cbar.ax.get_facecolor()),
-            "gradientLength": gradient_length,
-            "gradientOpacity": cbar.cmap._lut[-0][-1],
+            "gradientLength": gradient_length,  # alpha if alpha := getattr(cbar.cmap, "_lut", None)[0][-1] else
+            "gradientOpacity": cbar.mappable.get_alpha(),
             "gradientThickness": (cbar.ax.get_position().bounds[2] * fig.dpi) / 72,
             "gradientStrokeColor": stroke_color,
             "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
@@ -412,12 +426,13 @@ def _add_norm_transform(params: Params, data_object: dict[str, Any]) -> dict[str
     in the render parameters.
     """
     norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
+    field = data_object["transform"][-1]["as"][0] if data_object["transform"][-1]["type"] == "aggregate" else "value"
     if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
 
         if norm.clip:
-            formula = f"clamp((datum.value - {vmin}) / ({vmax} - {vmin}), 0, 1)"
+            formula = f"clamp((datum.{field} - {vmin}) / ({vmax} - {vmin}), 0, 1)"
         else:
-            formula = f"(datum.value - {vmin}) / ({vmax} - {vmin})"
+            formula = f"(datum.{field} - {vmin}) / ({vmax} - {vmin})"
         data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
     return data_object
 
@@ -444,17 +459,45 @@ def _add_table_lookup(
     """
     if table_id and not isinstance(params, ImageRenderParams):
         _, _, instance_key = get_table_keys(sdata[params.table_name])
+        color = params.color if params.color else params.col_for_color
         data_object["transform"].append(
             {
                 "type": "lookup",
                 "from": table_id,
                 "key": instance_key,
                 "fields": ["instance_ids"],
-                "values": [params.color],
-                "as": [params.color],
+                "values": [color],
+                "as": [color],
                 "default": None,
             }
         )
+    return data_object
+
+
+def _add_datashade_transform_points(params, data_object):
+    if params.ds_reduction == "std":
+        params.ds_reduction = "stdev"
+    if params.ds_reduction == "var":
+        params.ds_reduction = "variance"
+
+    if data_object["transform"][-1]["type"] == "formula":
+        field = data_object["transform"][-1]["as"]
+        as_field = field
+    elif params.col_for_color:
+        field = params.col_for_color
+        as_field = field
+    else:
+        field = "*"
+        as_field = "count"
+    data_object["transform"].append(
+        {"type": "aggregate", "field": [field], "ops": [params.ds_reduction], "as": [as_field]}
+    )
+    data_object = _add_norm_transform(params, data_object)
+    if data_object["transform"][-1]["type"] == "formula":
+        field = data_object["transform"][-1]["as"]
+    data_object["transform"].append(
+        {"type": "spread", "field": [as_field], "px": params.ds_pixel_spread, "as": [as_field]}
+    )
     return data_object
 
 
@@ -542,11 +585,17 @@ def _create_derived_data_block(
         marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_points" in call and isinstance(params, PointsRenderParams):
         data_object = _add_table_lookup(sdata, params, data_object, table_id)
+        if not params.ds_reduction:
+            data_object = _add_norm_transform(params, data_object)
+        if params.ds_reduction:
+            data_object = _add_datashade_transform_points(params, data_object)
         color_scale_array = None
         if params.colortype:
-            color_scale_array = _create_colorscale_points(
-                params.cmap_params, params.colortype, params, data_object["name"]
-            )
+            color_scale_array = _create_colorscale_points(params.cmap_params, params.colortype, params, data_object)
+            if params.colortype == "continuous":
+                legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
+            if isinstance(params.colortype, dict):
+                legend_array = _create_categorical_legend(fig, color_scale_array)
         marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
 
     return data_object, marks_object, color_scale_array, legend_array
@@ -594,28 +643,65 @@ def _create_points_symbol_marks_object(
     color_scale_array: list[dict[str, Any]] | None,
 ):
     encode_update = None
-    if not color_scale_array:
-        fill_color = {"value": strip_alpha(params.cmap_params.na_color)}
-    elif params.color:
-        fill_color = {"value": mcolors.to_hex(params.color)}
-    else:
-        encode_update = {
-            "fill": [
-                {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": params.col_for_color},
-                {"value": strip_alpha(params.cmap_params.na_color)},
-            ]
-        }
-        fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
+    if not color_scale_array and not params.color:
+        fill_color = {"value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)}
+    elif not color_scale_array and params.color:
+        fill_color = {"value": mcolors.to_hex(params.color, keep_alpha=False)}
+    elif color_scale_array and (params.color or params.col_for_color):
+        if isinstance(params.colortype, dict):
+            encode_update = {
+                "fill": [
+                    {
+                        "test": f"!isValid(datum.{params.col_for_color})",
+                        "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
+                    }
+                ]
+            }
+            fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
+        else:
+            value = val[0] if isinstance(val := color_scale_array[0]["domain"]["field"], list) else val
+            fill_color = {"scale": color_scale_array[0]["name"], "value": value}
+            encode_update = {"fill": []}
+            encode_update["fill"].append(
+                {
+                    "test": f"!isValid(datum.{params.col_for_color})",
+                    "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
+                }
+            )
+            if (params.cmap_params.norm.vmin is not None or params.cmap_params.norm.vmax is not None) and (
+                params.cmap_params.cmap.get_under() is not None or params.cmap_params.cmap.get_over() is not None
+            ):
+                # or condition doesn't reach second condition if first condition is met
+                under_col = params.cmap_params.cmap.get_under()
+                over_col = params.cmap_params.cmap.get_over()
+                if under_col is not None:
+                    encode_update["fill"].append(
+                        {
+                            "test": f"datum.{value}) < {params.cmap_params.norm.vmin}",
+                            "value": mcolors.to_hex(under_col, keep_alpha=False),
+                        }
+                    )
+                if over_col is not None:
+                    encode_update["fill"].append(
+                        {
+                            "test": f"datum.{value}) > {params.cmap_params.norm.vmax}",
+                            "value": mcolors.to_hex(over_col, keep_alpha=False),
+                        }
+                    )
+
     points_object = {
         "type": "symbol",
         "from": {"data": data_object["name"]},
         "zindex": params.zorder,
         "encode": {
             "enter": {
+                "x": {"scale": "X_scale", "field": "x"},
+                "y": {"scale": "Y_scale", "field": "y"},
                 "stroke": fill_color,
                 "fill": fill_color,
                 "fillOpacity": {"value": params.alpha},
                 "size": {"value": params.size},
+                "shape": {"value": "circle"},
             }
         },
     }
@@ -868,61 +954,3 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
     viewconfig["marks"] = marks_array
 
     return viewconfig
-
-
-# def plotting_tree_dict_to_marks(plotting_tree_dict):
-#     out = [] # caller will set { ..., "marks": out }
-#     for pl_call_id, pl_call_params in plotting_tree_dict.items():
-#         if pl_call_id.endswith("_render_images"):
-#             for channel_index in pl_call_params["channel"]:
-#                 out.append({
-#                   "type": "raster_image",
-#                   "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                   "zindex": pl_call_params["zorder"],
-#                   "encode": {
-#                       "opacity": { "value": pl_call_params.get("alpha") },
-#                       "color": {"scale": get_scale_name(pl_call_params), "field": channel_index }
-#                   }
-#                 })
-#         if pl_call_id.endswith("_render_shapes"):
-#             out.append({
-#                 "type": "shape",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
-#                     "fillColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeWidth": {"value": pl_call_params.get("outline_width")},
-#                   # TODO: check whether this is the key used in the spatial plotting tree # TODO: what are the units?
-#                     "strokeColor": {"value": pl_call_params.get("outline_color")},
-#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
-#                 }
-#             })
-#         if pl_call_id.endswith("_render_points"):
-#             out.append({
-#                 "type": "point",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "opacity": {"value": pl_call_params.get("alpha")},
-#                     "color": get_shapes_color_encoding(pl_call_params),
-#                     "size": {"value": pl_call_params.get("size")},
-#                 }
-#             })
-#         if pl_call_id.endswith("_render_labels"):
-#             out.append({
-#                 "type": "raster_labels",
-#                 "from": {"data": sdata_element_to_uuid(pl_call_params["element"])},
-#                 "zindex": pl_call_params["zorder"],
-#                 "encode": {
-#                     "opacity": {"value": pl_call_params.get("alpha")},
-#                     "fillColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeColor": get_shapes_color_encoding(pl_call_params),
-#                     "strokeWidth": {"value": pl_call_params.get("contour_px")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                     "strokeOpacity": {"value": pl_call_params.get("outline_alpha")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                     "fillOpacity": {"value": pl_call_params.get("fill_alpha")},
-#                     # TODO: check whether this is the key used in the spatial plotting tree
-#                 }
-#             })
