@@ -67,6 +67,7 @@ def _render_shapes(
     fig_params: FigParams,
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
+    render_count: int,
 ) -> None:
     element = render_params.element
     col_for_color = render_params.col_for_color
@@ -209,8 +210,11 @@ def _render_shapes(
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
+                sdata.plotting_tree[f"{render_count}_render_shapes"].ds_reduction = "count"
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
+                sdata.plotting_tree[f"{render_count}_render_shapes"].ds_reduction = reduction_name
+
                 logger.info(
                     f'Using the datashader reduction "{reduction_name}". "max" will give an output very close '
                     "to the matplotlib result."
@@ -222,6 +226,7 @@ def _render_shapes(
                 aggregate_with_reduction = (agg.min(), agg.max())
         else:
             agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
+            sdata.plotting_tree[f"{render_count}_render_shapes"].ds_reduction = "count"
         # render outlines if needed
         if (render_outlines := render_params.outline_alpha) > 0:
             agg_outlines = cvs.line(
@@ -329,10 +334,13 @@ def _render_shapes(
                 # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
                 vmin = norm.vmin - 0.5
                 vmax = norm.vmin + 0.5
+
             cax = ScalarMappable(
-                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
+                norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax, clip=norm.clip),
                 cmap=render_params.cmap_params.cmap,
             )
+            sdata.plotting_tree[f"{render_count}_render_shapes"].cmap_params.cmap = cax.cmap
+            sdata.plotting_tree[f"{render_count}_render_shapes"].cmap_params.norm = cax.norm
 
     elif method == "matplotlib":
         _cax = _get_collection_shape(
@@ -357,6 +365,7 @@ def _render_shapes(
     if not values_are_categorical:
         # If the user passed a Normalize object with vmin/vmax we'll use those,
         # if not we'll use the min/max of the color_vector
+        sdata.plotting_tree[f"{render_count}_render_shapes"].colortype = "continuous"
         _cax.set_clim(
             vmin=render_params.cmap_params.norm.vmin or min(color_vector),
             vmax=render_params.cmap_params.norm.vmax or max(color_vector),
@@ -366,6 +375,11 @@ def _render_shapes(
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
+
+        if not sdata.plotting_tree[f"{render_count}_render_shapes"].colortype and color_mapping:
+            key_diff = set(color_mapping.keys()).difference(color_source_vector)
+            color_mapping = {k: v for k, v in color_mapping.items() if k not in key_diff}
+            sdata.plotting_tree[f"{render_count}_render_shapes"].colortype = color_mapping
 
         # False if user specified color-like with 'color' parameter
         colorbar = False if render_params.col_for_color is None else legend_params.colorbar

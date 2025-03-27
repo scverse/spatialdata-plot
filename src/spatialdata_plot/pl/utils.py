@@ -23,7 +23,6 @@ import numpy.typing as npt
 import pandas as pd
 import shapely
 import spatialdata as sd
-import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
 from datashader.core import Canvas
@@ -584,57 +583,6 @@ def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int =
     # get rid of the empty axes
     _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
     return fig, axes
-
-
-def _normalize(
-    img: xr.DataArray,
-    pmin: float | None = None,
-    pmax: float | None = None,
-    eps: float = 1e-20,
-    clip: bool = False,
-    name: str = "normed",
-) -> xr.DataArray:
-    """Perform a min max normalisation on the xr.DataArray.
-
-    This function was adapted from the csbdeep package.
-
-    Parameters
-    ----------
-    dataarray
-        A xarray DataArray with an image field.
-    pmin
-        Lower quantile (min value) used to perform quantile normalization.
-    pmax
-        Upper quantile (max value) used to perform quantile normalization.
-    eps
-        Epsilon float added to prevent 0 division.
-    clip
-        Ensures that normed image array contains no values greater than 1.
-
-    Returns
-    -------
-    xr.DataArray
-        A min-max normalized image.
-    """
-    pmin = pmin or 0.0
-    pmax = pmax or 100.0
-
-    perc = np.percentile(img, [pmin, pmax])
-
-    # Ensure perc is an array of two elements
-    if np.isscalar(perc):
-        logger.warning(
-            "Percentile range is too small, using the same percentile for both min "
-            "and max. Consider using a larger percentile range."
-        )
-        perc = np.array([perc, perc])
-
-    norm = (img - perc[0]) / (perc[1] - perc[0] + eps)  # type: ignore
-
-    if clip:
-        norm = np.clip(norm, 0, 1)
-
-    return norm
 
 
 def _get_colors_for_categorical_obs(

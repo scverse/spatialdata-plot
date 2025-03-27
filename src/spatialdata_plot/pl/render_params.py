@@ -79,6 +79,7 @@ class ShapesRenderParams:
     element: str
     color: str | None = None
     col_for_color: str | None = None
+    colortype: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
     palette: ListedColormap | list[str] | None = None
@@ -91,6 +92,7 @@ class ShapesRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_pixel_spread: float | None = None
 
 
 @dataclass

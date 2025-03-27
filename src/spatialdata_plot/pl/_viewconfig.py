@@ -474,7 +474,7 @@ def _add_table_lookup(
     return data_object
 
 
-def _add_datashade_transform_points(params, data_object):
+def _add_datashade_transform(params, data_object):
     if params.ds_reduction == "std":
         params.ds_reduction = "stdev"
     if params.ds_reduction == "var":
@@ -495,9 +495,12 @@ def _add_datashade_transform_points(params, data_object):
     data_object = _add_norm_transform(params, data_object)
     if data_object["transform"][-1]["type"] == "formula":
         field = data_object["transform"][-1]["as"]
-    data_object["transform"].append(
-        {"type": "spread", "field": [as_field], "px": params.ds_pixel_spread, "as": [as_field]}
-    )
+    if isinstance(params, PointsRenderParams):
+        data_object["transform"].append(
+            {"type": "spread", "field": [as_field], "px": params.ds_pixel_spread, "as": [as_field]}
+        )
+    else:
+        pass
     return data_object
 
 
@@ -588,7 +591,7 @@ def _create_derived_data_block(
         if not params.ds_reduction:
             data_object = _add_norm_transform(params, data_object)
         if params.ds_reduction:
-            data_object = _add_datashade_transform_points(params, data_object)
+            data_object = _add_datashade_transform(params, data_object)
         color_scale_array = None
         if params.colortype:
             color_scale_array = _create_colorscale_points(params.cmap_params, params.colortype, params, data_object)
@@ -597,6 +600,22 @@ def _create_derived_data_block(
             if isinstance(params.colortype, dict):
                 legend_array = _create_categorical_legend(fig, color_scale_array)
         marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
+    if "render_shapes" in call and isinstance(params, ShapesRenderParams):
+        data_object = _add_table_lookup(sdata, params, data_object, table_id)
+        if not params.ds_reduction:
+            data_object = _add_norm_transform(params, data_object)
+        if params.ds_reduction:
+            data_object = _add_datashade_transform(params, data_object)
+
+        color_scale_array = None
+        if params.colortype:
+            color_scale_array = _create_colorscale_points(params.cmap_params, params.colortype, params, data_object)
+            if params.colortype == "continuous":
+                legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
+            if isinstance(params.colortype, dict):
+                legend_array = _create_categorical_legend(fig, color_scale_array)
+
+        marks_object = _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array)
 
     return data_object, marks_object, color_scale_array, legend_array
 
@@ -635,9 +654,88 @@ def strip_alpha(hex_color: str) -> str:
     return hex_color
 
 
+def _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array):
+    encode_update = None
+    if not color_scale_array and not params.color:
+        fill_color = {"value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)}
+    elif not color_scale_array and params.color:
+        fill_color = {"value": mcolors.to_hex(params.color, keep_alpha=False)}
+    elif color_scale_array and (params.color or params.col_for_color):
+        if isinstance(params.colortype, dict):
+            encode_update = {
+                "fill": [
+                    {
+                        "test": f"!isValid(datum.{params.col_for_color})",
+                        "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
+                    }
+                ]
+            }
+            fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
+        else:
+            value = val[0] if isinstance(val := color_scale_array[0]["domain"]["field"], list) else val
+            fill_color = {"scale": color_scale_array[0]["name"], "value": value}
+            encode_update = {"fill": []}
+            encode_update["fill"].append(
+                {
+                    "test": f"!isValid(datum.{params.col_for_color})",
+                    "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
+                }
+            )
+            if (params.cmap_params.norm.vmin is not None or params.cmap_params.norm.vmax is not None) and (
+                params.cmap_params.cmap.get_under() is not None or params.cmap_params.cmap.get_over() is not None
+            ):
+                # or condition doesn't reach second condition if first condition is met
+                under_col = params.cmap_params.cmap.get_under()
+                over_col = params.cmap_params.cmap.get_over()
+                if under_col is not None:
+                    encode_update["fill"].append(
+                        {
+                            "test": f"datum.{value}) < {params.cmap_params.norm.vmin}",
+                            "value": mcolors.to_hex(under_col, keep_alpha=False),
+                        }
+                    )
+                if over_col is not None:
+                    encode_update["fill"].append(
+                        {
+                            "test": f"datum.{value}) > {params.cmap_params.norm.vmax}",
+                            "value": mcolors.to_hex(over_col, keep_alpha=False),
+                        }
+                    )
+
+    shapes_object = {
+        "type": "path",
+        "from": {"data": data_object["name"]},
+        "zindex": params.zorder,
+        "encode": {
+            "enter": {
+                "x": {"scale": "X_scale", "field": "x"},
+                "y": {"scale": "Y_scale", "field": "y"},
+                "scaleX": params.scale,
+                "scaleY": params.scale,
+                "fill": fill_color,
+                "fillOpacity": {"value": params.fill_alpha},
+            }
+        },
+    }
+
+    if params.outline_params.outline and params.outline_alpha != 0:
+        outline_par = params.outline_params
+        stroke_color = {"value": mcolors.to_hex(outline_par.outline_color, keep_alpha=False)}
+
+        shapes_object["encode"]["enter"].update(
+            {
+                "stroke": stroke_color,
+                "strokeWidth": {"value": outline_par.linewidth},
+                "strokeOpacity": {"value": params.outline_alpha},
+            }
+        )
+
+    return shapes_object
+
+
 def _create_points_symbol_marks_object(
     ax: Axes,
-    params: LabelsRenderParams,
+    params: PointsRenderParams | ShapesRenderParams,
     data_object: dict[str, Any],
     call_count: int,
     color_scale_array: list[dict[str, Any]] | None,

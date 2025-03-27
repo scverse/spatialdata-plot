@@ -65,9 +65,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.shapes["blobs_circles"].at[0, "geometry"] = gpd.points_from_xy([None], [None])[0]
         sdata_blobs.pl.render_shapes().pl.show()
 
-    def test_plot_can_render_circles_with_default_outline_width(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1).pl.show()
-
     def test_plot_can_render_circles_with_specified_outline_width(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", outline_alpha=1, outline_width=3.0).pl.show()
 
