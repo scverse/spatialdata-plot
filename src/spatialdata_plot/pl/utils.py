@@ -695,11 +695,13 @@ def _get_colors_for_categorical_obs(
         else:
             palette = ["grey" for _ in range(len_cat)]
             logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
-    elif isinstance(palette, list) and len(palette) != len(categories):
-        raise ValueError(
-            f"The number of provided values in the palette ({len(palette)}) doesn't agree with the number of "
-            f"categories that should be colored ({categories})."
-        )
+    else:
+        # raise error when user didn't provide the right number of colors in palette
+        if isinstance(palette, list) and len(palette) != len(categories):
+            raise ValueError(
+                f"The number of provided values in the palette ({len(palette)}) doesn't agree with the number of "
+                f"categories that should be colored ({categories})."
+            )
 
     # otherwise, single channels turn out grey
     color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
