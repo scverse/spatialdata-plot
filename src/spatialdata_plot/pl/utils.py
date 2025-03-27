@@ -921,9 +921,8 @@ def _get_default_categorial_color_mapping(
     cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
     len_cat = len(color_source_vector.categories.unique())
-
     # Try to use provided colormap first
-    if cmap_params is not None and cmap_params.cmap is not None:
+    if cmap_params is not None and cmap_params.cmap is not None and not cmap_params.cmap_is_default:
         # Generate evenly spaced indices for the colormap
         color_idx = np.linspace(0, 1, len_cat)
         if isinstance(cmap_params.cmap, ListedColormap):
@@ -2441,3 +2440,41 @@ def _datashader_map_aggregate_to_color(
         span=span,
         how="linear",
     )
+
+
+def _hex_no_alpha(hex: str) -> str:
+    """
+    Return a hex color string without an alpha component.
+
+    Parameters
+    ----------
+    hex : str
+        The input hex color string. Must be in one of the following formats:
+        - "#RRGGBB": a hex color without an alpha channel.
+        - "#RRGGBBAA": a hex color with an alpha channel that will be removed.
+
+    Returns
+    -------
+    str
+        The hex color string in "#RRGGBB" format.
+    """
+    if not isinstance(hex, str):
+        raise TypeError("Input must be a string")
+    if not hex.startswith("#"):
+        raise ValueError("Invalid hex color: must start with '#'")
+
+    hex_digits = hex[1:]
+    length = len(hex_digits)
+
+    if length == 6:
+        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
+            raise ValueError("Invalid hex color: contains non-hex characters")
+        return hex  # Already in #RRGGBB format.
+
+    if length == 8:
+        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
+            raise ValueError("Invalid hex color: contains non-hex characters")
+        # Return only the first 6 characters, stripping the alpha.
+        return "#" + hex_digits[:6]
+
+    raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
