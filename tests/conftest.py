@@ -429,7 +429,13 @@ def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
     @wraps(fn)
     def save_and_compare(self, *args, **kwargs):
         # we need the test to contain one of these parameters as argument; the view configuration will be saved there
-        keys_to_check = ["sdata_blobs", "sdata_blobs_str", "sdata_raccoon", "sdata_empty"]
+        keys_to_check = [
+            "sdata_blobs",
+            "sdata_blobs_str",
+            "sdata_raccoon",
+            "sdata_empty",
+            "sdata_blobs_shapes_annotated",
+        ]
         sdata = None
         for key in keys_to_check:
             sdata = kwargs.get(key)

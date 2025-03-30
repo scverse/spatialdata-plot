@@ -20,6 +20,7 @@ from spatialdata_plot.pl.render_params import (
     PointsRenderParams,
     ShapesRenderParams,
 )
+from spatialdata_plot.viewconfig.scales import _create_axis_scale_array
 
 Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams
 
@@ -38,46 +39,6 @@ class VegaAlignment(Enum):
         """Convert Matplotlib horizontal alignment to Vega alignment."""
         mapping = {"left": cls.LEFT, "center": cls.CENTER, "right": cls.RIGHT}
         return mapping.get(alignment, cls.CENTER).value
-
-
-def _create_axis_scale_block(ax: Axes) -> list[dict[str, Any]]:
-    """Create vega scales object pertaining to both the x and the y axis.
-
-    Parameters
-    ----------
-    ax : Axes
-        A matplotlib Axes instance which represents one (sub)plot in a matplotlib figure.
-    """
-    scales = []
-    scales.append(_get_axis_scale_config(ax, "x"))
-    scales.append(_get_axis_scale_config(ax, "y"))
-    return scales
-
-
-def _get_axis_scale_config(ax: Axes, axis_name: str) -> dict[str, Any]:
-    """Provide a vega like scales object particular for one of the plotting axes.
-
-    Note that in vega, this config also contains the fields reverse and zero.
-    However, given that we specify the domain explicitly, these are not required here.
-
-    Parameters
-    ----------
-    ax : Axes
-        A matplotlib Axes instance which represents one (sub)plot in a matplotlib figure.
-    axis_name: str
-        Which axis the config should be made for, either "x" or "y".
-    """
-    scale: dict[str, Any] = {}
-    scale["name"] = f"{axis_name.upper()}_scale"
-    if axis_name == "x":
-        scale["type"] = ax.get_xaxis().get_scale()
-        scale["domain"] = [ax.get_xlim()[0].item(), ax.get_xlim()[1].item()]
-        scale["range"] = "width"
-    if axis_name == "y":
-        scale["type"] = ax.get_yaxis().get_scale()
-        scale["domain"] = [ax.get_ylim()[0].item(), ax.get_ylim()[1].item()]
-        scale["range"] = "height"
-    return scale
 
 
 def _create_padding_object(fig: Figure) -> dict[str, float]:
@@ -1031,7 +992,7 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
     ax = fig_params.ax
     data_array, marks_array, color_scale_array, legend_array = _create_data_configs(sdata, fig, ax, cs, sdata._path)
 
-    scales_array = _create_axis_scale_block(ax)
+    scales_array = _create_axis_scale_array(ax)
     axis_array = _create_axis_block(ax, scales_array, fig.dpi)
 
     scales = scales_array + color_scale_array if len(color_scale_array) > 0 else scales_array
