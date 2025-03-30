@@ -4,7 +4,7 @@ from matplotlib.axes import Axes
 from pydantic import BaseModel
 
 
-def _create_axis_scale_array(ax: Axes) -> list[dict[str, Any]]:
+def create_axis_scale_array(ax: Axes) -> list[dict[str, Any]]:
     """Create vega scales object pertaining to both the x and the y axis.
 
     Parameters
@@ -18,12 +18,12 @@ def _create_axis_scale_array(ax: Axes) -> list[dict[str, Any]]:
         An array containing individual scales objects with the parameters for the x and y axis of a plot.
     """
     scales = []
-    scales.append(_get_axis_scale_object(ax, "x"))
-    scales.append(_get_axis_scale_object(ax, "y"))
+    scales.append(get_axis_scale_object(ax, "x"))
+    scales.append(get_axis_scale_object(ax, "y"))
     return scales
 
 
-def _get_axis_scale_object(ax: Axes, axis_name: str) -> dict[str, Any]:
+def get_axis_scale_object(ax: Axes, axis_name: str) -> dict[str, Any]:
     """Provide a vega like scales object particular for one of the plotting axes.
 
     Note that in vega, this config also contains the fields reverse and zero.

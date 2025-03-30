@@ -12,6 +12,8 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from spatialdata.models import get_table_keys
 
+from spatialdata_plot._viewconfig.layout import create_padding_object
+from spatialdata_plot._viewconfig.scales import create_axis_scale_array
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     FigParams,
@@ -20,7 +22,6 @@ from spatialdata_plot.pl.render_params import (
     PointsRenderParams,
     ShapesRenderParams,
 )
-from spatialdata_plot.viewconfig.scales import _create_axis_scale_array
 
 Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams
 
@@ -39,28 +40,6 @@ class VegaAlignment(Enum):
         """Convert Matplotlib horizontal alignment to Vega alignment."""
         mapping = {"left": cls.LEFT, "center": cls.CENTER, "right": cls.RIGHT}
         return mapping.get(alignment, cls.CENTER).value
-
-
-def _create_padding_object(fig: Figure) -> dict[str, float]:
-    """Get the padding parameters for a vega viewconfiguration.
-
-    Given that matplotlib gives the padding parameters as a fraction of the the figure width or height and
-    vega gives it as absolute number of pixels we need to convert from the fraction to the number of pixels.
-
-    Parameters
-    ----------
-    fig : Figure
-        The matplotlib figure. The top level container for all the plot elements.
-    """
-    fig_width_pixels, fig_height_pixels = fig.get_size_inches() * fig.dpi
-    # contains also wspace and hspace but does not seem to be used by vega here.
-    padding_obj = fig.subplotpars
-    return {
-        "left": (padding_obj.left * fig_width_pixels).item(),
-        "top": ((1 - padding_obj.top) * fig_height_pixels).item(),
-        "right": ((1 - padding_obj.right) * fig_width_pixels).item(),
-        "bottom": (padding_obj.bottom * fig_height_pixels).item(),
-    }
 
 
 def _create_random_colorscale(data_id: str, field: str) -> list[dict[str, Any]]:
@@ -992,7 +971,7 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
     ax = fig_params.ax
     data_array, marks_array, color_scale_array, legend_array = _create_data_configs(sdata, fig, ax, cs, sdata._path)
 
-    scales_array = _create_axis_scale_array(ax)
+    scales_array = create_axis_scale_array(ax)
     axis_array = _create_axis_block(ax, scales_array, fig.dpi)
 
     scales = scales_array + color_scale_array if len(color_scale_array) > 0 else scales_array
@@ -1001,7 +980,7 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, legend_params: 
         "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
         "height": fig.bbox.height,  # matplotlib uses inches, but vega uses absolute pixels
         "width": fig.bbox.width,
-        "padding": _create_padding_object(fig),
+        "padding": create_padding_object(fig),
         "title": _create_title_config(ax, fig),
         "data": data_array,
         "scales": scales,
