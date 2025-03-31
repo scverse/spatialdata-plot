@@ -1,7 +1,11 @@
 from typing import Any, Literal
+from uuid import uuid4
 
+import matplotlib.colors as mcolors
 from matplotlib.axes import Axes
 from pydantic import BaseModel
+
+from spatialdata_plot.pl.render_params import CmapParams, LabelsRenderParams, PointsRenderParams, ShapesRenderParams
 
 
 def create_axis_scale_array(ax: Axes) -> list[dict[str, Any]]:
@@ -55,6 +59,191 @@ def get_axis_scale_object(ax: Axes, axis_name: str) -> dict[str, Any]:
         "domain": domain,
         "range": "width" if axis_name == "x" else "height",
     }
+
+
+def _generate_color_scale_object(
+    name: str, type_scale: str, domain: list[str] | dict[str, str], color_range: list[str] | dict[str, str | int]
+) -> dict[str, Any]:
+    """Create vega like color scale object.
+
+    This function is a helper function to generate any kind of color scale object, whether linear or categorical /
+    ordinal.
+
+    Parameters
+    ----------
+    name : str
+        The name by which others parts of the view configuration can refer to the color scale object.
+    type_scale : str
+        The type of color scale. Usually either `linear` or `ordinal`.
+    domain : list[str] | dict[str, str]
+        The domain of the color scale, meaning the actual values to which a color must be mapped. Can be either
+        an array of strings or if the `type` is `linear` it can be an object containing  `data` and `field` keys, which
+        are derived from a data object.
+    color_range : list[str] | dict[str, str | int]
+        The range of the color scale, meaning the colors which are mapped to a particular value given by the `domain`.
+        Either an object containing the `scheme` with as value the colormap name and the `count` stating the number
+        of colors in the colormap. Otherwise, it is an array of hex colors represented by strings.
+
+    Returns
+    -------
+    A vega-like color scale object.
+    """
+    return {
+        "name": name,
+        "type": type_scale,
+        "domain": domain,
+        "range": color_range,
+    }
+
+
+def _create_random_colorscale(data_id: str) -> dict[str, Any]:
+    """Create a vega-like colorscale for random colors.
+
+    There is no way currently to create a vega color scale object with random colors without serializing those. Need to
+    find a way to agree on this.
+
+    Parameters
+    ----------
+    data_id: str
+        The name of the derived data object that pertains to a spatialdata element for which a color scale array object
+        is created.
+
+    Returns
+    -------
+    A vega like color scale object for random color assignment.
+    """
+    return _generate_color_scale_object(f"color_{uuid4()}", "ordinal", {"data": data_id, "field": "value"}, ["random"])
+
+
+def create_categorical_colorscale(color_mapping: dict[str, str]) -> list[dict[str, Any]]:
+    """Create a categorical Vega-like color scale array.
+
+    Parameters
+    ----------
+    color_mapping: dict[str, str]
+        A mapping of individual values in usually a table column to their corresponding hex color in the visualization.
+
+    Returns
+    -------
+    A vega like color scale array containing in this case one color scale object.
+    """
+    return [
+        _generate_color_scale_object(
+            f"color_{uuid4()}", "ordinal", list(color_mapping.keys()), list(color_mapping.values())
+        )
+    ]
+
+
+def _process_colormap(cmap: CmapParams) -> dict[str, Any]:
+    """Process colormap to return a Vega color range dictionary.
+
+    cmap: CmapParams
+        An instance of CmapParams containing information pertaining colormap used and normalization applied.
+
+    Returns
+    -------
+    The `range` value of a vega like color scale object.
+    """
+    if isinstance(cmap, mcolors.ListedColormap | mcolors.LinearSegmentedColormap):
+        if cmap.name in {"from_list", "custom_colormap"}:
+            # TODO: Handle custom colormap logic
+            return {}
+        return {"scheme": cmap.name, "count": cmap.N}
+    return {}
+
+
+def create_colorscale_array_points_shapes_labels(
+    coloring: dict[str, str] | Literal["continuous"] | None,
+    params: PointsRenderParams | ShapesRenderParams | LabelsRenderParams,
+    data_object: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Create a vega like colorscale array based on the colormap parameters for points or shapes.
+
+    Parameters
+    ----------
+    coloring: dict[str, str] | str | None
+        Either a categorical mapping of values to hex color strings or the literal `continuous` in case of a
+        numerical column being used to determine the color of SpatialData shapes or points.
+    params: PointsRenderParams | ShapesRenderParams
+        The render parameters for a given SpatialData points or shapes element.
+    data_object: dict[str, Any]
+        A vega like data object pertaining to a Spatialdata points or shapes element
+        to which the color scale is applied.
+
+    Returns
+    -------
+    A vega like colorscale array containing in this case one color scale object pertaining to a SpatialData points
+    or shapes element.
+    """
+    color_scale_object = {"name": f"color_{uuid4()}"}
+
+    if isinstance(coloring, dict):
+        color_scale_object.update(
+            _generate_color_scale_object(
+                color_scale_object["name"],
+                "ordinal",
+                list(coloring.keys()),
+                [mcolors.to_hex(col, keep_alpha=False) for col in coloring.values()],
+            )
+        )
+    elif coloring == "continuous":
+        if isinstance(params, LabelsRenderParams):
+            field = data_object["transform"][-1].get("as") or [params.color]
+        else:
+            field = data_object["transform"][-1].get("as") or [params.col_for_color]
+        color_scale_object.update(
+            _generate_color_scale_object(
+                color_scale_object["name"],
+                "linear",
+                {"data": data_object["name"], "field": field},
+                _process_colormap(params.cmap_params.cmap),
+            )
+        )
+    elif coloring == "random":
+        color_scale_object.update(
+            _create_random_colorscale(
+                data_object["name"],
+            )
+        )
+
+    return [color_scale_object]
+
+
+def create_colorscale_array_image(
+    cmap_params: list[CmapParams] | CmapParams, data_id: str, field: list[str] | list[int] | int | str | None
+) -> list[dict[str, Any]]:
+    """Create a Vega-like color scale array for a SpatialData image element.
+
+    cmap_params: list[CmapParams] | CmapParams
+        The colormap parameters used to color a particular SpatialData image element.
+    data_id: str
+        The `name` in the vega like derived data object pertaining to a SpatialData image element.
+    field: list[str] | list[int] | int | str | None
+        The part of the SpatialData image or labels element to which apply the color. If `string` or
+        `list` of `strings` it pertains to individual channel names, if `int` or `list` of `int`
+        it pertains to the index or indices of image channel(s).
+
+    Returns
+    -------
+    A color scale array containing vega-like color scale objects pertaining to a SpatialData image element.
+    """
+    cmaps = [param.cmap for param in cmap_params] if isinstance(cmap_params, list) else [cmap_params.cmap]
+    cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps
+
+    color_scale_array = []
+    for index, cmap in enumerate(cmaps):
+        type_scale = "linear"
+        color_range = _process_colormap(cmap)
+
+        if isinstance(field, int | list):
+            field = f"channel_{index}"
+        field = field or "value"
+
+        color_scale_array.append(
+            _generate_color_scale_object(f"color_{uuid4()}", type_scale, {"data": data_id, "field": field}, color_range)
+        )
+
+    return color_scale_array
 
 
 class AxisScaleObject(BaseModel):

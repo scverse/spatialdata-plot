@@ -177,7 +177,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", fill_alpha=0.7, outline_alpha=0.1).pl.show()
 
-    def test_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
+    def test_plot_can_plot_with_one_element_color_table(self, sdata_blobs: SpatialData):
         table = sdata_blobs["table"].copy()
         table.obs["region"] = "blobs_multiscale_labels"
         table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
@@ -188,9 +188,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_subset_categorical_label_maintains_order(self, sdata_blobs: SpatialData):
-        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
-        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
-        sdata_blobs.table.obs["which_max"] = max_col
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True)
+        sdata_blobs["table"].obs["which_max"] = max_col
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
@@ -202,9 +202,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show(ax=axs[1])
 
     def test_plot_subset_categorical_label_maintains_order_when_palette_overwrite(self, sdata_blobs: SpatialData):
-        max_col = sdata_blobs.table.to_df().idxmax(axis=1)
-        max_col = pd.Categorical(max_col, categories=sdata_blobs.table.to_df().columns, ordered=True)
-        sdata_blobs.table.obs["which_max"] = max_col
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        max_col = pd.Categorical(max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True)
+        sdata_blobs["table"].obs["which_max"] = max_col
 
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 

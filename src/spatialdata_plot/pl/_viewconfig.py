@@ -13,9 +13,12 @@ from matplotlib.figure import Figure
 from spatialdata.models import get_table_keys
 
 from spatialdata_plot._viewconfig.layout import create_padding_object
-from spatialdata_plot._viewconfig.scales import create_axis_scale_array
+from spatialdata_plot._viewconfig.scales import (
+    create_axis_scale_array,
+    create_colorscale_array_image,
+    create_colorscale_array_points_shapes_labels,
+)
 from spatialdata_plot.pl.render_params import (
-    CmapParams,
     FigParams,
     ImageRenderParams,
     LabelsRenderParams,
@@ -40,142 +43,6 @@ class VegaAlignment(Enum):
         """Convert Matplotlib horizontal alignment to Vega alignment."""
         mapping = {"left": cls.LEFT, "center": cls.CENTER, "right": cls.RIGHT}
         return mapping.get(alignment, cls.CENTER).value
-
-
-def _create_random_colorscale(data_id: str, field: str) -> list[dict[str, Any]]:
-    """Create a vega like colorscale for random colors.
-
-    This scale is used in case there is a label image for which the labels are visualized by random colors.
-
-    Parameters
-    ----------
-    data_id : str
-        The ID of the derived data object that pertains to a spatialdata label element.
-    field : str
-        The value of the derived datablock to which the color scale gets applied. Typically `value`.
-
-    Returns
-    -------
-    The array containing the vega like random color scale object.
-    """
-    return [
-        {
-            "name": f"color_{str(uuid4())}",
-            "type": "ordinal",
-            "domain": {"data": data_id, "field": field},
-            "range": ["random"],  # TODO: decide how to better do this to simulate label2rgb
-        }
-    ]
-
-
-def _create_categorical_colorscale(color_mapping: dict[str, str]) -> list[dict[str, Any]]:
-    """Create a categorical vega like color scale array.
-
-    Parameters
-    ----------
-    color_mapping : dict[str, str]
-        The mapping of categorical values to colors as hex string.
-
-    Returns
-    -------
-    The array containing the vega like ordinal color scale object.
-    """
-    return [
-        {
-            "name": f"color_{str(uuid4())}",
-            "type": "ordinal",
-            "domain": list(color_mapping.keys()),
-            "range": list(color_mapping.values()),
-        }
-    ]
-
-
-def _create_colorscale_points(
-    cmap_params: list[CmapParams] | CmapParams, color_mapping: None | dict[str, str], params, data_object: str
-) -> list[dict[str, Any]]:
-    cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
-    cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
-    color_scale_array: list[dict[str, Any]] = []
-
-    color_scale_object = {"name": f"color_{str(uuid4())}"}
-    if isinstance(color_mapping, dict):
-        color_scale_object.update(
-            {
-                "type": "ordinal",
-                "domain": list(color_mapping.keys()),
-                "range": [mcolors.to_hex(col) for col in color_mapping.values()],
-            }
-        )
-    elif color_mapping == "continuous":
-        data_id = data_object["name"]
-        field = data_object["transform"][-1].get("as")
-        if not field:
-            field = [params.col_for_color]
-        color_scale_object.update(
-            {
-                "type": "linear",
-                "domain": {"data": data_id, "field": field},
-                "range": {"scheme": params.cmap_params.cmap.name, "count": params.cmap_params.cmap.N},
-            }
-        )
-
-    color_scale_array.append(color_scale_object)
-    return color_scale_array
-
-
-def _create_colorscale_image(
-    cmap_params: list[CmapParams] | CmapParams, data_id: str, field: list[str] | list[int] | int | str | None
-) -> list[dict[str, Any]]:
-    """Create a vega like color scale array to be applied to an image.
-
-    This in particular creates a color scale array based on the colormaps that are part of the ImageRenderParams.
-
-    Parameters
-    ----------
-    cmap_params : CmapParams
-        The colormap parameters used to plot the spatialdata image element.
-    data_id: str
-        The ID of the derived data object that pertains to a spatialdata image element.
-    field:
-        The value of the derived datablock to which the color scale is applied. In case of an image
-        can be a channel or list of channels or the index thereof.
-
-    Returns
-    -------
-    The array containing the vega like color scale array.
-    """
-    cmaps = [cmap_params.cmap] if not isinstance(cmap_params, list) else [param.cmap for param in cmap_params]
-    cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps  # Happens if palette is specified as list of strings
-    color_scale_array: list[dict[str, Any]] = []
-    for index, cmap in enumerate(cmaps):
-        # TODO: check why listedcolormap is only passed on when we specify channel.
-        if isinstance(cmap, mcolors.ListedColormap):
-            type_scale = "linear"
-            if cmap.name == "from_list":  # default name when cmap is custom.
-                # TODO: complete this for all types of cmaps
-                pass
-            else:
-                color_range = {"scheme": cmap.name, "count": cmap.N}
-        elif isinstance(cmap, mcolors.LinearSegmentedColormap):
-            type_scale = "linear"
-            if cmap.name == "custom_colormap":
-                pass
-            else:
-                color_range = {"scheme": cmap.name, "count": cmap.N}
-        if isinstance(field, int | list):
-            field = f"channel_{index}"
-        if not field:
-            field = "value"
-        color_scale_object = {
-            "name": f"color_{str(uuid4())}",
-            "type": type_scale,
-            "domain": {"data": data_id, "field": field},
-            "range": color_range,
-        }
-
-        color_scale_array.append(color_scale_object)
-
-    return color_scale_array
 
 
 def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
@@ -226,7 +93,7 @@ def _create_legend_title_config(title_obj: Text, dpi: float) -> dict[str, Any]:
     }
 
 
-def _create_categorical_legend(fig: Figure, color_scale_array: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _create_categorical_legend(fig: Figure, color_scale_array: list[dict[str, Any]], ax: Axes) -> list[dict[str, Any]]:
     """Create vega like categorical legend array.
 
     Parameters
@@ -235,13 +102,14 @@ def _create_categorical_legend(fig: Figure, color_scale_array: list[dict[str, An
         The matplotlib figure.
     color_scale_array : list[dict[str, Any]]
         The vega like color scale array for which the vega like legend array will be created.
+    ax : Axes
+        A matplotlib Axes object.
 
     Returns
     -------
     The vega like categorical legend array.
     """
     legend_array: list[dict[str, Any]] = []
-    ax = fig.get_axes()[0]
     legend = ax.legend()
     legend_bbox_props = legend.get_frame().properties()
     legend_bbox = legend.get_tightbbox()
@@ -305,48 +173,49 @@ def _create_colorbar_legend(
         if cbar:
             cbars.append(cbar)
 
-    for col_config in color_scale_array:
-        cbar = cbars[legend_count]
+    if len(cbars) != 0:
+        for col_config in color_scale_array:
+            cbar = cbars[legend_count]
 
-        axis_props = cbar.ax.properties()
-        if cbar.orientation == "vertical":
-            gradient_length = cbar.ax.get_position().bounds[-1] * fig.get_figheight() * fig.dpi
-            label = axis_props["yticklabels"][0].properties()
-        else:
-            gradient_length = cbar.ax.get_position().bounds[-2] * fig.get_figwidth() * fig.dpi
-            label = axis_props["xticklabels"][0].properties()
-        if col_config["type"] == "linear":
-            legend_type = "gradient"
-        spine_outline = cbar.outline.properties()  # outline of the colorbar lining
+            axis_props = cbar.ax.properties()
+            if cbar.orientation == "vertical":
+                gradient_length = cbar.ax.get_position().bounds[-1] * fig.get_figheight() * fig.dpi
+                label = axis_props["yticklabels"][0].properties()
+            else:
+                gradient_length = cbar.ax.get_position().bounds[-2] * fig.get_figwidth() * fig.dpi
+                label = axis_props["xticklabels"][0].properties()
+            if col_config["type"] == "linear":
+                legend_type = "gradient"
+            spine_outline = cbar.outline.properties()  # outline of the colorbar lining
 
-        stroke_color = mcolors.to_hex(spine_outline["facecolor"]) if spine_outline["facecolor"][-1] > 0 else None
-        legend_title_object = _create_legend_title_config(cbar.ax.title, fig.dpi)
-        # TODO: do we require padding? it is not obvious to get from matplotlib
-        legend_object = {
-            "type": legend_type,
-            "direction": cbar.orientation,
-            "orient": "none",  # Required in vega in order to use the x and y position
-            "fill": color_scale_array[0]["name"],
-            "fillColor": mcolors.to_hex(cbar.ax.get_facecolor()),
-            "gradientLength": gradient_length,  # alpha if alpha := getattr(cbar.cmap, "_lut", None)[0][-1] else
-            "gradientOpacity": cbar.mappable.get_alpha(),
-            "gradientThickness": (cbar.ax.get_position().bounds[2] * fig.dpi) / 72,
-            "gradientStrokeColor": stroke_color,
-            "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
-            "values": list(cbar.ax.get_yticks()),
-            "labelAlign": label["horizontalalignment"],
-            "labelColor": mcolors.to_hex(label["color"]),
-            "labelFont": label["fontname"],
-            "labelFontSize": (label["fontsize"] * fig.dpi) / 72,
-            "labelFontStyle": label["fontstyle"],
-            "labelFontWeight": label["fontweight"],
-            "legendX": cbar.ax.get_tightbbox().bounds[0],
-            "legendY": fig.bbox.height - cbar.ax.get_tightbbox().bounds[1] - cbar.ax.get_tightbbox().bounds[3],
-            "zindex": axis_props["zorder"],
-        }
-        if legend_title_object["title"] != "":
-            legend_object.update(legend_title_object)
-        legend_array.append(legend_object)
+            stroke_color = mcolors.to_hex(spine_outline["facecolor"]) if spine_outline["facecolor"][-1] > 0 else None
+            legend_title_object = _create_legend_title_config(cbar.ax.title, fig.dpi)
+            # TODO: do we require padding? it is not obvious to get from matplotlib
+            legend_object = {
+                "type": legend_type,
+                "direction": cbar.orientation,
+                "orient": "none",  # Required in vega in order to use the x and y position
+                "fill": color_scale_array[0]["name"],
+                "fillColor": mcolors.to_hex(cbar.ax.get_facecolor()),
+                "gradientLength": gradient_length,  # alpha if alpha := getattr(cbar.cmap, "_lut", None)[0][-1] else
+                "gradientOpacity": cbar.mappable.get_alpha(),
+                "gradientThickness": (cbar.ax.get_position().bounds[2] * fig.dpi) / 72,
+                "gradientStrokeColor": stroke_color,
+                "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
+                "values": list(cbar.ax.get_yticks()),
+                "labelAlign": label["horizontalalignment"],
+                "labelColor": mcolors.to_hex(label["color"]),
+                "labelFont": label["fontname"],
+                "labelFontSize": (label["fontsize"] * fig.dpi) / 72,
+                "labelFontStyle": label["fontstyle"],
+                "labelFontWeight": label["fontweight"],
+                "legendX": cbar.ax.get_tightbbox().bounds[0],
+                "legendY": fig.bbox.height - cbar.ax.get_tightbbox().bounds[1] - cbar.ax.get_tightbbox().bounds[3],
+                "zindex": axis_props["zorder"],
+            }
+            if legend_title_object["title"] != "":
+                legend_object.update(legend_title_object)
+            legend_array.append(legend_object)
     return legend_array
 
 
@@ -399,7 +268,10 @@ def _add_table_lookup(
     """
     if table_id and not isinstance(params, ImageRenderParams):
         _, _, instance_key = get_table_keys(sdata[params.table_name])
-        color = params.color if params.color else params.col_for_color
+        if isinstance(params, LabelsRenderParams):
+            color = params.color
+        else:
+            color = params.color if params.color else params.col_for_color
         data_object["transform"].append(
             {
                 "type": "lookup",
@@ -492,7 +364,6 @@ def _create_derived_data_block(
         data_object["format"] = {"type": "spatialdata_point", "version": 0.1}
     elif "render_shapes" in call:
         data_object["format"] = {"type": "spatialdata_shape", "version": 0.1}
-        marks_object = {"a": 5}
     else:
         raise ValueError(f"Unknown call: {call}")
 
@@ -506,25 +377,24 @@ def _create_derived_data_block(
         # Use isinstance because of possible 0 value
         data_object = _add_norm_transform(params, data_object)
 
-        color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], params.channel)
+        color_scale_array = create_colorscale_array_image(params.cmap_params, data_object["name"], params.channel)
         legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
         marks_object = _create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_labels" in call and isinstance(params, LabelsRenderParams):
         data_object["transform"].append({"type": "filter_scale", "expr": params.scale})
         data_object = _add_table_lookup(sdata, params, data_object, table_id)
-        if data_object["transform"][-1]["type"] == "lookup":
-            color_field = data_object["transform"][-1]["values"][0]
         data_object = _add_norm_transform(params, data_object)
+
+        # if it is a hex color then it should be directly used in the marks object.
+        if not mcolors.is_color_like(params.colortype):
+            color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
         if params.colortype == "continuous":
-            color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], color_field)
+            # color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], color_field)
             legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
-        if params.colortype == "categorical":
-            pass
         if isinstance(params.colortype, dict):
-            color_scale_array = _create_categorical_colorscale(params.colortype)
-            legend_array = _create_categorical_legend(fig, color_scale_array)
-        if params.colortype == "random":
-            color_scale_array = _create_random_colorscale(data_object["name"], "value")
+            # color_scale_array = _create_categorical_colorscale(params.colortype)
+            legend_array = _create_categorical_legend(fig, color_scale_array, ax)
+
         marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_points" in call and isinstance(params, PointsRenderParams):
         data_object = _add_table_lookup(sdata, params, data_object, table_id)
@@ -534,11 +404,11 @@ def _create_derived_data_block(
             data_object = _add_datashade_transform(params, data_object)
         color_scale_array = None
         if params.colortype:
-            color_scale_array = _create_colorscale_points(params.cmap_params, params.colortype, params, data_object)
+            color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
             if params.colortype == "continuous":
                 legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
             if isinstance(params.colortype, dict):
-                legend_array = _create_categorical_legend(fig, color_scale_array)
+                legend_array = _create_categorical_legend(fig, color_scale_array, ax)
         marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
     if "render_shapes" in call and isinstance(params, ShapesRenderParams):
         data_object = _add_table_lookup(sdata, params, data_object, table_id)
@@ -549,11 +419,11 @@ def _create_derived_data_block(
 
         color_scale_array = None
         if params.colortype:
-            color_scale_array = _create_colorscale_points(params.cmap_params, params.colortype, params, data_object)
+            color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
             if params.colortype == "continuous":
                 legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
             if isinstance(params.colortype, dict):
-                legend_array = _create_categorical_legend(fig, color_scale_array)
+                legend_array = _create_categorical_legend(fig, color_scale_array, ax)
 
         marks_object = _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array)
 
@@ -586,12 +456,6 @@ def _create_raster_image_marks_object(
             }
         },
     }
-
-
-def strip_alpha(hex_color: str) -> str:
-    if isinstance(hex_color, str) and hex_color.startswith("#") and len(hex_color) == 9:
-        return hex_color[:7]
-    return hex_color
 
 
 def _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array):
@@ -675,7 +539,7 @@ def _create_shapes_marks_object(ax, params, data_object, call_count, color_scale
 
 def _create_points_symbol_marks_object(
     ax: Axes,
-    params: PointsRenderParams | ShapesRenderParams,
+    params: PointsRenderParams,
     data_object: dict[str, Any],
     call_count: int,
     color_scale_array: list[dict[str, Any]] | None,
@@ -759,7 +623,7 @@ def _create_raster_label_marks_object(
 ) -> dict[str, Any]:
 
     if params.colortype == "continuous":
-        color_col = color_scale_array[0]["domain"]["field"]
+        color_col = color_scale_array[0]["domain"]["field"][0]
         fill_color = [{"scale": color_scale_array[0]["name"], "value": color_col}]
         encode_update = {
             "fill": [
@@ -767,9 +631,18 @@ def _create_raster_label_marks_object(
                 {"value": params.cmap_params.na_color},
             ]
         }
-    if params.colortype == "random" or isinstance(params.colortype, dict):
+    if isinstance(params.colortype, dict):
+        color_col = params.color
+        fill_color = [{"scale": color_scale_array[0]["name"], "value": color_col}]
+        encode_update = {
+            "fill": [
+                {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": color_col},
+                {"value": params.cmap_params.na_color},
+            ]
+        }
+    if params.colortype == "random":
         fill_color = [{"scale": color_scale_array[0]["name"], "value": "value"}]
-    elif params.colortype.startswith("#"):
+    if mcolors.is_color_like(params.colortype):
         fill_color = [{"value": params.colortype}]
 
     labels_object = {
@@ -797,7 +670,7 @@ def strip_call(s: str) -> str:
     return re.sub(r"^\d+_", "", s)
 
 
-def _create_table_data_object(table_name: str, base_uuid: str) -> dict[str, Any]:
+def _create_table_data_object(table_name: str, base_uuid: str, table_layer: str | None) -> dict[str, Any]:
     """Create the vega like data object for a spatialdata table.
 
     Parameters
@@ -807,17 +680,22 @@ def _create_table_data_object(table_name: str, base_uuid: str) -> dict[str, Any]
     base_uuid : str
         The ID of the vega like data object pertaining to the SpatialData zarr store containing
         the table to be added.
+    table_layer: str | None
+        The layer of the anndata table to be used.
 
     Returns
     -------
     The vega like data object for the SpatialData table.
     """
-    return {
+    table_object = {
         "name": str(uuid4()),
         "format": {"type": "spatialdata_table", "version": 0.1},
         "source": base_uuid,
         "transform": [{"type": "filter_element", "expr": table_name}],
     }
+    if table_layer:
+        table_object["transform"].append({"type": "filter_layer", "expr": table_layer})
+    return table_object
 
 
 def _create_data_configs(
@@ -857,7 +735,7 @@ def _create_data_configs(
         call = strip_call(call)
         table_id = None
         if table := getattr(params, "table_name", None):
-            data_array.append(_create_table_data_object(table, base_block["name"]))
+            data_array.append(_create_table_data_object(table, base_block["name"], params.table_layer))
             table_id = data_array[-1]["name"]
         data_object, marks_object, color_scale_array, legend_array = _create_derived_data_block(
             sdata, fig, ax, call, params, base_block["name"], cs, counters[call], table_id, len(color_scale_array_full)
