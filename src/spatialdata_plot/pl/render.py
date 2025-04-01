@@ -53,7 +53,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_transformation,
     _rasterize_if_necessary,
     _set_color_source_vec,
-    to_hex,
+    to_hex_alpha,
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
@@ -148,7 +148,7 @@ def _render_shapes(
     else:
         palette = ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex_alpha(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -371,12 +371,16 @@ def _render_shapes(
             vmax=render_params.cmap_params.norm.vmax or max(color_vector),
         )
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex_alpha(render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
 
-        if not sdata.plotting_tree[f"{render_count}_render_shapes"].colortype and color_mapping:
+        if (
+            sdata.plotting_tree[f"{render_count}_render_shapes"].colortype is not None
+            and color_mapping
+            and color_source_vector is not None
+        ):
             key_diff = set(color_mapping.keys()).difference(color_source_vector)
             color_mapping = {k: v for k, v in color_mapping.items() if k not in key_diff}
             sdata.plotting_tree[f"{render_count}_render_shapes"].colortype = color_mapping
@@ -726,7 +730,7 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
+    if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex_alpha(render_params.cmap_params.na_color):
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
             sdata.plotting_tree[f"{render_count}_render_points"].colortype = "continuous"

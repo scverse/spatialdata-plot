@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import re
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 import matplotlib.colors as mcolors
-import spatialdata
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from spatialdata.models import get_table_keys
 
+from spatialdata_plot._viewconfig.data import (
+    create_base_level_sdata_object,
+    create_derived_data_object,
+    create_table_data_object,
+)
 from spatialdata_plot._viewconfig.layout import create_padding_object
+from spatialdata_plot._viewconfig.misc import VegaAlignment
 from spatialdata_plot._viewconfig.scales import (
     create_axis_scale_array,
     create_colorscale_array_image,
@@ -31,35 +33,6 @@ Params = ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRen
 if TYPE_CHECKING:
     from matplotlib.text import Text
     from spatialdata import SpatialData
-
-
-class VegaAlignment(Enum):
-    LEFT = "start"
-    CENTER = "middle"
-    RIGHT = "end"
-
-    @classmethod
-    def from_matplotlib(cls, alignment: str) -> str:
-        """Convert Matplotlib horizontal alignment to Vega alignment."""
-        mapping = {"left": cls.LEFT, "center": cls.CENTER, "right": cls.RIGHT}
-        return mapping.get(alignment, cls.CENTER).value
-
-
-def _create_base_level_sdata_block(url: str) -> dict[str, Any]:
-    """Create the vega json object for the SpatialData zarr store.
-
-    Parameters
-    ----------
-    url : Path
-        The location of the SpatialData zarr store.
-
-    This config is to be added to the vega data field block.
-    """
-    return {
-        "name": str(uuid4()),
-        "url": url,
-        "format": {"type": "SpatialData", "version": spatialdata.__version__},
-    }
 
 
 def _create_legend_title_config(title_obj: Text, dpi: float) -> dict[str, Any]:
@@ -219,115 +192,14 @@ def _create_colorbar_legend(
     return legend_array
 
 
-def _add_norm_transform(params: Params, data_object: dict[str, Any]) -> dict[str, Any]:
-    """Add a normalization transform to a vega like derived data object.
-
-    Parameters
-    ----------
-    params : Params
-        The render parameters used to plot the particular spatialdata element.
-    data_object: dict[str, Any]
-        The vega like derived data object.
-
-    Returns
-    -------
-    The vega like derived data object with an added normalization transform if normalization was defined
-    in the render parameters.
-    """
-    norm = params.cmap_params.norm if not isinstance(params.cmap_params, list) else params.cmap_params[0].norm
-    field = data_object["transform"][-1]["as"][0] if data_object["transform"][-1]["type"] == "aggregate" else "value"
-    if isinstance(vmin := norm.vmin, float) and isinstance(vmax := norm.vmax, float):
-
-        if norm.clip:
-            formula = f"clamp((datum.{field} - {vmin}) / ({vmax} - {vmin}), 0, 1)"
-        else:
-            formula = f"(datum.{field} - {vmin}) / ({vmax} - {vmin})"
-        data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
-    return data_object
-
-
-def _add_table_lookup(
-    sdata: SpatialData, params: Params, data_object: dict[str, Any], table_id: str | None
-) -> dict[str, Any]:
-    """Add a lookup transform to a vega like derived data object.
-
-    Parameters
-    ----------
-    sdata : SpatialData
-        The spatialdata object containing the table.
-    params: params
-        The render parameters used to plot the particular spatialdata element.
-    data_object: dict[str, Any]
-        The vega like derived data object.
-    table_id: str
-        The ID of the vega data object pertaining to the spatialdata table.
-
-    Returns
-    -------
-    The vega like derived data object with the added lookup transform.
-    """
-    if table_id and not isinstance(params, ImageRenderParams):
-        _, _, instance_key = get_table_keys(sdata[params.table_name])
-        if isinstance(params, LabelsRenderParams):
-            color = params.color
-        else:
-            color = params.color if params.color else params.col_for_color
-        data_object["transform"].append(
-            {
-                "type": "lookup",
-                "from": table_id,
-                "key": instance_key,
-                "fields": ["instance_ids"],
-                "values": [color],
-                "as": [color],
-                "default": None,
-            }
-        )
-    return data_object
-
-
-def _add_datashade_transform(params, data_object):
-    if params.ds_reduction == "std":
-        params.ds_reduction = "stdev"
-    if params.ds_reduction == "var":
-        params.ds_reduction = "variance"
-
-    if data_object["transform"][-1]["type"] == "formula":
-        field = data_object["transform"][-1]["as"]
-        as_field = field
-    elif params.col_for_color:
-        field = params.col_for_color
-        as_field = field
-    else:
-        field = "*"
-        as_field = "count"
-    data_object["transform"].append(
-        {"type": "aggregate", "field": [field], "ops": [params.ds_reduction], "as": [as_field]}
-    )
-    data_object = _add_norm_transform(params, data_object)
-    if data_object["transform"][-1]["type"] == "formula":
-        field = data_object["transform"][-1]["as"]
-    if isinstance(params, PointsRenderParams):
-        data_object["transform"].append(
-            {"type": "spread", "field": [as_field], "px": params.ds_pixel_spread, "as": [as_field]}
-        )
-    else:
-        pass
-    return data_object
-
-
-def _create_derived_data_block(
-    sdata: SpatialData,
+def _create_scales_legends_marks(
     fig: Figure,
     ax: Axes,
-    call: str,
+    data_object: dict[str, Any],
     params: Params,
-    base_uuid: str,
-    cs: str,
     call_count: int,
-    table_id: str | None = None,
     legend_count: int = 0,
-) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create vega like data object for SpatialData elements.
 
     Each object for a SpatialData element contains an additional transform that
@@ -336,98 +208,40 @@ def _create_derived_data_block(
 
     Parameters
     ----------
-    call: str
-        The render call from spatialdata plot, either render_images, render_labels, render_points
-        or render_shapes, prefixed by n_ where n is the index of the render call starting from 0.
     params: Params
         The render parameters used in spatialdata-plot for the particular type of SpatialData
         element.
-    base_uuid: str
-        Unique identifier used to refer to the base level SpatialData zarr store in the vega
-        like view configuration.
-    cs: str
-        The name of the coordinate system in which the SpatialData element was plotted.
     """
-    data_object: dict[str, Any] = {}
     marks_object: dict[str, Any] = {}
     color_scale_array: list[dict[str, Any]] = []
     legend_array: list[dict[str, Any]] = []
 
-    data_object["name"] = params.element + "_" + str(uuid4())
-
-    # TODO: think about versioning of individual spatialdata elements
-    if "render_images" in call and isinstance(params, ImageRenderParams):
-        data_object["format"] = {"type": "spatialdata_image", "version": 0.1}
-    elif "render_labels" in call:
-        data_object["format"] = {"type": "spatialdata_label", "version": 0.1}
-    elif "render_points" in call:
-        data_object["format"] = {"type": "spatialdata_point", "version": 0.1}
-    elif "render_shapes" in call:
-        data_object["format"] = {"type": "spatialdata_shape", "version": 0.1}
-    else:
-        raise ValueError(f"Unknown call: {call}")
-
-    data_object["source"] = base_uuid
-    data_object["transform"] = [{"type": "filter_element", "expr": params.element}, {"type": "filter_cs", "expr": cs}]
-
-    if "render_images" in call and isinstance(params, ImageRenderParams):  # second part to shut up mypy
-        multiscale = "full" if not params.scale else params.scale
-        data_object["transform"].append({"type": "filter_scale", "expr": multiscale})
-        data_object["transform"].append({"type": "filter_channel", "expr": params.channel})
-        # Use isinstance because of possible 0 value
-        data_object = _add_norm_transform(params, data_object)
-
+    if isinstance(params, ImageRenderParams):  # second part to shut up mypy
         color_scale_array = create_colorscale_array_image(params.cmap_params, data_object["name"], params.channel)
         legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
         marks_object = _create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
-    if "render_labels" in call and isinstance(params, LabelsRenderParams):
-        data_object["transform"].append({"type": "filter_scale", "expr": params.scale})
-        data_object = _add_table_lookup(sdata, params, data_object, table_id)
-        data_object = _add_norm_transform(params, data_object)
-
-        # if it is a hex color then it should be directly used in the marks object.
-        if not mcolors.is_color_like(params.colortype):
+    if isinstance(params, LabelsRenderParams):
+        if params.colortype is not None:
             color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
-        if params.colortype == "continuous":
-            # color_scale_array = _create_colorscale_image(params.cmap_params, data_object["name"], color_field)
+        if not mcolors.is_color_like(params.colortype):
             legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
         if isinstance(params.colortype, dict):
-            # color_scale_array = _create_categorical_colorscale(params.colortype)
             legend_array = _create_categorical_legend(fig, color_scale_array, ax)
-
         marks_object = _create_raster_label_marks_object(ax, params, data_object, call_count, color_scale_array)
-    if "render_points" in call and isinstance(params, PointsRenderParams):
-        data_object = _add_table_lookup(sdata, params, data_object, table_id)
-        if not params.ds_reduction:
-            data_object = _add_norm_transform(params, data_object)
-        if params.ds_reduction:
-            data_object = _add_datashade_transform(params, data_object)
-        color_scale_array = None
-        if params.colortype:
-            color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
-            if params.colortype == "continuous":
-                legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
-            if isinstance(params.colortype, dict):
-                legend_array = _create_categorical_legend(fig, color_scale_array, ax)
-        marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
-    if "render_shapes" in call and isinstance(params, ShapesRenderParams):
-        data_object = _add_table_lookup(sdata, params, data_object, table_id)
-        if not params.ds_reduction:
-            data_object = _add_norm_transform(params, data_object)
-        if params.ds_reduction:
-            data_object = _add_datashade_transform(params, data_object)
-
-        color_scale_array = None
-        if params.colortype:
+    if isinstance(params, PointsRenderParams | ShapesRenderParams):
+        if params.colortype is not None:
             color_scale_array = create_colorscale_array_points_shapes_labels(params.colortype, params, data_object)
             if params.colortype == "continuous":
                 legend_array = _create_colorbar_legend(fig, color_scale_array, legend_count)
             if isinstance(params.colortype, dict):
                 legend_array = _create_categorical_legend(fig, color_scale_array, ax)
 
-        marks_object = _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array)
+        if isinstance(params, PointsRenderParams):
+            marks_object = _create_points_symbol_marks_object(ax, params, data_object, call_count, color_scale_array)
+        else:
+            marks_object = _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array)
 
-    return data_object, marks_object, color_scale_array, legend_array
+    return marks_object, color_scale_array, legend_array
 
 
 def _create_raster_image_marks_object(
@@ -458,7 +272,13 @@ def _create_raster_image_marks_object(
     }
 
 
-def _create_shapes_marks_object(ax, params, data_object, call_count, color_scale_array):
+def _create_shapes_marks_object(
+    ax: Axes,
+    params: ShapesRenderParams,
+    data_object: dict[str, Any],
+    call_count: int,
+    color_scale_array: list[dict[str, Any]],
+) -> dict[str, Any]:
     encode_update = None
     if not color_scale_array and not params.color:
         fill_color = {"value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)}
@@ -526,7 +346,7 @@ def _create_shapes_marks_object(ax, params, data_object, call_count, color_scale
         outline_par = params.outline_params
         stroke_color = {"value": mcolors.to_hex(outline_par.outline_color, keep_alpha=False)}
 
-        shapes_object["encode"]["enter"].update(
+        shapes_object["encode"]["enter"].update(  # type: ignore[index]
             {
                 "stroke": stroke_color,
                 "strokeWidth": {"value": outline_par.linewidth},
@@ -543,33 +363,32 @@ def _create_points_symbol_marks_object(
     data_object: dict[str, Any],
     call_count: int,
     color_scale_array: list[dict[str, Any]] | None,
-):
-    encode_update = None
+) -> dict[str, Any]:
+    encode_update = {}
     if not color_scale_array and not params.color:
         fill_color = {"value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)}
     elif not color_scale_array and params.color:
         fill_color = {"value": mcolors.to_hex(params.color, keep_alpha=False)}
     elif color_scale_array and (params.color or params.col_for_color):
         if isinstance(params.colortype, dict):
-            encode_update = {
-                "fill": [
-                    {
-                        "test": f"!isValid(datum.{params.col_for_color})",
-                        "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
-                    }
-                ]
-            }
-            fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
-        else:
-            value = val[0] if isinstance(val := color_scale_array[0]["domain"]["field"], list) else val
-            fill_color = {"scale": color_scale_array[0]["name"], "value": value}
-            encode_update = {"fill": []}
-            encode_update["fill"].append(
+            encode_update["fill"] = [
                 {
                     "test": f"!isValid(datum.{params.col_for_color})",
                     "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
                 }
-            )
+            ]
+            fill_color = {"scale": color_scale_array[0]["name"], "field": params.col_for_color}
+        else:
+            value = val[0] if isinstance(val := color_scale_array[0]["domain"]["field"], list) else val
+            fill_color = {"scale": color_scale_array[0]["name"], "value": value}
+            # encode_update = {"fill": []}
+            encode_update["fill"] = [
+                {
+                    "test": f"!isValid(datum.{params.col_for_color})",
+                    "value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False),
+                }
+            ]
+
             if (params.cmap_params.norm.vmin is not None or params.cmap_params.norm.vmax is not None) and (
                 params.cmap_params.cmap.get_under() is not None or params.cmap_params.cmap.get_over() is not None
             ):
@@ -609,7 +428,7 @@ def _create_points_symbol_marks_object(
     }
     if encode_update:
         # TODO: check if we can give info that na-color is used prior to adding this. If so then add if conditional.
-        points_object["encode"]["update"] = encode_update
+        points_object["encode"]["update"] = encode_update  # type: ignore[index]
 
     return points_object
 
@@ -670,37 +489,9 @@ def strip_call(s: str) -> str:
     return re.sub(r"^\d+_", "", s)
 
 
-def _create_table_data_object(table_name: str, base_uuid: str, table_layer: str | None) -> dict[str, Any]:
-    """Create the vega like data object for a spatialdata table.
-
-    Parameters
-    ----------
-    table_name : str
-        Name of the table in the SpatialData object.
-    base_uuid : str
-        The ID of the vega like data object pertaining to the SpatialData zarr store containing
-        the table to be added.
-    table_layer: str | None
-        The layer of the anndata table to be used.
-
-    Returns
-    -------
-    The vega like data object for the SpatialData table.
-    """
-    table_object = {
-        "name": str(uuid4()),
-        "format": {"type": "spatialdata_table", "version": 0.1},
-        "source": base_uuid,
-        "transform": [{"type": "filter_element", "expr": table_name}],
-    }
-    if table_layer:
-        table_object["transform"].append({"type": "filter_layer", "expr": table_layer})
-    return table_object
-
-
 def _create_data_configs(
     sdata: SpatialData, fig: Figure, ax: Axes, cs: str, sdata_path: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Create the vega json array value to the data key.
 
     The data array in the SpatialData vegalike viewconfig consists out of
@@ -720,14 +511,14 @@ def _create_data_configs(
     """
     data_array = []
     marks_array = []
-    color_scale_array_full = []
+    color_scale_array_full: list[dict[str, Any]] = []
     legend_array_full = []
     url = str(Path("sdata.zarr"))
 
     if sdata_path:
         url = sdata_path
 
-    base_block = _create_base_level_sdata_block(url)
+    base_block = create_base_level_sdata_object(url)
     data_array.append(base_block)
 
     counters = {"render_images": 0, "render_labels": 0, "render_points": 0, "render_shapes": 0}
@@ -735,13 +526,13 @@ def _create_data_configs(
         call = strip_call(call)
         table_id = None
         if table := getattr(params, "table_name", None):
-            data_array.append(_create_table_data_object(table, base_block["name"], params.table_layer))
+            data_array.append(create_table_data_object(table, base_block["name"], params.table_layer))
             table_id = data_array[-1]["name"]
-        data_object, marks_object, color_scale_array, legend_array = _create_derived_data_block(
-            sdata, fig, ax, call, params, base_block["name"], cs, counters[call], table_id, len(color_scale_array_full)
+        data_array.append(create_derived_data_object(sdata, call, params, base_block["name"], cs, table_id))
+        marks_object, color_scale_array, legend_array = _create_scales_legends_marks(
+            fig, ax, data_array[-1], params, counters[call], len(color_scale_array_full)
         )
 
-        data_array.append(data_object)
         marks_array.append(marks_object)
         if color_scale_array:
             color_scale_array_full += color_scale_array

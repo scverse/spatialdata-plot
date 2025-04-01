@@ -36,6 +36,7 @@ from matplotlib.colors import (
     LinearSegmentedColormap,
     ListedColormap,
     Normalize,
+    to_hex,
     to_rgba,
 )
 from matplotlib.figure import Figure
@@ -79,7 +80,7 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 
-to_hex = partial(colors.to_hex, keep_alpha=True)
+to_hex_alpha = partial(colors.to_hex, keep_alpha=True)
 
 # replace with
 # from spatialdata._types import ColorLike
@@ -275,13 +276,13 @@ def _sanitise_na_color(na_color: ColorLike | None) -> tuple[str, bool]:
     """
     if na_color == "default":
         # user kept the default
-        return to_hex("lightgray"), False
+        return to_hex_alpha("lightgray"), False
     if na_color is None:
         # user wants to hide NAs
         return "#FFFFFF00", True  # zero alpha so it's hidden
     if colors.is_color_like(na_color):
         # user specified a color (including "lightgray")
-        return to_hex(na_color), True
+        return to_hex_alpha(na_color), True
 
     # Handle unexpected values (optional)
     raise ValueError(f"Invalid na_color value: {na_color}")
@@ -637,13 +638,13 @@ def _get_colors_for_categorical_obs(
     color_idx = np.linspace(0, 1, len_cat) if len_cat > 1 else [0.7]
 
     if isinstance(palette, str):
-        palette = [to_hex(palette)]
+        palette = [to_hex_alpha(palette)]
     elif isinstance(palette, list):
-        palette = [to_hex(x) for x in palette]
+        palette = [to_hex_alpha(x) for x in palette]
     elif isinstance(palette, ListedColormap):
-        palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
+        palette = [to_hex_alpha(x) for x in palette(color_idx, alpha=alpha)]
     elif isinstance(palette, LinearSegmentedColormap):
-        palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
+        palette = [to_hex_alpha(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
     else:
         raise TypeError(f"Palette is {type(palette)} but should be string or list.")
 
@@ -663,7 +664,7 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
     render_type: Literal["points"] | None = None,
-) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool, dict[str, str] | None]:
+) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool, Mapping[str, str] | None]:
     color_mapping = None
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)
@@ -726,7 +727,7 @@ def _set_color_source_vec(
         return color_source_vector, color_vector, True, color_mapping
 
     logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    color = np.full(sdata[table_name].n_obs, to_hex(na_color))
+    color = np.full(sdata[table_name].n_obs, to_hex_alpha(na_color))
     return color, color, False, color_mapping
 
 
@@ -778,7 +779,7 @@ def _map_color_seg(
                 # we have hex colors
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
-                variable_type = color_vector[0][:-2]
+                variable_type = to_hex(color_vector[0], keep_alpha=False)
             else:
                 cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
@@ -817,8 +818,8 @@ def _generate_base_categorial_color_mapping(
             # should be unreachable, but just for safety
             raise ValueError("Expected `na_color` to be a hex color, but got a non-hex color.")
 
-        colors = [to_hex(to_rgba(color)[:3]) for color in colors]
-        na_color = to_hex(to_rgba(na_color)[:3])
+        colors = [to_hex_alpha(to_rgba(color)[:3]) for color in colors]
+        na_color = to_hex_alpha(to_rgba(na_color)[:3])
 
         if na_color and len(categories) > len(colors):
             return dict(zip(categories, colors + [na_color], strict=True))
@@ -862,7 +863,7 @@ def _get_default_categorial_color_mapping(
         logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
 
     return {
-        cat: to_hex(to_rgba(col)[:3])
+        cat: to_hex_alpha(to_rgba(col)[:3])
         for cat, col in zip(color_source_vector.categories, palette[:len_cat], strict=True)
     }
 
@@ -889,9 +890,9 @@ def _get_categorical_color_mapping(
 
         color_idx = color_idx = np.linspace(0, 1, len(color_source_vector.categories))
         if isinstance(palette, ListedColormap):
-            palette = [to_hex(x) for x in palette(color_idx, alpha=alpha)]
+            palette = [to_hex_alpha(x) for x in palette(color_idx, alpha=alpha)]
         elif isinstance(palette, LinearSegmentedColormap):
-            palette = [to_hex(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
+            palette = [to_hex_alpha(palette(x, alpha=alpha)) for x in color_idx]  # type: ignore[attr-defined]
         return dict(zip(color_source_vector.categories, palette, strict=True))
 
     if isinstance(palette, str):
@@ -2108,7 +2109,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: str | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2172,7 +2173,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: str | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2267,11 +2268,13 @@ def _datashader_map_aggregate_to_color(
 
         agg_under = agg.where(agg < span[0])
         img_under = ds.tf.shade(
-            agg_under, cmap=[to_hex(cmap.get_under())[:7]], min_alpha=min_alpha, color_key=color_key
+            agg_under, cmap=[to_hex_alpha(cmap.get_under())[:7]], min_alpha=min_alpha, color_key=color_key
         )
 
         agg_over = agg.where(agg > span[1])
-        img_over = ds.tf.shade(agg_over, cmap=[to_hex(cmap.get_over())[:7]], min_alpha=min_alpha, color_key=color_key)
+        img_over = ds.tf.shade(
+            agg_over, cmap=[to_hex_alpha(cmap.get_over())[:7]], min_alpha=min_alpha, color_key=color_key
+        )
 
         # stack the 3 arrays manually: go from under, through in to over and always overlay the values where alpha=0
         stack = img_under.to_numpy().base

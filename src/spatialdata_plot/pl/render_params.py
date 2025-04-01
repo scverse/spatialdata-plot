@@ -79,7 +79,7 @@ class ShapesRenderParams:
     element: str
     color: str | None = None
     col_for_color: str | None = None
-    colortype: str | None = None
+    colortype: str | dict[str, str] | Literal["continuous"] | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
     palette: ListedColormap | list[str] | None = None
@@ -91,7 +91,7 @@ class ShapesRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: str | None = None
     ds_pixel_spread: float | None = None
 
 
@@ -103,7 +103,7 @@ class PointsRenderParams:
     element: str
     color: str | None = None
     col_for_color: str | None = None
-    colortype: str | None = None
+    colortype: str | dict[str, str] | Literal["continuous"] | None = None
     groups: str | list[str] | None = None
     palette: ListedColormap | list[str] | None = None
     alpha: float = 1.0
@@ -113,7 +113,7 @@ class PointsRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: str | None = None
     ds_pixel_spread: float | None = None
 
 
@@ -148,4 +148,4 @@ class LabelsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     zorder: int = 0
-    colortype: str | None = None
+    colortype: dict[str, str] | Literal["continuous" | "random"] | None = None

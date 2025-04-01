@@ -62,7 +62,10 @@ def get_axis_scale_object(ax: Axes, axis_name: str) -> dict[str, Any]:
 
 
 def _generate_color_scale_object(
-    name: str, type_scale: str, domain: list[str] | dict[str, str], color_range: list[str] | dict[str, str | int]
+    name: str,
+    type_scale: str,
+    domain: list[str] | dict[str, Any],
+    color_range: list[str] | dict[str, str | int],
 ) -> dict[str, Any]:
     """Create vega like color scale object.
 
@@ -153,7 +156,7 @@ def _process_colormap(cmap: CmapParams) -> dict[str, Any]:
 
 
 def create_colorscale_array_points_shapes_labels(
-    coloring: dict[str, str] | Literal["continuous"] | None,
+    coloring: dict[str, str] | Literal["continuous"] | str,
     params: PointsRenderParams | ShapesRenderParams | LabelsRenderParams,
     data_object: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -188,9 +191,9 @@ def create_colorscale_array_points_shapes_labels(
         )
     elif coloring == "continuous":
         if isinstance(params, LabelsRenderParams):
-            field = data_object["transform"][-1].get("as") or [params.color]
+            field = data_object["transform"][-1].get("as") or params.color
         else:
-            field = data_object["transform"][-1].get("as") or [params.col_for_color]
+            field = data_object["transform"][-1].get("as") or params.col_for_color
         color_scale_object.update(
             _generate_color_scale_object(
                 color_scale_object["name"],
