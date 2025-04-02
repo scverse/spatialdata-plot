@@ -1,23 +1,43 @@
 {
-    "template": "/Users/tim.treis/Documents/GitHub/cookiecutter-scverse",
-    "commit": "7cc5403b05e299d7a4bb169c2bd8c27a2a7676f3",
-    "checkout": null,
-    "context": {
-        "cookiecutter": {
-            "project_name": "spatialdata-plot",
-            "package_name": "spatialdata_plot",
-            "project_description": "A very interesting piece of code",
-            "author_full_name": "scverse",
-            "author_email": "scverse",
-            "github_user": "scverse",
-            "project_repo": "https://github.com/scverse/spatialdata-plot",
-            "license": "BSD 3-Clause License",
-            "_copy_without_render": [
-                ".github/workflows/**.yaml",
-                "docs/_templates/autosummary/**.rst"
-            ],
-            "_template": "/Users/tim.treis/Documents/GitHub/cookiecutter-scverse"
-        }
-    },
-    "directory": null
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "94ef9fb6f9ad8cfe65a3d9575679c03c80c49cd1",
+  "checkout": "v0.5.0",
+  "context": {
+    "cookiecutter": {
+      "project_name": "spatialdata-plot",
+      "package_name": "spatialdata_plot",
+      "project_description": "A very interesting piece of code",
+      "author_full_name": "scverse",
+      "author_email": "scverse",
+      "github_user": "scverse",
+      "github_repo": "spatialdata-plot",
+      "license": "BSD 3-Clause License",
+      "ide_integration": true,
+      "_copy_without_render": [
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_exclude_on_template_update": [
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "docs/api.md",
+        "docs/index.md",
+        "docs/notebooks/example.ipynb",
+        "docs/references.bib",
+        "docs/references.md",
+        "src/**",
+        "tests/**"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "94ef9fb6f9ad8cfe65a3d9575679c03c80c49cd1"
+    }
+  },
+  "directory": null
 }
