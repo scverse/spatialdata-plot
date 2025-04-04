@@ -85,14 +85,14 @@ def add_norm_transform_to_data_object(
     last_transform = data_object["transform"][-1]
     field = last_transform["as"][0] if last_transform["type"] == "aggregate" else "value"
 
-    if not isinstance(norm.vmin, float) and isinstance(norm.vmax, float):
+    if norm.vmin is None and norm.vmax is None:
         return data_object
 
     norm_expr = f"(datum.{field} - {norm.vmin}) / ({norm.vmax} - {norm.vmin})"
     if norm.clip:
-        formula = f"clamp({norm_expr}, 0, 1)"
+        norm_expr = f"clamp({norm_expr}, 0, 1)"
 
-    data_object["transform"].append({"type": "formula", "expr": formula, "as": str(uuid4())})
+    data_object["transform"].append({"type": "formula", "expr": norm_expr, "as": str(uuid4())})
     return data_object
 
 
@@ -205,10 +205,10 @@ def _create_base_derived_data_object(element_name: str, call: str, cs: str, base
     A base vega like data object for derived SpatialData elements.
     """
     format_types = {
-        "render_images": (str(CurrentRasterFormat), CurrentRasterFormat().spatialdata_format_version),
-        "render_labels": (str(CurrentRasterFormat), CurrentRasterFormat().spatialdata_format_version),
-        "render_points": (str(CurrentPointsFormat), CurrentPointsFormat().spatialdata_format_version),
-        "render_shapes": (str(CurrentShapesFormat), CurrentShapesFormat().spatialdata_format_version),
+        "render_images": (CurrentRasterFormat.__name__, CurrentRasterFormat().spatialdata_format_version),
+        "render_labels": (CurrentRasterFormat.__name__, CurrentRasterFormat().spatialdata_format_version),
+        "render_points": (CurrentPointsFormat.__name__, CurrentPointsFormat().spatialdata_format_version),
+        "render_shapes": (CurrentShapesFormat.__name__, CurrentShapesFormat().spatialdata_format_version),
     }
 
     for key, fmt in format_types.items():
