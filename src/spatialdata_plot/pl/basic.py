@@ -26,7 +26,7 @@ from xarray import DataArray, DataTree
 
 import spatialdata_plot.config
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot.pl._viewconfig import create_viewconfig
+from spatialdata_plot._viewconfig.config import create_viewconfig
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -1091,7 +1091,7 @@ class PlotAccessor:
 
         viewconfig: list[dict[str, Any]] | None = None
         if store_viewconfig_in_attrs or store_viewconfig_to_disk:
-            viewconfig = [create_viewconfig(sdata, fig_params, legend_params, store_viewconfig_cs)]
+            viewconfig = [create_viewconfig(sdata, fig_params, store_viewconfig_cs)]
         if store_viewconfig_in_attrs:
             root = sdata
             while hasattr(root, "_sdata"):
