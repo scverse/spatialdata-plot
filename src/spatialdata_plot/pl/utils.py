@@ -360,13 +360,15 @@ def _get_collection_shape(
             c = cmap(c)
         else:
             try:
-                norm = colors.Normalize(vmin=min(c), vmax=max(c)) if norm is None else norm
+                norm = colors.Normalize(vmin=np.nanmin(c), vmax=np.nanmax(c)) if norm is None else norm
             except ValueError as e:
                 raise ValueError(
                     "Could not convert values in the `color` column to float, if `color` column represents"
                     " categories, set the column to categorical dtype."
                 ) from e
-            c = cmap(norm(c))
+            # normalize only the not nan values, else the whole array would contain only nan values
+            c[~c.isnull()] = norm(c[~c.isnull()])
+            c = cmap(c)
 
     fill_c = ColorConverter().to_rgba_array(c)
     fill_c[..., -1] *= render_params.fill_alpha
@@ -773,6 +775,9 @@ def _set_color_source_vec(
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
+        # nan handling
+        color_vector = color_vector.add_categories(na_color)
+        color_vector[pd.isna(color_vector)] = na_color
 
         return color_source_vector, color_vector, True
 
@@ -796,15 +801,25 @@ def _map_color_seg(
 
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
-        if np.any(color_source_vector.isna()):
-            cell_id[color_source_vector.isna()] = 0
+
+        # TODO: remove
+        # in seg, the value 0 depicts the background, so this leads to the bg being mapped to the NaN color
+        # the actual label(s) with na in the color_source_vector don't have their id in cell_id anymore, so they're
+        # mapped to nothing! => would look like background
+        # if np.any(color_source_vector.isna()):
+        # cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        # normalize only the not nan values, else the whole array would contain only nan values
+        normed_color_vector = color_vector.copy().astype(float)
+        normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
+            normed_color_vector[~np.isnan(normed_color_vector)]
+        )
+        cols = cmap_params.cmap(normed_color_vector)
         val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors

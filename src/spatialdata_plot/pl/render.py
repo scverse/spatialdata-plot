@@ -205,9 +205,13 @@ def _render_shapes(
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
+
         aggregate_with_reduction = None
+        continuous_nan_shapes = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
+                # add nan as a category so that shapes with nan value are colored in the nan color
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
                 agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
@@ -220,6 +224,13 @@ def _render_shapes(
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
+
+                # nan shapes need to be rendered separately (else: invisible, bc nan is skipped by aggregation methods)
+                transformed_element_nan_color = transformed_element[transformed_element[col_for_color].isnull()]
+                if len(transformed_element_nan_color) > 0:
+                    continuous_nan_shapes = _datashader_aggregate_with_function(
+                        "any", cvs, transformed_element_nan_color, None, "shapes"
+                    )
         else:
             agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
         # render outlines if needed
@@ -282,6 +293,18 @@ def _render_shapes(
                 clip=norm.clip,
             )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
+            if continuous_nan_shapes is not None:
+                # for coloring by continuous variable: render nan shapes separately
+                nan_color = render_params.cmap_params.na_color
+                if isinstance(nan_color, str) and nan_color.startswith("#") and len(nan_color) == 9:
+                    nan_color = nan_color[:7]
+                continuous_nan_shapes = ds.tf.shade(
+                    continuous_nan_shapes,
+                    cmap=nan_color,
+                    how="linear",
+                    min_alpha=np.min([254, render_params.fill_alpha * 255]),
+                )
+
         # shade outlines if needed
         outline_color = render_params.outline_params.outline_color
         if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
@@ -299,6 +322,17 @@ def _render_shapes(
                 how="linear",
             )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
+        if continuous_nan_shapes is not None:
+            # for coloring by continuous variable: render nan points separately
+            rgba_image_nan, trans_data_nan = _create_image_from_datashader_result(continuous_nan_shapes, factor, ax)
+            _ax_show_and_transform(
+                rgba_image_nan,
+                trans_data_nan,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.fill_alpha,
+                extent=x_ext + y_ext,
+            )
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
             rgba_image,
@@ -338,7 +372,7 @@ def _render_shapes(
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
-            c=color_vector,
+            c=color_vector.copy(),  # copy bc c is modified in _get_collection_shape
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
@@ -358,8 +392,8 @@ def _render_shapes(
         # If the user passed a Normalize object with vmin/vmax we'll use those,
         # if not we'll use the min/max of the color_vector
         _cax.set_clim(
-            vmin=render_params.cmap_params.norm.vmin or min(color_vector),
-            vmax=render_params.cmap_params.norm.vmax or max(color_vector),
+            vmin=render_params.cmap_params.norm.vmin or np.nanmin(color_vector),
+            vmax=render_params.cmap_params.norm.vmax or np.nanmax(color_vector),
         )
 
     if len(set(color_vector)) != 1 or list(set(color_vector))[0] != to_hex(render_params.cmap_params.na_color):
@@ -569,15 +603,28 @@ def _render_points(
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
+        # in case we are coloring by a column in table
+        if col_for_color is not None and col_for_color not in transformed_element.columns:
+            if color_source_vector is not None:
+                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_source_vector))
+            else:
+                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_vector))
+            transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
+
         color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
             object,
             "categorical",
         )
         if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
+
         aggregate_with_reduction = None
+        continuous_nan_points = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
+                # add nan as category so that nan points are shown in the nan color
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.as_known()
+                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -590,6 +637,12 @@ def _render_points(
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
+                # nan points need to be rendered separately (else: invisible, bc nan is skipped by aggregation methods)
+                transformed_element_nan_color = transformed_element[transformed_element[col_for_color].isnull()]
+                if len(transformed_element_nan_color) > 0:
+                    continuous_nan_points = _datashader_aggregate_with_function(
+                        "any", cvs, transformed_element_nan_color, None, "points"
+                    )
         else:
             agg = cvs.points(transformed_element, "x", "y", agg=ds.count())
 
@@ -652,6 +705,29 @@ def _render_points(
                 min_alpha=np.min([254, render_params.alpha * 255]),
             )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
 
+            if continuous_nan_points is not None:
+                # for coloring by continuous variable: render nan points separately
+                nan_color = render_params.cmap_params.na_color
+                if isinstance(nan_color, str) and nan_color.startswith("#") and len(nan_color) == 9:
+                    nan_color = nan_color[:7]
+                continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how="max")
+                continuous_nan_points = ds.tf.shade(
+                    continuous_nan_points,
+                    cmap=nan_color,
+                    how="linear",
+                )
+
+        if continuous_nan_points is not None:
+            # for coloring by continuous variable: render nan points separately
+            rgba_image_nan, trans_data_nan = _create_image_from_datashader_result(continuous_nan_points, factor, ax)
+            _ax_show_and_transform(
+                rgba_image_nan,
+                trans_data_nan,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.alpha,
+                extent=x_ext + y_ext,
+            )
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _ax_show_and_transform(
             rgba_image,
@@ -690,6 +766,7 @@ def _render_points(
             alpha=render_params.alpha,
             transform=trans_data,
             zorder=render_params.zorder,
+            plotnonfinite=True,  # nan points should be rendered as well
         )
         cax = ax.add_collection(_cax)
         if update_parameters:
