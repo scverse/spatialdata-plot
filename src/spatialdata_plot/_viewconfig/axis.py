@@ -1,6 +1,7 @@
 from typing import Any
 
 import matplotlib.colors as mcolors
+import numpy as np
 from matplotlib.axes import Axes
 
 from spatialdata_plot._viewconfig.misc import parse_numbers_with_exact_format
@@ -50,7 +51,7 @@ def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: fl
                     tick_props["markersize"] * dpi
                 ) / 72  # also marker edge width, but vega doesn't have an equivalent for that.
 
-                vmin, vmax = axis_props["view_interval"]
+                vmin, vmax = np.sort(axis_props["view_interval"])
                 tick_str_values = [
                     ticklabel.get_text()
                     for ticklabel in axis_props["ticklabels"]
