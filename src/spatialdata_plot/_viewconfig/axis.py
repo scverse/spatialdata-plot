@@ -3,6 +3,7 @@ from typing import Any
 import matplotlib.colors as mcolors
 from matplotlib.axes import Axes
 
+from spatialdata_plot._viewconfig.misc import parse_numbers_with_exact_format
 from spatialdata_plot.pl.utils import to_hex_alpha
 
 
@@ -37,8 +38,7 @@ def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: fl
         axis_config["labelFontSize"] = (axis_props["majorticklabels"][0].get_size() * dpi) / 72
         axis_config["labelFontStyle"] = axis_props["majorticklabels"][0].get_fontstyle()
         axis_config["labelFontWeight"] = axis_props["majorticklabels"][0].get_fontweight()
-        axis_config["tickCount"] = len(axis_props["ticklocs"])
-        if axis_config["tickCount"] != 0:
+        if len(axis_props["ticklocs"]) != 0:
             tick_props = axis_props["ticklines"][0].properties()
             axis_config["ticks"] = tick_props["visible"]
             axis_config["tickOpacity"] = tick_props["alpha"] if tick_props["alpha"] else 1
@@ -49,6 +49,14 @@ def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: fl
                 axis_config["tickSize"] = (
                     tick_props["markersize"] * dpi
                 ) / 72  # also marker edge width, but vega doesn't have an equivalent for that.
+
+                vmin, vmax = axis_props["view_interval"]
+                tick_str_values = [
+                    ticklabel.get_text()
+                    for ticklabel in axis_props["ticklabels"]
+                    if vmin <= float(ticklabel.get_text()) <= vmax
+                ]
+                axis_config["values"] = parse_numbers_with_exact_format(tick_str_values)
 
         label = axis_props["label_text"]
         if label != "":
