@@ -159,18 +159,12 @@ def create_colorbar_legend(
                 "gradientStrokeColor": stroke_color,
                 "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
                 "values": enforce_common_decimal_format(list(cbar.ax.get_yticks())),
-                # "labelAlign": label["horizontalalignment"],
-                # "labelColor": mcolors.to_hex(label["color"]),
-                # "labelFont": label["fontname"],
-                # "labelFontSize": (label["fontsize"] * fig.dpi) / 72,
-                # "labelFontStyle": label["fontstyle"],
-                # "labelFontWeight": label["fontweight"],
+                **common_props,
                 "legendX": cbar.ax.get_tightbbox().bounds[0],
                 "legendY": fig.bbox.height - cbar.ax.get_tightbbox().bounds[1] - cbar.ax.get_tightbbox().bounds[3],
-                **common_props,
                 "zindex": axis_props["zorder"],
             }
             if legend_title_object["title"] != "":
-                legend_object.update(legend_title_object)
+                legend_object |= legend_title_object
             legend_array.append(legend_object)
     return legend_array
