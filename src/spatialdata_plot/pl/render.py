@@ -960,6 +960,17 @@ def _render_labels(
         table_layer=table_layer,
     )
 
+    # rasterize could have removed labels from label
+    if rasterize:
+        labels_in_rasterized_image=np.unique( label.values )
+        mask=np.isin( instance_id, labels_in_rasterized_image )
+        instance_id=instance_id[mask]
+        color_vector=color_vector[mask]
+        if pd.api.types.is_categorical_dtype(color_vector.dtype):
+            color_vector=color_vector.remove_unused_categories()
+        if color_source_vector is not None:
+            color_source_vector=color_source_vector[mask]
+
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
             seg=label.values,
