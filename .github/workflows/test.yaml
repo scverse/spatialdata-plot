@@ -26,9 +26,9 @@ jobs:
       PYTHON: ${{ matrix.python }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
@@ -59,7 +59,7 @@ jobs:
           pytest -v --cov --color=yes --cov-report=xml
       - name: Archive figures generated during testing
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: visual_test_results_${{ matrix.os }}-python${{ matrix.python }}
           path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*

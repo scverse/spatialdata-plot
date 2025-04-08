@@ -18,7 +18,10 @@
 
 The `spatialdata-plot` package extends `spatialdata` with a declarative plotting API that enables to quickly visualize `spatialdata` objects and their respective elements (i.e. `images`, `labels`, `points` and `shapes`).
 
-SpatialData’s plotting capabilities allow to quickly visualise all contained modalities. The user can specify which elements should be rendered (images, labels, points, shapes) and specify certain parameters for each layer, such as for example the intent to color shapes by a gene’s expression profile or which color to use for which image channel. When the plot is then eventually displayed, all transformations, alignments and coordinate systems are internally processed to form the final visualisation. In concordance with the general SpatialData philosophy, all modalities of the major spatial technologies are supported out of the box.
+SpatialData’s plotting capabilities allow to quickly visualise all contained modalities.
+The user can specify which elements should be rendered (images, labels, points, shapes) and specify certain parameters for each layer, such as for example the intent to color shapes by a gene’s expression profile or which color to use for which image channel.
+When the plot is then eventually displayed, all transformations, alignments and coordinate systems are internally processed to form the final visualisation.
+In concordance with the general SpatialData philosophy, all modalities of the major spatial technologies are supported out of the box.
 
 <img src='https://raw.githubusercontent.com/scverse/spatialdata-plot/main/docs/spatialdata-plot.png'/>
 
@@ -36,15 +39,13 @@ Python installed, we recommend installing [Mambaforge](https://github.com/conda-
 
 There are several alternative options to install spatialdata-plot:
 
-<!--
-1) Install the latest release of `spatialdata-plot` from `PyPI <https://pypi.org/project/spatialdata-plot/>`_:
+1. Install the latest release of `spatialdata-plot` from `PyPI <https://pypi.org/project/spatialdata-plot/>`\_:
 
 ```bash
 pip install spatialdata-plot
 ```
--->
 
-1. Install the latest development version:
+2. Install the latest development version:
 
 ```bash
 pip install git+https://github.com/scverse/spatialdata-plot.git@main
@@ -66,3 +67,16 @@ Marconato, L., Palla, G., Yamauchi, K.A. et al. SpatialData: an open and univers
 [link-api]: https://spatialdata.scverse.org/projects/plot/en/latest/api.html
 [link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
 [link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
+[//]: # "numfocus-fiscal-sponsor-attribution"
+
+spatialdata-plot is part of the scverse® project ([website](https://scverse.org), [governance](https://scverse.org/about/roles)) and is fiscally sponsored by [NumFOCUS](https://numfocus.org/).
+If you like scverse® and want to support our mission, please consider making a tax-deductible [donation](https://numfocus.org/donate-to-scverse) to help the project pay for developer time, professional services, travel, workshops, and a variety of other needs.
+
+<div align="center">
+<a href="https://numfocus.org/project/scverse">
+  <img
+    src="https://raw.githubusercontent.com/numfocus/templates/master/images/numfocus-logo.png"
+    width="200"
+  >
+</a>
+</div>

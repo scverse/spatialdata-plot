@@ -86,7 +86,6 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     ],
 )
 def test_is_color_like(color_result: tuple[ColorLike, bool]):
-
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
@@ -121,7 +120,6 @@ def test_utils_sanitise_na_color(input_output):
     ],
 )
 def test_utils_sanitise_na_color_accepts_valid_inputs(input_output):
-
     func_input, expected_output = input_output
 
     assert _sanitise_na_color(func_input) == expected_output
@@ -141,7 +139,6 @@ def test_utils_sanitise_na_color_fails_when_input_isnt_a_color():
     ],
 )
 def test_utils_get_subplots_produces_correct_axs_layout(input_output):
-
     num_images, ncols, len_axs, axs_visible = input_output
 
     _, axs = _get_subplots(num_images=num_images, ncols=ncols)
