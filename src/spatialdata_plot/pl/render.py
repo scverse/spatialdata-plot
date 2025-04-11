@@ -961,7 +961,8 @@ def _render_labels(
     )
 
     # rasterize could have removed labels from label
-    if rasterize:
+    # only problematic if color is specified
+    if rasterize and color is not None:
         labels_in_rasterized_image=np.unique( label.values )
         mask=np.isin( instance_id, labels_in_rasterized_image )
         instance_id=instance_id[mask]
