@@ -144,7 +144,7 @@ def create_colorbar_legend(
             common_props = _extract_legend_label_properties(labels, fig.dpi)
             spine_outline = cbar.outline.properties()  # outline of the colorbar lining
 
-            stroke_color = mcolors.to_hex(spine_outline["facecolor"]) if spine_outline["facecolor"][-1] > 0 else None
+            stroke_color = mcolors.to_hex(spine_outline["edgecolor"]) if spine_outline["edgecolor"][-1] > 0 else None
             legend_title_object = _create_legend_title_config(cbar.ax.title, fig.dpi)
             # TODO: do we require padding? it is not obvious to get from matplotlib
             legend_object = {
