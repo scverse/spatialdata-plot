@@ -4,6 +4,7 @@ import matplotlib.colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.text import Text
+from matplotlib.transforms import Bbox
 
 from spatialdata_plot._viewconfig.misc import enforce_common_decimal_format
 from spatialdata_plot.pl.utils import to_hex_alpha
@@ -102,6 +103,30 @@ def create_categorical_legend(fig: Figure, color_scale_array: list[dict[str, Any
     return legend_array
 
 
+def _get_gradient_thickness(orientation: str, fig: Figure, cbar_bbox: Bbox) -> float:
+    """
+    Get the thickness of the colorbar in pixel units.
+
+    Parameters
+    ----------
+    orientation: str
+        The orientation of the colorbar, either `vertical` or `horizontal`.
+    fig: Figure
+        The matplotlib figure.
+    cbar_bbox: Bbox
+        The bounding box of the colorbar.
+
+    Returns
+    -------
+    float
+        The thickness of the colorbar in pixel units.
+    """
+    if orientation == "vertical":
+        return float(cbar_bbox.width * fig.bbox.width)
+
+    return float(cbar_bbox.height * fig.bbox.height)
+
+
 def create_colorbar_legend(
     fig: Figure, color_scale_array: list[dict[str, Any]], legend_count: int
 ) -> list[dict[str, Any]]:
@@ -132,11 +157,12 @@ def create_colorbar_legend(
             cbar = cbars[legend_count]
 
             axis_props = cbar.ax.properties()
+            cbar_bbox = cbar.ax.get_position()
             if cbar.orientation == "vertical":
-                gradient_length = cbar.ax.get_position().bounds[-1] * fig.get_figheight() * fig.dpi
+                gradient_length = cbar_bbox.height * fig.bbox.height
                 labels = axis_props["yticklabels"]
             else:
-                gradient_length = cbar.ax.get_position().bounds[-2] * fig.get_figwidth() * fig.dpi
+                gradient_length = cbar_bbox.width * fig.bbox.width
                 labels = axis_props["xticklabels"]
             if col_config["type"] == "linear":
                 legend_type = "gradient"
@@ -146,7 +172,9 @@ def create_colorbar_legend(
 
             stroke_color = mcolors.to_hex(spine_outline["edgecolor"]) if spine_outline["edgecolor"][-1] > 0 else None
             legend_title_object = _create_legend_title_config(cbar.ax.title, fig.dpi)
-            # TODO: do we require padding? it is not obvious to get from matplotlib
+
+            gradient_thickness = _get_gradient_thickness(cbar.orientation, fig, cbar_bbox)
+            # We do not deal with padding as matplotlib does not seem to allow a colorbar in a rectangular bounding box.
             legend_object = {
                 "type": legend_type,
                 "direction": cbar.orientation,
@@ -155,7 +183,7 @@ def create_colorbar_legend(
                 "fillColor": mcolors.to_hex(cbar.ax.get_facecolor()),
                 "gradientLength": gradient_length,  # alpha if alpha := getattr(cbar.cmap, "_lut", None)[0][-1] else
                 "gradientOpacity": cbar.mappable.get_alpha(),
-                "gradientThickness": (cbar.ax.get_position().bounds[2] * fig.dpi) / 72,
+                "gradientThickness": gradient_thickness,
                 "gradientStrokeColor": stroke_color,
                 "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
                 "values": enforce_common_decimal_format(list(cbar.ax.get_yticks())),
