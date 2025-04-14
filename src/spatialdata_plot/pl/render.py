@@ -895,6 +895,8 @@ def _render_images(
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+            sdata.plotting_tree[f"{render_count}_render_images"].cmap_params.cmap = channel_cmaps
+
             colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
             colored = colored[:, :, :3]
 

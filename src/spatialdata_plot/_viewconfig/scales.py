@@ -151,6 +151,12 @@ def _process_colormap(cmap: CmapParams) -> dict[str, Any]:
         if cmap.name in {"from_list", "custom_colormap"}:
             # TODO: Handle custom colormap logic
             return {}
+        if cmap.name.startswith("#"):
+            color = mcolors.to_hex(cmap.name)
+            for name, hex_val in mcolors.CSS4_COLORS.items():
+                if color.lower() == hex_val.lower():
+                    cmap.name = name
+
         return {"scheme": cmap.name, "count": cmap.N}
     return {}
 
@@ -230,12 +236,12 @@ def create_colorscale_array_image(
     -------
     A color scale array containing vega-like color scale objects pertaining to a SpatialData image element.
     """
+    color_scale_array = []
     cmaps = [param.cmap for param in cmap_params] if isinstance(cmap_params, list) else [cmap_params.cmap]
     cmaps = cmaps[0] if isinstance(cmaps[0], list) else cmaps
 
-    color_scale_array = []
     for index, cmap in enumerate(cmaps):
-        type_scale = "linear"
+
         color_range = _process_colormap(cmap)
 
         if isinstance(field, int | list):
@@ -243,7 +249,7 @@ def create_colorscale_array_image(
         field = field or "value"
 
         color_scale_array.append(
-            _generate_color_scale_object(f"color_{uuid4()}", type_scale, {"data": data_id, "field": field}, color_range)
+            _generate_color_scale_object(f"color_{uuid4()}", "linear", {"data": data_id, "field": field}, color_range)
         )
 
     return color_scale_array
