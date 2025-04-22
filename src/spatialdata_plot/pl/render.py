@@ -45,6 +45,7 @@ from spatialdata_plot.pl.utils import (
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _get_transformation_matrix_for_datashader,
+    _hex_no_alpha,
     _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
@@ -257,7 +258,7 @@ def _render_shapes(
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key = (
-            [x[:-2] for x in color_vector.categories.values]
+            [_hex_no_alpha(x) for x in color_vector.categories.values]
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
             else None
@@ -268,7 +269,7 @@ def _render_shapes(
             if color_vector is not None:
                 ds_cmap = color_vector[0]
                 if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
-                    ds_cmap = ds_cmap[:-2]
+                    ds_cmap = _hex_no_alpha(ds_cmap)
 
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
@@ -926,6 +927,25 @@ def _render_images(
                 colored = pca_rgb.reshape(h, w, 3)
 
                 logger.info(f"Visualizing {n_channels} channels using PCA → RGB projection")
+
+            _ax_show_and_transform(
+                colored,
+                trans_data,
+                ax,
+                render_params.alpha,
+                zorder=render_params.zorder,
+            )
+
+        elif palette is None and got_multiple_cmaps:
+            channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
+            colored = (
+                np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                / n_channels
+            )
+            colored = colored[:, :, :3]
 
             _ax_show_and_transform(
                 colored,
