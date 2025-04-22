@@ -148,7 +148,11 @@ class PlotAccessor:
             shapes=self._sdata.shapes if shapes is None else shapes,
             tables=self._sdata.tables if tables is None else tables,
         )
-        sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+        sdata.plotting_tree = (
+            self._sdata.plotting_tree
+            if hasattr(self._sdata, "plotting_tree")
+            else OrderedDict()
+        )
 
         return sdata
 
@@ -421,7 +425,9 @@ class PlotAccessor:
             if not isinstance(method, str):
                 raise TypeError("Parameter 'method' must be a string.")
             if method not in ["matplotlib", "datashader"]:
-                raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+                raise ValueError(
+                    "Parameter 'method' must be either 'matplotlib' or 'datashader'."
+                )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -453,7 +459,11 @@ class PlotAccessor:
 
         return sdata
 
-    @_deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
+    @_deprecation_alias(
+        elements="element",
+        quantiles_for_norm="percentiles_for_norm",
+        version="version 0.3.0",
+    )
     def render_images(
         self,
         element: str | None = None,
@@ -464,6 +474,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
+        bg_threshold: float = 1e-4,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -506,6 +517,8 @@ class PlotAccessor:
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
+        bg_threshold : float, default 1e-4
+            Threshold below which values are considered background in the PCA dimred for images with 3+ channels.
         kwargs
             Additional arguments to be passed to cmap, norm, and other rendering functions.
 
@@ -564,6 +577,7 @@ class PlotAccessor:
                 alpha=param_values["alpha"],
                 scale=param_values["scale"],
                 zorder=n_steps,
+                bg_threshold=bg_threshold,
             )
             n_steps += 1
 
@@ -811,7 +825,9 @@ class PlotAccessor:
                 render_cmds.append((cmd, params))
 
         if not render_cmds:
-            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
+            raise TypeError(
+                "Please specify what to plot using the 'render_*' functions before calling 'imshow()'."
+            )
 
         if title is not None:
             if isinstance(title, str):
@@ -828,18 +844,26 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        coordinate_systems = (
+            sdata.coordinate_systems
+            if coordinate_systems is None
+            else coordinate_systems
+        )
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
 
         for cs in coordinate_systems:
             if cs not in sdata.coordinate_systems:
-                raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
+                raise ValueError(
+                    f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}"
+                )
 
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
 
-        elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_contents, cs)
+        elements_to_be_rendered = _get_elements_to_be_rendered(
+            render_cmds, cs_contents, cs
+        )
 
         # filter out cs without relevant elements
         cmds = [cmd for cmd, _ in render_cmds]
@@ -906,8 +930,10 @@ class PlotAccessor:
                 # We create a copy here as the wanted elements can change from one cs to another.
                 params_copy = deepcopy(params)
                 if cmd == "render_images" and has_images:
-                    wanted_elements, wanted_images_on_this_cs, wants_images = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "images"
+                    wanted_elements, wanted_images_on_this_cs, wants_images = (
+                        _get_wanted_render_elements(
+                            sdata, wanted_elements, params_copy, cs, "images"
+                        )
                     )
 
                     if wanted_images_on_this_cs:
@@ -928,8 +954,10 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_shapes" and has_shapes:
-                    wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "shapes"
+                    wanted_elements, wanted_shapes_on_this_cs, wants_shapes = (
+                        _get_wanted_render_elements(
+                            sdata, wanted_elements, params_copy, cs, "shapes"
+                        )
                     )
 
                     if wanted_shapes_on_this_cs:
@@ -944,8 +972,10 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_points" and has_points:
-                    wanted_elements, wanted_points_on_this_cs, wants_points = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "points"
+                    wanted_elements, wanted_points_on_this_cs, wants_points = (
+                        _get_wanted_render_elements(
+                            sdata, wanted_elements, params_copy, cs, "points"
+                        )
                     )
 
                     if wanted_points_on_this_cs:
@@ -960,15 +990,19 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_labels" and has_labels:
-                    wanted_elements, wanted_labels_on_this_cs, wants_labels = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "labels"
+                    wanted_elements, wanted_labels_on_this_cs, wants_labels = (
+                        _get_wanted_render_elements(
+                            sdata, wanted_elements, params_copy, cs, "labels"
+                        )
                     )
 
                     if wanted_labels_on_this_cs:
                         if (table := params_copy.table_name) is not None:
                             assert isinstance(params_copy.color, str)
                             colors = sc.get.obs_df(sdata[table], [params_copy.color])
-                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
+                            if isinstance(
+                                colors[params_copy.color].dtype, pd.CategoricalDtype
+                            ):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],
@@ -1000,7 +1034,9 @@ class PlotAccessor:
                     try:
                         t = title[i]
                     except IndexError as e:
-                        raise IndexError("The number of titles must match the number of coordinate systems.") from e
+                        raise IndexError(
+                            "The number of titles must match the number of coordinate systems."
+                        ) from e
                 ax.set_title(t)
                 ax.set_aspect("equal")
 
@@ -1032,4 +1068,8 @@ class PlotAccessor:
         # https://stackoverflow.com/a/64523765
         if not hasattr(sys, "ps1"):
             plt.show()
-        return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
+        return (
+            (fig_params.ax if fig_params.axs is None else fig_params.axs)
+            if return_ax
+            else None
+        )  # shuts up ruff
