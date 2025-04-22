@@ -9,7 +9,9 @@ from matplotlib.colors import Colormap, ListedColormap, Normalize
 from matplotlib.figure import Figure
 
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
-_FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
+_FontSize = Literal[
+    "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"
+]
 
 # replace with
 # from spatialdata._types import ColorLike
@@ -90,7 +92,9 @@ class ShapesRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: (
+        Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+    ) = None
 
 
 @dataclass
@@ -110,7 +114,9 @@ class PointsRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: (
+        Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None
+    ) = None
 
 
 @dataclass
@@ -125,6 +131,7 @@ class ImageRenderParams:
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
     zorder: int = 0
+    bg_threshold: float = 1e-4
 
 
 @dataclass
