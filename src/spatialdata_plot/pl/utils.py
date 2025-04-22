@@ -1929,7 +1929,7 @@ def _validate_col_for_column_table(
         elif len(tables) >= 1:
             table_name = next(iter(tables))
             if len(tables) > 1:
-                warnings.warn(f"Multiple tables contain color column, using {table_name}", UserWarning, stacklevel=2)
+                warnings.warn(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.", UserWarning, stacklevel=2)
     return col_for_color, table_name
 
 
