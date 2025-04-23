@@ -689,12 +689,10 @@ def _render_points(
         )
 
         # remove alpha from color if it's hex
-        if color_key is not None and all(len(x) == 9 for x in color_key) and color_key[0][0] == "#":
-            color_key = [x[:-2] for x in color_key]
-        if isinstance(color_vector[0], str) and (
-            color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#"
-        ):
-            color_vector = np.asarray([x[:-2] for x in color_vector])
+        if color_key is not None and color_key[0][0] == "#":
+            color_key = [_hex_no_alpha(x) for x in color_key]
+        if isinstance(color_vector[0], str) and (color_vector is not None and color_vector[0][0] == "#"):
+            color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
 
         if color_by_categorical or col_for_color is None:
             ds_result = _datashader_map_aggregate_to_color(
