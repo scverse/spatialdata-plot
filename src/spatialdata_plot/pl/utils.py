@@ -55,7 +55,13 @@ from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
-from spatialdata import SpatialData, get_element_annotators, get_extent, get_values, rasterize
+from spatialdata import (
+    SpatialData,
+    get_element_annotators,
+    get_extent,
+    get_values,
+    rasterize,
+)
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
@@ -182,7 +188,12 @@ def _prepare_params_plot(
     dpi = rcParams["figure.dpi"] if dpi is None else dpi
     if num_panels > 1 and ax is None:
         fig, grid = _panel_grid(
-            num_panels=num_panels, hspace=hspace, wspace=wspace, ncols=ncols, dpi=dpi, figsize=figsize
+            num_panels=num_panels,
+            hspace=hspace,
+            wspace=wspace,
+            ncols=ncols,
+            dpi=dpi,
+            figsize=figsize,
         )
         axs: None | Sequence[Axes] = [plt.subplot(grid[c]) for c in range(num_panels)]
     elif num_panels > 1:
@@ -386,7 +397,11 @@ def _get_collection_shape(
     shapes_df = shapes_df.reset_index(drop=True)
 
     def _assign_fill_and_outline_to_row(
-        fill_c: list[Any], outline_c: list[Any], row: dict[str, Any], idx: int, is_multiple_shapes: bool
+        fill_c: list[Any],
+        outline_c: list[Any],
+        row: dict[str, Any],
+        idx: int,
+        is_multiple_shapes: bool,
     ) -> None:
         try:
             if is_multiple_shapes and len(fill_c) == 1:
@@ -402,7 +417,10 @@ def _get_collection_shape(
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
         scaled_coords = (centroid + (coords - centroid) * s).tolist()
-        return {**row.to_dict(), "geometry": mpatches.Polygon(scaled_coords, closed=True)}
+        return {
+            **row.to_dict(),
+            "geometry": mpatches.Polygon(scaled_coords, closed=True),
+        }
 
     def _process_multipolygon(row: pd.Series, s: float) -> list[dict[str, Any]]:
         mp = _make_patch_from_multipolygon(row["geometry"])
@@ -723,7 +741,12 @@ def _set_color_source_vec(
         return color, color, False
 
     # Figure out where to get the color from
-    origins = _locate_value(value_key=value_to_plot, sdata=sdata, element_name=element_name, table_name=table_name)
+    origins = _locate_value(
+        value_key=value_to_plot,
+        sdata=sdata,
+        element_name=element_name,
+        table_name=table_name,
+    )
 
     if len(origins) > 1:
         raise ValueError(
@@ -869,6 +892,7 @@ def _generate_base_categorial_color_mapping(
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     na_color: ColorLike,
+    cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns and f"{cluster_key}_colors" in adata.uns:
         colors = adata.uns[f"{cluster_key}_colors"]
@@ -885,7 +909,7 @@ def _generate_base_categorial_color_mapping(
 
         return dict(zip(categories, colors, strict=True))
 
-    return _get_default_categorial_color_mapping(color_source_vector)
+    return _get_default_categorial_color_mapping(color_source_vector=color_source_vector, cmap_params=cmap_params)
 
 
 def _modify_categorical_color_mapping(
@@ -909,22 +933,36 @@ def _modify_categorical_color_mapping(
 
 def _get_default_categorial_color_mapping(
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+    cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
     len_cat = len(color_source_vector.categories.unique())
-    if len_cat <= 20:
-        palette = default_20
-    elif len_cat <= 28:
-        palette = default_28
-    elif len_cat <= len(default_102):  # 103 colors
-        palette = default_102
+    # Try to use provided colormap first
+    if cmap_params is not None and cmap_params.cmap is not None and not cmap_params.cmap_is_default:
+        # Generate evenly spaced indices for the colormap
+        color_idx = np.linspace(0, 1, len_cat)
+        if isinstance(cmap_params.cmap, ListedColormap):
+            palette = [to_hex(x) for x in cmap_params.cmap(color_idx)]
+        elif isinstance(cmap_params.cmap, LinearSegmentedColormap):
+            palette = [to_hex(cmap_params.cmap(x)) for x in color_idx]
+        else:
+            # Fall back to default palettes if cmap is not of expected type
+            palette = None
     else:
-        palette = ["grey" for _ in range(len_cat)]
-        logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
+        palette = None
 
-    return {
-        cat: to_hex(to_rgba(col)[:3])
-        for cat, col in zip(color_source_vector.categories, palette[:len_cat], strict=True)
-    }
+    # Fall back to default palettes if needed
+    if palette is None:
+        if len_cat <= 20:
+            palette = default_20
+        elif len_cat <= 28:
+            palette = default_28
+        elif len_cat <= len(default_102):  # 103 colors
+            palette = default_102
+        else:
+            palette = ["grey"] * len_cat
+            logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
+
+    return dict(zip(color_source_vector.categories, palette[:len_cat], strict=True))
 
 
 def _get_categorical_color_mapping(
@@ -959,15 +997,26 @@ def _get_categorical_color_mapping(
 
     if cluster_key is None:
         # user didn't specify a column to use for coloring
-        base_mapping = _get_default_categorial_color_mapping(color_source_vector)
+        base_mapping = _get_default_categorial_color_mapping(
+            color_source_vector=color_source_vector, cmap_params=cmap_params
+        )
     else:
-        base_mapping = _generate_base_categorial_color_mapping(adata, cluster_key, color_source_vector, na_color)
+        base_mapping = _generate_base_categorial_color_mapping(
+            adata=adata,
+            cluster_key=cluster_key,
+            color_source_vector=color_source_vector,
+            na_color=na_color,
+            cmap_params=cmap_params,
+        )
 
     return _modify_categorical_color_mapping(mapping=base_mapping, groups=groups, palette=palette)
 
 
 def _maybe_set_colors(
-    source: AnnData, target: AnnData, key: str, palette: str | ListedColormap | Cycler | Sequence[Any] | None = None
+    source: AnnData,
+    target: AnnData,
+    key: str,
+    palette: str | ListedColormap | Cycler | Sequence[Any] | None = None,
 ) -> None:
     color_key = f"{key}_colors"
     try:
@@ -1089,7 +1138,13 @@ def _get_list(
     raise ValueError(f"Can't make a list from variable: `{var}`")
 
 
-def save_fig(fig: Figure, path: str | Path, make_dir: bool = True, ext: str = "png", **kwargs: Any) -> None:
+def save_fig(
+    fig: Figure,
+    path: str | Path,
+    make_dir: bool = True,
+    ext: str = "png",
+    **kwargs: Any,
+) -> None:
     """
     Save a figure.
 
@@ -1381,7 +1436,12 @@ def _multiscale_to_spatial_image(
 
 
 def _get_elements_to_be_rendered(
-    render_cmds: list[tuple[str, ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams]],
+    render_cmds: list[
+        tuple[
+            str,
+            ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+        ]
+    ],
     cs_contents: pd.DataFrame,
     cs: str,
 ) -> list[str]:
@@ -1455,7 +1515,15 @@ def _validate_show_parameters(
             f"the following strings: {readable_font_weights}.",
         )
 
-    font_sizes = ["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
+    font_sizes = [
+        "xx-small",
+        "x-small",
+        "small",
+        "medium",
+        "large",
+        "x-large",
+        "xx-large",
+    ]
 
     if legend_fontsize is not None and (
         not isinstance(legend_fontsize, int | float | str)
@@ -1548,7 +1616,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in {"shapes", "points", "labels"}:
+    if (color := param_dict.get("color")) and element_type in {
+        "shapes",
+        "points",
+        "labels",
+    }:
         if not isinstance(color, str):
             raise TypeError("Parameter 'color' must be a string.")
         if element_type in {"shapes", "points"}:
@@ -1923,7 +1995,11 @@ def _validate_shape_render_params(
 
 
 def _validate_col_for_column_table(
-    sdata: SpatialData, element_name: str, col_for_color: str | None, table_name: str | None, labels: bool = False
+    sdata: SpatialData,
+    element_name: str,
+    col_for_color: str | None,
+    table_name: str | None,
+    labels: bool = False,
 ) -> tuple[str | None, str | None]:
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
@@ -1944,7 +2020,11 @@ def _validate_col_for_column_table(
         elif len(tables) >= 1:
             table_name = next(iter(tables))
             if len(tables) > 1:
-                warnings.warn(f"Multiple tables contain color column, using {table_name}", UserWarning, stacklevel=2)
+                warnings.warn(
+                    f"Multiple tables contain color column, using {table_name}",
+                    UserWarning,
+                    stacklevel=2,
+                )
     return col_for_color, table_name
 
 
@@ -2021,12 +2101,17 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
     wants_elements = True
-    if element_type in ["images", "labels", "points", "shapes"]:  # Prevents eval security risk
+    if element_type in [
+        "images",
+        "labels",
+        "points",
+        "shapes",
+    ]:  # Prevents eval security risk
         wanted_elements: list[str] = [params.element]
         wanted_elements_on_cs = [
             element for element in wanted_elements if cs in set(get_transformation(sdata[element], get_all=True).keys())
@@ -2112,7 +2197,10 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
 
 
 def _get_extent_and_range_for_datashader_canvas(
-    spatial_element: SpatialElement, coordinate_system: str, ax: Axes, fig_params: FigParams
+    spatial_element: SpatialElement,
+    coordinate_system: str,
+    ax: Axes,
+    fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
     extent = get_extent(spatial_element, coordinate_system=coordinate_system)
     x_ext = [min(0, extent["x"][0]), extent["x"][1]]
@@ -2148,7 +2236,9 @@ def _get_extent_and_range_for_datashader_canvas(
 
 
 def _create_image_from_datashader_result(
-    ds_result: ds.transfer_functions.Image | np.ndarray[Any, np.dtype[np.uint8]], factor: float, ax: Axes
+    ds_result: ds.transfer_functions.Image | np.ndarray[Any, np.dtype[np.uint8]],
+    factor: float,
+    ax: Axes,
 ) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
     rgba_image_data = ds_result.copy() if isinstance(ds_result, np.ndarray) else ds_result.to_numpy().base
@@ -2168,7 +2258,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2232,7 +2322,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2258,8 +2348,13 @@ def _datshader_get_how_kw_for_spread(
 
 
 def _prepare_transformation(
-    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame, coordinate_system: str, ax: Axes | None = None
-) -> tuple[matplotlib.transforms.Affine2D, matplotlib.transforms.CompositeGenericTransform | None]:
+    element: DataArray | GeoDataFrame | dask.dataframe.core.DataFrame,
+    coordinate_system: str,
+    ax: Axes | None = None,
+) -> tuple[
+    matplotlib.transforms.Affine2D,
+    matplotlib.transforms.CompositeGenericTransform | None,
+]:
     trans = get_transformation(element, get_all=True)[coordinate_system]
     affine_trans = trans.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
     trans = mtransforms.Affine2D(matrix=affine_trans)
@@ -2327,11 +2422,19 @@ def _datashader_map_aggregate_to_color(
 
         agg_under = agg.where(agg < span[0])
         img_under = ds.tf.shade(
-            agg_under, cmap=[to_hex(cmap.get_under())[:7]], min_alpha=min_alpha, color_key=color_key
+            agg_under,
+            cmap=[to_hex(cmap.get_under())[:7]],
+            min_alpha=min_alpha,
+            color_key=color_key,
         )
 
         agg_over = agg.where(agg > span[1])
-        img_over = ds.tf.shade(agg_over, cmap=[to_hex(cmap.get_over())[:7]], min_alpha=min_alpha, color_key=color_key)
+        img_over = ds.tf.shade(
+            agg_over,
+            cmap=[to_hex(cmap.get_over())[:7]],
+            min_alpha=min_alpha,
+            color_key=color_key,
+        )
 
         # stack the 3 arrays manually: go from under, through in to over and always overlay the values where alpha=0
         stack = img_under.to_numpy().base
@@ -2344,4 +2447,49 @@ def _datashader_map_aggregate_to_color(
             stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
         return stack
 
-    return ds.tf.shade(agg, cmap=cmap, color_key=color_key, min_alpha=min_alpha, span=span, how="linear")
+    return ds.tf.shade(
+        agg,
+        cmap=cmap,
+        color_key=color_key,
+        min_alpha=min_alpha,
+        span=span,
+        how="linear",
+    )
+
+
+def _hex_no_alpha(hex: str) -> str:
+    """
+    Return a hex color string without an alpha component.
+
+    Parameters
+    ----------
+    hex : str
+        The input hex color string. Must be in one of the following formats:
+        - "#RRGGBB": a hex color without an alpha channel.
+        - "#RRGGBBAA": a hex color with an alpha channel that will be removed.
+
+    Returns
+    -------
+    str
+        The hex color string in "#RRGGBB" format.
+    """
+    if not isinstance(hex, str):
+        raise TypeError("Input must be a string")
+    if not hex.startswith("#"):
+        raise ValueError("Invalid hex color: must start with '#'")
+
+    hex_digits = hex[1:]
+    length = len(hex_digits)
+
+    if length == 6:
+        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
+            raise ValueError("Invalid hex color: contains non-hex characters")
+        return hex  # Already in #RRGGBB format.
+
+    if length == 8:
+        if not all(c in "0123456789abcdefABCDEF" for c in hex_digits):
+            raise ValueError("Invalid hex color: contains non-hex characters")
+        # Return only the first 6 characters, stripping the alpha.
+        return "#" + hex_digits[:6]
+
+    raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")

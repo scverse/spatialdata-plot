@@ -2,7 +2,7 @@
 
 Please refer to the [contribution guide from the `spatialdata` repository](https://github.com/scverse/spatialdata/blob/main/docs/contributing.md).
 
-### Testing the correctness of the plots
+## Testing the correctness of the plots
 
 Many tests will produce plots and check that they are correct by comparing them with a previously saved and serialized version of the same plots. The ground truth images are located in `tests/_images`. Different OS/versions may produce similar but not identical plots (for instance the ticks/padding could vary). To take into account for this please consider the following:
 

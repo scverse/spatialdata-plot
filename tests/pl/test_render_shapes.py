@@ -315,10 +315,53 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
-        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_polygons",
+        )
         sdata_blobs["table"] = table
 
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()
+
+    def test_plot_datashader_can_color_by_category_with_cmap(self, sdata_blobs: SpatialData):
+        RNG = np.random.default_rng(seed=42)
+        n_obs = len(sdata_blobs["blobs_polygons"])
+        adata = AnnData(RNG.normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_polygons"
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_polygons",
+        )
+        sdata_blobs["table"] = table
+
+        sdata_blobs.pl.render_shapes(
+            element="blobs_polygons", color="category", method="datashader", cmap="cool"
+        ).pl.show()
+
+    def test_plot_can_color_by_category_with_cmap(self, sdata_blobs: SpatialData):
+        RNG = np.random.default_rng(seed=42)
+        n_obs = len(sdata_blobs["blobs_polygons"])
+        adata = AnnData(RNG.normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["instance_id"] = list(range(adata.n_obs))
+        adata.obs["region"] = "blobs_polygons"
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_polygons",
+        )
+        sdata_blobs["table"] = table
+
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", cmap="cool").pl.show()
 
     def test_plot_datashader_can_color_by_value(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = "blobs_polygons"

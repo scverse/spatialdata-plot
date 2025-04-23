@@ -45,6 +45,7 @@ from spatialdata_plot.pl.utils import (
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _get_transformation_matrix_for_datashader,
+    _hex_no_alpha,
     _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
@@ -185,17 +186,20 @@ def _render_shapes(
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # apply transformations to the individual points
-        element_trans = get_transformation(sdata_filt.shapes[element])
+        element_trans = get_transformation(sdata_filt.shapes[element], to_coordinate_system=coordinate_system)
         tm = _get_transformation_matrix_for_datashader(element_trans)
         transformed_element = sdata_filt.shapes[element].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
         )
         transformed_element = ShapesModel.parse(
-            gpd.GeoDataFrame(data=sdata_filt.shapes[element].drop("geometry", axis=1), geometry=transformed_element)
+            gpd.GeoDataFrame(
+                data=sdata_filt.shapes[element].drop("geometry", axis=1),
+                geometry=transformed_element,
+            )
         )
 
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            transformed_element, coordinate_system, ax, fig_params
+            transformed_element, "global", ax, fig_params
         )
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
@@ -220,7 +224,11 @@ def _render_shapes(
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.ds_reduction, cvs, transformed_element, col_for_color, "shapes"
+                    render_params.ds_reduction,
+                    cvs,
+                    transformed_element,
+                    col_for_color,
+                    "shapes",
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
@@ -257,7 +265,7 @@ def _render_shapes(
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key = (
-            [x[:-2] for x in color_vector.categories.values]
+            [_hex_no_alpha(x) for x in color_vector.categories.values]
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
             else None
@@ -268,7 +276,7 @@ def _render_shapes(
             if color_vector is not None:
                 ds_cmap = color_vector[0]
                 if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
-                    ds_cmap = ds_cmap[:-2]
+                    ds_cmap = _hex_no_alpha(ds_cmap)
 
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
@@ -283,7 +291,10 @@ def _render_shapes(
             # else: all elements would get alpha=0 and the color bar would have a weird range
             if aggregate_with_reduction[0] == aggregate_with_reduction[1]:
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
-                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+                aggregate_with_reduction = (
+                    aggregate_with_reduction[0],
+                    aggregate_with_reduction[0] + 1,
+                )
 
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
@@ -502,7 +513,9 @@ def _render_points(
     # we construct an anndata to hack the plotting functions
     if table_name is None:
         adata = AnnData(
-            X=points[["x", "y"]].values, obs=points[coords].reset_index(), dtype=points[["x", "y"]].values.dtype
+            X=points[["x", "y"]].values,
+            obs=points[coords].reset_index(),
+            dtype=points[["x", "y"]].values.dtype,
         )
     else:
         adata_obs = sdata_filt[table_name].obs
@@ -530,7 +543,9 @@ def _render_points(
     sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
     # restore transformation in coordinate system of interest
     set_transformation(
-        element=sdata_filt.points[element], transformation=transformation_in_cs, to_coordinate_system=coordinate_system
+        element=sdata_filt.points[element],
+        transformation=transformation_in_cs,
+        to_coordinate_system=coordinate_system,
     )
 
     if col_for_color is not None:
@@ -633,7 +648,11 @@ def _render_points(
                     "to the matplotlib result."
                 )
                 agg = _datashader_aggregate_with_function(
-                    render_params.ds_reduction, cvs, transformed_element, col_for_color, "points"
+                    render_params.ds_reduction,
+                    cvs,
+                    transformed_element,
+                    col_for_color,
+                    "points",
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
@@ -695,7 +714,10 @@ def _render_points(
             # else: all elements would get alpha=0 and the color bar would have a weird range
             if aggregate_with_reduction[0] == aggregate_with_reduction[1] and (ds_span is None or ds_span != [0, 1]):
                 ds_cmap = matplotlib.colors.to_hex(render_params.cmap_params.cmap(0.0), keep_alpha=False)
-                aggregate_with_reduction = (aggregate_with_reduction[0], aggregate_with_reduction[0] + 1)
+                aggregate_with_reduction = (
+                    aggregate_with_reduction[0],
+                    aggregate_with_reduction[0] + 1,
+                )
 
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
@@ -882,7 +904,12 @@ def _render_images(
 
         # norm needs to be passed directly to ax.imshow(). If we normalize before, that method would always clip.
         _ax_show_and_transform(
-            layer, trans_data, ax, cmap=cmap, zorder=render_params.zorder, norm=render_params.cmap_params.norm
+            layer,
+            trans_data,
+            ax,
+            cmap=cmap,
+            zorder=render_params.zorder,
+            norm=render_params.cmap_params.norm,
         )
 
         if legend_params.colorbar:
@@ -909,7 +936,11 @@ def _render_images(
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
-                    np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
+                    np.stack(
+                        [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                        0,
+                    ).sum(0)
+                    / n_channels
                 )
                 stacked = stacked[:, :, :3]
                 logger.warning(
@@ -921,7 +952,13 @@ def _render_images(
                     "Consider using 'palette' instead."
                 )
 
-            _ax_show_and_transform(stacked, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
+            _ax_show_and_transform(
+                stacked,
+                trans_data,
+                ax,
+                render_params.alpha,
+                zorder=render_params.zorder,
+            )
 
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
@@ -935,7 +972,13 @@ def _render_images(
             colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
+            _ax_show_and_transform(
+                colored,
+                trans_data,
+                ax,
+                render_params.alpha,
+                zorder=render_params.zorder,
+            )
 
         # 2C) Image has n channels and palette info
         elif palette is not None and not got_multiple_cmaps:
@@ -946,16 +989,32 @@ def _render_images(
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
+            _ax_show_and_transform(
+                colored,
+                trans_data,
+                ax,
+                render_params.alpha,
+                zorder=render_params.zorder,
+            )
 
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
             colored = (
-                np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0) / n_channels
+                np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                / n_channels
             )
             colored = colored[:, :, :3]
 
-            _ax_show_and_transform(colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder)
+            _ax_show_and_transform(
+                colored,
+                trans_data,
+                ax,
+                render_params.alpha,
+                zorder=render_params.zorder,
+            )
 
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
@@ -1076,7 +1135,9 @@ def _render_labels(
     # outline-only case
     elif render_params.fill_alpha == 0.0 and render_params.outline_alpha > 0.0:
         cax = _draw_labels(
-            seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=True,
+            alpha=render_params.outline_alpha,
         )
         alpha_to_decorate_ax = render_params.outline_alpha
 
@@ -1087,7 +1148,9 @@ def _render_labels(
 
         # ... then overlay the contour
         cax_contour = _draw_labels(
-            seg_erosionpx=render_params.contour_px, seg_boundaries=True, alpha=render_params.outline_alpha
+            seg_erosionpx=render_params.contour_px,
+            seg_boundaries=True,
+            alpha=render_params.outline_alpha,
         )
 
         # pass the less-transparent _cax for the legend
@@ -1112,7 +1175,7 @@ def _render_labels(
         legend_fontweight=legend_params.legend_fontweight,
         legend_loc=legend_params.legend_loc,
         legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector)),
+        na_in_legend=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
         colorbar=legend_params.colorbar,
         scalebar_dx=scalebar_params.scalebar_dx,
         scalebar_units=scalebar_params.scalebar_units,
