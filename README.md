@@ -6,6 +6,7 @@
 [![Documentation][badge-docs]][link-docs]
 [![Codecov][badge-codecov]][link-codecov]
 [![Documentation][badge-pypi]][link-pypi]
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spatialdata-plot/badges/version.svg)](https://anaconda.org/conda-forge/spatialdata-plot)
 [![DOI](https://zenodo.org/badge/588223127.svg)](https://zenodo.org/badge/latestdoi/588223127)
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test.yaml?branch=main
