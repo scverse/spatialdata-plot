@@ -824,13 +824,6 @@ def _map_color_seg(
 
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
-
-        # TODO: remove
-        # in seg, the value 0 depicts the background, so this leads to the bg being mapped to the NaN color
-        # the actual label(s) with na in the color_source_vector don't have their id in cell_id anymore, so they're
-        # mapped to nothing! => would look like background
-        # if np.any(color_source_vector.isna()):
-        # cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
@@ -2101,7 +2094,7 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
@@ -2258,7 +2251,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2322,7 +2315,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
