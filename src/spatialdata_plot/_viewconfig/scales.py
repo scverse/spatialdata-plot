@@ -243,13 +243,15 @@ def create_colorscale_array_image(
     for index, cmap in enumerate(cmaps):
 
         color_range = _process_colormap(cmap)
-
+        field_val = field
         if isinstance(field, int | list):
-            field = f"channel_{index}"
-        field = field or "value"
+            field_val = f"channel_{index}"
+        field_val = field_val or "value"
 
         color_scale_array.append(
-            _generate_color_scale_object(f"color_{uuid4()}", "linear", {"data": data_id, "field": field}, color_range)
+            _generate_color_scale_object(
+                f"color_{uuid4()}", "linear", {"data": data_id, "field": field_val}, color_range
+            )
         )
 
     return color_scale_array
