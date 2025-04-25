@@ -1,0 +1,356 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 320.0,
+        "width": 320.0,
+        "padding": {
+            "left": 57.599999999999994,
+            "top": 28.79999999999999,
+            "right": 12.800000000000011,
+            "bottom": 48.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 15.555555555555555,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "blobs_circles_2011a6f9-bbcf-4613-8d36-e32a56b7d80e",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_circles"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_polygons_d3b7570c-468f-44f7-b2fb-9db2a24fef91",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_polygons"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_multipolygons_bfc9adb0-62b9-40f4-ae27-602a1621912f",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_multipolygons"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca",
+                "format": {
+                    "type": "RasterFormatV02",
+                    "version": "0.2"
+                },
+                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_image"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "filter_scale",
+                        "expr": "full"
+                    },
+                    {
+                        "type": "filter_channel",
+                        "expr": null
+                    }
+                ]
+            },
+            {
+                "name": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5",
+                "format": {
+                    "type": "RasterFormatV02",
+                    "version": "0.2"
+                },
+                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_multiscale_image"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "filter_scale",
+                        "expr": "full"
+                    },
+                    {
+                        "type": "filter_channel",
+                        "expr": null
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [0.0, 512.0],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [512.0, 0.0],
+                "range": "height"
+            },
+            {
+                "name": "color_360709a7-9663-447a-9968-5491a884ba95",
+                "type": "linear",
+                "domain": {
+                    "data": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca",
+                    "field": "value"
+                },
+                "range": {
+                    "scheme": "viridis",
+                    "count": 256
+                }
+            },
+            {
+                "name": "color_28b7bed3-0a23-4705-af69-de2fec0da0d5",
+                "type": "linear",
+                "domain": {
+                    "data": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5",
+                    "field": "value"
+                },
+                "range": {
+                    "scheme": "viridis",
+                    "count": 256
+                }
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#ccccccff",
+                "gridWidth": 1.1111111111111112,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [0, 200, 400],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#ccccccff",
+                "gridWidth": 1.1111111111111112,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [0, 100, 200, 300, 400, 500],
+                "zindex": 1.5
+            }
+        ],
+        "marks": [
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_circles_2011a6f9-bbcf-4613-8d36-e32a56b7d80e"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            },
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_polygons_d3b7570c-468f-44f7-b2fb-9db2a24fef91"
+                },
+                "zindex": 1,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            },
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_multipolygons_bfc9adb0-62b9-40f4-ae27-602a1621912f"
+                },
+                "zindex": 2,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            },
+            {
+                "type": "raster_image",
+                "from": {
+                    "data": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca"
+                },
+                "zindex": 3,
+                "encode": {
+                    "enter": {
+                        "opacity": {
+                            "value": 1.0
+                        },
+                        "fill": [
+                            {
+                                "scale": "color_360709a7-9663-447a-9968-5491a884ba95",
+                                "value": "value"
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "type": "raster_image",
+                "from": {
+                    "data": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5"
+                },
+                "zindex": 4,
+                "encode": {
+                    "enter": {
+                        "opacity": {
+                            "value": 1.0
+                        },
+                        "fill": [
+                            {
+                                "scale": "color_28b7bed3-0a23-4705-af69-de2fec0da0d5",
+                                "value": "value"
+                            }
+                        ]
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "bce72096-f040-509b-903f-7953efa752d3"
+        }
+    }
+]

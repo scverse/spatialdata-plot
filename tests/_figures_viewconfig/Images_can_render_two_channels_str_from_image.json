@@ -1,0 +1,179 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 320.0,
+        "width": 320.0,
+        "padding": {
+            "left": 57.599999999999994,
+            "top": 28.79999999999999,
+            "right": 12.800000000000011,
+            "bottom": 48.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 15.555555555555555,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "e4626e9f-ee78-4ccd-b29b-f27d588f084c",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "blobs_image_c1b2dcc2-1220-4be9-99fe-21ad9ac3efe8",
+                "format": {
+                    "type": "RasterFormatV02",
+                    "version": "0.2"
+                },
+                "source": "e4626e9f-ee78-4ccd-b29b-f27d588f084c",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_image"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "filter_scale",
+                        "expr": "full"
+                    },
+                    {
+                        "type": "filter_channel",
+                        "expr": ["c1", "c2"]
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [0.0, 512.0],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [512.0, 0.0],
+                "range": "height"
+            },
+            {
+                "name": "color_37849dc4-7a97-4b4e-95a3-a6564b930652",
+                "type": "linear",
+                "domain": {
+                    "data": "blobs_image_c1b2dcc2-1220-4be9-99fe-21ad9ac3efe8",
+                    "field": "channel_0"
+                },
+                "range": {
+                    "scheme": "red",
+                    "count": 256
+                }
+            },
+            {
+                "name": "color_7ccc915c-c713-403a-b2a5-7e1cabe499d1",
+                "type": "linear",
+                "domain": {
+                    "data": "blobs_image_c1b2dcc2-1220-4be9-99fe-21ad9ac3efe8",
+                    "field": "channel_1"
+                },
+                "range": {
+                    "scheme": "lime",
+                    "count": 256
+                }
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#ccccccff",
+                "gridWidth": 1.1111111111111112,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [0, 200, 400],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#ccccccff",
+                "gridWidth": 1.1111111111111112,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [0, 100, 200, 300, 400, 500],
+                "zindex": 1.5
+            }
+        ],
+        "marks": [
+            {
+                "type": "raster_image",
+                "from": {
+                    "data": "blobs_image_c1b2dcc2-1220-4be9-99fe-21ad9ac3efe8"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "opacity": {
+                            "value": 1.0
+                        },
+                        "fill": [
+                            {
+                                "scale": "color_37849dc4-7a97-4b4e-95a3-a6564b930652",
+                                "field": "channel_0"
+                            },
+                            {
+                                "scale": "color_7ccc915c-c713-403a-b2a5-7e1cabe499d1",
+                                "field": "channel_1"
+                            }
+                        ]
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "349318be-8354-50b4-8875-f394ab309ed8"
+        }
+    }
+]
