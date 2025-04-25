@@ -127,9 +127,13 @@ def create_raster_image_marks_object(
         if len(color_scale_array) == 1
         else [{"scale": cs["name"], "field": f"channel_{i}"} for i, cs in enumerate(color_scale_array)]
     )
+
+    data_id = (
+        data_object["name"] if data_object["transform"][-1]["type"] != "formula" else data_object["transform"][-1]["as"]
+    )
     return {
         "type": "raster_image",
-        "from": {"data": data_object["name"]},
+        "from": {"data": data_id},
         "zindex": ax.properties()["images"][call_count].zorder,
         "encode": {"enter": {"opacity": {"value": params.alpha}, "fill": fill_color}},
     }

@@ -145,7 +145,12 @@ def _create_scales_legends_marks(
 
     match params:
         case ImageRenderParams():
-            color_scale_array = create_colorscale_array_image(params.cmap_params, data_object["name"], params.channel)
+            data_id = (
+                data_object["name"]
+                if data_object["transform"][-1]["type"] != "formula"
+                else data_object["transform"][-1]["as"]
+            )
+            color_scale_array = create_colorscale_array_image(params.cmap_params, data_id, params.channel)
             legend_array = create_colorbar_legend(fig, color_scale_array, legend_count)
             marks_object = create_raster_image_marks_object(ax, params, data_object, call_count, color_scale_array)
         case LabelsRenderParams() | PointsRenderParams() | ShapesRenderParams():
