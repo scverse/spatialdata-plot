@@ -186,6 +186,7 @@ def create_colorbar_legend(
                 "gradientThickness": gradient_thickness,
                 "gradientStrokeColor": stroke_color,
                 "gradientStrokeWidth": (spine_outline["linewidth"] * fig.dpi) / 72 if stroke_color else None,
+                # TODO: check why values can be different for example in Images_can_pass_normalize_clip_True
                 "values": enforce_common_decimal_format(list(cbar.ax.get_yticks())),
                 **common_props,
                 "legendX": cbar.ax.get_tightbbox().bounds[0],
