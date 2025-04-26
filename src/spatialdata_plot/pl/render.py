@@ -1032,8 +1032,10 @@ def _render_labels(
         color_vector = color_vector[mask]
         if isinstance(color_vector.dtype, pd.CategoricalDtype):
             color_vector = color_vector.remove_unused_categories()
-        if color_source_vector is not None:
+            assert color_source_vector is not None
             color_source_vector = color_source_vector[mask]
+        else:
+            assert color_source_vector is None
 
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
