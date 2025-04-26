@@ -6,6 +6,7 @@
 [![Documentation][badge-docs]][link-docs]
 [![Codecov][badge-codecov]][link-codecov]
 [![Documentation][badge-pypi]][link-pypi]
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spatialdata-plot/badges/version.svg)](https://anaconda.org/conda-forge/spatialdata-plot)
 [![DOI](https://zenodo.org/badge/588223127.svg)](https://zenodo.org/badge/latestdoi/588223127)
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test.yaml?branch=main
@@ -62,11 +63,10 @@ Marconato, L., Palla, G., Yamauchi, K.A. et al. SpatialData: an open and univers
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
-[changelog]: https://spatialdata-plot.readthedocs.io/latest/changelog.html
 [link-docs]: https://spatialdata-plot.readthedocs.io
-[link-api]: https://spatialdata.scverse.org/projects/plot/en/latest/api.html
-[link-design-doc]: https://spatialdata.scverse.org/en/latest/design_doc.html
-[link-notebooks]: https://spatialdata.scverse.org/en/latest/tutorials/notebooks/notebooks.html
+[link-api]: https://spatialdata.scverse.org/projects/plot/en/stable/api.html
+[link-design-doc]: https://spatialdata.scverse.org/en/stable/design_doc.html
+[link-notebooks]: https://spatialdata.scverse.org/en/stable/tutorials/notebooks/notebooks.html
 [//]: # "numfocus-fiscal-sponsor-attribution"
 
 spatialdata-plot is part of the scverse® project ([website](https://scverse.org), [governance](https://scverse.org/about/roles)) and is fiscally sponsored by [NumFOCUS](https://numfocus.org/).
