@@ -1030,7 +1030,7 @@ def _render_labels(
         mask = np.isin(instance_id, labels_in_rasterized_image)
         instance_id = instance_id[mask]
         color_vector = color_vector[mask]
-        if pd.api.types.is_categorical_dtype(color_vector.dtype):
+        if isinstance(color_vector.dtype, pd.CategoricalDtype):
             color_vector = color_vector.remove_unused_categories()
         if color_source_vector is not None:
             color_source_vector = color_source_vector[mask]
