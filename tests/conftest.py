@@ -1,9 +1,11 @@
 import json
+import re
 import warnings
 from abc import ABC, ABCMeta
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -37,6 +39,7 @@ HERE: Path = Path(__file__).parent
 EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 VIEWCONFIG_ACTUAL = HERE / "figures_viewconfig"
+VIEWCONFIG_EXPECTED = HERE / "_figures_viewconfig"
 TOL = 15
 DPI = 80
 
@@ -391,6 +394,57 @@ def _get_table(
     return table
 
 
+UUID_REGEX = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def is_uuid_string(s: str) -> bool:
+    return bool(UUID_REGEX.search(s))
+
+
+def compare_json_ignore_uuids(a: Any, b: Any, path="root", errors=None) -> bool:
+    if errors is None:
+        errors = []
+    if isinstance(a, dict) and isinstance(b, dict):
+        if set(a.keys()) != set(b.keys()):
+            errors.append(f"Key mismatch at {path} actual vs expected: {set(a.keys())} != {set(b.keys())}")
+        for k in a:
+            next_path = f"{path}.{k}"
+            if isinstance(a[k], str) and is_uuid_string(a[k]):
+                continue
+            if k == "version":
+                continue
+            compare_json_ignore_uuids(a[k], b[k], path=next_path, errors=errors)
+
+        return True
+
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            errors.append(f"List length mismatch at {path} actual vs expected: {len(a)} != {len(b)}")
+        for i, (ai, bi) in enumerate(zip(a, b, strict=True)):
+            next_path = f"{path}[{i}]"
+            compare_json_ignore_uuids(ai, bi, path=next_path, errors=errors)
+
+    else:
+        if isinstance(a, str) and is_uuid_string(a):
+            return True  # ignore UUID strings
+        if a != b:
+            errors.append(f"Value mismatch at {path} actual vs expected: {a!r} != {b!r}")
+
+    if path == "root" and errors:
+        error_message = "\n".join(errors)
+        raise AssertionError(f"JSONs do not match:\n{error_message}")
+
+    return not errors
+
+
+def test_viewconfig_output(actual_json_path, expected_json_path):
+    with actual_json_path.open() as f:
+        actual_json = json.load(f)
+    with expected_json_path.open() as f:
+        expected_json = json.load(f)
+    assert compare_json_ignore_uuids(actual_json, expected_json)
+
+
 class PlotTesterMeta(ABCMeta):
     def __new__(cls, clsname, superclasses, attributedict):
         for key, value in attributedict.items():
@@ -420,6 +474,7 @@ class PlotTester(ABC):  # noqa: B024
             # see https://github.com/scverse/squidpy/pull/302
             tolerance = 2 * TOL if "Napari" in basename else TOL
 
+        test_viewconfig_output(VIEWCONFIG_ACTUAL / f"{basename}.json", VIEWCONFIG_EXPECTED / f"{basename}.json")
         res = compare_images(str(EXPECTED / f"{basename}.png"), str(out_path), tolerance)
 
         assert res is None, res
