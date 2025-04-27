@@ -5,7 +5,6 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from spatialdata_plot._viewconfig.misc import parse_numbers_with_exact_format
-from spatialdata_plot.pl.utils import to_hex_alpha
 
 
 def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: float) -> list[dict[str, Any]]:
@@ -33,8 +32,10 @@ def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: fl
             axis_config["gridOpacity"] = axis_props["gridlines"][0].properties()["alpha"]
             axis_config["gridCap"] = axis_props["gridlines"][0].properties()["dash_capstyle"]
             grid_color = float(axis_props["gridlines"][0].properties()["markeredgecolor"])
-            axis_config["gridColor"] = to_hex_alpha([grid_color] * 3)
+            axis_config["gridColor"] = mcolors.to_hex([grid_color] * 3)
             axis_config["gridWidth"] = (axis_props["gridlines"][0].properties()["markeredgewidth"] * dpi) / 72
+        axis_config["labelColor"] = mcolors.to_hex(axis_props["majorticklabels"][0].get_color())
+        axis_config["labelOpacity"] = 1 if not (alpha := axis_props["majorticklabels"][0].get_alpha()) else alpha
         axis_config["labelFont"] = axis_props["majorticklabels"][0].get_fontname()
         axis_config["labelFontSize"] = (axis_props["majorticklabels"][0].get_size() * dpi) / 72
         axis_config["labelFontStyle"] = axis_props["majorticklabels"][0].get_fontstyle()
