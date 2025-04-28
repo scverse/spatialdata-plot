@@ -244,8 +244,9 @@ def create_colorscale_array_image(
 
         color_range = _process_colormap(cmap)
         field_val = field
-        if isinstance(field, int | list):
+        if isinstance(field, int | list) or (field is None and len(cmaps) != 1):
             field_val = f"channel_{index}"
+
         field_val = field_val or "value"
 
         color_scale_array.append(
