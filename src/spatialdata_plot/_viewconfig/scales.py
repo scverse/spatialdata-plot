@@ -246,6 +246,8 @@ def create_colorscale_array_image(
         field_val = field
         if isinstance(field, int | list) or (field is None and len(cmaps) != 1):
             field_val = f"channel_{index}"
+        if isinstance(field, list) and len(field) == 1:
+            field_val = "value"
 
         field_val = field_val or "value"
 

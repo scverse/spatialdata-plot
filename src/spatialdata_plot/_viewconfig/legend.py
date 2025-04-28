@@ -47,7 +47,8 @@ def _extract_legend_label_properties(label_texts: list[Text], dpi: float) -> dic
 
     return {
         "labelAlign": text_props["horizontalalignment"],
-        "labelColor": to_hex_alpha(text_props["color"]),
+        "labelColor": mcolors.to_hex(text_props["color"]),
+        "labelOpacity": 1 if text_props["alpha"] is None else text_props["alpha"],
         "labelFont": text_props["fontname"],
         "labelFontSize": (text_props["fontsize"] * dpi) / 72,
         "labelFontStyle": text_props["fontstyle"],
