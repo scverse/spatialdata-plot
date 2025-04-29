@@ -22,7 +22,7 @@
         },
         "data": [
             {
-                "name": "47fc311c-de64-4a94-aac5-c961d60d0f9e",
+                "name": "24df284f-a11d-4340-a143-2b5cf233a298",
                 "url": "sdata.zarr",
                 "format": {
                     "type": "SpatialData",
@@ -30,12 +30,12 @@
                 }
             },
             {
-                "name": "blobs_image_73967ea3-cf7f-4c37-8f6c-55a13165ae41",
+                "name": "blobs_image_a20c7fe3-8480-45ab-8fd4-21773ccb688a",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "47fc311c-de64-4a94-aac5-c961d60d0f9e",
+                "source": "24df284f-a11d-4340-a143-2b5cf233a298",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -56,7 +56,7 @@
                     {
                         "type": "formula",
                         "expr": "clamp((datum.value - 0.0) / (0.4 - 0.0), 0, 1)",
-                        "as": "729a827d-f810-4494-9ddd-b98c33eda533"
+                        "as": "eec38c7c-3a6e-4c5c-a674-8d38ca62bf73"
                     }
                 ]
             }
@@ -75,11 +75,11 @@
                 "range": "height"
             },
             {
-                "name": "color_1d1cd407-84c8-41d2-b89f-2f136a57de33",
+                "name": "color_3a788edc-90f7-4165-8f32-9ef4fea44fb3",
                 "type": "linear",
                 "domain": {
-                    "data": "729a827d-f810-4494-9ddd-b98c33eda533",
-                    "field": "value"
+                    "data": "eec38c7c-3a6e-4c5c-a674-8d38ca62bf73",
+                    "field": "channel_0"
                 },
                 "range": {
                     "scheme": "seismic",
@@ -87,11 +87,11 @@
                 }
             },
             {
-                "name": "color_e213a063-db1f-44f8-b634-df358d017c75",
+                "name": "color_f3dcaaa5-34f5-45c1-83ff-6de3bb979044",
                 "type": "linear",
                 "domain": {
-                    "data": "729a827d-f810-4494-9ddd-b98c33eda533",
-                    "field": "value"
+                    "data": "eec38c7c-3a6e-4c5c-a674-8d38ca62bf73",
+                    "field": "channel_1"
                 },
                 "range": {
                     "scheme": "Reds",
@@ -99,11 +99,11 @@
                 }
             },
             {
-                "name": "color_380a4cab-221a-48e0-82ba-2bd15ec32ffb",
+                "name": "color_4bc87e63-19d4-4b1b-9de4-d3deb8cbceaa",
                 "type": "linear",
                 "domain": {
-                    "data": "729a827d-f810-4494-9ddd-b98c33eda533",
-                    "field": "value"
+                    "data": "eec38c7c-3a6e-4c5c-a674-8d38ca62bf73",
+                    "field": "channel_2"
                 },
                 "range": {
                     "scheme": "Blues",
@@ -122,8 +122,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -147,8 +149,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -167,7 +171,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "729a827d-f810-4494-9ddd-b98c33eda533"
+                    "data": "eec38c7c-3a6e-4c5c-a674-8d38ca62bf73"
                 },
                 "zindex": 0,
                 "encode": {
@@ -177,15 +181,15 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_1d1cd407-84c8-41d2-b89f-2f136a57de33",
+                                "scale": "color_3a788edc-90f7-4165-8f32-9ef4fea44fb3",
                                 "field": "channel_0"
                             },
                             {
-                                "scale": "color_e213a063-db1f-44f8-b634-df358d017c75",
+                                "scale": "color_f3dcaaa5-34f5-45c1-83ff-6de3bb979044",
                                 "field": "channel_1"
                             },
                             {
-                                "scale": "color_380a4cab-221a-48e0-82ba-2bd15ec32ffb",
+                                "scale": "color_4bc87e63-19d4-4b1b-9de4-d3deb8cbceaa",
                                 "field": "channel_2"
                             }
                         ]
@@ -194,7 +198,7 @@
             }
         ],
         "usermeta": {
-            "axis_uuid": "35ed1888-f2b3-5efd-9d78-3207a64499c9"
+            "axis_uuid": "3c9ffcd5-4dd7-5958-b857-40807b961040"
         }
     }
 ]

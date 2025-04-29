@@ -22,7 +22,7 @@
         },
         "data": [
             {
-                "name": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "name": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "url": "sdata.zarr",
                 "format": {
                     "type": "SpatialData",
@@ -30,12 +30,12 @@
                 }
             },
             {
-                "name": "blobs_circles_2011a6f9-bbcf-4613-8d36-e32a56b7d80e",
+                "name": "blobs_circles_cf9bea02-83c7-4cbf-ab04-3b0fc03a0efe",
                 "format": {
                     "type": "ShapesFormatV02",
                     "version": "0.2"
                 },
-                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "source": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -48,12 +48,12 @@
                 ]
             },
             {
-                "name": "blobs_polygons_d3b7570c-468f-44f7-b2fb-9db2a24fef91",
+                "name": "blobs_polygons_743fda8d-a7df-46ea-8e9e-b7b02166d0ee",
                 "format": {
                     "type": "ShapesFormatV02",
                     "version": "0.2"
                 },
-                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "source": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -66,12 +66,12 @@
                 ]
             },
             {
-                "name": "blobs_multipolygons_bfc9adb0-62b9-40f4-ae27-602a1621912f",
+                "name": "blobs_multipolygons_81eb2fbb-e456-44d5-869a-27dc0b455333",
                 "format": {
                     "type": "ShapesFormatV02",
                     "version": "0.2"
                 },
-                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "source": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -84,12 +84,12 @@
                 ]
             },
             {
-                "name": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca",
+                "name": "blobs_image_8fb8d079-09d7-4aec-95b5-2cf9d02054df",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "source": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -110,12 +110,12 @@
                 ]
             },
             {
-                "name": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5",
+                "name": "blobs_multiscale_image_503495d1-1210-4584-a44f-df132a64b4a5",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "f78b3d63-78ad-4fa4-b2b4-5b90deacdbf8",
+                "source": "c44f74f8-f792-42b7-8c1d-38b250ce3c59",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -150,10 +150,10 @@
                 "range": "height"
             },
             {
-                "name": "color_360709a7-9663-447a-9968-5491a884ba95",
+                "name": "color_f58f3d5e-13c7-4b7f-8f79-d468e660538c",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca",
+                    "data": "blobs_image_8fb8d079-09d7-4aec-95b5-2cf9d02054df",
                     "field": "value"
                 },
                 "range": {
@@ -162,10 +162,10 @@
                 }
             },
             {
-                "name": "color_28b7bed3-0a23-4705-af69-de2fec0da0d5",
+                "name": "color_6a9ca815-465f-42a1-8cc7-dd4b00a97446",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5",
+                    "data": "blobs_multiscale_image_503495d1-1210-4584-a44f-df132a64b4a5",
                     "field": "value"
                 },
                 "range": {
@@ -185,8 +185,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -210,8 +212,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -230,7 +234,7 @@
             {
                 "type": "path",
                 "from": {
-                    "data": "blobs_circles_2011a6f9-bbcf-4613-8d36-e32a56b7d80e"
+                    "data": "blobs_circles_cf9bea02-83c7-4cbf-ab04-3b0fc03a0efe"
                 },
                 "zindex": 0,
                 "encode": {
@@ -257,7 +261,7 @@
             {
                 "type": "path",
                 "from": {
-                    "data": "blobs_polygons_d3b7570c-468f-44f7-b2fb-9db2a24fef91"
+                    "data": "blobs_polygons_743fda8d-a7df-46ea-8e9e-b7b02166d0ee"
                 },
                 "zindex": 1,
                 "encode": {
@@ -284,7 +288,7 @@
             {
                 "type": "path",
                 "from": {
-                    "data": "blobs_multipolygons_bfc9adb0-62b9-40f4-ae27-602a1621912f"
+                    "data": "blobs_multipolygons_81eb2fbb-e456-44d5-869a-27dc0b455333"
                 },
                 "zindex": 2,
                 "encode": {
@@ -311,7 +315,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "blobs_image_6b94ea67-7021-4163-a614-13b7d85d7cca"
+                    "data": "blobs_image_8fb8d079-09d7-4aec-95b5-2cf9d02054df"
                 },
                 "zindex": 3,
                 "encode": {
@@ -321,7 +325,7 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_360709a7-9663-447a-9968-5491a884ba95",
+                                "scale": "color_f58f3d5e-13c7-4b7f-8f79-d468e660538c",
                                 "value": "value"
                             }
                         ]
@@ -331,7 +335,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "blobs_multiscale_image_8d40fd50-d385-4c1a-94af-5d9c78815dd5"
+                    "data": "blobs_multiscale_image_503495d1-1210-4584-a44f-df132a64b4a5"
                 },
                 "zindex": 4,
                 "encode": {
@@ -341,7 +345,7 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_28b7bed3-0a23-4705-af69-de2fec0da0d5",
+                                "scale": "color_6a9ca815-465f-42a1-8cc7-dd4b00a97446",
                                 "value": "value"
                             }
                         ]
@@ -350,7 +354,7 @@
             }
         ],
         "usermeta": {
-            "axis_uuid": "bce72096-f040-509b-903f-7953efa752d3"
+            "axis_uuid": "df82fb18-3c1a-5887-b764-365dcbdd9385"
         }
     }
 ]

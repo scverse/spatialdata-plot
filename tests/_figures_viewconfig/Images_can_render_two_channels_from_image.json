@@ -22,7 +22,7 @@
         },
         "data": [
             {
-                "name": "a69da098-cb50-4f55-91cd-817f17c5a52b",
+                "name": "33e11ade-b94f-46fe-988c-6c2797d42b63",
                 "url": "sdata.zarr",
                 "format": {
                     "type": "SpatialData",
@@ -30,12 +30,12 @@
                 }
             },
             {
-                "name": "blobs_image_437c4b1f-2bb4-4ee7-bd12-cdb538d936f9",
+                "name": "blobs_image_b4d75cdb-1184-4307-9cc3-df2d78d04923",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "a69da098-cb50-4f55-91cd-817f17c5a52b",
+                "source": "33e11ade-b94f-46fe-988c-6c2797d42b63",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -70,10 +70,10 @@
                 "range": "height"
             },
             {
-                "name": "color_cfab0e24-53b3-4fbb-a2a1-f1937d26264c",
+                "name": "color_6adfa8d8-d389-45e6-93d4-41316230ed41",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_437c4b1f-2bb4-4ee7-bd12-cdb538d936f9",
+                    "data": "blobs_image_b4d75cdb-1184-4307-9cc3-df2d78d04923",
                     "field": "channel_0"
                 },
                 "range": {
@@ -82,10 +82,10 @@
                 }
             },
             {
-                "name": "color_8d53e0ac-d209-44cb-b225-9322d9ca8b96",
+                "name": "color_d85ab719-b866-4cb7-9dbf-d740b7ea9972",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_437c4b1f-2bb4-4ee7-bd12-cdb538d936f9",
+                    "data": "blobs_image_b4d75cdb-1184-4307-9cc3-df2d78d04923",
                     "field": "channel_1"
                 },
                 "range": {
@@ -105,8 +105,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -130,8 +132,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -150,7 +154,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "blobs_image_437c4b1f-2bb4-4ee7-bd12-cdb538d936f9"
+                    "data": "blobs_image_b4d75cdb-1184-4307-9cc3-df2d78d04923"
                 },
                 "zindex": 0,
                 "encode": {
@@ -160,11 +164,11 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_cfab0e24-53b3-4fbb-a2a1-f1937d26264c",
+                                "scale": "color_6adfa8d8-d389-45e6-93d4-41316230ed41",
                                 "field": "channel_0"
                             },
                             {
-                                "scale": "color_8d53e0ac-d209-44cb-b225-9322d9ca8b96",
+                                "scale": "color_d85ab719-b866-4cb7-9dbf-d740b7ea9972",
                                 "field": "channel_1"
                             }
                         ]
@@ -173,7 +177,7 @@
             }
         ],
         "usermeta": {
-            "axis_uuid": "76201cde-07a0-5afb-99f2-f13e85339410"
+            "axis_uuid": "248551f7-f962-5d91-a248-c48417951257"
         }
     }
 ]

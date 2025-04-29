@@ -22,7 +22,7 @@
         },
         "data": [
             {
-                "name": "36456d6a-eeae-4db9-92a2-ccd1e2c64227",
+                "name": "97d394a9-4c4a-4189-9318-0fecc7b541a8",
                 "url": "sdata.zarr",
                 "format": {
                     "type": "SpatialData",
@@ -30,12 +30,12 @@
                 }
             },
             {
-                "name": "blobs_image_e126f581-b94e-4895-aebb-0a9cc645adfa",
+                "name": "blobs_image_06772d4a-ba12-4951-99ef-f3a10771de9a",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "36456d6a-eeae-4db9-92a2-ccd1e2c64227",
+                "source": "97d394a9-4c4a-4189-9318-0fecc7b541a8",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -70,10 +70,10 @@
                 "range": "height"
             },
             {
-                "name": "color_4652ac13-c94d-4696-b713-97571cef968e",
+                "name": "color_dbd18e2b-50e8-4bca-ac4f-33d26f0f99a1",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_e126f581-b94e-4895-aebb-0a9cc645adfa",
+                    "data": "blobs_image_06772d4a-ba12-4951-99ef-f3a10771de9a",
                     "field": "channel_0"
                 },
                 "range": {
@@ -82,10 +82,10 @@
                 }
             },
             {
-                "name": "color_e524a644-7b95-4411-9fb4-976c9185ca32",
+                "name": "color_0b6ba62b-3241-463f-b2b1-cbed9271e421",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_e126f581-b94e-4895-aebb-0a9cc645adfa",
+                    "data": "blobs_image_06772d4a-ba12-4951-99ef-f3a10771de9a",
                     "field": "channel_1"
                 },
                 "range": {
@@ -94,10 +94,10 @@
                 }
             },
             {
-                "name": "color_960bbc50-cbcf-4a46-809b-f6b1697f5d26",
+                "name": "color_94b0271e-0e6e-4e16-b6f4-3e9f71661875",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_image_e126f581-b94e-4895-aebb-0a9cc645adfa",
+                    "data": "blobs_image_06772d4a-ba12-4951-99ef-f3a10771de9a",
                     "field": "channel_2"
                 },
                 "range": {
@@ -117,8 +117,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -142,8 +144,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -162,7 +166,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "blobs_image_e126f581-b94e-4895-aebb-0a9cc645adfa"
+                    "data": "blobs_image_06772d4a-ba12-4951-99ef-f3a10771de9a"
                 },
                 "zindex": 0,
                 "encode": {
@@ -172,15 +176,15 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_4652ac13-c94d-4696-b713-97571cef968e",
+                                "scale": "color_dbd18e2b-50e8-4bca-ac4f-33d26f0f99a1",
                                 "field": "channel_0"
                             },
                             {
-                                "scale": "color_e524a644-7b95-4411-9fb4-976c9185ca32",
+                                "scale": "color_0b6ba62b-3241-463f-b2b1-cbed9271e421",
                                 "field": "channel_1"
                             },
                             {
-                                "scale": "color_960bbc50-cbcf-4a46-809b-f6b1697f5d26",
+                                "scale": "color_94b0271e-0e6e-4e16-b6f4-3e9f71661875",
                                 "field": "channel_2"
                             }
                         ]
@@ -189,7 +193,7 @@
             }
         ],
         "usermeta": {
-            "axis_uuid": "ce6499ea-274b-5531-b90a-90e16c86d1b1"
+            "axis_uuid": "f8fdd4b4-7e46-53cd-9e67-f9acbf3b2ebd"
         }
     }
 ]

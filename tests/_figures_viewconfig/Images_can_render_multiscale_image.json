@@ -22,7 +22,7 @@
         },
         "data": [
             {
-                "name": "56349b13-6e07-43a1-9afe-f4a2b18eefb4",
+                "name": "8123869d-5833-4634-b023-7b83c0170371",
                 "url": "sdata.zarr",
                 "format": {
                     "type": "SpatialData",
@@ -30,12 +30,12 @@
                 }
             },
             {
-                "name": "blobs_multiscale_image_29661d8b-d49a-4534-8887-c6ce89bf948c",
+                "name": "blobs_multiscale_image_a8fedc1c-a0c5-4123-8f44-3d0de94ddcb2",
                 "format": {
                     "type": "RasterFormatV02",
                     "version": "0.2"
                 },
-                "source": "56349b13-6e07-43a1-9afe-f4a2b18eefb4",
+                "source": "8123869d-5833-4634-b023-7b83c0170371",
                 "transform": [
                     {
                         "type": "filter_element",
@@ -70,10 +70,10 @@
                 "range": "height"
             },
             {
-                "name": "color_c602bd42-be58-4bc2-8db0-0f8bc310d2f2",
+                "name": "color_6a308c45-a705-4432-aae9-e663b0fabc6a",
                 "type": "linear",
                 "domain": {
-                    "data": "blobs_multiscale_image_29661d8b-d49a-4534-8887-c6ce89bf948c",
+                    "data": "blobs_multiscale_image_a8fedc1c-a0c5-4123-8f44-3d0de94ddcb2",
                     "field": "value"
                 },
                 "range": {
@@ -93,8 +93,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -118,8 +120,10 @@
                 "grid": true,
                 "gridOpacity": 1.0,
                 "gridCap": "butt",
-                "gridColor": "#ccccccff",
+                "gridColor": "#cccccc",
                 "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
                 "labelFont": "Arial",
                 "labelFontSize": 15.555555555555555,
                 "labelFontStyle": "normal",
@@ -138,7 +142,7 @@
             {
                 "type": "raster_image",
                 "from": {
-                    "data": "blobs_multiscale_image_29661d8b-d49a-4534-8887-c6ce89bf948c"
+                    "data": "blobs_multiscale_image_a8fedc1c-a0c5-4123-8f44-3d0de94ddcb2"
                 },
                 "zindex": 0,
                 "encode": {
@@ -148,7 +152,7 @@
                         },
                         "fill": [
                             {
-                                "scale": "color_c602bd42-be58-4bc2-8db0-0f8bc310d2f2",
+                                "scale": "color_6a308c45-a705-4432-aae9-e663b0fabc6a",
                                 "value": "value"
                             }
                         ]
@@ -157,7 +161,7 @@
             }
         ],
         "usermeta": {
-            "axis_uuid": "d37a2592-d43a-54ec-8d5d-534ce4dd1620"
+            "axis_uuid": "217f0086-2a6c-57bd-9902-e4482d0528d8"
         }
     }
 ]
