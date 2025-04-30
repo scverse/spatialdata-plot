@@ -214,6 +214,8 @@ def create_colorscale_array_points_shapes_labels(
                 data_object["name"],
             )
         )
+    else:
+        return []
 
     return [color_scale_object]
 
