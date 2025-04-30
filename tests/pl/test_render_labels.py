@@ -165,7 +165,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         self,
         sdata_blobs: SpatialData,
     ):
-
+        # TODO: ask tim regarding this test as the name is confusing or there is a bug.
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", fill_alpha=0.1, outline_alpha=0.7, contour_px=15
         ).pl.show()

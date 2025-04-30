@@ -137,7 +137,7 @@ def create_table_data_object(table_name: str, base_uuid: str, table_layer: str |
         "transform": [{"type": "filter_element", "expr": table_name}],
     }
     if table_layer is not None:
-        table_object["transform"].append({"type": "filter_layer"})  # type: ignore[attr-defined]
+        table_object["transform"].append({"type": "filter_layer", "expr": table_layer})  # type: ignore[attr-defined]
     return table_object
 
 

@@ -297,7 +297,9 @@ def create_raster_label_marks_object(
     encode_update = None
 
     if params.colortype == "continuous":
-        field = color_scale_array[0]["domain"]["field"][0]
+        if isinstance(field := color_scale_array[0]["domain"]["field"], list):
+            field = field[0]
+
         fill_color = [{"scale": color_scale_array[0]["name"], "value": field}]
         encode_update = {
             "fill": [
