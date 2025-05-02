@@ -1,0 +1,233 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 320.0,
+        "width": 320.0,
+        "padding": {
+            "left": 57.599999999999994,
+            "top": 28.79999999999999,
+            "right": 12.800000000000011,
+            "bottom": 48.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 15.555555555555555,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "882207e6-e04a-47d1-9bf6-68a1c6e59817",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "blobs_points_75d73c23-3eea-4a4f-87cb-a35740cfe77e",
+                "format": {
+                    "type": "PointsFormatV01",
+                    "version": "0.1"
+                },
+                "source": "882207e6-e04a-47d1-9bf6-68a1c6e59817",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_points"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "aggregate",
+                        "field": ["instance_id"],
+                        "ops": ["sum"],
+                        "as": ["instance_id"]
+                    },
+                    {
+                        "type": "formula",
+                        "expr": "(datum.instance_id - 0.0) / (14.0 - 0.0)",
+                        "as": "adafac37-bc91-4982-8f59-5e7e1df18c02"
+                    },
+                    {
+                        "type": "spread",
+                        "field": ["instance_id"],
+                        "px": 1,
+                        "as": ["instance_id"]
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [3.0, 509.0],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [507.0, 4.0],
+                "range": "height"
+            },
+            {
+                "name": "color_3ed5be73-46b3-4f72-ba9e-b553c236313e",
+                "type": "linear",
+                "domain": {
+                    "data": "blobs_points_75d73c23-3eea-4a4f-87cb-a35740cfe77e",
+                    "field": ["instance_id"]
+                },
+                "range": {
+                    "scheme": "viridis",
+                    "count": 256
+                }
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [200, 400],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [100, 200, 300, 400, 500],
+                "zindex": 1.5
+            }
+        ],
+        "legend": [
+            {
+                "type": "gradient",
+                "direction": "vertical",
+                "orient": "none",
+                "fill": "color_3ed5be73-46b3-4f72-ba9e-b553c236313e",
+                "fillColor": "#ffffff",
+                "gradientLength": 243.2,
+                "gradientOpacity": 1.0,
+                "gradientThickness": 8.106666666666662,
+                "gradientStrokeColor": "#000000",
+                "gradientStrokeWidth": 0.8888888888888888,
+                "values": [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0],
+                "labelAlign": "left",
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "legendX": 287.23199999999997,
+                "legendY": 22.80000000000001,
+                "zindex": 0
+            }
+        ],
+        "marks": [
+            {
+                "type": "symbol",
+                "from": {
+                    "data": "blobs_points_75d73c23-3eea-4a4f-87cb-a35740cfe77e"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "stroke": {
+                            "scale": "color_3ed5be73-46b3-4f72-ba9e-b553c236313e",
+                            "value": "instance_id"
+                        },
+                        "fill": {
+                            "scale": "color_3ed5be73-46b3-4f72-ba9e-b553c236313e",
+                            "value": "instance_id"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        },
+                        "size": {
+                            "value": 1.0
+                        },
+                        "shape": {
+                            "value": "circle"
+                        }
+                    },
+                    "update": {
+                        "fill": [
+                            {
+                                "test": "!isValid(datum.instance_id)",
+                                "value": "#d3d3d3"
+                            },
+                            {
+                                "test": "datum.instance_id) < 0.0",
+                                "value": "#440154"
+                            },
+                            {
+                                "test": "datum.instance_id) > 14.0",
+                                "value": "#fde725"
+                            }
+                        ]
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "2f5d2cc1-0d47-5802-8fe5-7495f8ec1c22"
+        }
+    }
+]

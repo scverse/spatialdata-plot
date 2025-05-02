@@ -47,7 +47,7 @@ def _add_datashade_transform(
 
     if last_transform["type"] == "formula":
         field = as_field = data_object["transform"][-1]["as"]
-    elif params.col_for_color:
+    else:
         field = as_field = params.col_for_color or "*"
         if field == "*":
             as_field = "count"

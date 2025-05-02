@@ -58,7 +58,7 @@ def create_axis_block(ax: Axes, axis_scales_block: list[dict[str, Any]], dpi: fl
                 tick_str_values = [
                     ticklabel.get_text()
                     for ticklabel in axis_props["ticklabels"]
-                    if vmin <= float(ticklabel.get_text()) <= vmax
+                    if vmin <= float(ticklabel.get_text().replace("−", "-")) <= vmax
                 ]
                 axis_config["values"] = parse_numbers_with_exact_format(tick_str_values)
 

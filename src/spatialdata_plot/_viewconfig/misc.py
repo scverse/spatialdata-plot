@@ -47,6 +47,7 @@ def parse_numbers_with_exact_format(str_values: list[str]) -> list[float]:
     """
     float_ls = []
     for s in str_values:
+        s = s.replace("−", "-")
         if "." in s:
             float_ls.append(float(s))
         else:

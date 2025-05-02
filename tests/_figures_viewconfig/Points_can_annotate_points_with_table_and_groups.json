@@ -1,0 +1,225 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 320.0,
+        "width": 320.0,
+        "padding": {
+            "left": 57.599999999999994,
+            "top": 28.79999999999999,
+            "right": 12.800000000000011,
+            "bottom": 48.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 15.555555555555555,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "a00b5c40-3b37-48fc-9b49-e3a02d11a76a",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "4107814a-544f-4186-9616-cf3ef40a11fd",
+                "format": {
+                    "type": "spatialdata_table",
+                    "version": 0.1
+                },
+                "source": "a00b5c40-3b37-48fc-9b49-e3a02d11a76a",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "points_table"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_points_5ded845f-6951-46bd-be0b-f1921ce917c9",
+                "format": {
+                    "type": "PointsFormatV01",
+                    "version": "0.1"
+                },
+                "source": "a00b5c40-3b37-48fc-9b49-e3a02d11a76a",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_points"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "lookup",
+                        "from": "4107814a-544f-4186-9616-cf3ef40a11fd",
+                        "key": "instance_id",
+                        "fields": ["instance_ids"],
+                        "values": ["extra_feature_cat"],
+                        "as": ["extra_feature_cat"],
+                        "default": null
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [3.0, 509.0],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [507.0, 4.0],
+                "range": "height"
+            },
+            {
+                "name": "color_ba262afd-c10c-4b56-a4af-e62641e52bd2",
+                "type": "ordinal",
+                "domain": ["two"],
+                "range": ["#ff7f0e"]
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [200, 400],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [100, 200, 300, 400, 500],
+                "zindex": 1.5
+            }
+        ],
+        "legend": [
+            {
+                "type": "discrete",
+                "direction": "vertical",
+                "fill": "color_ba262afd-c10c-4b56-a4af-e62641e52bd2",
+                "orient": "none",
+                "columns": 1,
+                "columnPadding": 2.2222222222222223,
+                "rowPadding": 0.5555555555555556,
+                "padding": 0.4444444444444444,
+                "fillColor": "#ffffffcc",
+                "strokeColor": "#cccccccc",
+                "strokeWidth": 1.1111111111111112,
+                "labelOffset": 0.4444444444444444,
+                "labelAlign": "left",
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 14.311111111111112,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "legendX": 253.59055555555548,
+                "legendY": 239.39555555555555
+            }
+        ],
+        "marks": [
+            {
+                "type": "symbol",
+                "from": {
+                    "data": "blobs_points_5ded845f-6951-46bd-be0b-f1921ce917c9"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "stroke": {
+                            "scale": "color_ba262afd-c10c-4b56-a4af-e62641e52bd2",
+                            "field": "extra_feature_cat"
+                        },
+                        "fill": {
+                            "scale": "color_ba262afd-c10c-4b56-a4af-e62641e52bd2",
+                            "field": "extra_feature_cat"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        },
+                        "size": {
+                            "value": 10
+                        },
+                        "shape": {
+                            "value": "circle"
+                        }
+                    },
+                    "update": {
+                        "fill": [
+                            {
+                                "test": "!isValid(datum.extra_feature_cat)",
+                                "value": "#d3d3d3"
+                            }
+                        ]
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "2c539bdf-7947-5742-9fa3-7efea6df4524"
+        }
+    }
+]

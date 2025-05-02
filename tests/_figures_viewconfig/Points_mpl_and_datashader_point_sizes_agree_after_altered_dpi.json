@@ -1,0 +1,225 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 800.0,
+        "width": 800.0,
+        "padding": {
+            "left": 144.0,
+            "top": 71.99999999999997,
+            "right": 32.00000000000003,
+            "bottom": 120.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 38.888888888888886,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "fe73f6c8-17d5-473a-84c5-6c8327b3a63d",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "blobs_points_58755652-81c2-4b5a-8179-fa7918be1be9",
+                "format": {
+                    "type": "PointsFormatV01",
+                    "version": "0.1"
+                },
+                "source": "fe73f6c8-17d5-473a-84c5-6c8327b3a63d",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_points"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_points_91042950-96b5-4636-942e-8775f1c9ca76",
+                "format": {
+                    "type": "PointsFormatV01",
+                    "version": "0.1"
+                },
+                "source": "fe73f6c8-17d5-473a-84c5-6c8327b3a63d",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_points"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    },
+                    {
+                        "type": "aggregate",
+                        "field": ["*"],
+                        "ops": ["count"],
+                        "as": ["count"]
+                    },
+                    {
+                        "type": "spread",
+                        "field": ["count"],
+                        "px": 40,
+                        "as": ["count"]
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [3.0, 509.0],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [507.0, 4.0],
+                "range": "height"
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 2.2222222222222223,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 2.7777777777777777,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 38.888888888888886,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 4.166666666666667,
+                "tickSize": 9.722222222222221,
+                "values": [200, 400],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 2.2222222222222223,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 2.7777777777777777,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 38.888888888888886,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 4.166666666666667,
+                "tickSize": 9.722222222222221,
+                "values": [100, 200, 300, 400, 500],
+                "zindex": 1.5
+            }
+        ],
+        "marks": [
+            {
+                "type": "symbol",
+                "from": {
+                    "data": "blobs_points_58755652-81c2-4b5a-8179-fa7918be1be9"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "stroke": {
+                            "value": "#0000ff"
+                        },
+                        "fill": {
+                            "value": "#0000ff"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        },
+                        "size": {
+                            "value": 400
+                        },
+                        "shape": {
+                            "value": "circle"
+                        }
+                    }
+                }
+            },
+            {
+                "type": "symbol",
+                "from": {
+                    "data": "blobs_points_91042950-96b5-4636-942e-8775f1c9ca76"
+                },
+                "zindex": 1,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "stroke": {
+                            "value": "#ffff00"
+                        },
+                        "fill": {
+                            "value": "#ffff00"
+                        },
+                        "fillOpacity": {
+                            "value": 0.8
+                        },
+                        "size": {
+                            "value": 400
+                        },
+                        "shape": {
+                            "value": "circle"
+                        }
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "43a1ea63-34d1-5be9-973f-a7e1f6ffbb87"
+        }
+    }
+]
