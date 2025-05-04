@@ -121,6 +121,9 @@ def _render_shapes(
         table_layer=table_layer,
     )
 
+    if color_mapping:
+        sdata.plotting_tree[f"{render_count}_render_shapes"].colortype = color_mapping
+
     values_are_categorical = color_source_vector is not None
 
     # color_source_vector is None when the values aren't categorical

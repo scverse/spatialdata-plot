@@ -1,0 +1,244 @@
+[
+    {
+        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+        "height": 320.0,
+        "width": 320.0,
+        "padding": {
+            "left": 57.599999999999994,
+            "top": 28.79999999999999,
+            "right": 12.800000000000011,
+            "bottom": 48.0
+        },
+        "title": {
+            "text": "global",
+            "orient": "top",
+            "anchor": "middle",
+            "baseline": "baseline",
+            "color": "black",
+            "font": "Arial",
+            "fontSize": 15.555555555555555,
+            "fontStyle": "normal",
+            "fontWeight": "normal"
+        },
+        "data": [
+            {
+                "name": "36aa5b03-30d6-458a-8a74-7bc090c3a4f2",
+                "url": "sdata.zarr",
+                "format": {
+                    "type": "SpatialData",
+                    "version": "0.3.1.dev31+g4021946.d20250416"
+                }
+            },
+            {
+                "name": "blobs_circles_8b65a870-2dce-4b7e-ad2c-d920e78dfd61",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "36aa5b03-30d6-458a-8a74-7bc090c3a4f2",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_circles"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_multipolygons_4aacc8a0-1638-4f61-aded-73b9edb526f0",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "36aa5b03-30d6-458a-8a74-7bc090c3a4f2",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_multipolygons"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            },
+            {
+                "name": "blobs_polygons_76ccf0b8-ea7b-49a6-9ff3-0374a3d64689",
+                "format": {
+                    "type": "ShapesFormatV02",
+                    "version": "0.2"
+                },
+                "source": "36aa5b03-30d6-458a-8a74-7bc090c3a4f2",
+                "transform": [
+                    {
+                        "type": "filter_element",
+                        "expr": "blobs_polygons"
+                    },
+                    {
+                        "type": "filter_cs",
+                        "expr": "global"
+                    }
+                ]
+            }
+        ],
+        "scales": [
+            {
+                "name": "X_scale",
+                "type": "linear",
+                "domain": [98.92618678876784, 389.33194389674156],
+                "range": "width"
+            },
+            {
+                "name": "Y_scale",
+                "type": "linear",
+                "domain": [319.36204268927, 137.62348968860152],
+                "range": "height"
+            }
+        ],
+        "axes": [
+            {
+                "scale": "X_scale",
+                "orient": "bottom",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [100, 200, 300],
+                "zindex": 1.5
+            },
+            {
+                "scale": "Y_scale",
+                "orient": "left",
+                "domain": true,
+                "domainOpacity": 1,
+                "domainColor": "#000000",
+                "domainWidth": 0.8888888888888888,
+                "grid": true,
+                "gridOpacity": 1.0,
+                "gridCap": "butt",
+                "gridColor": "#cccccc",
+                "gridWidth": 1.1111111111111112,
+                "labelColor": "#000000",
+                "labelOpacity": 1,
+                "labelFont": "Arial",
+                "labelFontSize": 15.555555555555555,
+                "labelFontStyle": "normal",
+                "labelFontWeight": "normal",
+                "ticks": true,
+                "tickOpacity": 1,
+                "tickColor": "#000000",
+                "tickCap": "butt",
+                "tickWidth": 1.6666666666666667,
+                "tickSize": 3.888888888888889,
+                "values": [150, 200, 250, 300],
+                "zindex": 1.5
+            }
+        ],
+        "marks": [
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_circles_8b65a870-2dce-4b7e-ad2c-d920e78dfd61"
+                },
+                "zindex": 0,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            },
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_multipolygons_4aacc8a0-1638-4f61-aded-73b9edb526f0"
+                },
+                "zindex": 1,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            },
+            {
+                "type": "path",
+                "from": {
+                    "data": "blobs_polygons_76ccf0b8-ea7b-49a6-9ff3-0374a3d64689"
+                },
+                "zindex": 2,
+                "encode": {
+                    "enter": {
+                        "x": {
+                            "scale": "X_scale",
+                            "field": "x"
+                        },
+                        "y": {
+                            "scale": "Y_scale",
+                            "field": "y"
+                        },
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "fill": {
+                            "value": "#d3d3d3"
+                        },
+                        "fillOpacity": {
+                            "value": 1.0
+                        }
+                    }
+                }
+            }
+        ],
+        "usermeta": {
+            "axis_uuid": "c1c63ddd-2cdb-5369-bed1-93c94497960d"
+        }
+    }
+]

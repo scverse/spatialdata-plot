@@ -217,6 +217,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.show()
 
     def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
+        # TODO: discuss 2 color scales resulting in one legend -> array values for source?
         sdata_blobs["table"].obs["region"] = "blobs_circles"
         new_table = sdata_blobs["table"][:10].copy()
         new_table.uns["spatialdata_attrs"]["region"] = ["blobs_circles", "blobs_polygons"]
@@ -450,6 +451,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes("blobs_circles", method="datashader", outline_alpha=1.0).pl.show()
 
     def test_plot_can_do_non_matching_table(self, sdata_blobs: SpatialData):
+        # TODO: discuss isvalid logic
         table_shapes = sdata_blobs["table"][:3].copy()
         table_shapes.obs.instance_id = list(range(3))
         table_shapes.obs["region"] = "blobs_circles"
