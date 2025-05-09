@@ -743,7 +743,6 @@ def _set_color_source_vec(
         color = np.full(len(element), value_to_plot)
         return None, color, False
 
-    # Figure out where to get the color from
     origins = _locate_value(
         value_key=value_to_plot,
         sdata=sdata,
@@ -765,11 +764,9 @@ def _set_color_source_vec(
             table_layer=table_layer,
         )[value_to_plot]
 
-        # Check what type of data we're dealing with
         is_categorical = isinstance(color_source_vector.dtype, pd.CategoricalDtype)
         is_numeric = pd.api.types.is_numeric_dtype(color_source_vector)
 
-        # If it's numeric data, handle it appropriately
         if is_numeric and not is_categorical:
             if (
                 not isinstance(element, GeoDataFrame)
@@ -784,7 +781,6 @@ def _set_color_source_vec(
                 )
             return None, color_source_vector, False
 
-        # For non-numeric, non-categorical data (like strings), convert to categorical
         if not is_categorical:
             try:
                 color_source_vector = pd.Categorical(color_source_vector)
@@ -794,8 +790,6 @@ def _set_color_source_vec(
                 return None, color_source_vector, False
 
         # At this point color_source_vector should be categorical
-
-        # Look for predefined colors in the AnnData object
         adata_with_colors = None
         cluster_key = value_to_plot
 
@@ -812,12 +806,12 @@ def _set_color_source_vec(
                 first_table = next(iter(annotator_tables))
                 adata_with_colors = sdata.tables[first_table]
                 adata_with_colors.uns["spatialdata_key"] = first_table
+                
         # If no specific table is found, try using the default table
         elif sdata.table is not None:
             adata_with_colors = sdata.table
             adata_with_colors.uns["spatialdata_key"] = "default_table"
 
-        # Now generate the color mapping using the appropriate AnnData object and cluster_key
         color_mapping = _get_categorical_color_mapping(
             adata=adata_with_colors,
             cluster_key=cluster_key,
@@ -868,7 +862,6 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    # Safely handle different types of color_vector
     is_categorical = pd.api.types.is_categorical_dtype(getattr(color_vector, "dtype", None))
     is_numeric = pd.api.types.is_numeric_dtype(getattr(color_vector, "dtype", None))
     is_pandas_series = isinstance(color_vector, pd.Series)
@@ -962,23 +955,19 @@ def _generate_base_categorial_color_mapping(
     na_color: ColorLike,
     cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
-    color_key = f"{cluster_key}_colors"
 
-    # Break long string template into multiple lines to fix E501 error
+    color_key = f"{cluster_key}_colors"
     color_found_in_uns_msg_template = (
         "Using colors from '{cluster}_colors' in .uns slot of table '{table}' for plotting. "
         "If this is unexpected, please delete the column from your AnnData object."
     )
 
-    # Check if we have a valid AnnData and if the color key exists in uns
     if adata is not None and cluster_key is not None:
-        # Check for direct color dictionary in uns (e.g., {'A': '#FF5733', 'B': '#3498DB'})
         if cluster_key in adata.uns and isinstance(adata.uns[cluster_key], dict):
             # We have a direct color mapping dictionary
             color_dict = adata.uns[cluster_key]
             table_name = getattr(adata, "uns", {}).get("spatialdata_key", "")
             if table_name:
-                # Format the template with the actual values
                 logger.info(color_found_in_uns_msg_template.format(cluster=cluster_key, table=table_name))
 
             # Ensure all values are hex colors
@@ -986,7 +975,6 @@ def _generate_base_categorial_color_mapping(
                 if isinstance(v, str) and not v.startswith("#"):
                     color_dict[k] = to_hex(to_rgba(v))
 
-            # Add NA color if missing
             categories = color_source_vector.categories.tolist()
             na_color_hex = to_hex(to_rgba(na_color)[:3])
 
@@ -996,24 +984,16 @@ def _generate_base_categorial_color_mapping(
             colors = adata.uns[color_key]
             table_name = getattr(adata, "uns", {}).get("spatialdata_key", "")
             if table_name:
-                if isinstance(colors, dict):
-                    # Format the template with the actual values
-                    logger.info(color_found_in_uns_msg_template.format(cluster=cluster_key, table=table_name))
-                else:
-                    # Format the template with the actual values
-                    logger.info(color_found_in_uns_msg_template.format(cluster=cluster_key, table=table_name))
+                logger.info(color_found_in_uns_msg_template.format(cluster=cluster_key, table=table_name))
 
-            # Ensure colors are in hex format
             if isinstance(colors, list):
                 colors = [to_hex(to_rgba(color)[:3]) for color in colors]
                 categories = color_source_vector.categories.tolist()
 
-                # Handle NaN values
                 na_color_hex = to_hex(to_rgba(na_color)[:3])
                 if "NaN" not in categories:
                     categories.append("NaN")
 
-                # Make sure we have enough colors
                 if len(colors) < len(categories) - 1:  # -1 for NaN
                     logger.warning(
                         f"Not enough colors in {color_key} ({len(colors)}) for all categories ({len(categories) - 1}). "
@@ -1022,39 +1002,31 @@ def _generate_base_categorial_color_mapping(
                     # Extend with default colors or duplicate the last color
                     colors.extend([na_color_hex] * (len(categories) - 1 - len(colors)))
 
-                # Create mapping with NaN color
                 return dict(zip(categories, colors + [na_color_hex], strict=False))
 
             if isinstance(colors, np.ndarray):
-                # Convert numpy array to list of hex colors
                 colors = [to_hex(to_rgba(color)[:3]) for color in colors]
                 categories = color_source_vector.categories.tolist()
 
-                # Handle NaN values
                 na_color_hex = to_hex(to_rgba(na_color)[:3])
                 if "NaN" not in categories:
                     categories.append("NaN")
 
-                # Make sure we have enough colors
                 if len(colors) < len(categories) - 1:  # -1 for NaN
                     logger.warning(
                         f"Not enough colors in {color_key} ({len(colors)}) for all categories ({len(categories) - 1}). "
                         "Some categories will use default colors."
                     )
-                    # Extend with default colors
                     colors.extend([na_color_hex] * (len(categories) - 1 - len(colors)))
 
-                # Create mapping with NaN color
                 return dict(zip(categories, colors + [na_color_hex], strict=False))
 
-            # Dictionary format - direct color mapping
             if isinstance(colors, dict):
                 # Ensure all values are hex colors
                 for k, v in colors.items():
                     if isinstance(v, str) and not v.startswith("#"):
                         colors[k] = to_hex(to_rgba(v))
 
-                # Get categories and handle NaN
                 categories = color_source_vector.categories.tolist()
                 na_color_hex = to_hex(to_rgba(na_color)[:3])
 
@@ -1072,8 +1044,6 @@ def _generate_base_categorial_color_mapping(
 
                 return result
 
-    # If we reach here, we didn't find usable colors in uns, use default color mapping
-    logger.info(f"No colors found for '{cluster_key}' in AnnData.uns, using default colors")
     return _get_default_categorial_color_mapping(color_source_vector=color_source_vector, cmap_params=cmap_params)
 
 
