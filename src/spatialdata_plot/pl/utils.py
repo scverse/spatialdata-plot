@@ -732,10 +732,10 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
     render_type: Literal["points"] | None = None,
-) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
+) -> tuple[pd.Categorical | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color)
-        return color, color, False
+        return None, color, False
 
     # First check if value_to_plot is likely a color specification rather than a column name
     if value_to_plot is not None and _is_color_like(value_to_plot) and element is not None:
@@ -764,29 +764,27 @@ def _set_color_source_vec(
             table_layer=table_layer,
         )[value_to_plot]
 
-        is_categorical = isinstance(color_source_vector.dtype, pd.CategoricalDtype)
-        is_numeric = pd.api.types.is_numeric_dtype(color_source_vector)
-
-        if is_numeric and not is_categorical:
-            if (
-                not isinstance(element, GeoDataFrame)
-                and isinstance(palette, list)
-                and palette[0] is not None
-                or isinstance(element, GeoDataFrame)
-                and isinstance(palette, list)
-            ):
-                logger.warning(
-                    "Ignoring categorical palette which is given for a continuous variable. "
-                    "Consider using `cmap` to pass a ColorMap."
-                )
-            return None, color_source_vector, False
-
-        if not is_categorical:
+        # Convert to categorical if not already
+        if not isinstance(color_source_vector, pd.Categorical):
             try:
                 color_source_vector = pd.Categorical(color_source_vector)
             except (ValueError, TypeError) as e:
                 logger.warning(f"Could not convert '{value_to_plot}' to categorical: {e}")
-                # Fall back to returning the original values
+                # For numeric data, return None to indicate non-categorical
+                if pd.api.types.is_numeric_dtype(color_source_vector):
+                    if (
+                        not isinstance(element, GeoDataFrame)
+                        and isinstance(palette, list)
+                        and palette[0] is not None
+                        or isinstance(element, GeoDataFrame)
+                        and isinstance(palette, list)
+                    ):
+                        logger.warning(
+                            "Ignoring categorical palette which is given for a continuous variable. "
+                            "Consider using `cmap` to pass a ColorMap."
+                        )
+                    return None, color_source_vector, False
+                # For other types, try to use as is
                 return None, color_source_vector, False
 
         # At this point color_source_vector should be categorical
@@ -806,7 +804,7 @@ def _set_color_source_vec(
                 first_table = next(iter(annotator_tables))
                 adata_with_colors = sdata.tables[first_table]
                 adata_with_colors.uns["spatialdata_key"] = first_table
-                
+
         # If no specific table is found, try using the default table
         elif sdata.table is not None:
             adata_with_colors = sdata.table
@@ -830,7 +828,6 @@ def _set_color_source_vec(
             raise ValueError("Unable to create color palette.")
 
         # Map categorical values to colors
-        # Do not rename categories, as colors need not be unique
         try:
             color_vector = color_source_vector.map(color_mapping)
         except (KeyError, TypeError, ValueError) as e:
@@ -846,7 +843,7 @@ def _set_color_source_vec(
 
     logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not found, using default colors.")
     color = np.full(sdata[table_name].n_obs, to_hex(na_color))
-    return color, color, False
+    return None, color, False
 
 
 def _map_color_seg(
@@ -955,7 +952,6 @@ def _generate_base_categorial_color_mapping(
     na_color: ColorLike,
     cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
-
     color_key = f"{cluster_key}_colors"
     color_found_in_uns_msg_template = (
         "Using colors from '{cluster}_colors' in .uns slot of table '{table}' for plotting. "
