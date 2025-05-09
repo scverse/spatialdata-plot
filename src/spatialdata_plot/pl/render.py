@@ -172,7 +172,7 @@ def _render_shapes(
         logger.info(
             f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
             " method to speed up plotting. Depending on the reduction method, the value"
-            " range of the plot might change. Set method to 'matplotlib' do disable"
+            " range of the plot might change. Set method to 'matplotlib' to disable"
             " this behaviour."
         )
 
