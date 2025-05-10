@@ -338,7 +338,7 @@ def _render_shapes(
         cax = None
         if aggregate_with_reduction is not None:
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
-            vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
+            vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
                 # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
                 # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
@@ -761,6 +761,7 @@ def _render_images(
     scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     rasterize: bool,
+    bg_threshold: float = 1e-4,
 ) -> None:
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -887,34 +888,55 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
-        # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
+        # 2B) Image has n channels, no palette/cmap info -> we use PCA to reduce the number of channels to 3
         elif palette is None and not got_multiple_cmaps:
             # overwrite if n_channels == 2 for intuitive result
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
-            else:
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
+
+            elif n_channels <= 3:
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-            colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            else:
+                from sklearn.decomposition import PCA
 
-            _ax_show_and_transform(
-                colored,
-                trans_data,
-                ax,
-                render_params.alpha,
-                zorder=render_params.zorder,
-            )
+                # Stack (n_channels, height, width) → (height*width, n_channels)
+                h, w = layers[channels[0]].shape
+                pixel_matrix = np.stack(
+                    [(layers[c].data.ravel() if hasattr(layers[c], "data") else layers[c].ravel()) for c in channels],
+                    axis=1,
+                )
 
-        # 2C) Image has n channels and palette info
-        elif palette is not None and not got_multiple_cmaps:
-            if len(palette) != n_channels:
-                raise ValueError("If 'palette' is provided, its length must match the number of channels.")
+                # Calculate pixel sums and create mask for background
+                pixel_sums = np.sum(pixel_matrix, axis=1)
+                mask = pixel_sums > bg_threshold
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
-            colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+                # Only use non-background pixels for PCA
+                pca_rgb = np.zeros((h * w, 3))
+                if np.any(mask):
+                    pca_rgb[mask] = PCA(n_components=3).fit_transform(pixel_matrix[mask])
+
+                    # Rescale only non-background pixels to [0, 1] range
+                    pca_rgb[mask] -= pca_rgb[mask].min(axis=0)
+                    pca_rgb[mask] /= np.clip(pca_rgb[mask].max(axis=0), a_min=1e-6, a_max=None)
+                else:
+                    logger.warning("All pixels are below background threshold. Using zeros for PCA visualization.")
+
+                colored = pca_rgb.reshape(h, w, 3)
+
+                logger.info(f"Visualizing {n_channels} channels using PCA → RGB projection")
 
             _ax_show_and_transform(
                 colored,

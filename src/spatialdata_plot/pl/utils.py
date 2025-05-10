@@ -2006,7 +2006,7 @@ def _validate_col_for_column_table(
             table_name = next(iter(tables))
             if len(tables) > 1:
                 warnings.warn(
-                    f"Multiple tables contain color column, using {table_name}",
+                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -2023,6 +2023,7 @@ def _validate_image_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
+    bg_threshold: float = 1e-4,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2034,6 +2035,7 @@ def _validate_image_render_params(
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
+        "bg_threshold": bg_threshold,
     }
     param_dict = _type_check_params(param_dict, "images")
 

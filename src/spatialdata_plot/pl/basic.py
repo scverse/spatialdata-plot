@@ -453,7 +453,11 @@ class PlotAccessor:
 
         return sdata
 
-    @_deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
+    @_deprecation_alias(
+        elements="element",
+        quantiles_for_norm="percentiles_for_norm",
+        version="version 0.3.0",
+    )
     def render_images(
         self,
         element: str | None = None,
@@ -464,6 +468,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
+        bg_threshold: float = 1e-4,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -506,6 +511,8 @@ class PlotAccessor:
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
+        bg_threshold : float, default 1e-4
+            Threshold below which values are considered background in the PCA dimred for images with 3+ channels.
         kwargs
             Additional arguments to be passed to cmap, norm, and other rendering functions.
 
@@ -564,6 +571,7 @@ class PlotAccessor:
                 alpha=param_values["alpha"],
                 scale=param_values["scale"],
                 zorder=n_steps,
+                bg_threshold=bg_threshold,
             )
             n_steps += 1
 

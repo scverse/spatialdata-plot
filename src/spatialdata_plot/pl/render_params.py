@@ -125,6 +125,7 @@ class ImageRenderParams:
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
     zorder: int = 0
+    bg_threshold: float = 1e-4
 
 
 @dataclass
