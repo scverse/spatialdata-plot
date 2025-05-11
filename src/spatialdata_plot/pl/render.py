@@ -936,7 +936,7 @@ def _render_images(
 
                     # For each channel: map to RGBA, apply constant alpha, then add
                     for idx, ch in enumerate(channels):
-                        layer_arr = layers[ch]
+                        layer_arr = layers[idx]
                         rgba = channel_cmaps[idx](layer_arr)
                         rgba[..., 3] = render_params.alpha
                         comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
