@@ -1176,6 +1176,7 @@ def save_fig(
 def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
+
 def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
     sorted_labels = sorted(color_dict.keys())
     colors = [color_dict[k] for k in sorted_labels]
