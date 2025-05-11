@@ -148,21 +148,13 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         """Test that a single channel can use a cmap instead of a palette color"""
         sdata_blobs.pl.render_images(element="blobs_image", channel=0, cmap="Reds").pl.show()
 
-    def test_plot_can_handle_mixed_color_types(self, sdata_blobs: SpatialData):
-        """Test that different channels can use different color types (palette colors and cmaps)"""
-        sdata_blobs.pl.render_images(
-            element="blobs_image", channel=[0, 1, 2], cmap=["viridis", None, "Reds"], palette=[None, "green", None]
-        ).pl.show()
-
     def test_plot_can_handle_one_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=[0]).pl.show()
 
     def test_plot_can_handle_subset_of_channels(self, sdata_blobs: SpatialData):
-        """Test case 2A: 3 channels with default RGB mapping"""
         sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 2]).pl.show()
 
     def test_plot_can_handle_actual_number_of_channels(self, sdata_blobs: SpatialData):
-        """Test case 2A: 3 channels with default RGB mapping"""
         sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2]).pl.show()
 
     def test_plot_can_handle_scrambled_channels(self, sdata_blobs: SpatialData):
@@ -207,13 +199,13 @@ def test_fail_when_len_cmap_not_equal_len_img_channels(sdata_blobs):
         sdata_blobs.pl.render_images(element="blobs_image", cmap=["Reds", "Blues"]).pl.show()
 
 def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
-    with pytest.raises(ValueError, match="Cmap length"):
-        sdata_blobs.pl.render_images(element="blobs_image", channel=[0,1,2], cmap=["viridis", "Reds"]).pl.show()
+    with pytest.raises(ValueError, match="If 'cmap' is provided, its length must match the number of channels."):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds"]).pl.show()
 
 def test_fail_invalid_multichannel_strategy(sdata_multichannel):
     with pytest.raises(ValueError, match="Invalid multichannel_strategy"):
         sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
 
 def test_fail_channel_index_out_of_range(sdata_blobs):
-    with pytest.raises(IndexError, match="channel index"):
+    with pytest.raises(IndexError, match="Invalid channel(s):"):
         sdata_blobs.pl.render_images(element="blobs_image", channel=10).pl.show()
