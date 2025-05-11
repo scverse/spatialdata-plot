@@ -1004,7 +1004,7 @@ def _render_images(
         # 2C) Image has n channels and palette info
         # immitating Napari's multi-channel additive blending (SRC_ALPHA, ONE):
         elif palette is not None and not got_multiple_cmaps:
-            channel_cmaps = [_get_linear_colormap([c], "transparent")[0] for c in palette]
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette]
 
             sample = next(iter(layers.values()))
             H, W = sample.shape
