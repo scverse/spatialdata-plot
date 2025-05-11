@@ -190,6 +190,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds", "Blues"]
         ).pl.show()
 
+
 def test_fails_with_palette_and_multiple_cmaps(self, sdata_blobs: SpatialData):
     """Test error case: Cannot provide both palette and multiple cmaps"""
     with pytest.raises(ValueError, match="If 'palette' is provided"):
