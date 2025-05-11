@@ -468,7 +468,7 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
-        multichannel_strategy: str = "pca",
+        multichannel_strategy: str = "stack",
         bg_threshold: float = 1e-4,
         **kwargs: Any,
     ) -> sd.SpatialData:
@@ -512,10 +512,10 @@ class PlotAccessor:
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
-        multichannel_strategy : str, default "pca"
+        multichannel_strategy : str, default "stack"
             Method for rendering images with more than 3 channels.
-            "pca": Uses PCA to reduce the number of channels to 3.
             "stack": Samples categorical colors and stacks the channels.
+            "pca": Uses PCA to reduce the number of channels to 3.
         bg_threshold : float, default 1e-4
             Threshold below which values are considered background in the PCA dimred for images with 3+ channels.
         kwargs

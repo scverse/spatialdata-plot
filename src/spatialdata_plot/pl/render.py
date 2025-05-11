@@ -846,6 +846,7 @@ def _render_images(
     else:
         layers = {}
         for ch_idx, ch in enumerate(channels):
+            print(channels, ch)
             layers[ch_idx] = img.sel(c=ch).copy(deep=True).squeeze()
             if isinstance(render_params.cmap_params, list):
                 ch_norm = render_params.cmap_params[ch_idx].norm
