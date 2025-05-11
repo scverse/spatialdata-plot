@@ -205,6 +205,7 @@ def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
     with pytest.raises(ValueError, match="If 'cmap' is provided, its length must match the number of channels."):
         sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds"]).pl.show()
 
+
 def test_fail_invalid_multichannel_strategy(sdata_multichannel):
     with pytest.raises(ValueError, match="Invalid multichannel_strategy"):
         sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
