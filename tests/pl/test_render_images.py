@@ -126,14 +126,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_multiscale_image_with_custom_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_multiscale_image", channel=0, scale="scale2", cmap="Greys").pl.show()
 
-    def test_plot_fail_when_len_palette_is_not_equal_to_len_img_channels(self, sdata_blobs: SpatialData):
-        with pytest.raises(ValueError, match="Palette length"):
-            sdata_blobs.pl.render_images(element="blobs_image", palette=["red", "green"]).pl.show()
-
-    def test_plot_fail_when_len_palette_is_not_equal_to_len_user_channels(self, sdata_blobs: SpatialData):
-        with pytest.raises(ValueError, match="Palette length"):
-            sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], palette=["red", "green"]).pl.show()
-
     def test_plot_can_handle_one_palette_per_img_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", palette=["red", "green", "blue"]).pl.show()
 
@@ -199,3 +191,28 @@ def test_fails_with_palette_and_multiple_cmaps(self, sdata_blobs: SpatialData):
             palette=["red", "green", "blue"],
             cmap=["viridis", "Reds", "Blues"],
         ).pl.show()
+
+
+def test_fail_when_len_palette_is_not_equal_to_len_img_channels(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="Palette length"):
+        sdata_blobs.pl.render_images(element="blobs_image", palette=["red", "green"]).pl.show()
+
+def test_fail_when_len_palette_is_not_equal_to_len_user_channels(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="Palette length"):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], palette=["red", "green"]).pl.show()
+
+def test_fail_when_len_cmap_not_equal_len_img_channels(sdata_blobs):
+    with pytest.raises(ValueError, match="Cmap length"):
+        sdata_blobs.pl.render_images(element="blobs_image", cmap=["Reds", "Blues"]).pl.show()
+
+def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
+    with pytest.raises(ValueError, match="Cmap length"):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0,1,2], cmap=["viridis", "Reds"]).pl.show()
+
+def test_fail_invalid_multichannel_strategy(sdata_multichannel):
+    with pytest.raises(ValueError, match="Invalid multichannel_strategy"):
+        sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
+
+def test_fail_channel_index_out_of_range(sdata_blobs):
+    with pytest.raises(IndexError, match="channel index"):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=10).pl.show()
