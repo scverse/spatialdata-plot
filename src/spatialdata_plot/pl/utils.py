@@ -1777,6 +1777,15 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if method == "datashader" and ds_reduction is None:
         param_dict["ds_reduction"] = "sum"
 
+    if param_dict.get("multichannel_strategy") not in ["pca", "stack"]:
+        raise ValueError("Parameter 'multicmultichannel_strategyhannel' must be one of the following: 'pca', 'stack'.")
+
+    if param_dict.get("bg_threshold") is not None:
+        if not isinstance(param_dict["bg_threshold"], float | int):
+            raise TypeError("Parameter 'bg_threshold' must be a number.")
+        if param_dict["bg_threshold"] < 0:
+            raise ValueError("Parameter 'bg_threshold' must be a positive number.")
+
     return param_dict
 
 
@@ -2023,6 +2032,7 @@ def _validate_image_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
+    multichannel_strategy: str = "pca",
     bg_threshold: float = 1e-4,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
@@ -2035,35 +2045,81 @@ def _validate_image_render_params(
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
+        "multichannel_strategy": multichannel_strategy,
         "bg_threshold": bg_threshold,
     }
     param_dict = _type_check_params(param_dict, "images")
-
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
         element_params[el] = {}
         spatial_element = param_dict["sdata"][el]
 
+        # robustly get channel names from image or multiscale image
         spatial_element_ch = (
             spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
         )
-        if (channel := param_dict["channel"]) is not None and (
-            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
-            or all(ch in spatial_element_ch for ch in channel)
-        ):
-            element_params[el]["channel"] = channel
+
+        channel = param_dict["channel"]
+        if channel is not None:
+            # Normalize channel to always be a list of str or a list of int
+            if isinstance(channel, str):
+                channel = [channel]
+
+            if isinstance(channel, int):
+                channel = [channel]
+
+            # If channel is a list, ensure all elements are the same type
+            if not (isinstance(channel, list) and channel and all(isinstance(c, type(channel[0])) for c in channel)):
+                raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
+            # At this point, channel is either list[str] or list[int]
+
+            channels_are_strings = isinstance(channel[0], str)
+            channels_are_ints = isinstance(channel[0], int)
+
+            # Validate string channels
+            if channels_are_strings:
+                invalid = [c for c in channel if c not in spatial_element_ch]
+                if invalid:
+                    raise ValueError(
+                        f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. "
+                        f"Valid choices are: {spatial_element_ch}"
+                    )
+                element_params[el]["channel"] = channel
+            # Validate integer channels
+            elif channels_are_ints:
+                valid_indices = list(range(len(spatial_element_ch)))
+                invalid = [c for c in channel if c not in valid_indices]
+                if invalid:
+                    raise ValueError(
+                        f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. Valid choices are: {valid_indices}"
+                    )
+                element_params[el]["channel"] = channel
+            else:
+                raise TypeError("Channel must be a string or integer.")
         else:
             element_params[el]["channel"] = None
 
         element_params[el]["alpha"] = param_dict["alpha"]
 
-        if isinstance(palette := param_dict["palette"], list):
+        palette = param_dict["palette"]
+        assert isinstance(palette, list | type(None))  # if present, was converted to list, just to make sure
+
+        if isinstance(palette, list):
+            # case A: single palette for all channels
             if len(palette) == 1:
                 palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
-                palette = None
+
+            # case B: one palette per channel (either given or derived from channel length)
+            channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
+            if channels_to_use is not None and len(palette) != len(channels_to_use):
+                raise ValueError(
+                    f"Palette length ({len(palette)}) does not match channel length "
+                    f"({', '.join(str(c) for c in channels_to_use)})."
+                )
+
         element_params[el]["palette"] = palette
+
         element_params[el]["na_color"] = param_dict["na_color"]
 
         if (cmap := param_dict["cmap"]) is not None:
@@ -2081,6 +2137,9 @@ def _validate_image_render_params(
                 element_params[el]["scale"] = scale
         else:
             element_params[el]["scale"] = scale
+
+        element_params[el]["multichannel_strategy"] = param_dict["multichannel_strategy"]
+        element_params[el]["bg_threshold"] = param_dict["bg_threshold"]
 
     return element_params
 
