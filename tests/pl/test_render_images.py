@@ -197,7 +197,7 @@ def test_fail_when_len_palette_is_not_equal_to_len_user_channels(sdata_blobs: Sp
 
 
 def test_fail_when_len_cmap_not_equal_len_img_channels(sdata_blobs):
-    with pytest.raises(ValueError, match="Cmap length"):
+    with pytest.raises(ValueError, match="If 'cmap' is provided, its length must match the number of channels."):
         sdata_blobs.pl.render_images(element="blobs_image", cmap=["Reds", "Blues"]).pl.show()
 
 
@@ -212,5 +212,5 @@ def test_fail_invalid_multichannel_strategy(sdata_multichannel):
 
 
 def test_fail_channel_index_out_of_range(sdata_blobs):
-    with pytest.raises(IndexError, match="Invalid channel(s):"):
+    with pytest.raises(ValueError, match="Invalid channel(s):"):
         sdata_blobs.pl.render_images(element="blobs_image", channel=10).pl.show()

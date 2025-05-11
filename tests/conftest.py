@@ -119,7 +119,7 @@ def make_multichannel_blobs(n=512, nch=6, sigma=0.1, radius=0.6, random_state=0)
 
 
 @pytest.fixture
-def test_sdata_multichannel() -> SpatialData:
+def sdata_multichannel() -> SpatialData:
     """Creates a SpatialData object with 5 channels arranged in a circle.
 
     Each channel is a Gaussian blob positioned at evenly spaced angles around a circle.
