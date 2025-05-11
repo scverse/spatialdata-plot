@@ -1173,41 +1173,8 @@ def save_fig(
     fig.savefig(path, **kwargs)
 
 
-def _get_linear_colormap2(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
+def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
-
-
-def _get_linear_colormap(
-    colors: list[str],
-    background: str = "black",
-) -> list[LinearSegmentedColormap]:
-    """
-    Create one LinearSegmentedColormap per color in `colors` that
-    fades from `background` → the color.
-
-    If background is "transparent" (or "none"), the start point
-    will be the same RGB as the target color but with alpha=0.
-    """
-    cmaps: list[LinearSegmentedColormap] = []
-    for c in colors:
-        # fully opaque target
-        target_rgba = to_rgba(c, alpha=1.0)
-
-        if background.lower() in ("transparent", "none"):
-            # start with same RGB, but zero alpha
-            start_rgba = (target_rgba[0], target_rgba[1], target_rgba[2], 0.0)
-        else:
-            # start from a solid background color
-            start_rgba = to_rgba(background)
-
-        cm = LinearSegmentedColormap.from_list(
-            f"{c}_fade",
-            [start_rgba, target_rgba],
-            N=256,
-        )
-        cmaps.append(cm)
-
-    return cmaps
 
 def _get_listed_colormap(color_dict: dict[str, str]) -> ListedColormap:
     sorted_labels = sorted(color_dict.keys())
