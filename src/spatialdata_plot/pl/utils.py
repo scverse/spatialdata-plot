@@ -2072,12 +2072,7 @@ def _validate_image_render_params(
             # If channel is a list, ensure all elements are the same type
             if not (isinstance(channel, list) and channel and all(isinstance(c, type(channel[0])) for c in channel)):
                 raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
-            # At this point, channel is either list[str] or list[int]
 
-            channels_are_strings = isinstance(channel[0], str)
-            channels_are_ints = isinstance(channel[0], int)
-
-            print(channel, spatial_element_ch)
             invalid = [c for c in channel if c not in spatial_element_ch]
             if invalid:
                 raise ValueError(

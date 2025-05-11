@@ -846,8 +846,7 @@ def _render_images(
     else:
         layers = {}
         for ch_idx, ch in enumerate(channels):
-            print(channels, ch)
-            layers[ch_idx] = img.sel(c=ch).copy(deep=True).squeeze()
+            layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
             if isinstance(render_params.cmap_params, list):
                 ch_norm = render_params.cmap_params[ch_idx].norm
                 ch_cmap_is_default = render_params.cmap_params[ch_idx].cmap_is_default
@@ -861,7 +860,7 @@ def _render_images(
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
-                stacked = np.stack([layers[ch_idx] for ch_idx in layers], axis=-1)
+                stacked = np.stack([layers[ch] for ch in layers], axis=-1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
@@ -896,7 +895,7 @@ def _render_images(
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
                 colored = np.stack(
-                    [channel_cmaps[ch_ind](layers[ch_ind]) for ch_ind, ch in enumerate(channels)],
+                    [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
                 colored = colored[:, :, :3]
@@ -936,9 +935,9 @@ def _render_images(
                     comp_rgb = np.zeros((H, W, 3), dtype=float)
 
                     # For each channel: map to RGBA, apply constant alpha, then add
-                    for idx, ch in enumerate(channels):
-                        layer_arr = layers[idx]
-                        rgba = channel_cmaps[idx](layer_arr)
+                    for ch_idx, ch in enumerate(channels):
+                        layer_arr = layers[ch]
+                        rgba = channel_cmaps[ch_idx](layer_arr)
                         rgba[..., 3] = render_params.alpha
                         comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
 
@@ -955,8 +954,8 @@ def _render_images(
                     H, W = next(iter(layers.values())).shape
                     pixel_matrix = np.stack(
                         [
-                            (layers[ch_idx].data.ravel() if hasattr(layers[ch_idx], "data") else layers[ch_idx].ravel())
-                            for ch_idx, _ in enumerate(channels)
+                            (layers[ch].data.ravel() if hasattr(layers[ch], "data") else layers[ch].ravel())
+                            for ch in channels
                         ],
                         axis=1,
                     )
