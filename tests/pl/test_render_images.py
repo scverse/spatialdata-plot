@@ -207,10 +207,10 @@ def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
 
 
 def test_fail_invalid_multichannel_strategy(sdata_multichannel):
-    with pytest.raises(ValueError, match="Invalid multichannel_strategy"):
+    with pytest.raises(ValueError, match="Parameter 'multichannel_strategy' must be one of the following: 'pca', 'stack'."):
         sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
 
 
 def test_fail_channel_index_out_of_range(sdata_blobs):
-    with pytest.raises(ValueError, match="Invalid channel(s):"):
+    with pytest.raises(ValueError, match="Invalid channel(s): 10. Valid choices are: [0, 1, 2]"):
         sdata_blobs.pl.render_images(element="blobs_image", channel=10).pl.show()

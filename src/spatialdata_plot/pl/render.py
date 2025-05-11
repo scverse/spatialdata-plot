@@ -895,7 +895,7 @@ def _render_images(
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
                 colored = np.stack(
-                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    [channel_cmaps[ch_ind](layers[ch_ind]) for ch_ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
                 colored = colored[:, :, :3]
@@ -954,12 +954,8 @@ def _render_images(
                     H, W = next(iter(layers.values())).shape
                     pixel_matrix = np.stack(
                         [
-                            (
-                                next(iter(layers.values())).data.ravel()
-                                if hasattr(next(iter(layers.values())), "data")
-                                else next(iter(layers.values())).ravel()
-                            )
-                            for c in channels
+                            (layers[ch_idx].data.ravel() if hasattr(layers[ch_idx], "data") else layers[ch_idx].ravel())
+                            for ch_idx, _ in enumerate(channels)
                         ],
                         axis=1,
                     )
