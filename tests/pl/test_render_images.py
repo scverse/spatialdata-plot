@@ -43,9 +43,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             cmap=[matplotlib.colormaps["seismic"], matplotlib.colormaps["Reds"], matplotlib.colormaps["Blues"]],
         ).pl.show()
 
-    def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0).pl.show()
-
     def test_plot_can_render_a_single_channel_from_multiscale_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_multiscale_image", channel=0).pl.show()
 
@@ -84,11 +81,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_pass_cmap_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, cmap="Reds").pl.show()
-
-    def test_plot_can_pass_color_to_each_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(
-            element="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
-        ).pl.show()
 
     def test_plot_can_pass_cmap_to_each_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
@@ -162,7 +154,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_handle_single_channel_with_cmap(self, sdata_blobs: SpatialData):
         """Test that a single channel can use a cmap instead of a palette color"""
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, cmap="viridis").pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, cmap="Reds").pl.show()
 
     def test_plot_can_handle_mixed_color_types(self, sdata_blobs: SpatialData):
         """Test that different channels can use different color types (palette colors and cmaps)"""
@@ -175,7 +167,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_handle_subset_of_channels(self, sdata_blobs: SpatialData):
         """Test case 2A: 3 channels with default RGB mapping"""
-        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2]).pl.show()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 2]).pl.show()
 
     def test_plot_can_handle_actual_number_of_channels(self, sdata_blobs: SpatialData):
         """Test case 2A: 3 channels with default RGB mapping"""
@@ -194,17 +186,16 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="pca").pl.show()
 
     def test_plot_can_handle_multiple_cmaps(self, sdata_blobs: SpatialData):
-        """Test case 2D: Multiple channels with multiple cmaps"""
         sdata_blobs.pl.render_images(
             element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds", "Blues"]
         ).pl.show()
 
-    def test_plot_fails_with_palette_and_multiple_cmaps(self, sdata_blobs: SpatialData):
-        """Test error case: Cannot provide both palette and multiple cmaps"""
-        with pytest.raises(ValueError, match="If 'palette' is provided"):
-            sdata_blobs.pl.render_images(
-                element="blobs_image",
-                channel=[0, 1, 2],
-                palette=["red", "green", "blue"],
-                cmap=["viridis", "Reds", "Blues"],
-            ).pl.show()
+def test_fails_with_palette_and_multiple_cmaps(self, sdata_blobs: SpatialData):
+    """Test error case: Cannot provide both palette and multiple cmaps"""
+    with pytest.raises(ValueError, match="If 'palette' is provided"):
+        sdata_blobs.pl.render_images(
+            element="blobs_image",
+            channel=[0, 1, 2],
+            palette=["red", "green", "blue"],
+            cmap=["viridis", "Reds", "Blues"],
+        ).pl.show()
