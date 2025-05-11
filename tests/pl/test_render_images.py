@@ -207,7 +207,9 @@ def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
 
 
 def test_fail_invalid_multichannel_strategy(sdata_multichannel):
-    with pytest.raises(ValueError, match="Parameter 'multichannel_strategy' must be one of the following: 'pca', 'stack'."):
+    with pytest.raises(
+        ValueError, match="Parameter 'multichannel_strategy' must be one of the following: 'pca', 'stack'."
+    ):
         sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
 
 
