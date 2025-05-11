@@ -1777,14 +1777,15 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if method == "datashader" and ds_reduction is None:
         param_dict["ds_reduction"] = "sum"
 
-    if param_dict.get("multichannel_strategy") not in ["pca", "stack"]:
-        raise ValueError("Parameter 'multicmultichannel_strategyhannel' must be one of the following: 'pca', 'stack'.")
+    if element_type == "images":
+        if param_dict.get("multichannel_strategy") not in ["pca", "stack"]:
+            raise ValueError("Parameter 'multichannel_strategy' must be one of the following: 'pca', 'stack'.")
 
-    if param_dict.get("bg_threshold") is not None:
-        if not isinstance(param_dict["bg_threshold"], float | int):
-            raise TypeError("Parameter 'bg_threshold' must be a number.")
-        if param_dict["bg_threshold"] < 0:
-            raise ValueError("Parameter 'bg_threshold' must be a positive number.")
+        if param_dict.get("bg_threshold") is not None:
+            if not isinstance(param_dict["bg_threshold"], float | int):
+                raise TypeError("Parameter 'bg_threshold' must be a number.")
+            if param_dict["bg_threshold"] < 0:
+                raise ValueError("Parameter 'bg_threshold' must be a positive number.")
 
     return param_dict
 
