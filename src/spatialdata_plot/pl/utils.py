@@ -2057,7 +2057,7 @@ def _validate_image_render_params(
 
         # robustly get channel names from image or multiscale image
         spatial_element_ch = (
-            spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
+            spatial_element.c.values if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c.values
         )
 
         channel = param_dict["channel"]
@@ -2077,26 +2077,13 @@ def _validate_image_render_params(
             channels_are_strings = isinstance(channel[0], str)
             channels_are_ints = isinstance(channel[0], int)
 
-            # Validate string channels
-            if channels_are_strings:
-                invalid = [c for c in channel if c not in spatial_element_ch]
-                if invalid:
-                    raise ValueError(
-                        f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. "
-                        f"Valid choices are: {spatial_element_ch}"
-                    )
-                element_params[el]["channel"] = channel
-            # Validate integer channels
-            elif channels_are_ints:
-                valid_indices = list(range(len(spatial_element_ch)))
-                invalid = [c for c in channel if c not in valid_indices]
-                if invalid:
-                    raise ValueError(
-                        f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. Valid choices are: {valid_indices}"
-                    )
-                element_params[el]["channel"] = channel
-            else:
-                raise TypeError("Channel must be a string or integer.")
+            print(channel, spatial_element_ch)
+            invalid = [c for c in channel if c not in spatial_element_ch]
+            if invalid:
+                raise ValueError(
+                    f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. Valid choices are: {spatial_element_ch}"
+                )
+            element_params[el]["channel"] = channel
         else:
             element_params[el]["channel"] = None
 

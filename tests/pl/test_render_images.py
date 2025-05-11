@@ -176,7 +176,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
 
 def test_fails_with_palette_and_multiple_cmaps(sdata_blobs: SpatialData):
-    with pytest.raises(ValueError, match="If 'palette' is provided"):
+    with pytest.raises(ValueError, match="Both `palette` and `cmap` are specified. Please specify only one of them."):
         sdata_blobs.pl.render_images(
             element="blobs_image",
             channel=[0, 1, 2],
