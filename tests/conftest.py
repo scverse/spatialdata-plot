@@ -104,6 +104,31 @@ def test_sdata_multiple_images():
     return sdata
 
 
+def make_multichannel_blobs(n=512, nch=6, sigma=0.1, radius=0.6, random_state=0):
+    x = np.linspace(-1, 1, n)
+    X, Y = np.meshgrid(x, x)
+
+    angles = np.linspace(0, 2 * np.pi, nch, endpoint=False)
+    centers = [(radius * np.cos(a), radius * np.sin(a)) for a in angles]
+
+    chans = []
+    for cx, cy in centers:
+        g = np.exp(-((X - cx) ** 2 + (Y - cy) ** 2) / (2 * sigma**2))
+        chans.append(g)
+    return np.stack(chans, axis=-1).transpose(2, 1, 0)
+
+
+@pytest.fixture
+def sdata_multichannel() -> SpatialData:
+    """Creates a SpatialData object with 5 channels arranged in a circle.
+
+    Each channel is a Gaussian blob positioned at evenly spaced angles around a circle.
+    The blobs have a radius of 0.4 and sigma of 0.2.
+    """
+    data = make_multichannel_blobs(n=256, nch=5, sigma=0.2, radius=0.4)
+    return sd.SpatialData(images={"multichannel_image": Image2DModel.parse(data)})
+
+
 @pytest.fixture
 def test_sdata_multiple_images_with_table():
     """Creates an sdata object with multiple images."""

@@ -125,6 +125,8 @@ class ImageRenderParams:
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
     zorder: int = 0
+    multichannel_strategy: str = "stack"
+    bg_threshold: float = 1e-4
 
 
 @dataclass

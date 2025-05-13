@@ -338,7 +338,7 @@ def _render_shapes(
         cax = None
         if aggregate_with_reduction is not None:
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
-            vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
+            vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
                 # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
                 # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
@@ -843,23 +843,24 @@ def _render_images(
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
             fig_params.fig.colorbar(sm, ax=ax)
 
-    # 2) Image has any number of channels but 1
     else:
         layers = {}
-        for ch_index, c in enumerate(channels):
-            layers[c] = img.sel(c=c).copy(deep=True).squeeze()
-
-            if not isinstance(render_params.cmap_params, list):
-                if render_params.cmap_params.norm is not None:
-                    layers[c] = render_params.cmap_params.norm(layers[c])
+        for ch_idx, ch in enumerate(channels):
+            layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
+            if isinstance(render_params.cmap_params, list):
+                ch_norm = render_params.cmap_params[ch_idx].norm
+                ch_cmap_is_default = render_params.cmap_params[ch_idx].cmap_is_default
             else:
-                if render_params.cmap_params[ch_index].norm is not None:
-                    layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
+                ch_norm = render_params.cmap_params.norm
+                ch_cmap_is_default = render_params.cmap_params.cmap_is_default
+
+            if not ch_cmap_is_default and ch_norm is not None:
+                layers[ch_idx] = ch_norm(layers[ch_idx])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
-                stacked = np.stack([layers[c] for c in channels], axis=-1)
+                stacked = np.stack([layers[ch] for ch in layers], axis=-1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
@@ -892,12 +893,105 @@ def _render_images(
             # overwrite if n_channels == 2 for intuitive result
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
-            else:
-                seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-            colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            elif n_channels == 3:
+                seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
+
+            else:
+                if render_params.multichannel_strategy == "stack":
+                    if isinstance(render_params.cmap_params, list):
+                        cmap_is_default = render_params.cmap_params[0].cmap_is_default
+                    else:
+                        cmap_is_default = render_params.cmap_params.cmap_is_default
+
+                    if cmap_is_default:
+                        seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                    else:
+                        # Sample n_channels colors evenly from the colormap
+                        if isinstance(render_params.cmap_params, list):
+                            seed_colors = [
+                                render_params.cmap_params[i].cmap(i / (n_channels - 1)) for i in range(n_channels)
+                            ]
+                        else:
+                            seed_colors = [
+                                render_params.cmap_params.cmap(i / (n_channels - 1)) for i in range(n_channels)
+                            ]
+                    channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+
+                    # Stack (n_channels, height, width) → (height*width, n_channels)
+                    H, W = next(iter(layers.values())).shape
+                    comp_rgb = np.zeros((H, W, 3), dtype=float)
+
+                    # For each channel: map to RGBA, apply constant alpha, then add
+                    for ch_idx, ch in enumerate(channels):
+                        layer_arr = layers[ch]
+                        rgba = channel_cmaps[ch_idx](layer_arr)
+                        rgba[..., 3] = render_params.alpha
+                        comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
+
+                    colored = np.clip(comp_rgb, 0, 1)
+                    logger.info(
+                        f"Your image has {n_channels} channels. Sampling categorical colors and using "
+                        f"multichannel strategy '{render_params.multichannel_strategy}' to render."
+                    )
+
+                elif render_params.multichannel_strategy == "pca":
+                    from sklearn.decomposition import PCA
+
+                    # Stack (n_channels, height, width) → (height*width, n_channels)
+                    H, W = next(iter(layers.values())).shape
+                    pixel_matrix = np.stack(
+                        [
+                            (layers[ch].data.ravel() if hasattr(layers[ch], "data") else layers[ch].ravel())
+                            for ch in channels
+                        ],
+                        axis=1,
+                    )
+
+                    # Calculate pixel sums and create mask for background
+                    pixel_sums = np.sum(pixel_matrix, axis=1)
+                    mask = pixel_sums > render_params.bg_threshold
+
+                    # Only use non-background pixels for PCA
+                    pca_rgb = np.zeros((H * W, 3))
+                    if np.any(mask):
+                        # Apply PCA only to non-background pixels
+                        pca_result = PCA(n_components=3).fit_transform(pixel_matrix[mask])
+
+                        # Take absolute values to ensure positive values
+                        pca_result = np.abs(pca_result)
+
+                        # Normalize each channel independently to [0,1]
+                        for i in range(3):
+                            channel_min = pca_result[:, i].min()
+                            channel_max = pca_result[:, i].max()
+                            if channel_max > channel_min:
+                                pca_result[:, i] = (pca_result[:, i] - channel_min) / (channel_max - channel_min)
+
+                        pca_rgb[mask] = pca_result
+                        # Ensure background pixels stay at zero
+                        pca_rgb[~mask] = 0
+                    else:
+                        logger.warning("All pixels are below background threshold.")
+
+                    colored = pca_rgb.reshape(H, W, 3)
+
+                    logger.info(
+                        f"Your image has {n_channels} channels. Using multichannel strategy "
+                        f"'{render_params.multichannel_strategy}' to project to RGB."
+                    )
 
             _ax_show_and_transform(
                 colored,
@@ -908,13 +1002,22 @@ def _render_images(
             )
 
         # 2C) Image has n channels and palette info
+        # immitating Napari's multi-channel additive blending (SRC_ALPHA, ONE):
         elif palette is not None and not got_multiple_cmaps:
-            if len(palette) != n_channels:
-                raise ValueError("If 'palette' is provided, its length must match the number of channels.")
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette]
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
-            colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            sample = next(iter(layers.values()))
+            H, W = sample.shape
+            comp_rgb = np.zeros((H, W, 3), dtype=float)
+
+            # for each channel: map to RGBA, apply constant alpha, then add
+            for idx, ch in enumerate(channels):
+                layer_arr = layers[ch]
+                rgba = channel_cmaps[idx](layer_arr)
+                rgba[..., 3] = render_params.alpha
+                comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
+
+            colored = np.clip(comp_rgb, 0, 1)
 
             _ax_show_and_transform(
                 colored,
@@ -924,6 +1027,7 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
+        # 2D) Image has n channels, no palette but cmap info
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
             colored = (

@@ -1,6 +1,7 @@
 import dask.array as da
 import matplotlib
 import numpy as np
+import pytest
 import scanpy as sc
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
@@ -42,9 +43,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             cmap=[matplotlib.colormaps["seismic"], matplotlib.colormaps["Reds"], matplotlib.colormaps["Blues"]],
         ).pl.show()
 
-    def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0).pl.show()
-
     def test_plot_can_render_a_single_channel_from_multiscale_image(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_multiscale_image", channel=0).pl.show()
 
@@ -83,11 +81,6 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_pass_cmap_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, cmap="Reds").pl.show()
-
-    def test_plot_can_pass_color_to_each_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(
-            element="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
-        ).pl.show()
 
     def test_plot_can_pass_cmap_to_each_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
@@ -132,3 +125,93 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_render_multiscale_image_with_custom_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_multiscale_image", channel=0, scale="scale2", cmap="Greys").pl.show()
+
+    def test_plot_can_handle_one_palette_per_img_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", palette=["red", "green", "blue"]).pl.show()
+
+    def test_plot_can_handle_one_palette_per_user_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=[0, 1, 2], palette=["red", "green", "blue"]
+        ).pl.show()
+
+    def test_plot_can_handle_mixed_channel_order(self, sdata_blobs: SpatialData):
+        """Test that channels can be specified in any order and are correctly matched with their palette colors"""
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=[2, 0, 1], palette=["blue", "red", "green"]
+        ).pl.show()
+
+    def test_plot_can_handle_single_channel_default_color(self, sdata_blobs: SpatialData):
+        """Test that a single channel without palette uses default color mapping"""
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0).pl.show()
+
+    def test_plot_can_handle_single_channel_with_cmap(self, sdata_blobs: SpatialData):
+        """Test that a single channel can use a cmap instead of a palette color"""
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, cmap="Reds").pl.show()
+
+    def test_plot_can_handle_one_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0]).pl.show()
+
+    def test_plot_can_handle_subset_of_channels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 2]).pl.show()
+
+    def test_plot_can_handle_actual_number_of_channels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2]).pl.show()
+
+    def test_plot_can_handle_scrambled_channels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 2, 1]).pl.show()
+
+    def test_plot_can_handle_three_channels_single_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], cmap="viridis").pl.show()
+
+    def test_plot_can_handle_multiple_channels_stack_strategy(self, sdata_multichannel: SpatialData):
+        sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="stack").pl.show()
+
+    def test_plot_can_handle_multiple_channels_pca_strategy(self, sdata_multichannel: SpatialData):
+        sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="pca").pl.show()
+
+    def test_plot_can_handle_multiple_cmaps(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds", "Blues"]
+        ).pl.show()
+
+
+def test_fails_with_palette_and_multiple_cmaps(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="Both `palette` and `cmap` are specified. Please specify only one of them."):
+        sdata_blobs.pl.render_images(
+            element="blobs_image",
+            channel=[0, 1, 2],
+            palette=["red", "green", "blue"],
+            cmap=["viridis", "Reds", "Blues"],
+        ).pl.show()
+
+
+def test_fail_when_len_palette_is_not_equal_to_len_img_channels(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="Palette length"):
+        sdata_blobs.pl.render_images(element="blobs_image", palette=["red", "green"]).pl.show()
+
+
+def test_fail_when_len_palette_is_not_equal_to_len_user_channels(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="Palette length"):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], palette=["red", "green"]).pl.show()
+
+
+def test_fail_when_len_cmap_not_equal_len_img_channels(sdata_blobs):
+    with pytest.raises(ValueError, match="If 'cmap' is provided, its length must match the number of channels."):
+        sdata_blobs.pl.render_images(element="blobs_image", cmap=["Reds", "Blues"]).pl.show()
+
+
+def test_fail_when_len_cmap_not_equal_len_user_channels(sdata_blobs):
+    with pytest.raises(ValueError, match="If 'cmap' is provided, its length must match the number of channels."):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], cmap=["viridis", "Reds"]).pl.show()
+
+
+def test_fail_invalid_multichannel_strategy(sdata_multichannel):
+    with pytest.raises(
+        ValueError, match="Parameter 'multichannel_strategy' must be one of the following: 'pca', 'stack'."
+    ):
+        sdata_multichannel.pl.render_images(element="multichannel_image", multichannel_strategy="foo").pl.show()
+
+
+def test_fail_channel_index_out_of_range(sdata_blobs):
+    with pytest.raises(ValueError, match="Invalid channel"):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=10).pl.show()
