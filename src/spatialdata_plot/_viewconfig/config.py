@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.text import Text
 from spatialdata import SpatialData
 
 from spatialdata_plot._viewconfig.axis import create_axis_block
@@ -73,7 +76,7 @@ def create_padding_object(fig: Figure) -> dict[str, float]:
     }
 
 
-def create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
+def create_title_config(ax: Axes, fig: Figure, suptitle: Text | None = None) -> dict[str, Any]:
     """Create a vega title object for a spatialdata view configuration.
 
     Note that not all field values as obtained from matplotlib are supported by the official
@@ -85,10 +88,23 @@ def create_title_config(ax: Axes, fig: Figure) -> dict[str, Any]:
         A matplotlib Axes instance which represents one (sub)plot in a matplotlib figure.
     fig : Figure
         The matplotlib figure. The top level container for all the plot elements.
+    suptitle : Text
+        The figure title Text object. Specified in case the figure contains multiple subplots, but has a
+        figure title which is not an empty string.
+
+    Returns
+    -------
+    dict[str, Any]
+
     """
-    title_text = ax.get_title()
-    title_obj = ax.title
-    title_font = title_obj.get_fontproperties()
+    if not suptitle:
+        title_text = ax.get_title()
+        title_obj = ax.title
+        title_font = title_obj.get_fontproperties()
+    else:
+        title_text = suptitle.get_text()
+        title_obj = suptitle
+        title_font = suptitle.get_fontproperties()
 
     return {
         "text": title_text,
@@ -233,7 +249,42 @@ def _create_data_configs(
     return data_array, marks_array, color_scale_array_full, legend_array_full
 
 
-def create_viewconfig(sdata: SpatialData, fig_params: FigParams, cs: str) -> dict[str, Any]:
+def create_group_mark(
+    fig: Figure,
+    ax: Axes,
+    scales: list[dict[str, Any]],
+    axis_array: list[dict[str, Any]],
+    marks_array: list[dict[str, Any]],
+    legend_array: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Create a Vega like groups mark object."""
+    ax_pos = ax.get_position()
+
+    encode_enter_obj = {
+        "x": {"value": ax_pos.x0 * fig.bbox.width},
+        "y": {"value": (1 - ax_pos.y1) * fig.bbox.height},
+        "width": {"value": (ax_pos.x1 - ax_pos.x0) * fig.bbox.width},
+        "height": {"value": (ax_pos.y1 - ax_pos.y0) * fig.bbox.height},
+    }
+
+    group_config = {
+        "type": "group",
+        "encode": {
+            "enter": encode_enter_obj,
+        },
+        "scales": scales,
+        "axes": axis_array,
+    }
+    if legend_array:
+        group_config["legend"] = legend_array
+    group_config["marks"] = marks_array
+
+    return group_config
+
+
+def create_viewconfig(
+    sdata: SpatialData, fig_params: FigParams, cs: str, existing_config: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Create a vega like view configuration based on the spatialdata-plot visualization.
 
     Parameters
@@ -244,6 +295,8 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, cs: str) -> dic
         The figure parameters containing for example the matplotlib figure and axes.
     cs: str
         The name of the coordinate system in which the SpatialData elements were plotted.
+    existing_config : dict[str, Any]
+        Existing config to which to add a subplot. The subplot will be added mostly in the marks array in the config.
     """
     fig = fig_params.fig
     ax = fig_params.ax
@@ -254,19 +307,53 @@ def create_viewconfig(sdata: SpatialData, fig_params: FigParams, cs: str) -> dic
 
     scales = scales_array + color_scale_array if len(color_scale_array) > 0 else scales_array
 
-    viewconfig = {
-        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-        "height": fig.bbox.height,
-        "width": fig.bbox.width,
-        "padding": create_padding_object(fig),
-        "title": create_title_config(ax, fig),
-        "data": data_array,
-        "scales": scales,
-        "axes": axis_array,
-    }
+    if len(fig.get_axes()) == 1:
+        viewconfig = {
+            "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+            "height": fig.bbox.height,
+            "width": fig.bbox.width,
+            "padding": create_padding_object(fig),
+            "title": create_title_config(ax, fig),
+            "data": data_array,
+            "scales": scales,
+            "axes": axis_array,
+        }
 
-    if len(legend_array) > 0:
-        viewconfig["legend"] = legend_array
-    viewconfig["marks"] = marks_array
+        if len(legend_array) > 0:
+            viewconfig["legend"] = legend_array
+        viewconfig["marks"] = marks_array
+
+    if len(fig.get_axes()) > 1:
+        ax_index = fig.get_axes().index(ax)
+
+        if not existing_config:
+            viewconfig = {
+                "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+                "height": fig.bbox.height,
+                "width": fig.bbox.width,
+                "padding": create_padding_object(fig),
+            }
+
+            # While matplotlib has an api for accessing the title object of individual axes, it does not have this for
+            # suptitle. So this here is quite hacky and we need to come up with a better way for this.
+            if fig.texts:
+                viewconfig["title"] = create_title_config(ax, fig, fig.texts[0])
+
+            viewconfig["data"] = data_array
+
+        else:
+            viewconfig = existing_config
+        for index, scale in enumerate(scales):
+            if "scale" in scale["name"]:
+                scale["name"] = f"{scale['name']}_{ax_index}"
+                axis_array[index]["scale"] = f"{scale['name']}"
+
+        if "marks" not in viewconfig:
+            viewconfig["marks"] = []
+
+        if len(viewconfig["marks"]) != ax_index:
+            raise ValueError("It seems like you are missing part of the viewconfig.")
+        group_mark = create_group_mark(fig, ax, scales, axis_array, marks_array, legend_array)
+        viewconfig["marks"].append(group_mark)
 
     return viewconfig

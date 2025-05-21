@@ -498,14 +498,14 @@ def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
                 break
 
         if sdata is not None:
-            old_config = spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS
-            spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = True
+            old_config = spatialdata_plot.config.STORE_VIEWCONFIG_NAME
+            spatialdata_plot.config.STORE_VIEWCONFIG_NAME = "test_config"
         fn(self, *args, **kwargs)
 
         if sdata is not None:
             spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS = old_config
-            if "viewconfig" in sdata.attrs:
-                viewconfig = sdata.attrs["viewconfig"]
+            if "viewconfigs" in sdata.attrs:
+                viewconfig = sdata.attrs["viewconfigs"][spatialdata_plot.config.STORE_VIEWCONFIG_NAME]
                 VIEWCONFIG_ACTUAL.mkdir(parents=True, exist_ok=True)
                 with open(VIEWCONFIG_ACTUAL / f"{fig_name}.json", "w") as outfile:
                     json.dump(viewconfig, outfile, indent=4)

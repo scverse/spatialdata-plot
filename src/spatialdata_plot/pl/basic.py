@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-import uuid
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
@@ -727,7 +726,7 @@ class PlotAccessor:
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
-        store_viewconfig_in_attrs: bool | None = None,
+        store_viewconfig_name: str | None = None,
         store_viewconfig_to_disk: Path | None = None,
     ) -> sd.SpatialData:
         """
@@ -781,9 +780,9 @@ class PlotAccessor:
             Whether to return the axes object created.
         save :
             Path to save the plot to a file.
-        store_viewconfig_in_attrs :
-            Whether to store the view configuration in `.attrs` slot of the `SpatialData` object. It defaults to
-            `spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS`.
+        store_viewconfig_name :
+            Key name by which to store the view configuration in `.attrs["viewconfig"]` slot of the `SpatialData`
+            object. It defaults to `spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS`.
         store_viewconfig_to_disk :
             Path to store the view configuration on disk. By default, the view configuration is not stored on disk.
 
@@ -823,8 +822,8 @@ class PlotAccessor:
             save,
         )
 
-        if store_viewconfig_in_attrs is None:
-            store_viewconfig_in_attrs = spatialdata_plot.config.STORE_VIEWCONFIG_IN_ATTRS
+        if store_viewconfig_name is None:
+            store_viewconfig_name = spatialdata_plot.config.STORE_VIEWCONFIG_NAME
 
         sdata = self._copy()
 
@@ -871,14 +870,14 @@ class PlotAccessor:
 
         # Only reason for multiple coordinate systems is to show quick overview, but this would complicate the
         # view config implementation. For testing now, global is used as default.
-        if not isinstance(coordinate_systems, str) and store_viewconfig_in_attrs:
+        if not isinstance(coordinate_systems, str) and store_viewconfig_name:
             # TODO: change this when having full implementation.
             store_viewconfig_cs = "global"
             # raise ValueError("If wanting to store the view configuration. A single coordinate system must be
             # provided")
 
         if isinstance(coordinate_systems, str):
-            if store_viewconfig_in_attrs:
+            if store_viewconfig_name:
                 store_viewconfig_cs = coordinate_systems
             coordinate_systems = [coordinate_systems]
 
@@ -1081,29 +1080,31 @@ class PlotAccessor:
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
-        def get_current_ax_uuid(ax: Axes) -> str:
-            return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(id(ax))))
+        existing_viewconfig = None
+        if store_viewconfig_name:
+            root = sdata
+            while hasattr(root, "_sdata"):
+                root = root._sdata
+                if (
+                    "viewconfigs" in root.attrs
+                    and store_viewconfig_name
+                    and store_viewconfig_name in root.attrs["viewconfigs"]
+                ):
+                    existing_viewconfig = root.attrs["viewconfigs"][store_viewconfig_name]
 
-        def _concat_viewconfig(
-            old_viewconfig: list[dict[str, Any]], new_viewconfig: list[dict[str, Any]]
-        ) -> list[dict[str, Any]]:
-            return old_viewconfig + new_viewconfig
-
-        viewconfig: list[dict[str, Any]] | None = None
-        if store_viewconfig_in_attrs or store_viewconfig_to_disk:
-            viewconfig = [create_viewconfig(sdata, fig_params, store_viewconfig_cs)]
-        if store_viewconfig_in_attrs:
+        viewconfig: dict[str, Any] | None = None
+        if store_viewconfig_name or store_viewconfig_to_disk:
+            viewconfig = create_viewconfig(sdata, fig_params, store_viewconfig_cs, existing_viewconfig)
+        if store_viewconfig_name:
             root = sdata
             while hasattr(root, "_sdata"):
                 root = root._sdata
 
-            assert isinstance(viewconfig, list)
-            viewconfig[0]["usermeta"] = {"axis_uuid": get_current_ax_uuid(ax)}
-            if "viewconfig" not in root.attrs:
-                root.attrs["viewconfig"] = viewconfig
-            else:
-                merged_viewconfig = _concat_viewconfig(root.attrs["viewconfig"], viewconfig)
-                root.attrs["viewconfig"] = merged_viewconfig
+            if "viewconfigs" not in root.attrs:
+                root.attrs["viewconfigs"] = []
+
+            root.attrs["viewconfigs"][store_viewconfig_name] = viewconfig
+
         if store_viewconfig_to_disk:
             with open(store_viewconfig_to_disk, "w") as outfile:
                 json.dump(viewconfig, outfile)
