@@ -307,7 +307,9 @@ def create_viewconfig(
 
     scales = scales_array + color_scale_array if len(color_scale_array) > 0 else scales_array
 
-    if len(fig.get_axes()) == 1:
+    # To avoid counting the colorbar axes object.
+    subplot_axes_objects = [i for i in fig.get_axes() if i.get_label() == ""]
+    if len(subplot_axes_objects) == 1:
         viewconfig = {
             "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
             "height": fig.bbox.height,
@@ -323,8 +325,8 @@ def create_viewconfig(
             viewconfig["legend"] = legend_array
         viewconfig["marks"] = marks_array
 
-    if len(fig.get_axes()) > 1:
-        ax_index = fig.get_axes().index(ax)
+    if len(subplot_axes_objects) > 1:
+        ax_index = subplot_axes_objects.index(ax)
 
         if not existing_config:
             viewconfig = {
