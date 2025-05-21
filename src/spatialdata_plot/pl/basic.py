@@ -1101,7 +1101,7 @@ class PlotAccessor:
                 root = root._sdata
 
             if "viewconfigs" not in root.attrs:
-                root.attrs["viewconfigs"] = []
+                root.attrs["viewconfigs"] = {}
 
             root.attrs["viewconfigs"][store_viewconfig_name] = viewconfig
 
