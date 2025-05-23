@@ -1,225 +1,220 @@
-[
-    {
-        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-        "height": 320.0,
-        "width": 320.0,
-        "padding": {
-            "left": 57.599999999999994,
-            "top": 28.79999999999999,
-            "right": 12.800000000000011,
-            "bottom": 48.0
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "alphabetic",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "cd447067-24c2-4f8a-8eb3-3c88e8442c58",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.3.1.dev31+g4021946.d20250416"
+            }
         },
-        "title": {
-            "text": "global",
-            "orient": "top",
-            "anchor": "middle",
-            "baseline": "baseline",
-            "color": "black",
-            "font": "Arial",
-            "fontSize": 15.555555555555555,
-            "fontStyle": "normal",
-            "fontWeight": "normal"
+        {
+            "name": "points1_2355f2a3-ebeb-476b-a52a-ae94b43ae962",
+            "format": {
+                "type": "PointsFormatV01",
+                "version": "0.1"
+            },
+            "source": "cd447067-24c2-4f8a-8eb3-3c88e8442c58",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "points1"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                }
+            ]
         },
-        "data": [
-            {
-                "name": "1726166b-d3f2-4d72-99da-5002a67ff362",
-                "url": "sdata.zarr",
-                "format": {
-                    "type": "SpatialData",
-                    "version": "0.3.1.dev31+g4021946.d20250416"
+        {
+            "name": "points1_e2f780ff-20e8-4e3e-be7f-abc949020e14",
+            "format": {
+                "type": "PointsFormatV01",
+                "version": "0.1"
+            },
+            "source": "cd447067-24c2-4f8a-8eb3-3c88e8442c58",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "points1"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                },
+                {
+                    "type": "aggregate",
+                    "field": ["*"],
+                    "ops": ["count"],
+                    "as": ["count"]
+                },
+                {
+                    "type": "spread",
+                    "field": ["count"],
+                    "px": 3,
+                    "as": ["count"]
                 }
-            },
-            {
-                "name": "points1_a3aaddcc-5548-4b3b-aab8-85bd9fc8655c",
-                "format": {
-                    "type": "PointsFormatV01",
-                    "version": "0.1"
-                },
-                "source": "1726166b-d3f2-4d72-99da-5002a67ff362",
-                "transform": [
-                    {
-                        "type": "filter_element",
-                        "expr": "points1"
-                    },
-                    {
-                        "type": "filter_cs",
-                        "expr": "global"
-                    }
-                ]
-            },
-            {
-                "name": "points1_5135bd5c-be45-475d-acdb-ba94c1d91548",
-                "format": {
-                    "type": "PointsFormatV01",
-                    "version": "0.1"
-                },
-                "source": "1726166b-d3f2-4d72-99da-5002a67ff362",
-                "transform": [
-                    {
-                        "type": "filter_element",
-                        "expr": "points1"
-                    },
-                    {
-                        "type": "filter_cs",
-                        "expr": "global"
-                    },
-                    {
-                        "type": "aggregate",
-                        "field": ["*"],
-                        "ops": ["count"],
-                        "as": ["count"]
-                    },
-                    {
-                        "type": "spread",
-                        "field": ["count"],
-                        "px": 3,
-                        "as": ["count"]
-                    }
-                ]
-            }
-        ],
-        "scales": [
-            {
-                "name": "X_scale",
-                "type": "linear",
-                "domain": [0.0, 20.0],
-                "range": "width"
-            },
-            {
-                "name": "Y_scale",
-                "type": "linear",
-                "domain": [20.0, 0.0],
-                "range": "height"
-            }
-        ],
-        "axes": [
-            {
-                "scale": "X_scale",
-                "orient": "bottom",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [0, 5, 10, 15, 20],
-                "zindex": 1.5
-            },
-            {
-                "scale": "Y_scale",
-                "orient": "left",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [0, 5, 10, 15, 20],
-                "zindex": 1.5
-            }
-        ],
-        "marks": [
-            {
-                "type": "symbol",
-                "from": {
-                    "data": "points1_a3aaddcc-5548-4b3b-aab8-85bd9fc8655c"
-                },
-                "zindex": 0,
-                "encode": {
-                    "enter": {
-                        "x": {
-                            "scale": "X_scale",
-                            "field": "x"
-                        },
-                        "y": {
-                            "scale": "Y_scale",
-                            "field": "y"
-                        },
-                        "stroke": {
-                            "value": "#d3d3d3"
-                        },
-                        "fill": {
-                            "value": "#d3d3d3"
-                        },
-                        "fillOpacity": {
-                            "value": 1.0
-                        },
-                        "size": {
-                            "value": 50
-                        },
-                        "shape": {
-                            "value": "circle"
-                        }
-                    }
-                }
-            },
-            {
-                "type": "symbol",
-                "from": {
-                    "data": "points1_5135bd5c-be45-475d-acdb-ba94c1d91548"
-                },
-                "zindex": 1,
-                "encode": {
-                    "enter": {
-                        "x": {
-                            "scale": "X_scale",
-                            "field": "x"
-                        },
-                        "y": {
-                            "scale": "Y_scale",
-                            "field": "y"
-                        },
-                        "stroke": {
-                            "value": "#ff0000"
-                        },
-                        "fill": {
-                            "value": "#ff0000"
-                        },
-                        "fillOpacity": {
-                            "value": 1.0
-                        },
-                        "size": {
-                            "value": 10
-                        },
-                        "shape": {
-                            "value": "circle"
-                        }
-                    }
-                }
-            }
-        ],
-        "usermeta": {
-            "axis_uuid": "ec28cecf-b4ae-5607-b2e6-16c709515234"
+            ]
         }
-    }
-]
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [0.0, 20.0],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [20.0, 0.0],
+            "range": "height"
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 5, 10, 15, 20],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 5, 10, 15, 20],
+            "zindex": 1.5
+        }
+    ],
+    "marks": [
+        {
+            "type": "symbol",
+            "from": {
+                "data": "points1_2355f2a3-ebeb-476b-a52a-ae94b43ae962"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "stroke": {
+                        "value": "#d3d3d3"
+                    },
+                    "fill": {
+                        "value": "#d3d3d3"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    },
+                    "size": {
+                        "value": 50
+                    },
+                    "shape": {
+                        "value": "circle"
+                    }
+                }
+            }
+        },
+        {
+            "type": "symbol",
+            "from": {
+                "data": "points1_e2f780ff-20e8-4e3e-be7f-abc949020e14"
+            },
+            "zindex": 1,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "stroke": {
+                        "value": "#ff0000"
+                    },
+                    "fill": {
+                        "value": "#ff0000"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    },
+                    "size": {
+                        "value": 10
+                    },
+                    "shape": {
+                        "value": "circle"
+                    }
+                }
+            }
+        }
+    ]
+}

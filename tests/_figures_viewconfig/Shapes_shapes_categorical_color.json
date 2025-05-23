@@ -1,217 +1,212 @@
-[
-    {
-        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-        "height": 320.0,
-        "width": 320.0,
-        "padding": {
-            "left": 57.599999999999994,
-            "top": 28.79999999999999,
-            "right": 12.800000000000011,
-            "bottom": 48.0
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "alphabetic",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "64c9a803-1fc3-4933-a4b1-9f0fae9ecd2e",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.3.1.dev31+g4021946.d20250416"
+            }
         },
-        "title": {
-            "text": "global",
-            "orient": "top",
-            "anchor": "middle",
-            "baseline": "baseline",
-            "color": "black",
-            "font": "Arial",
-            "fontSize": 15.555555555555555,
-            "fontStyle": "normal",
-            "fontWeight": "normal"
+        {
+            "name": "a84061fc-ea69-48b8-a34a-cd511e367148",
+            "format": {
+                "type": "spatialdata_table",
+                "version": 0.1
+            },
+            "source": "64c9a803-1fc3-4933-a4b1-9f0fae9ecd2e",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "table"
+                }
+            ]
         },
-        "data": [
-            {
-                "name": "7f09f346-c7a4-4dc1-8216-bf8d53cf1f1e",
-                "url": "sdata.zarr",
-                "format": {
-                    "type": "SpatialData",
-                    "version": "0.3.1.dev31+g4021946.d20250416"
+        {
+            "name": "blobs_polygons_8d5dcab2-374c-499f-93fb-bf4127848594",
+            "format": {
+                "type": "ShapesFormatV02",
+                "version": "0.2"
+            },
+            "source": "64c9a803-1fc3-4933-a4b1-9f0fae9ecd2e",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "blobs_polygons"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                },
+                {
+                    "type": "lookup",
+                    "from": "a84061fc-ea69-48b8-a34a-cd511e367148",
+                    "key": "instance_id",
+                    "fields": ["instance_ids"],
+                    "values": ["category"],
+                    "as": ["category"],
+                    "default": null
                 }
-            },
-            {
-                "name": "b9bb444b-5de9-4d9c-b28c-ecdf50bb154c",
-                "format": {
-                    "type": "spatialdata_table",
-                    "version": 0.1
-                },
-                "source": "7f09f346-c7a4-4dc1-8216-bf8d53cf1f1e",
-                "transform": [
-                    {
-                        "type": "filter_element",
-                        "expr": "table"
-                    }
-                ]
-            },
-            {
-                "name": "blobs_polygons_28c6b35e-06a8-4b07-b4cb-36fc6e494ff1",
-                "format": {
-                    "type": "ShapesFormatV02",
-                    "version": "0.2"
-                },
-                "source": "7f09f346-c7a4-4dc1-8216-bf8d53cf1f1e",
-                "transform": [
-                    {
-                        "type": "filter_element",
-                        "expr": "blobs_polygons"
-                    },
-                    {
-                        "type": "filter_cs",
-                        "expr": "global"
-                    },
-                    {
-                        "type": "lookup",
-                        "from": "b9bb444b-5de9-4d9c-b28c-ecdf50bb154c",
-                        "key": "instance_id",
-                        "fields": ["instance_ids"],
-                        "values": ["category"],
-                        "as": ["category"],
-                        "default": null
-                    }
-                ]
-            }
-        ],
-        "scales": [
-            {
-                "name": "X_scale",
-                "type": "linear",
-                "domain": [149.92618678876784, 446.7026437060826],
-                "range": "width"
-            },
-            {
-                "name": "Y_scale",
-                "type": "linear",
-                "domain": [461.8520923943867, 188.62348968860152],
-                "range": "height"
-            },
-            {
-                "name": "color_4bdb204c-f15d-4b9f-b669-0e939e18652b",
-                "type": "ordinal",
-                "domain": ["a", "b", "c"],
-                "range": ["#1f77b4", "#ff7f0e", "#279e68"]
-            }
-        ],
-        "axes": [
-            {
-                "scale": "X_scale",
-                "orient": "bottom",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [200, 300, 400],
-                "zindex": 1.5
-            },
-            {
-                "scale": "Y_scale",
-                "orient": "left",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [200, 250, 300, 350, 400, 450],
-                "zindex": 1.5
-            }
-        ],
-        "legend": [
-            {
-                "type": "discrete",
-                "direction": "vertical",
-                "fill": "color_4bdb204c-f15d-4b9f-b669-0e939e18652b",
-                "orient": "none",
-                "columns": 1,
-                "columnPadding": 2.2222222222222223,
-                "rowPadding": 0.5555555555555556,
-                "padding": 0.4444444444444444,
-                "fillColor": "#ffffffcc",
-                "strokeColor": "#cccccccc",
-                "strokeWidth": 1.1111111111111112,
-                "labelOffset": 0.4444444444444444,
-                "labelAlign": "left",
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 14.311111111111112,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "legendX": 267.8405555555555,
-                "legendY": 35.95555555555558
-            }
-        ],
-        "marks": [
-            {
-                "type": "path",
-                "from": {
-                    "data": "blobs_polygons_28c6b35e-06a8-4b07-b4cb-36fc6e494ff1"
-                },
-                "zindex": 0,
-                "encode": {
-                    "enter": {
-                        "x": {
-                            "scale": "X_scale",
-                            "field": "x"
-                        },
-                        "y": {
-                            "scale": "Y_scale",
-                            "field": "y"
-                        },
-                        "scaleX": 1.0,
-                        "scaleY": 1.0,
-                        "fill": {
-                            "scale": "color_4bdb204c-f15d-4b9f-b669-0e939e18652b",
-                            "field": "category"
-                        },
-                        "fillOpacity": {
-                            "value": 1.0
-                        }
-                    },
-                    "update": {
-                        "fill": [
-                            {
-                                "test": "!isValid(datum.category)",
-                                "value": "#d3d3d3"
-                            }
-                        ]
-                    }
-                }
-            }
-        ],
-        "usermeta": {
-            "axis_uuid": "b31d077e-eecd-53fb-ba3c-f779f19bc620"
+            ]
         }
-    }
-]
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [149.92618678876784, 446.7026437060826],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [461.8520923943867, 188.62348968860152],
+            "range": "height"
+        },
+        {
+            "name": "color_508038f7-a404-49ee-898c-49cd402b3fa4",
+            "type": "ordinal",
+            "domain": ["a", "b", "c"],
+            "range": ["#1f77b4", "#ff7f0e", "#279e68"]
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [200, 300, 400],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [200, 250, 300, 350, 400, 450],
+            "zindex": 1.5
+        }
+    ],
+    "legend": [
+        {
+            "type": "discrete",
+            "direction": "vertical",
+            "fill": "color_508038f7-a404-49ee-898c-49cd402b3fa4",
+            "orient": "none",
+            "columns": 1,
+            "columnPadding": 2.2222222222222223,
+            "rowPadding": 0.5555555555555556,
+            "padding": 0.4444444444444444,
+            "fillColor": "#ffffffcc",
+            "strokeColor": "#cccccccc",
+            "strokeWidth": 1.1111111111111112,
+            "labelOffset": 0.4444444444444444,
+            "labelAlign": "left",
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 14.311111111111112,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "legendX": 267.8405555555555,
+            "legendY": 35.95555555555558
+        }
+    ],
+    "marks": [
+        {
+            "type": "path",
+            "from": {
+                "data": "blobs_polygons_8d5dcab2-374c-499f-93fb-bf4127848594"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "fill": {
+                        "scale": "color_508038f7-a404-49ee-898c-49cd402b3fa4",
+                        "field": "category"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    }
+                },
+                "update": {
+                    "fill": [
+                        {
+                            "test": "!isValid(datum.category)",
+                            "value": "#d3d3d3"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}
