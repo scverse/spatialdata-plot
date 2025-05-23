@@ -21,7 +21,7 @@ from spatialdata_plot._viewconfig.marks import (
     create_raster_label_marks_object,
     create_shapes_marks_object,
 )
-from spatialdata_plot._viewconfig.misc import VegaAlignment, strip_call
+from spatialdata_plot._viewconfig.misc import VegaAlignment, VegaTextBaseline, strip_call
 from spatialdata_plot._viewconfig.scales import (
     create_axis_scale_array,
     create_colorscale_array_image,
@@ -110,7 +110,7 @@ def create_title_config(ax: Axes, fig: Figure, suptitle: Text | None = None) -> 
         "text": title_text,
         "orient": "top",  # there is not really a nice conversion here of matplotlib to vega
         "anchor": VegaAlignment.from_matplotlib(title_obj.get_horizontalalignment()),
-        "baseline": title_obj.get_va(),
+        "baseline": VegaTextBaseline.from_matplotlib(title_obj.get_va()),
         "color": title_obj.get_color(),
         "font": title_obj.get_fontname(),
         "fontSize": (title_font.get_size() * fig.dpi) / 72,
@@ -249,6 +249,30 @@ def _create_data_configs(
     return data_array, marks_array, color_scale_array_full, legend_array_full
 
 
+def create_subtitle_config(fig: Figure, ax: Axes) -> dict[str, Any] | None:
+    """Create text mark for subplot title text."""
+    title_text_mark = None
+    if ax.get_title():
+        title_encode_enter_obj = create_title_config(ax, fig)
+        title_encode_enter_obj["align"] = {"value": ax.title.properties()["horizontalalignment"]}
+        for key, value in title_encode_enter_obj.items():
+            title_encode_enter_obj[key] = {"value": value}
+        del title_encode_enter_obj["anchor"]
+        del title_encode_enter_obj["orient"]
+
+        renderer = fig.canvas.get_renderer()
+        bbox = ax.title.get_window_extent(renderer=renderer)
+        title_encode_enter_obj["x"] = {"value": bbox.x0}
+        title_encode_enter_obj["y"] = {"value": fig.bbox.height - bbox.y1}
+        title_encode_enter_obj["linebreak"] = {"value": "\n"}
+        title_text_mark = {
+            "type": "text",
+            "encode": {"enter": title_encode_enter_obj},
+            "zindex": ax.title.properties()["zorder"],
+        }
+    return title_text_mark
+
+
 def create_group_mark(
     fig: Figure,
     ax: Axes,
@@ -356,6 +380,8 @@ def create_viewconfig(
         if len(viewconfig["marks"]) != ax_index:
             raise ValueError("It seems like you are missing part of the viewconfig.")
         group_mark = create_group_mark(fig, ax, scales, axis_array, marks_array, legend_array)
+        if title_text_mark := create_subtitle_config(fig, ax):
+            group_mark["marks"].append(title_text_mark)
         viewconfig["marks"].append(group_mark)
 
     return viewconfig

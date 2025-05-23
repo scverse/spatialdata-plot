@@ -442,7 +442,7 @@ def test_viewconfig_output(actual_json_path, expected_json_path):
         actual_json = json.load(f)
     with expected_json_path.open() as f:
         expected_json = json.load(f)
-    assert compare_json_ignore_uuids(actual_json, expected_json)
+    assert compare_json_ignore_uuids(actual_json, expected_json[0])
 
 
 class PlotTesterMeta(ABCMeta):

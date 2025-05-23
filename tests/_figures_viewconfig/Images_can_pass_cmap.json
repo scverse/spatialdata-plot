@@ -21,7 +21,7 @@
     },
     "data": [
         {
-            "name": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
+            "name": "30b4723b-6fdd-47a0-ada8-02c234753830",
             "url": "sdata.zarr",
             "format": {
                 "type": "SpatialData",
@@ -29,16 +29,16 @@
             }
         },
         {
-            "name": "blobs_labels_ff2f67ed-d4e9-41e1-9e5d-fc271817989c",
+            "name": "blobs_image_2c487a3f-2f46-4885-905c-ddfe5987f64d",
             "format": {
                 "type": "RasterFormatV02",
                 "version": "0.2"
             },
-            "source": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
+            "source": "30b4723b-6fdd-47a0-ada8-02c234753830",
             "transform": [
                 {
                     "type": "filter_element",
-                    "expr": "blobs_labels"
+                    "expr": "blobs_image"
                 },
                 {
                     "type": "filter_cs",
@@ -47,28 +47,10 @@
                 {
                     "type": "filter_scale",
                     "expr": "full"
-                }
-            ]
-        },
-        {
-            "name": "blobs_labels_a6869836-35fc-4cb3-9fff-b23541f65ce1",
-            "format": {
-                "type": "RasterFormatV02",
-                "version": "0.2"
-            },
-            "source": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
-            "transform": [
-                {
-                    "type": "filter_element",
-                    "expr": "blobs_labels"
                 },
                 {
-                    "type": "filter_cs",
-                    "expr": "global"
-                },
-                {
-                    "type": "filter_scale",
-                    "expr": "full"
+                    "type": "filter_channel",
+                    "expr": null
                 }
             ]
         }
@@ -85,6 +67,18 @@
             "type": "linear",
             "domain": [512.0, 0.0],
             "range": "height"
+        },
+        {
+            "name": "color_bd3c8928-d083-43cb-8670-0e5b916f4cc9",
+            "type": "linear",
+            "domain": {
+                "data": "blobs_image_2c487a3f-2f46-4885-905c-ddfe5987f64d",
+                "field": "value"
+            },
+            "range": {
+                "scheme": "seismic",
+                "count": 256
+            }
         }
     ],
     "axes": [
@@ -145,62 +139,22 @@
     ],
     "marks": [
         {
-            "type": "raster_label",
+            "type": "raster_image",
             "from": {
-                "data": "blobs_labels_ff2f67ed-d4e9-41e1-9e5d-fc271817989c"
+                "data": "blobs_image_2c487a3f-2f46-4885-905c-ddfe5987f64d"
             },
             "zindex": 0,
             "encode": {
                 "enter": {
-                    "stroke": [
-                        {
-                            "value": "#ff0000"
-                        }
-                    ],
+                    "opacity": {
+                        "value": 1.0
+                    },
                     "fill": [
                         {
-                            "value": "#ff0000"
+                            "scale": "color_bd3c8928-d083-43cb-8670-0e5b916f4cc9",
+                            "value": "value"
                         }
-                    ],
-                    "fillOpacity": {
-                        "value": 1
-                    },
-                    "strokeOpacity": {
-                        "value": 0
-                    },
-                    "strokeWidth": {
-                        "value": 3
-                    }
-                }
-            }
-        },
-        {
-            "type": "raster_label",
-            "from": {
-                "data": "blobs_labels_a6869836-35fc-4cb3-9fff-b23541f65ce1"
-            },
-            "zindex": 0,
-            "encode": {
-                "enter": {
-                    "stroke": [
-                        {
-                            "value": "#0000ff"
-                        }
-                    ],
-                    "fill": [
-                        {
-                            "value": "#0000ff"
-                        }
-                    ],
-                    "fillOpacity": {
-                        "value": 0
-                    },
-                    "strokeOpacity": {
-                        "value": 1
-                    },
-                    "strokeWidth": {
-                        "value": 15
-                    }
+                    ]
                 }
             }
         }

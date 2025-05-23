@@ -15,6 +15,19 @@ class VegaAlignment(Enum):
         return mapping.get(alignment, cls.CENTER).value
 
 
+class VegaTextBaseline(Enum):
+    ALPHABETIC = "alphabetic"
+    TOP = "top"
+    MIDDLE = "middle"
+    BOTTOM = "bottom"
+
+    @classmethod
+    def from_matplotlib(cls, alignment: str) -> str:
+        """Convert Matplotlib horizontal alignment to Vega alignment."""
+        mapping = {"baseline": cls.ALPHABETIC, "top": cls.TOP, "center": cls.MIDDLE, "bottom": cls.BOTTOM}
+        return mapping.get(alignment, cls.MIDDLE).value
+
+
 def _count_trailing(num: float) -> int | None:
     str_num = str(num)
     if "." in str_num:

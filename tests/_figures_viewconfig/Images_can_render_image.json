@@ -21,7 +21,7 @@
     },
     "data": [
         {
-            "name": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
+            "name": "bc697316-1f4f-4852-95dd-2ebcc36a5a7b",
             "url": "sdata.zarr",
             "format": {
                 "type": "SpatialData",
@@ -29,16 +29,16 @@
             }
         },
         {
-            "name": "blobs_labels_ff2f67ed-d4e9-41e1-9e5d-fc271817989c",
+            "name": "blobs_image_ba193f43-8eb8-4ab0-99c0-283719f658a4",
             "format": {
                 "type": "RasterFormatV02",
                 "version": "0.2"
             },
-            "source": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
+            "source": "bc697316-1f4f-4852-95dd-2ebcc36a5a7b",
             "transform": [
                 {
                     "type": "filter_element",
-                    "expr": "blobs_labels"
+                    "expr": "blobs_image"
                 },
                 {
                     "type": "filter_cs",
@@ -47,28 +47,10 @@
                 {
                     "type": "filter_scale",
                     "expr": "full"
-                }
-            ]
-        },
-        {
-            "name": "blobs_labels_a6869836-35fc-4cb3-9fff-b23541f65ce1",
-            "format": {
-                "type": "RasterFormatV02",
-                "version": "0.2"
-            },
-            "source": "e21c21c8-5f5b-4fa8-89da-604f68d78c28",
-            "transform": [
-                {
-                    "type": "filter_element",
-                    "expr": "blobs_labels"
                 },
                 {
-                    "type": "filter_cs",
-                    "expr": "global"
-                },
-                {
-                    "type": "filter_scale",
-                    "expr": "full"
+                    "type": "filter_channel",
+                    "expr": null
                 }
             ]
         }
@@ -85,6 +67,18 @@
             "type": "linear",
             "domain": [512.0, 0.0],
             "range": "height"
+        },
+        {
+            "name": "color_10c9c707-f3e1-4273-be00-49ad57c44da9",
+            "type": "linear",
+            "domain": {
+                "data": "blobs_image_ba193f43-8eb8-4ab0-99c0-283719f658a4",
+                "field": "value"
+            },
+            "range": {
+                "scheme": "viridis",
+                "count": 256
+            }
         }
     ],
     "axes": [
@@ -145,62 +139,22 @@
     ],
     "marks": [
         {
-            "type": "raster_label",
+            "type": "raster_image",
             "from": {
-                "data": "blobs_labels_ff2f67ed-d4e9-41e1-9e5d-fc271817989c"
+                "data": "blobs_image_ba193f43-8eb8-4ab0-99c0-283719f658a4"
             },
             "zindex": 0,
             "encode": {
                 "enter": {
-                    "stroke": [
-                        {
-                            "value": "#ff0000"
-                        }
-                    ],
+                    "opacity": {
+                        "value": 1.0
+                    },
                     "fill": [
                         {
-                            "value": "#ff0000"
+                            "scale": "color_10c9c707-f3e1-4273-be00-49ad57c44da9",
+                            "value": "value"
                         }
-                    ],
-                    "fillOpacity": {
-                        "value": 1
-                    },
-                    "strokeOpacity": {
-                        "value": 0
-                    },
-                    "strokeWidth": {
-                        "value": 3
-                    }
-                }
-            }
-        },
-        {
-            "type": "raster_label",
-            "from": {
-                "data": "blobs_labels_a6869836-35fc-4cb3-9fff-b23541f65ce1"
-            },
-            "zindex": 0,
-            "encode": {
-                "enter": {
-                    "stroke": [
-                        {
-                            "value": "#0000ff"
-                        }
-                    ],
-                    "fill": [
-                        {
-                            "value": "#0000ff"
-                        }
-                    ],
-                    "fillOpacity": {
-                        "value": 0
-                    },
-                    "strokeOpacity": {
-                        "value": 1
-                    },
-                    "strokeWidth": {
-                        "value": 15
-                    }
+                    ]
                 }
             }
         }

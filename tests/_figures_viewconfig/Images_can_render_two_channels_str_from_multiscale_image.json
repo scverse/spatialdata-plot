@@ -1,183 +1,178 @@
-[
-    {
-        "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
-        "height": 320.0,
-        "width": 320.0,
-        "padding": {
-            "left": 57.599999999999994,
-            "top": 28.79999999999999,
-            "right": 12.800000000000011,
-            "bottom": 48.0
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "baseline",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "f656da23-df6a-4138-a077-a7387db7be53",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.3.1.dev31+g4021946.d20250416"
+            }
         },
-        "title": {
-            "text": "global",
-            "orient": "top",
-            "anchor": "middle",
-            "baseline": "baseline",
-            "color": "black",
-            "font": "Arial",
-            "fontSize": 15.555555555555555,
-            "fontStyle": "normal",
-            "fontWeight": "normal"
-        },
-        "data": [
-            {
-                "name": "2547d2aa-44a8-4022-a755-f656fcd94b7f",
-                "url": "sdata.zarr",
-                "format": {
-                    "type": "SpatialData",
-                    "version": "0.3.1.dev31+g4021946.d20250416"
-                }
+        {
+            "name": "blobs_multiscale_image_699e2f11-1b9a-4664-a024-4927881d0e82",
+            "format": {
+                "type": "RasterFormatV02",
+                "version": "0.2"
             },
-            {
-                "name": "blobs_multiscale_image_e687bad5-a08f-47b1-b546-ac186497d855",
-                "format": {
-                    "type": "RasterFormatV02",
-                    "version": "0.2"
+            "source": "f656da23-df6a-4138-a077-a7387db7be53",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "blobs_multiscale_image"
                 },
-                "source": "2547d2aa-44a8-4022-a755-f656fcd94b7f",
-                "transform": [
-                    {
-                        "type": "filter_element",
-                        "expr": "blobs_multiscale_image"
-                    },
-                    {
-                        "type": "filter_cs",
-                        "expr": "global"
-                    },
-                    {
-                        "type": "filter_scale",
-                        "expr": "full"
-                    },
-                    {
-                        "type": "filter_channel",
-                        "expr": ["c1", "c2"]
-                    }
-                ]
-            }
-        ],
-        "scales": [
-            {
-                "name": "X_scale",
-                "type": "linear",
-                "domain": [0.0, 512.0],
-                "range": "width"
-            },
-            {
-                "name": "Y_scale",
-                "type": "linear",
-                "domain": [512.0, 0.0],
-                "range": "height"
-            },
-            {
-                "name": "color_049a6837-e6a2-4736-9ae3-73dec8664ba8",
-                "type": "linear",
-                "domain": {
-                    "data": "blobs_multiscale_image_e687bad5-a08f-47b1-b546-ac186497d855",
-                    "field": "channel_0"
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
                 },
-                "range": {
-                    "scheme": "red",
-                    "count": 256
-                }
-            },
-            {
-                "name": "color_d98f460f-804b-4a55-8ec8-f70fc0e4e419",
-                "type": "linear",
-                "domain": {
-                    "data": "blobs_multiscale_image_e687bad5-a08f-47b1-b546-ac186497d855",
-                    "field": "channel_1"
+                {
+                    "type": "filter_scale",
+                    "expr": "full"
                 },
-                "range": {
-                    "scheme": "lime",
-                    "count": 256
+                {
+                    "type": "filter_channel",
+                    "expr": ["c1", "c2"]
                 }
-            }
-        ],
-        "axes": [
-            {
-                "scale": "X_scale",
-                "orient": "bottom",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [0, 200, 400],
-                "zindex": 1.5
-            },
-            {
-                "scale": "Y_scale",
-                "orient": "left",
-                "domain": true,
-                "domainOpacity": 1,
-                "domainColor": "#000000",
-                "domainWidth": 0.8888888888888888,
-                "grid": true,
-                "gridOpacity": 1.0,
-                "gridCap": "butt",
-                "gridColor": "#cccccc",
-                "gridWidth": 1.1111111111111112,
-                "labelColor": "#000000",
-                "labelOpacity": 1,
-                "labelFont": "Arial",
-                "labelFontSize": 15.555555555555555,
-                "labelFontStyle": "normal",
-                "labelFontWeight": "normal",
-                "ticks": true,
-                "tickOpacity": 1,
-                "tickColor": "#000000",
-                "tickCap": "butt",
-                "tickWidth": 1.6666666666666667,
-                "tickSize": 3.888888888888889,
-                "values": [0, 100, 200, 300, 400, 500],
-                "zindex": 1.5
-            }
-        ],
-        "marks": [
-            {
-                "type": "raster_image",
-                "from": {
-                    "data": "blobs_multiscale_image_e687bad5-a08f-47b1-b546-ac186497d855"
-                },
-                "zindex": 0,
-                "encode": {
-                    "enter": {
-                        "opacity": {
-                            "value": 1.0
-                        },
-                        "fill": [
-                            {
-                                "scale": "color_049a6837-e6a2-4736-9ae3-73dec8664ba8",
-                                "field": "channel_0"
-                            },
-                            {
-                                "scale": "color_d98f460f-804b-4a55-8ec8-f70fc0e4e419",
-                                "field": "channel_1"
-                            }
-                        ]
-                    }
-                }
-            }
-        ],
-        "usermeta": {
-            "axis_uuid": "e02813ac-4d6a-5ec4-80b3-0e83933bf9be"
+            ]
         }
-    }
-]
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [0.0, 512.0],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [512.0, 0.0],
+            "range": "height"
+        },
+        {
+            "name": "color_5c93128c-3760-4270-9bde-ce76042e0ec4",
+            "type": "linear",
+            "domain": {
+                "data": "blobs_multiscale_image_699e2f11-1b9a-4664-a024-4927881d0e82",
+                "field": "channel_0"
+            },
+            "range": {
+                "scheme": "red",
+                "count": 256
+            }
+        },
+        {
+            "name": "color_2cf38f71-902c-4bfb-97c9-be49c9ef8037",
+            "type": "linear",
+            "domain": {
+                "data": "blobs_multiscale_image_699e2f11-1b9a-4664-a024-4927881d0e82",
+                "field": "channel_1"
+            },
+            "range": {
+                "scheme": "lime",
+                "count": 256
+            }
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 200, 400],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 100, 200, 300, 400, 500],
+            "zindex": 1.5
+        }
+    ],
+    "marks": [
+        {
+            "type": "raster_image",
+            "from": {
+                "data": "blobs_multiscale_image_699e2f11-1b9a-4664-a024-4927881d0e82"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "opacity": {
+                        "value": 1.0
+                    },
+                    "fill": [
+                        {
+                            "scale": "color_5c93128c-3760-4270-9bde-ce76042e0ec4",
+                            "field": "channel_0"
+                        },
+                        {
+                            "scale": "color_2cf38f71-902c-4bfb-97c9-be49c9ef8037",
+                            "field": "channel_1"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}
