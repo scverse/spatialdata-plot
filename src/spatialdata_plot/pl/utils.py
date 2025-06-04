@@ -335,6 +335,10 @@ def _get_collection_shape(
     """
     Get a PatchCollection for rendering given geometries with specified colors and outlines.
 
+    NOTE: this is meant for either getting the outlines or the shapes themselves, not both!
+    If outline_alpha > 0.0 is given, the size is increased further by half the outline linewidth to ensure that the
+    outline can be rendered without overlapping the shape.
+
     Args:
     - shapes (list[GeoDataFrame]): List of geometrical shapes.
     - c: Color parameter.
@@ -380,11 +384,11 @@ def _get_collection_shape(
             c = cmap(norm(c))
 
     fill_c = ColorConverter().to_rgba_array(c)
-    fill_c[..., -1] *= render_params.fill_alpha
+    fill_c[..., -1] *= fill_alpha
 
     if render_params.outline_params.outline:
         outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
-        outline_c[..., -1] = render_params.outline_alpha
+        outline_c[..., -1] = outline_alpha
         outline_c = outline_c.tolist()
     else:
         outline_c = [None]
@@ -414,7 +418,37 @@ def _get_collection_shape(
     def _process_polygon(row: pd.Series, s: float) -> dict[str, Any]:
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
-        scaled_coords = (centroid + (coords - centroid) * s).tolist()
+        scaled_vectors = (coords - centroid) * s
+        # if outline_alpha > 0.0:
+        #     # NOTE: this only works with 2D coordinates
+        #     # should scale shape slightly larger so that outline doesn't overlap with shape later
+        #     half_lw = 0.5 * render_params.outline_params.linewidth
+
+        #     # TODO: adapt shift depending on angle???
+        #     # def sin_half_angle(p_prev, p_curr, p_next):
+        #     #     # vectors to previous and next point
+        #     #     v1 = np.array(p_prev) - np.array(p_curr)
+        #     #     v2 = np.array(p_next) - np.array(p_curr)
+        #     #     v1_unit = v1 / np.linalg.norm(v1)
+        #     #     v2_unit = v2 / np.linalg.norm(v2)
+        #     #     cos_alpha = np.clip(np.dot(v1_unit, v2_unit), -1.0, 1.0)
+        #     #     alpha = np.arccos(cos_alpha)
+        #     #     return np.sin(alpha / 2)
+
+        #     # sin_of_half_angles = [
+        #     #     sin_half_angle(coords[:-1][i - 1], coords[i], coords[(i + 1)]) for i in range(len(coords) - 1)
+        #     # ]
+        #     # sin_of_half_angles.append(sin_of_half_angles[0])
+        #     # sin_of_half_angles = np.array(sin_of_half_angles)
+        #     # shift_by = render_params.outline_params.linewidth * 0.5 * (1 / sin_of_half_angles)
+
+        #     y_by_x = scaled_vectors[:, 1] / scaled_vectors[:, 0]
+        #     x_sign = scaled_vectors[:, 0] / np.abs(scaled_vectors[:, 0])
+        #     # new_x = scaled_vectors[:, 0] + x_sign * (shift_by / np.sqrt(1 + y_by_x**2))
+        #     new_x = scaled_vectors[:, 0] + x_sign * (half_lw / np.sqrt(1 + y_by_x**2))
+        #     new_y = y_by_x * new_x
+        #     scaled_vectors = np.stack([new_x, new_y], axis=1)
+        scaled_coords = (centroid + scaled_vectors).tolist()
         return {
             **row.to_dict(),
             "geometry": mpatches.Polygon(scaled_coords, closed=True),
@@ -429,6 +463,8 @@ def _get_collection_shape(
         return [{**row_dict, "geometry": m} for m in mp]
 
     def _process_point(row: pd.Series, s: float) -> dict[str, Any]:
+        # added_size_for_outline = 0 if outline_alpha == 0.0 else 0.5 * render_params.outline_params.linewidth
+        # (row["geometry"].x, row["geometry"].y), radius=row["radius"] * s + added_size_for_outline
         return {
             **row.to_dict(),
             "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * s),
@@ -2086,7 +2122,7 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
@@ -2243,7 +2279,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2307,7 +2343,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
