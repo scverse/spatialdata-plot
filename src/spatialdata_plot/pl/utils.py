@@ -2006,7 +2006,7 @@ def _validate_col_for_column_table(
             table_name = next(iter(tables))
             if len(tables) > 1:
                 warnings.warn(
-                    f"Multiple tables contain color column, using {table_name}",
+                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -2042,25 +2042,49 @@ def _validate_image_render_params(
         element_params[el] = {}
         spatial_element = param_dict["sdata"][el]
 
+        # robustly get channel names from image or multiscale image
         spatial_element_ch = (
-            spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
+            spatial_element.c.values if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c.values
         )
-        if (channel := param_dict["channel"]) is not None and (
-            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
-            or all(ch in spatial_element_ch for ch in channel)
-        ):
+        channel = param_dict["channel"]
+        if channel is not None:
+            # Normalize channel to always be a list of str or a list of int
+            if isinstance(channel, str):
+                channel = [channel]
+
+            if isinstance(channel, int):
+                channel = [channel]
+
+            # If channel is a list, ensure all elements are the same type
+            if not (isinstance(channel, list) and channel and all(isinstance(c, type(channel[0])) for c in channel)):
+                raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
+
+            invalid = [c for c in channel if c not in spatial_element_ch]
+            if invalid:
+                raise ValueError(
+                    f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. Valid choices are: {spatial_element_ch}"
+                )
             element_params[el]["channel"] = channel
         else:
             element_params[el]["channel"] = None
 
         element_params[el]["alpha"] = param_dict["alpha"]
 
-        if isinstance(palette := param_dict["palette"], list):
+        palette = param_dict["palette"]
+        assert isinstance(palette, list | type(None))  # if present, was converted to list, just to make sure
+
+        if isinstance(palette, list):
+            # case A: single palette for all channels
             if len(palette) == 1:
                 palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
-                palette = None
+            # case B: one palette per channel (either given or derived from channel length)
+            channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
+            if channels_to_use is not None and len(palette) != len(channels_to_use):
+                raise ValueError(
+                    f"Palette length ({len(palette)}) does not match channel length "
+                    f"({', '.join(str(c) for c in channels_to_use)})."
+                )
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
@@ -2086,7 +2110,7 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
@@ -2243,7 +2267,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2307,7 +2331,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
