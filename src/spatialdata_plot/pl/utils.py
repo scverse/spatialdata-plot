@@ -620,8 +620,9 @@ def _set_outline(
         if isinstance(outline_width, int | float):
             # inner outline default width: 0.5
             outline_width = (outline_width, 0.5)
-    elif isinstance(outline_color, int | float):
+    else:
         # single outline
+        assert isinstance(outline_width, int | float), "outline_width is not int | float"  # shut up mypy
         outline_width = (outline_width, 0.0)
         outline_color = (outline_color, "white")
 
