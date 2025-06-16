@@ -161,8 +161,8 @@ class PlotAccessor:
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
-        outline_width: float | int = 1.5,
-        outline_color: str | list[float] = "#000000",
+        outline_width: float | int | tuple[float | int, float | int] = 1.5,
+        outline_color: str | list[float] | tuple[str | list[float], str | list[float]] = "#000000",
         outline_alpha: float | int = 0.0,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -207,13 +207,15 @@ class PlotAccessor:
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline_width : float | int, default 1.5
-            Width of the border.
+        outline_width : float | int | tuple[float | int, float | int], default 1.5
+            Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
+            In that case, and if < 2 outline_colors are specified, the default color (`outline_color`, "white") is used.
         outline_color : str | list[float], default "#000000"
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
             "#000000ff", the last two positions are ignored, since the alpha of the outlines is solely controlled by
-            `outline_alpha`.
+            `outline_alpha`. If 2 values are given (tuple), 2 borders are shown with these colors (outer & inner).
+            In that case, and if < 2 outline widths are specified, the default width (`outline_width`, 0.5) is used.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of shapes. Invisible by default.
         cmap : Colormap | str | None, optional
@@ -247,6 +249,8 @@ class PlotAccessor:
         - Empty geometries will be removed at the time of plotting.
         - An `outline_width` of 0.0 leads to no border being plotted.
         - When passing a color-like to 'color', this has precendence over the potential existence as a column name.
+        - If a double outline is rendered, the alpha of the inner and outer border cannot be set individually. The value
+          of `outline_alpha` is always applied to both.
 
         Returns
         -------

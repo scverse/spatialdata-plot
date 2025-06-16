@@ -48,6 +48,9 @@ class OutlineParams:
     outline: bool
     outline_color: str | list[float]
     linewidth: float
+    inner_outline: bool = False
+    inner_outline_color: str | list[float] = "#FFFFFF"
+    inner_outline_linewidth: float = 0.5
 
 
 @dataclass

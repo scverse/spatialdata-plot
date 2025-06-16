@@ -330,6 +330,8 @@ def _get_collection_shape(
     render_params: ShapesRenderParams,
     fill_alpha: None | float = None,
     outline_alpha: None | float = None,
+    outline_color: None | str | list[float] = "white",
+    linewidth: float = 0.0,
     **kwargs: Any,
 ) -> PatchCollection:
     """
@@ -346,6 +348,8 @@ def _get_collection_shape(
     - norm: Normalization for the color map.
     - fill_alpha (float, optional): Opacity for the fill color.
     - outline_alpha (float, optional): Opacity for the outline.
+    - outline_color (optional): Color for the outline.
+    - linewidth (float, optional): Width for the outline.
     - **kwargs: Additional keyword arguments.
 
     Returns
@@ -387,7 +391,7 @@ def _get_collection_shape(
     fill_c[..., -1] *= fill_alpha
 
     if render_params.outline_params.outline:
-        outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
+        outline_c = ColorConverter().to_rgba_array(outline_color)
         outline_c[..., -1] = outline_alpha
         outline_c = outline_c.tolist()
     else:
@@ -424,7 +428,7 @@ def _get_collection_shape(
         #     # should scale shape slightly larger so that outline doesn't overlap with shape later
         #     half_lw = 0.5 * render_params.outline_params.linewidth
 
-        #     # TODO: adapt shift depending on angle???
+        #     # adapt shift depending on angle
         #     # def sin_half_angle(p_prev, p_curr, p_next):
         #     #     # vectors to previous and next point
         #     #     v1 = np.array(p_prev) - np.array(p_curr)
@@ -495,7 +499,7 @@ def _get_collection_shape(
     return PatchCollection(
         patches["geometry"].values.tolist(),
         snap=False,
-        lw=render_params.outline_params.linewidth,
+        lw=linewidth,
         facecolor=patches["fill_c"],
         edgecolor=None if all(outline is None for outline in outline_c) else outline_c,
         **kwargs,
@@ -579,27 +583,75 @@ def _prepare_cmap_norm(
 
 def _set_outline(
     outline: bool = False,
-    outline_width: float = 1.5,
-    outline_color: str | list[float] = "#0000000ff",  # black, white
+    outline_width: int | float | tuple[float | int, float | int] = 1.5,
+    outline_color: str | list[float] | tuple[str | list[float], str | list[float]] = "#000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    if not isinstance(outline_width, int | float):
-        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `int` or `float`.")
-    if outline_width == 0.0:
-        outline = False
-    if outline_width < 0.0:
-        logger.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1) * outline_width}")
-        outline_width *= -1
+    """Create OutlineParams object for shapes, including possibility of double outline."""
+    # make sure outline_width and outline_color both have length 2
+    if isinstance(outline_width, tuple):
+        if len(outline_width) == 1:
+            # interpreted as outer outline
+            if isinstance(outline_color, tuple) and len(outline_color) >= 2:
+                outline_width = (outline_width[0], 0.5)  # default inner outline width
+            else:
+                outline_width = (outline_width[0], 0.0)
+        elif len(outline_width) > 2:
+            # only using first to positions
+            logger.warning(
+                f"Tuple of length {len(outline_width)} was passed for outline_width, only first two positions are used"
+                " since more than 2 outlines are not supported!"
+            )
+            outline_width = (outline_width[0], outline_width[1])
+        if isinstance(outline_color, str | list):
+            # inner outline default color: white
+            outline_color = (outline_color, "#ffffffff")
+    if isinstance(outline_color, tuple):
+        if len(outline_color) == 1:
+            # interpreted as outer outline
+            outline_color = (outline_color[0], "white")
+        elif len(outline_color) > 2:
+            # only using first to positions
+            logger.warning(
+                f"Tuple of length {len(outline_color)} was passed for outline_color, only first two positions are used"
+                " since more than 2 outlines are not supported!"
+            )
+            outline_color = (outline_color[0], outline_color[1])
+        if isinstance(outline_width, int | float):
+            # inner outline default width: 0.5
+            outline_width = (outline_width, 0.5)
+    elif isinstance(outline_color, int | float):
+        # single outline
+        outline_width = (outline_width, 0.0)
+        outline_color = (outline_color, "white")
+
+    assert isinstance(outline_color, tuple), "outline_color is not a tuple"  # shut up mypy
+    assert isinstance(outline_width, tuple), "outline_width is not a tuple"
+
+    for ow in outline_width:
+        if not isinstance(ow, int | float):
+            raise TypeError(f"Invalid type of `outline_width`: {type(ow)}, expected `int` or `float`.")
 
     # the default black and white colors can be changed using the contour_config parameter
-    if len(outline_color) in {3, 4} and all(isinstance(c, float) for c in outline_color):
-        outline_color = matplotlib.colors.to_hex(outline_color)
+    if len(outline_color[0]) in {3, 4} and all(isinstance(c, float) for c in outline_color[0]):
+        outline_color = (matplotlib.colors.to_hex(outline_color[0]), outline_color[1])
+    if len(outline_color[1]) in {3, 4} and all(isinstance(c, float) for c in outline_color[1]):
+        outline_color = (outline_color[0], matplotlib.colors.to_hex(outline_color[1]))
+
+    # handle possible linewidths of 0.0
+    if np.all(np.array(outline_width) == 0.0):
+        outline = False
+    elif outline_width[0] == 0.0:
+        # only inner outline => is treated as outer outline
+        outline_width = (outline_width[1], 0.0)
+        outline_color = (outline_color[1], "white")
+    inner_outline = outline_width[1] > 0.0
 
     if outline:
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, outline_color, outline_width)
+    return OutlineParams(outline, outline_color[0], outline_width[0], inner_outline, outline_color[1], outline_width[1])
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
@@ -1655,9 +1707,17 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["col_for_color"] = None
 
     if outline_width := param_dict.get("outline_width"):
-        if not isinstance(outline_width, float | int):
-            raise TypeError("Parameter 'outline_width' must be numeric.")
-        if outline_width < 0:
+        # outline_width only exists for shapes at the moment
+        if isinstance(outline_width, tuple):
+            for ow in outline_width:
+                if isinstance(ow, float | int):
+                    if ow < 0:
+                        raise ValueError("Parameter 'outline_width' cannot contain negative values.")
+                else:
+                    raise TypeError("Parameter 'outline_width' must contain only numerics when it is a tuple.")
+        elif not isinstance(outline_width, float | int):
+            raise TypeError("Parameter 'outline_width' must be numeric or a tuple of two numerics.")
+        if isinstance(outline_width, float | int) and outline_width < 0:
             raise ValueError("Parameter 'outline_width' cannot be negative.")
 
     if (outline_alpha := param_dict.get("outline_alpha")) and (
@@ -1948,8 +2008,8 @@ def _validate_shape_render_params(
     palette: list[str] | str | None,
     color: list[str] | str | None,
     na_color: ColorLike | None,
-    outline_width: float | int,
-    outline_color: str | list[float],
+    outline_width: float | int | tuple[float | int, float | int],
+    outline_color: str | list[float] | tuple[str | list[float], str | list[float]],
     outline_alpha: float | int,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
