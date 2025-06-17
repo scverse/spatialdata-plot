@@ -607,7 +607,7 @@ def _set_outline(
             # inner outline default color: white
             outline_color = (outline_color, "#ffffffff")
     if isinstance(outline_color, tuple):
-        if len(outline_color) == 4 and all(isinstance(i, float) for i in outline_color):
+        if (len(outline_color) == 4 or len(outline_color) == 3) and all(isinstance(i, float) for i in outline_color):
             # may be an RGBA color tuple
             outline_color = (outline_color, "#ffffffff")
         elif len(outline_color) == 1:
