@@ -607,9 +607,12 @@ def _set_outline(
             # inner outline default color: white
             outline_color = (outline_color, "#ffffffff")
     if isinstance(outline_color, tuple):
-        if len(outline_color) == 1:
+        if len(outline_color) == 4 and all(isinstance(i, float) for i in outline_color):
+            # may be an RGBA color tuple
+            outline_color = (outline_color, "#ffffffff")
+        elif len(outline_color) == 1:
             # interpreted as outer outline
-            outline_color = (outline_color[0], "white")
+            outline_color = (outline_color[0], "#ffffffff")
         elif len(outline_color) > 2:
             # only using first to positions
             logger.warning(
