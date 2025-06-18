@@ -423,35 +423,6 @@ def _get_collection_shape(
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
         scaled_vectors = (coords - centroid) * s
-        # if outline_alpha > 0.0:
-        #     # NOTE: this only works with 2D coordinates
-        #     # should scale shape slightly larger so that outline doesn't overlap with shape later
-        #     half_lw = 0.5 * render_params.outline_params.linewidth
-
-        #     # adapt shift depending on angle
-        #     # def sin_half_angle(p_prev, p_curr, p_next):
-        #     #     # vectors to previous and next point
-        #     #     v1 = np.array(p_prev) - np.array(p_curr)
-        #     #     v2 = np.array(p_next) - np.array(p_curr)
-        #     #     v1_unit = v1 / np.linalg.norm(v1)
-        #     #     v2_unit = v2 / np.linalg.norm(v2)
-        #     #     cos_alpha = np.clip(np.dot(v1_unit, v2_unit), -1.0, 1.0)
-        #     #     alpha = np.arccos(cos_alpha)
-        #     #     return np.sin(alpha / 2)
-
-        #     # sin_of_half_angles = [
-        #     #     sin_half_angle(coords[:-1][i - 1], coords[i], coords[(i + 1)]) for i in range(len(coords) - 1)
-        #     # ]
-        #     # sin_of_half_angles.append(sin_of_half_angles[0])
-        #     # sin_of_half_angles = np.array(sin_of_half_angles)
-        #     # shift_by = render_params.outline_params.linewidth * 0.5 * (1 / sin_of_half_angles)
-
-        #     y_by_x = scaled_vectors[:, 1] / scaled_vectors[:, 0]
-        #     x_sign = scaled_vectors[:, 0] / np.abs(scaled_vectors[:, 0])
-        #     # new_x = scaled_vectors[:, 0] + x_sign * (shift_by / np.sqrt(1 + y_by_x**2))
-        #     new_x = scaled_vectors[:, 0] + x_sign * (half_lw / np.sqrt(1 + y_by_x**2))
-        #     new_y = y_by_x * new_x
-        #     scaled_vectors = np.stack([new_x, new_y], axis=1)
         scaled_coords = (centroid + scaled_vectors).tolist()
         return {
             **row.to_dict(),
@@ -467,8 +438,6 @@ def _get_collection_shape(
         return [{**row_dict, "geometry": m} for m in mp]
 
     def _process_point(row: pd.Series, s: float) -> dict[str, Any]:
-        # added_size_for_outline = 0 if outline_alpha == 0.0 else 0.5 * render_params.outline_params.linewidth
-        # (row["geometry"].x, row["geometry"].y), radius=row["radius"] * s + added_size_for_outline
         return {
             **row.to_dict(),
             "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * s),
