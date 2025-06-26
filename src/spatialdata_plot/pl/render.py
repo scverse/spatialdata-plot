@@ -35,6 +35,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
+    _convert_shapes,
     _create_image_from_datashader_result,
     _datashader_aggregate_with_function,
     _datashader_map_aggregate_to_color,
@@ -160,6 +161,12 @@ def _render_shapes(
     trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+    # convert shapes if necessary
+    if render_params.shape is not None:
+        current_type = shapes["geometry"].type
+        if not (render_params.shape == "circle" and (current_type == "Point").all()):
+            logger.info(f"Converting {shapes.shape[0]} shapes to {render_params.shape}.")
+            shapes = _convert_shapes(shapes, render_params.shape)
 
     # Determine which method to use for rendering
     method = render_params.method
@@ -188,9 +195,7 @@ def _render_shapes(
         # apply transformations to the individual points
         element_trans = get_transformation(sdata_filt.shapes[element], to_coordinate_system=coordinate_system)
         tm = _get_transformation_matrix_for_datashader(element_trans)
-        transformed_element = sdata_filt.shapes[element].transform(
-            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
-        )
+        transformed_element = shapes.transform(lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2])
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(
                 data=sdata_filt.shapes[element].drop("geometry", axis=1),

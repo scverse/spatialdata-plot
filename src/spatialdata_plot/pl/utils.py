@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import warnings
 from collections import OrderedDict
@@ -51,6 +52,7 @@ from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
+from scipy.spatial import ConvexHull
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -1709,6 +1711,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
 
+    if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
+        if not isinstance(shape, str):
+            raise TypeError("Parameter 'shape' must be a String from ['circle', 'hex', 'square'] if not None.")
+        if shape not in ["circle", "hex", "square"]:
+            raise ValueError(
+                f"'{shape}' is not supported for 'shape', please choose from[None, 'circle', 'hex', 'square']."
+            )
+
     table_name = param_dict.get("table_name")
     table_layer = param_dict.get("table_layer")
     if table_name and not isinstance(param_dict["table_name"], str):
@@ -1920,6 +1930,7 @@ def _validate_shape_render_params(
     scale: float | int,
     table_name: str | None,
     table_layer: str | None,
+    shape: Literal["circle", "hex", "square"] | None,
     method: str | None,
     ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
@@ -1939,6 +1950,7 @@ def _validate_shape_render_params(
         "scale": scale,
         "table_name": table_name,
         "table_layer": table_layer,
+        "shape": shape,
         "method": method,
         "ds_reduction": ds_reduction,
     }
@@ -1959,6 +1971,7 @@ def _validate_shape_render_params(
         element_params[el]["norm"] = param_dict["norm"]
         element_params[el]["scale"] = param_dict["scale"]
         element_params[el]["table_layer"] = param_dict["table_layer"]
+        element_params[el]["shape"] = param_dict["shape"]
 
         element_params[el]["color"] = param_dict["color"]
 
@@ -2086,7 +2099,7 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
@@ -2243,7 +2256,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2307,7 +2320,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2478,3 +2491,100 @@ def _hex_no_alpha(hex: str) -> str:
         return "#" + hex_digits[:6]
 
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
+
+
+def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
+    """Convert the shapes stored in a GeoDataFrame (geometry column) to the target_shape."""
+
+    # define individual conversion methods
+    def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+        vertices = [
+            (center.x + radius * math.cos(math.radians(angle)), center.y + radius * math.sin(math.radians(angle)))
+            for angle in range(0, 360, 60)
+        ]
+        return shapely.Polygon(vertices), None
+
+    def _circle_to_square(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+        vertices = [
+            (center.x + radius * math.cos(math.radians(angle)), center.y + radius * math.sin(math.radians(angle)))
+            for angle in range(45, 360, 90)
+        ]
+        return shapely.Polygon(vertices), None
+
+    def _circle_to_circle(center: shapely.Point, radius: float) -> tuple[shapely.Point, float]:
+        return center, radius
+
+    def _polygon_to_hexagon(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _polygon_to_circle(polygon)
+        return _circle_to_hexagon(center, radius)
+
+    def _polygon_to_square(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _polygon_to_circle(polygon)
+        return _circle_to_square(center, radius)
+
+    def _polygon_to_circle(polygon: shapely.Polygon) -> tuple[shapely.Point, float]:
+        coords = np.array(polygon.exterior.coords)
+        circle_points = coords[ConvexHull(coords).vertices]
+        center = np.mean(circle_points, axis=0)
+        radius = max(np.linalg.norm(p - center) for p in circle_points)
+        assert isinstance(radius, float)  # shut up mypy
+        return shapely.Point(center), radius
+
+    def _multipolygon_to_hexagon(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _multipolygon_to_circle(multipolygon)
+        return _circle_to_hexagon(center, radius)
+
+    def _multipolygon_to_square(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _multipolygon_to_circle(multipolygon)
+        return _circle_to_square(center, radius)
+
+    def _multipolygon_to_circle(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Point, float]:
+        coords = []
+        for polygon in multipolygon.geoms:
+            coords.extend(polygon.exterior.coords)
+        points = np.array(coords)
+        circle_points = points[ConvexHull(points).vertices]
+        center = np.mean(circle_points, axis=0)
+        radius = max(np.linalg.norm(p - center) for p in circle_points)
+        assert isinstance(radius, float)  # shut up mypy
+        return shapely.Point(center), radius
+
+    # define dict with all conversion methods
+    if target_shape == "circle":
+        conversion_methods = {
+            "Point": _circle_to_circle,
+            "Polygon": _polygon_to_circle,
+            "Multipolygon": _multipolygon_to_circle,
+        }
+        pass
+    elif target_shape == "hex":
+        conversion_methods = {
+            "Point": _circle_to_hexagon,
+            "Polygon": _polygon_to_hexagon,
+            "Multipolygon": _multipolygon_to_hexagon,
+        }
+    else:
+        conversion_methods = {
+            "Point": _circle_to_square,
+            "Polygon": _polygon_to_square,
+            "Multipolygon": _multipolygon_to_square,
+        }
+
+    # convert every shape
+    for i in range(shapes.shape[0]):
+        if shapes["geometry"][i].type == "Point":
+            converted, radius = conversion_methods["Point"](shapes["geometry"][i], shapes["radius"][i])  # type: ignore
+        elif shapes["geometry"][i].type == "Polygon":
+            converted, radius = conversion_methods["Polygon"](shapes["geometry"][i])  # type: ignore
+        elif shapes["geometry"][i].type == "MultiPolygon":
+            converted, radius = conversion_methods["Multipolygon"](shapes["geometry"][i])  # type: ignore
+        else:
+            error_type = shapes["geometry"][i].type
+            raise ValueError(f"Converting shape {error_type} to {target_shape} is not supported.")
+        shapes["geometry"][i] = converted
+        if radius is not None:
+            if "radius" not in shapes.columns:
+                shapes["radius"] = np.nan
+            shapes["radius"][i] = radius
+
+    return shapes

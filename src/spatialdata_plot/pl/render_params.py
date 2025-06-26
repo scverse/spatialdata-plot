@@ -90,6 +90,7 @@ class ShapesRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
+    shape: Literal["circle", "hex", "square"] | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
 
 
