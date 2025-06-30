@@ -2363,15 +2363,15 @@ def _prepare_transformation(
 
 def _get_datashader_trans_matrix_of_single_element(
     trans: Identity | Scale | Affine | MapAxis | Translation,
-) -> npt.NDArray[Any]:
+) -> ArrayLike:
     flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-    tm: npt.NDArray[Any] = trans.to_affine_matrix(("x", "y"), ("x", "y"))
+    tm: ArrayLike = trans.to_affine_matrix(("x", "y"), ("x", "y"))
 
     if isinstance(trans, Identity):
         return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     if isinstance(trans, (Scale | Affine)):
         # idea: "flip the y-axis", apply transformation, flip back
-        flip_and_transform: npt.NDArray[Any] = flip_matrix @ tm @ flip_matrix
+        flip_and_transform: ArrayLike = flip_matrix @ tm @ flip_matrix
         return flip_and_transform
     if isinstance(trans, MapAxis):
         # no flipping needed
@@ -2382,7 +2382,7 @@ def _get_datashader_trans_matrix_of_single_element(
 
 def _get_transformation_matrix_for_datashader(
     trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
-) -> npt.NDArray[Any]:
+) -> ArrayLike:
     """Get the affine matrix needed to transform shapes for rendering with datashader."""
     if isinstance(trans, SDSequence):
         tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
@@ -2545,7 +2545,7 @@ def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
         points = np.array(coords)
         circle_points = points[ConvexHull(points).vertices]
         center = np.mean(circle_points, axis=0)
-        radius = max(np.linalg.norm(p - center) for p in circle_points)
+        radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
         assert isinstance(radius, float)  # shut up mypy
         return shapely.Point(center), radius
 
