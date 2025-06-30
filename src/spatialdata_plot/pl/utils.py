@@ -2526,7 +2526,7 @@ def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
         coords = np.array(polygon.exterior.coords)
         circle_points = coords[ConvexHull(coords).vertices]
         center = np.mean(circle_points, axis=0)
-        radius = max(np.linalg.norm(p - center) for p in circle_points)
+        radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
         assert isinstance(radius, float)  # shut up mypy
         return shapely.Point(center), radius
 
