@@ -166,7 +166,10 @@ def _render_shapes(
         current_type = shapes["geometry"].type
         if not (render_params.shape == "circle" and (current_type == "Point").all()):
             logger.info(f"Converting {shapes.shape[0]} shapes to {render_params.shape}.")
-            shapes = _convert_shapes(shapes, render_params.shape)
+            max_extent = np.max(
+                [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
+            )
+            shapes = _convert_shapes(shapes, render_params.shape, max_extent)
 
     # Determine which method to use for rendering
     method = render_params.method

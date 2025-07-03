@@ -2493,8 +2493,16 @@ def _hex_no_alpha(hex: str) -> str:
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
 
 
-def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
+def _convert_shapes(
+    shapes: GeoDataFrame, target_shape: str, max_extent: float, warn_above_extent_fraction: float = 0.5
+) -> GeoDataFrame:
     """Convert the shapes stored in a GeoDataFrame (geometry column) to the target_shape."""
+    # NOTE: possible follow-up: when converting equally sized shapes to hex, automatically scale resulting hexagons
+    # so that they are perfectly adjacent to each other
+
+    if warn_above_extent_fraction < 0.0 or warn_above_extent_fraction > 1.0:
+        warn_above_extent_fraction = 0.5  # set to default if the value is outside [0, 1]
+    warn_shape_size = False
 
     # define individual conversion methods
     def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
@@ -2528,6 +2536,9 @@ def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
         center = np.mean(circle_points, axis=0)
         radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
         assert isinstance(radius, float)  # shut up mypy
+        if 2 * radius > max_extent * warn_above_extent_fraction:
+            nonlocal warn_shape_size
+            warn_shape_size = True
         return shapely.Point(center), radius
 
     def _multipolygon_to_hexagon(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
@@ -2547,6 +2558,9 @@ def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
         center = np.mean(circle_points, axis=0)
         radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
         assert isinstance(radius, float)  # shut up mypy
+        if 2 * radius > max_extent * warn_above_extent_fraction:
+            nonlocal warn_shape_size
+            warn_shape_size = True
         return shapely.Point(center), radius
 
     # define dict with all conversion methods
@@ -2586,5 +2600,12 @@ def _convert_shapes(shapes: GeoDataFrame, target_shape: str) -> GeoDataFrame:
             if "radius" not in shapes.columns:
                 shapes["radius"] = np.nan
             shapes["radius"][i] = radius
+
+    if warn_shape_size:
+        logger.info(
+            f"When converting the shapes, the size of at least one target shape extends "
+            f"{warn_above_extent_fraction * 100}% of the original total bound of the shapes. The conversion"
+            " might not give satisfying results in this scenario."
+        )
 
     return shapes
