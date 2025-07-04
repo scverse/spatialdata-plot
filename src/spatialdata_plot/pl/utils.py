@@ -337,10 +337,6 @@ def _get_collection_shape(
     """
     Get a PatchCollection for rendering given geometries with specified colors and outlines.
 
-    NOTE: this is meant for either getting the outlines or the shapes themselves, not both!
-    If outline_alpha > 0.0 is given, the size is increased further by half the outline linewidth to ensure that the
-    outline can be rendered without overlapping the shape.
-
     Args:
     - shapes (list[GeoDataFrame]): List of geometrical shapes.
     - c: Color parameter.
@@ -2547,3 +2543,9 @@ def _hex_no_alpha(hex: str) -> str:
         return "#" + hex_digits[:6]
 
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
+
+
+def _convert_alpha_to_datashader_range(alpha: float) -> float:
+    """Convert alpha from the range [0, 1] to the range [0, 255] used in datashader."""
+    # prevent a value of 255, bc that led to fully colored test plots instead of just colored points/shapes
+    return min([254, alpha * 255])
