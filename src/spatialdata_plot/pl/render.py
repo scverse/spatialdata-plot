@@ -391,7 +391,7 @@ def _render_shapes(
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
-                c=np.array(["white"]),  # invisible bc fill_alpha=0
+                c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
                 render_params=render_params,
                 rasterized=sc_settings._vector_friendly,
                 cmap=None,
@@ -413,7 +413,7 @@ def _render_shapes(
                 _cax = _get_collection_shape(
                     shapes=shapes,
                     s=render_params.scale,
-                    c=np.array(["white"]),  # invisible bc fill_alpha=0
+                    c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
                     render_params=render_params,
                     rasterized=sc_settings._vector_friendly,
                     cmap=None,

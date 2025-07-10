@@ -2549,3 +2549,61 @@ def _convert_alpha_to_datashader_range(alpha: float) -> float:
     """Convert alpha from the range [0, 1] to the range [0, 255] used in datashader."""
     # prevent a value of 255, bc that led to fully colored test plots instead of just colored points/shapes
     return min([254, alpha * 255])
+
+
+class ColorHandler:
+    """Validate, parse and store a single color."""
+
+    color_hex: str | None
+
+    def __init__(self, color: ColorLike | list[float] | None):
+        """Validate input and store as hex color.
+
+        `color` can be
+        - str: hex representation, named color or "default"
+        - None (values won't be shown)
+        - tuple[float, ...] | list[float]: RGB(A) array (all values within [0, 1]!)
+        """
+        if color is None:
+            self.color_hex = None
+        elif isinstance(color, str):
+            # already hex
+            if color.startswith("#"):
+                if len(color) not in [7, 9]:
+                    raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
+                self.color_hex = color.lower()
+                if len(self.color_hex) == 7:
+                    self.color_hex += "ff"  # add alpha of 1.0 if needed
+                if not all(c in "0123456789abcdef" for c in self.color_hex[1:]):
+                    raise ValueError("Invalid hex color: contains non-hex characters")
+            # "default" should refer to lightgray
+            elif color == "default":
+                self.color_hex = to_hex("lightgray", keep_alpha=True)
+            # named color
+            else:
+                # matplotlib raises ValueError in case of invalid color name
+                self.color_hex = to_hex(color, keep_alpha=True)
+        elif isinstance(color, list[float] | tuple[float, ...]):
+            if len(color) < 3:
+                raise ValueError(f"Color `{color}` can't be interpreted as RGB(A) array, needs at least 3 values.")
+            # get first 3-4 values
+            r, g, b = color[0], color[1], color[2]
+            a = 1.0 if len(color) == 3 else color[3]
+            if any(np.array([r, g, b, a]) > 1) or any(np.array([r, g, b, a]) < 0):
+                raise ValueError(f"Invalid color `{color}`, all values in RGB(A) array must be within [0.0, 1.0].")
+            self.color_hex = colors.rgb2hex((r, g, b, a), keep_alpha=True)
+        else:
+            raise TypeError(
+                f"Invalid type `{type(color)}` for a color, expecting str | None | tuple[float, ...] | list[float]."
+            )
+
+    def get_hex(self) -> str | None:
+        """Get color value as '#RRGGBBAA'."""
+        return self.color_hex
+
+    def get_hex_without_alpha(self) -> str | None:
+        """Get color value as '#RRGGBB'."""
+        if isinstance(self.color_hex, str):
+            # return hex after stripping the last 2 positions (=alpha)
+            return self.color_hex[0:7]
+        return self.color_hex
