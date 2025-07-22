@@ -562,3 +562,25 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["circle_table"].layers["normalized"] = RNG.random((nrows, ncols))
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
+
+    def test_plot_can_render_shapes_with_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes("blobs_circles", outline_alpha=1.0, outline_width=(10.0, 5.0)).pl.show()
+
+    def test_plot_can_render_shapes_with_colored_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", outline_alpha=1.0, outline_width=(10.0, 5.0), outline_color=("purple", "orange")
+        ).pl.show()
+
+    def test_plot_datashader_can_render_shapes_with_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", outline_alpha=1.0, outline_width=(10.0, 5.0), method="datashader"
+        ).pl.show()
+
+    def test_plot_datashader_can_render_shapes_with_colored_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons",
+            outline_alpha=1.0,
+            outline_width=(10.0, 5.0),
+            outline_color=("purple", "orange"),
+            method="datashader",
+        ).pl.show()

@@ -35,6 +35,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
+    _convert_alpha_to_datashader_range,
     _create_image_from_datashader_result,
     _datashader_aggregate_with_function,
     _datashader_map_aggregate_to_color,
@@ -235,12 +236,20 @@ def _render_shapes(
         else:
             agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
         # render outlines if needed
-        if (render_outlines := render_params.outline_alpha) > 0:
+        render_outlines = render_params.outline_alpha > 0
+        if render_outlines:
             agg_outlines = cvs.line(
                 transformed_element,
                 geometry="geometry",
                 line_width=render_params.outline_params.linewidth,
             )
+            # if necessary, compute aggregate for inner outlines
+            if render_params.outline_params.inner_outline:
+                agg_inner_outlines = cvs.line(
+                    transformed_element,
+                    geometry="geometry",
+                    line_width=render_params.outline_params.inner_outline_linewidth,
+                )
 
         ds_span = None
         if norm.vmin is not None or norm.vmax is not None:
@@ -275,8 +284,8 @@ def _render_shapes(
                 agg,
                 cmap=ds_cmap,
                 color_key=color_key,
-                min_alpha=np.min([254, render_params.fill_alpha * 255]),
-            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+                min_alpha=_convert_alpha_to_datashader_range(render_params.fill_alpha),
+            )
         elif aggregate_with_reduction is not None:  # to shut up mypy
             ds_cmap = render_params.cmap_params.cmap
             # in case all elements have the same value X: we render them using cmap(0.0),
@@ -292,27 +301,64 @@ def _render_shapes(
             ds_result = _datashader_map_aggregate_to_color(
                 agg,
                 cmap=ds_cmap,
-                min_alpha=np.min([254, render_params.fill_alpha * 255]),
+                min_alpha=_convert_alpha_to_datashader_range(render_params.fill_alpha),
                 span=ds_span,
                 clip=norm.clip,
-            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+            )
 
         # shade outlines if needed
-        outline_color = render_params.outline_params.outline_color
-        if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
-            logger.info(
-                "alpha component of given RGBA value for outline color is discarded, because outline_alpha"
-                " takes precedent."
-            )
-            outline_color = outline_color[:-2]
-
         if render_outlines:
+            # outer outlines
+            outline_color = render_params.outline_params.outline_color
+            if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
+                logger.info(
+                    "alpha component of given RGBA value for outline color is discarded, because outline_alpha"
+                    " takes precedent."
+                )
+                outline_color = outline_color[:-2]
             ds_outlines = ds.tf.shade(
                 agg_outlines,
                 cmap=outline_color,
-                min_alpha=np.min([254, render_params.outline_alpha * 255]),
+                min_alpha=_convert_alpha_to_datashader_range(render_params.outline_alpha),
                 how="linear",
-            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+            )
+
+            # inner outlines
+            if render_params.outline_params.inner_outline:
+                outline_color = render_params.outline_params.inner_outline_color
+                if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
+                    logger.info(
+                        "alpha component of given RGBA value for outline color is discarded, because outline_alpha"
+                        " takes precedent."
+                    )
+                    outline_color = outline_color[:-2]
+                ds_inner_outlines = ds.tf.shade(
+                    agg_inner_outlines,
+                    cmap=outline_color,
+                    min_alpha=_convert_alpha_to_datashader_range(render_params.outline_alpha),
+                    how="linear",
+                )
+
+            # render outline image(s)
+            rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
+            _ax_show_and_transform(
+                rgba_image,
+                trans_data,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.outline_alpha,
+                extent=x_ext + y_ext,
+            )
+            if render_params.outline_params.inner_outline:
+                rgba_image, trans_data = _create_image_from_datashader_result(ds_inner_outlines, factor, ax)
+                _ax_show_and_transform(
+                    rgba_image,
+                    trans_data,
+                    ax,
+                    zorder=render_params.zorder,
+                    alpha=render_params.outline_alpha,
+                    extent=x_ext + y_ext,
+                )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
@@ -323,17 +369,6 @@ def _render_shapes(
             alpha=render_params.fill_alpha,
             extent=x_ext + y_ext,
         )
-        # render outline image if needed
-        if render_outlines:
-            rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
-            _ax_show_and_transform(
-                rgba_image,
-                trans_data,
-                ax,
-                zorder=render_params.zorder,
-                alpha=render_params.outline_alpha,
-                extent=x_ext + y_ext,
-            )
 
         cax = None
         if aggregate_with_reduction is not None:
@@ -350,6 +385,51 @@ def _render_shapes(
             )
 
     elif method == "matplotlib":
+        # render outlines separately to ensure they are always underneath the shape
+        if render_params.outline_alpha > 0:
+            # 1) render outer outline
+            _cax = _get_collection_shape(
+                shapes=shapes,
+                s=render_params.scale,
+                c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
+                render_params=render_params,
+                rasterized=sc_settings._vector_friendly,
+                cmap=None,
+                norm=None,
+                fill_alpha=0.0,
+                outline_alpha=render_params.outline_alpha,
+                outline_color=render_params.outline_params.outline_color,
+                linewidth=render_params.outline_params.linewidth,
+                zorder=render_params.zorder,
+                # **kwargs,
+            )
+            cax = ax.add_collection(_cax)
+            # Transform the paths in PatchCollection
+            for path in _cax.get_paths():
+                path.vertices = trans.transform(path.vertices)
+
+            # 2) render inner outline if necessary
+            if render_params.outline_params.inner_outline:
+                _cax = _get_collection_shape(
+                    shapes=shapes,
+                    s=render_params.scale,
+                    c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
+                    render_params=render_params,
+                    rasterized=sc_settings._vector_friendly,
+                    cmap=None,
+                    norm=None,
+                    fill_alpha=0.0,
+                    outline_alpha=render_params.outline_alpha,
+                    outline_color=render_params.outline_params.inner_outline_color,
+                    linewidth=render_params.outline_params.inner_outline_linewidth,
+                    zorder=render_params.zorder,
+                    # **kwargs,
+                )
+                cax = ax.add_collection(_cax)
+                # Transform the paths in PatchCollection
+                for path in _cax.get_paths():
+                    path.vertices = trans.transform(path.vertices)
+
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
@@ -359,7 +439,7 @@ def _render_shapes(
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             fill_alpha=render_params.fill_alpha,
-            outline_alpha=render_params.outline_alpha,
+            outline_alpha=0.0,
             zorder=render_params.zorder,
             # **kwargs,
         )
@@ -652,8 +732,8 @@ def _render_points(
                 ds.tf.spread(agg, px=px),
                 cmap=color_vector[0],
                 color_key=color_key,
-                min_alpha=np.min([254, render_params.alpha * 255]),
-            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+                min_alpha=_convert_alpha_to_datashader_range(render_params.alpha),
+            )
         else:
             spread_how = _datshader_get_how_kw_for_spread(render_params.ds_reduction)
             agg = ds.tf.spread(agg, px=px, how=spread_how)
@@ -675,8 +755,8 @@ def _render_points(
                 cmap=ds_cmap,
                 span=ds_span,
                 clip=norm.clip,
-                min_alpha=np.min([254, render_params.alpha * 255]),
-            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+                min_alpha=_convert_alpha_to_datashader_range(render_params.alpha),
+            )
 
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _ax_show_and_transform(

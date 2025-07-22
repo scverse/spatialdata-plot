@@ -5,6 +5,7 @@ import warnings
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
@@ -330,6 +331,8 @@ def _get_collection_shape(
     render_params: ShapesRenderParams,
     fill_alpha: None | float = None,
     outline_alpha: None | float = None,
+    outline_color: None | str | list[float] = "white",
+    linewidth: float = 0.0,
     **kwargs: Any,
 ) -> PatchCollection:
     """
@@ -342,6 +345,8 @@ def _get_collection_shape(
     - norm: Normalization for the color map.
     - fill_alpha (float, optional): Opacity for the fill color.
     - outline_alpha (float, optional): Opacity for the outline.
+    - outline_color (optional): Color for the outline.
+    - linewidth (float, optional): Width for the outline.
     - **kwargs: Additional keyword arguments.
 
     Returns
@@ -380,11 +385,11 @@ def _get_collection_shape(
             c = cmap(norm(c))
 
     fill_c = ColorConverter().to_rgba_array(c)
-    fill_c[..., -1] *= render_params.fill_alpha
+    fill_c[..., -1] *= fill_alpha
 
     if render_params.outline_params.outline:
-        outline_c = ColorConverter().to_rgba_array(render_params.outline_params.outline_color)
-        outline_c[..., -1] = render_params.outline_alpha
+        outline_c = ColorConverter().to_rgba_array(outline_color)
+        outline_c[..., -1] = outline_alpha
         outline_c = outline_c.tolist()
     else:
         outline_c = [None]
@@ -414,7 +419,8 @@ def _get_collection_shape(
     def _process_polygon(row: pd.Series, s: float) -> dict[str, Any]:
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
-        scaled_coords = (centroid + (coords - centroid) * s).tolist()
+        scaled_vectors = (coords - centroid) * s
+        scaled_coords = (centroid + scaled_vectors).tolist()
         return {
             **row.to_dict(),
             "geometry": mpatches.Polygon(scaled_coords, closed=True),
@@ -459,7 +465,7 @@ def _get_collection_shape(
     return PatchCollection(
         patches["geometry"].values.tolist(),
         snap=False,
-        lw=render_params.outline_params.linewidth,
+        lw=linewidth,
         facecolor=patches["fill_c"],
         edgecolor=None if all(outline is None for outline in outline_c) else outline_c,
         **kwargs,
@@ -543,27 +549,79 @@ def _prepare_cmap_norm(
 
 def _set_outline(
     outline: bool = False,
-    outline_width: float = 1.5,
-    outline_color: str | list[float] = "#0000000ff",  # black, white
+    outline_width: int | float | tuple[float | int, float | int] = 1.5,
+    outline_color: str | list[float] | tuple[str | list[float], str | list[float]] = "#000000ff",  # black, white
     **kwargs: Any,
 ) -> OutlineParams:
-    if not isinstance(outline_width, int | float):
-        raise TypeError(f"Invalid type of `outline_width`: {type(outline_width)}, expected `int` or `float`.")
-    if outline_width == 0.0:
-        outline = False
-    if outline_width < 0.0:
-        logger.warning(f"Negative line widths are not allowed, changing {outline_width} to {(-1) * outline_width}")
-        outline_width *= -1
+    """Create OutlineParams object for shapes, including possibility of double outline."""
+    # make sure outline_width and outline_color both have length 2
+    if isinstance(outline_width, tuple):
+        if len(outline_width) == 1:
+            # interpreted as outer outline
+            if isinstance(outline_color, tuple) and len(outline_color) >= 2:
+                outline_width = (outline_width[0], 0.5)  # default inner outline width
+            else:
+                outline_width = (outline_width[0], 0.0)
+        elif len(outline_width) > 2:
+            # only using first to positions
+            logger.warning(
+                f"Tuple of length {len(outline_width)} was passed for outline_width, only first two positions are used"
+                " since more than 2 outlines are not supported!"
+            )
+            outline_width = (outline_width[0], outline_width[1])
+        if isinstance(outline_color, str | list):
+            # inner outline default color: white
+            outline_color = (outline_color, "#ffffffff")
+    if isinstance(outline_color, tuple):
+        if (len(outline_color) == 4 or len(outline_color) == 3) and all(isinstance(i, float) for i in outline_color):
+            # may be an RGBA color tuple
+            outline_color = (outline_color, "#ffffffff")
+        elif len(outline_color) == 1:
+            # interpreted as outer outline
+            outline_color = (outline_color[0], "#ffffffff")
+        elif len(outline_color) > 2:
+            # only using first to positions
+            logger.warning(
+                f"Tuple of length {len(outline_color)} was passed for outline_color, only first two positions are used"
+                " since more than 2 outlines are not supported!"
+            )
+            outline_color = (outline_color[0], outline_color[1])
+        if isinstance(outline_width, int | float):
+            # inner outline default width: 0.5
+            outline_width = (outline_width, 0.5)
+    else:
+        # single outline
+        assert isinstance(outline_width, int | float), "outline_width is not int | float"  # shut up mypy
+        outline_width = (outline_width, 0.0)
+        outline_color = (outline_color, "white")
+
+    assert isinstance(outline_color, tuple), "outline_color is not a tuple"  # shut up mypy
+    assert isinstance(outline_width, tuple), "outline_width is not a tuple"
+
+    for ow in outline_width:
+        if not isinstance(ow, int | float):
+            raise TypeError(f"Invalid type of `outline_width`: {type(ow)}, expected `int` or `float`.")
 
     # the default black and white colors can be changed using the contour_config parameter
-    if len(outline_color) in {3, 4} and all(isinstance(c, float) for c in outline_color):
-        outline_color = matplotlib.colors.to_hex(outline_color)
+    if len(outline_color[0]) in {3, 4} and all(isinstance(c, float) for c in outline_color[0]):
+        outline_color = (matplotlib.colors.to_hex(outline_color[0]), outline_color[1])
+    if len(outline_color[1]) in {3, 4} and all(isinstance(c, float) for c in outline_color[1]):
+        outline_color = (outline_color[0], matplotlib.colors.to_hex(outline_color[1]))
+
+    # handle possible linewidths of 0.0
+    if np.all(np.array(outline_width) == 0.0):
+        outline = False
+    elif outline_width[0] == 0.0:
+        # only inner outline => is treated as outer outline
+        outline_width = (outline_width[1], 0.0)
+        outline_color = (outline_color[1], "white")
+    inner_outline = outline_width[1] > 0.0
 
     if outline:
         kwargs.pop("edgecolor", None)  # remove edge from kwargs if present
         kwargs.pop("alpha", None)  # remove alpha from kwargs if present
 
-    return OutlineParams(outline, outline_color, outline_width)
+    return OutlineParams(outline, outline_color[0], outline_width[0], inner_outline, outline_color[1], outline_width[1])
 
 
 def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
@@ -1612,6 +1670,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
+                # TODO: create Color object?
             else:
                 param_dict["col_for_color"] = color
                 param_dict["color"] = None
@@ -1619,9 +1678,17 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         param_dict["col_for_color"] = None
 
     if outline_width := param_dict.get("outline_width"):
-        if not isinstance(outline_width, float | int):
-            raise TypeError("Parameter 'outline_width' must be numeric.")
-        if outline_width < 0:
+        # outline_width only exists for shapes at the moment
+        if isinstance(outline_width, tuple):
+            for ow in outline_width:
+                if isinstance(ow, float | int):
+                    if ow < 0:
+                        raise ValueError("Parameter 'outline_width' cannot contain negative values.")
+                else:
+                    raise TypeError("Parameter 'outline_width' must contain only numerics when it is a tuple.")
+        elif not isinstance(outline_width, float | int):
+            raise TypeError("Parameter 'outline_width' must be numeric or a tuple of two numerics.")
+        if isinstance(outline_width, float | int) and outline_width < 0:
             raise ValueError("Parameter 'outline_width' cannot be negative.")
 
     if (outline_alpha := param_dict.get("outline_alpha")) and (
@@ -1912,8 +1979,8 @@ def _validate_shape_render_params(
     palette: list[str] | str | None,
     color: list[str] | str | None,
     na_color: ColorLike | None,
-    outline_width: float | int,
-    outline_color: str | list[float],
+    outline_width: float | int | tuple[float | int, float | int],
+    outline_color: str | list[float] | tuple[str | list[float], str | list[float]],
     outline_alpha: float | int,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
@@ -2086,7 +2153,7 @@ def _validate_image_render_params(
 def _get_wanted_render_elements(
     sdata: SpatialData,
     sdata_wanted_elements: list[str],
-    params: (ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams),
+    params: ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
     cs: str,
     element_type: Literal["images", "labels", "points", "shapes"],
 ) -> tuple[list[str], list[str], bool]:
@@ -2243,7 +2310,7 @@ def _create_image_from_datashader_result(
 
 
 def _datashader_aggregate_with_function(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -2307,7 +2374,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: (Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None),
+    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"
@@ -2350,15 +2417,15 @@ def _prepare_transformation(
 
 def _get_datashader_trans_matrix_of_single_element(
     trans: Identity | Scale | Affine | MapAxis | Translation,
-) -> npt.NDArray[Any]:
+) -> ArrayLike:
     flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-    tm: npt.NDArray[Any] = trans.to_affine_matrix(("x", "y"), ("x", "y"))
+    tm: ArrayLike = trans.to_affine_matrix(("x", "y"), ("x", "y"))
 
     if isinstance(trans, Identity):
         return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     if isinstance(trans, (Scale | Affine)):
         # idea: "flip the y-axis", apply transformation, flip back
-        flip_and_transform: npt.NDArray[Any] = flip_matrix @ tm @ flip_matrix
+        flip_and_transform: ArrayLike = flip_matrix @ tm @ flip_matrix
         return flip_and_transform
     if isinstance(trans, MapAxis):
         # no flipping needed
@@ -2369,7 +2436,7 @@ def _get_datashader_trans_matrix_of_single_element(
 
 def _get_transformation_matrix_for_datashader(
     trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
-) -> npt.NDArray[Any]:
+) -> ArrayLike:
     """Get the affine matrix needed to transform shapes for rendering with datashader."""
     if isinstance(trans, SDSequence):
         tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
@@ -2478,3 +2545,108 @@ def _hex_no_alpha(hex: str) -> str:
         return "#" + hex_digits[:6]
 
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
+
+
+def _convert_alpha_to_datashader_range(alpha: float) -> float:
+    """Convert alpha from the range [0, 1] to the range [0, 255] used in datashader."""
+    # prevent a value of 255, bc that led to fully colored test plots instead of just colored points/shapes
+    return min([254, alpha * 255])
+
+
+@dataclass
+class Color:
+    """Validate, parse and store a single color.
+
+    Accepts a color and an alpha value.
+    If no color or "default" is given, the default color "lightgray" is used.
+    If no alpha is given, the default of completely opaque is used ("FF").
+    At all times, if color indicates an alpha value, for instance as part of a hex string, the alpha parameter takes
+    precedence if given.
+    """
+
+    color: str
+    alpha: str
+
+    def __post__init__(self) -> None:
+        """Validate input and store as hex color.
+
+        `self.color` can be
+        - str: hex representation, named color or "default"
+        - None (values won't be shown)
+        - tuple[float, ...] | list[float]: RGB(A) array (all values within [0, 1]!)
+        """
+        # 1) Validate alpha value
+        if isinstance(self.alpha, float | int):
+            if self.alpha <= 1.0 and self.alpha >= 0.0:
+                # Convert float alpha to hex representation
+                self.alpha = int(np.round(self.alpha * 255))
+                self.alpha = hex(self.alpha)[2:].upper()
+                if len(self.alpha) == 1:
+                    self.alpha = "0" + self.alpha
+            else:
+                raise ValueError(f"Invalid alpha value `{self.alpha}`, must lie within [0.0, 1.0].")
+        elif self.alpha is not None:
+            raise ValueError(f"Invalid alpha value `{self.alpha}`, must be None or a float | int within [0.0, 1.0].")
+
+        # 2) Validate color value
+        if self.color is None or self.color == "default":
+            self.color = colors.to_hex("lightgray", keep_alpha=False)
+        elif isinstance(self.color, str):
+            # already hex
+            if self.color.startswith("#"):
+                if len(self.color) not in [7, 9]:
+                    raise ValueError("Invalid hex color length: only formats '#RRGGBB' and '#RRGGBBAA' are supported.")
+                self.color = self.color.upper()
+                if not all(c in "0123456789ABCDEF" for c in self.color[1:]):
+                    raise ValueError("Invalid hex color: contains non-hex characters")
+                if len(self.color) == 9:
+                    if self.alpha is None:
+                        self.alpha = self.color[7:]
+                    self.color = self.color[:7]
+            else:
+                try:
+                    float(self.color)
+                except ValueError:
+                    # we're not dealing with what matplotlib considers greyscale
+                    pass
+                else:
+                    raise TypeError(
+                        f"Invalid type `{type(self.color)}` for a color, expecting str | None | tuple[float, ...] | "
+                        "list[float]. Note that unlike in matplotlib, giving a string of a number within [0, 1] as a "
+                        "greyscale value is not supported here!"
+                    )
+                # matplotlib raises ValueError in case of invalid color name
+                self.color = colors.to_hex(self.color, keep_alpha=False)
+        elif isinstance(self.color, list[float] | tuple[float, ...]):
+            if len(self.color) < 3:
+                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs 3 or 4 values!")
+            if len(self.color) > 4:
+                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs 3 or 4 values!")
+            # get first 3-4 values
+            r, g, b = self.color[0], self.color[1], self.color[2]
+            a = 1.0 if len(self.color) == 3 else self.color[3]
+            if any(np.array([r, g, b, a]) > 1) or any(np.array([r, g, b, a]) < 0):
+                raise ValueError(f"Invalid color `{self.color}`, all values in RGB(A) array must be within [0.0, 1.0].")
+            self.color = colors.rgb2hex((r, g, b, a), keep_alpha=False)
+            if self.alpha is None:
+                self.alpha = colors.rgb2hex((r, g, b, a), keep_alpha=True)[7:]
+        else:
+            raise TypeError(
+                f"Invalid type `{type(self.color)}` for color, expecting str | None | tuple[float, ...] | list[float]."
+            )
+
+        # 3) Set default alpha if still necessary
+        if self.alpha is None:
+            self.alpha = "FF"  # default: completely opaque
+
+    def get_hex_with_alpha(self) -> str:
+        """Get color value as '#RRGGBBAA'."""
+        return self.color + self.alpha
+
+    def get_hex(self) -> str:
+        """Get color value as '#RRGGBB'."""
+        return self.color
+
+    def get_alpha_as_float(self) -> float:
+        """Return alpha as value within [0.0, 1.0]."""
+        return int(self.alpha, 16) / 255
