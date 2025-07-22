@@ -5,6 +5,7 @@ import warnings
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
@@ -2551,59 +2552,94 @@ def _convert_alpha_to_datashader_range(alpha: float) -> float:
     return min([254, alpha * 255])
 
 
-class ColorHandler:
-    """Validate, parse and store a single color."""
+@dataclass
+class Color:
+    """Validate, parse and store a single color.
 
-    color_hex: str | None
+    Accepts a color and an alpha value.
+    If no color or "default" is given, the default color "lightgray" is used.
+    If no alpha is given, the default of completely opaque is used ("FF").
+    At all times, if color indicates an alpha value, for instance as part of a hex string, the alpha parameter takes
+    precedence if given.
+    """
 
-    def __init__(self, color: ColorLike | list[float] | None):
+    color: str
+    alpha: str
+
+    def __post__init__(self) -> None:
         """Validate input and store as hex color.
 
-        `color` can be
+        `self.color` can be
         - str: hex representation, named color or "default"
         - None (values won't be shown)
         - tuple[float, ...] | list[float]: RGB(A) array (all values within [0, 1]!)
         """
-        if color is None:
-            self.color_hex = None
-        elif isinstance(color, str):
+        # 1) Validate alpha value
+        if isinstance(self.alpha, float | int):
+            if self.alpha <= 1.0 and self.alpha >= 0.0:
+                # Convert float alpha to hex representation
+                self.alpha = int(np.round(self.alpha * 255))
+                self.alpha = hex(self.alpha)[2:].upper()
+                if len(self.alpha) == 1:
+                    self.alpha = "0" + self.alpha
+            else:
+                raise ValueError(f"Invalid alpha value `{self.alpha}`, must lie within [0.0, 1.0].")
+        elif self.alpha is not None:
+            raise ValueError(f"Invalid alpha value `{self.alpha}`, must be None or a float | int within [0.0, 1.0].")
+
+        # 2) Validate color value
+        if self.color is None or self.color == "default":
+            self.color = colors.to_hex("lightgray", keep_alpha=False)
+        elif isinstance(self.color, str):
             # already hex
-            if color.startswith("#"):
-                if len(color) not in [7, 9]:
-                    raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
-                self.color_hex = color.lower()
-                if len(self.color_hex) == 7:
-                    self.color_hex += "ff"  # add alpha of 1.0 if needed
-                if not all(c in "0123456789abcdef" for c in self.color_hex[1:]):
+            if self.color.startswith("#"):
+                if len(self.color) not in [7, 9]:
+                    raise ValueError("Invalid hex color length: only formats '#RRGGBB' and '#RRGGBBAA' are supported.")
+                self.color = self.color.upper()
+                if not all(c in "0123456789ABCDEF" for c in self.color[1:]):
                     raise ValueError("Invalid hex color: contains non-hex characters")
-            # "default" should refer to lightgray
-            elif color == "default":
-                self.color_hex = to_hex("lightgray", keep_alpha=True)
+                if len(self.color) == 9:
+                    if self.alpha is None:
+                        self.alpha = self.color[7:]
+                    self.color = self.color[:7]
             # named color
             else:
                 # matplotlib raises ValueError in case of invalid color name
-                self.color_hex = to_hex(color, keep_alpha=True)
-        elif isinstance(color, list[float] | tuple[float, ...]):
-            if len(color) < 3:
-                raise ValueError(f"Color `{color}` can't be interpreted as RGB(A) array, needs at least 3 values.")
+                self.color = colors.to_hex(self.color, keep_alpha=False)
+        elif isinstance(self.color, list[float] | tuple[float, ...]):
+            if len(self.color) < 3:
+                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs at least 3 values.")
             # get first 3-4 values
-            r, g, b = color[0], color[1], color[2]
-            a = 1.0 if len(color) == 3 else color[3]
+            r, g, b = self.color[0], self.color[1], self.color[2]
+            a = 1.0 if len(self.color) == 3 else self.color[3]
             if any(np.array([r, g, b, a]) > 1) or any(np.array([r, g, b, a]) < 0):
-                raise ValueError(f"Invalid color `{color}`, all values in RGB(A) array must be within [0.0, 1.0].")
-            self.color_hex = colors.rgb2hex((r, g, b, a), keep_alpha=True)
+                raise ValueError(f"Invalid color `{self.color}`, all values in RGB(A) array must be within [0.0, 1.0].")
+            self.color = colors.rgb2hex((r, g, b, a), keep_alpha=False)
+            if self.alpha is None:
+                self.alpha = colors.rgb2hex((r, g, b, a), keep_alpha=True)[7:]
+        elif isinstance(self.color, float | int):
+            raise TypeError(
+                f"Invalid type `{type(self.color)}` for a color, expecting str | None | tuple[float, ...] | "
+                "list[float]. Note that unlike in matplotlib, giving a float within [0, 1] as a greyscale value is not "
+                "supported here!"
+            )
         else:
             raise TypeError(
-                f"Invalid type `{type(color)}` for a color, expecting str | None | tuple[float, ...] | list[float]."
+                f"Invalid type `{type(self.color)}` for color, expecting str | None | tuple[float, ...] | list[float]."
             )
 
-    def get_hex(self) -> str | None:
-        """Get color value as '#RRGGBBAA'."""
-        return self.color_hex
+        # 3) Set default alpha if still necessary
+        if self.alpha is None:
+            self.alpha = "FF"  # default: completely opaque
 
-    def get_hex_without_alpha(self) -> str | None:
+    def get_hex_with_alpha(self) -> str:
+        """Get color value as '#RRGGBBAA'."""
+        return self.color + self.alpha
+
+    def get_hex(self) -> str:
         """Get color value as '#RRGGBB'."""
-        if isinstance(self.color_hex, str):
-            # return hex after stripping the last 2 positions (=alpha)
-            return self.color_hex[0:7]
-        return self.color_hex
+        return self.color
+
+    def get_alpha_as_float(self) -> float:
+        """Return alpha as value within [0.0, 1.0]."""
+        return int(self.alpha, 16) / 255
