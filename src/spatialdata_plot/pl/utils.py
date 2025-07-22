@@ -1670,6 +1670,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
+                # TODO: create Color object?
             else:
                 param_dict["col_for_color"] = color
                 param_dict["color"] = None
@@ -2602,13 +2603,25 @@ class Color:
                     if self.alpha is None:
                         self.alpha = self.color[7:]
                     self.color = self.color[:7]
-            # named color
             else:
+                try:
+                    float(self.color)
+                except ValueError:
+                    # we're not dealing with what matplotlib considers greyscale
+                    pass
+                else:
+                    raise TypeError(
+                        f"Invalid type `{type(self.color)}` for a color, expecting str | None | tuple[float, ...] | "
+                        "list[float]. Note that unlike in matplotlib, giving a string of a number within [0, 1] as a "
+                        "greyscale value is not supported here!"
+                    )
                 # matplotlib raises ValueError in case of invalid color name
                 self.color = colors.to_hex(self.color, keep_alpha=False)
         elif isinstance(self.color, list[float] | tuple[float, ...]):
             if len(self.color) < 3:
-                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs at least 3 values.")
+                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs 3 or 4 values!")
+            if len(self.color) > 4:
+                raise ValueError(f"Color `{self.color}` can't be interpreted as RGB(A) array, needs 3 or 4 values!")
             # get first 3-4 values
             r, g, b = self.color[0], self.color[1], self.color[2]
             a = 1.0 if len(self.color) == 3 else self.color[3]
@@ -2617,12 +2630,6 @@ class Color:
             self.color = colors.rgb2hex((r, g, b, a), keep_alpha=False)
             if self.alpha is None:
                 self.alpha = colors.rgb2hex((r, g, b, a), keep_alpha=True)[7:]
-        elif isinstance(self.color, float | int):
-            raise TypeError(
-                f"Invalid type `{type(self.color)}` for a color, expecting str | None | tuple[float, ...] | "
-                "list[float]. Note that unlike in matplotlib, giving a float within [0, 1] as a greyscale value is not "
-                "supported here!"
-            )
         else:
             raise TypeError(
                 f"Invalid type `{type(self.color)}` for color, expecting str | None | tuple[float, ...] | list[float]."
