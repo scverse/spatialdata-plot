@@ -2060,9 +2060,9 @@ def _validate_image_render_params(
             (isinstance(channel_list[0], int) and max([abs(ch) for ch in channel_list]) <= len(spatial_element_ch))  # type: ignore[arg-type]
             or all(ch in spatial_element_ch for ch in channel_list)
         ):
-            element_params[el]["channel_list"] = channel_list
+            element_params[el]["channel"] = channel_list
         else:
-            element_params[el]["channel_list"] = None
+            element_params[el]["channel"] = None
 
         element_params[el]["alpha"] = param_dict["alpha"]
 
