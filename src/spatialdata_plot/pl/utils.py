@@ -526,6 +526,8 @@ def _prepare_cmap_norm(
 
     cmap = copy(cmap)
 
+    assert isinstance(cmap, Colormap), f"Invalid type of `cmap`: {type(cmap)}, expected `Colormap`."
+
     if norm is None:
         norm = Normalize(vmin=None, vmax=None, clip=False)
 
@@ -2045,11 +2047,20 @@ def _validate_image_render_params(
         spatial_element_ch = (
             spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
         )
-        if (channel := param_dict["channel"]) is not None and (
-            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
-            or all(ch in spatial_element_ch for ch in channel)
+
+        channel = param_dict["channel"]
+        channel_list: list[str] | list[int] | None
+        if isinstance(channel, list):
+            type_ = type(channel[0])
+            assert all(isinstance(ch, type_) for ch in channel), "All channels must be of the same type."
+        # mypy complains that channel_list can be also of type list[str | int]
+        channel_list = [channel] if isinstance(channel, int | str) else channel  # type: ignore[assignment]
+
+        if channel_list is not None and (
+            (isinstance(channel_list[0], int) and max([abs(ch) for ch in channel_list]) <= len(spatial_element_ch))  # type: ignore[arg-type]
+            or all(ch in spatial_element_ch for ch in channel_list)
         ):
-            element_params[el]["channel"] = channel
+            element_params[el]["channel"] = channel_list
         else:
             element_params[el]["channel"] = None
 
@@ -2057,18 +2068,20 @@ def _validate_image_render_params(
 
         if isinstance(palette := param_dict["palette"], list):
             if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
+                palette_length = len(channel_list) if channel_list is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
+            if (channel_list is not None and len(palette) != len(channel_list)) and len(palette) != len(
+                spatial_element_ch
+            ):
                 palette = None
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
         if (cmap := param_dict["cmap"]) is not None:
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
+                cmap_length = len(channel_list) if channel_list is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
+            if (channel_list is not None and len(cmap) != len(channel_list)) or len(cmap) != len(spatial_element_ch):
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
@@ -2364,7 +2377,9 @@ def _get_datashader_trans_matrix_of_single_element(
         # no flipping needed
         return tm
     # for a Translation, we need the transposed transformation matrix
-    return tm.T
+    tm_T = tm.T
+    assert isinstance(tm_T, np.ndarray)
+    return tm_T
 
 
 def _get_transformation_matrix_for_datashader(
