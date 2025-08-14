@@ -562,3 +562,51 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["circle_table"].layers["normalized"] = RNG.random((nrows, ncols))
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
+
+    def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
+
+    def test_plot_can_render_circles_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="square").pl.show()
+
+    def test_plot_can_render_polygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="hex").pl.show()
+
+    def test_plot_can_render_polygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="square").pl.show()
+
+    def test_plot_can_render_polygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="circle").pl.show()
+
+    def test_plot_can_render_multipolygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="hex").pl.show()
+
+    def test_plot_can_render_multipolygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="square").pl.show()
+
+    def test_plot_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle").pl.show()
+
+    def test_plot_datashader_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_circles_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="circle", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle", method="datashader").pl.show()
