@@ -136,7 +136,7 @@ def _render_shapes(
     if isinstance(groups, list) and color_source_vector is not None:
         mask = color_source_vector.isin(groups)
         shapes = shapes[mask]
-        shapes = shapes.reset_index()
+        shapes = shapes.reset_index(drop=True)
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
 
