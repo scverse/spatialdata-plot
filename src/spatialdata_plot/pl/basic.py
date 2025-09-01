@@ -61,7 +61,7 @@ from spatialdata_plot.pl.utils import (
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | str
+ColorLike = tuple[float, ...] | list[float] | str
 
 
 @register_spatial_data_accessor("pl")
@@ -156,14 +156,14 @@ class PlotAccessor:
     def render_shapes(
         self,
         element: str | None = None,
-        color: str | None = None,
-        fill_alpha: float | int = 1.0,
+        color: ColorLike | None = None,
+        fill_alpha: float | int | None = None,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
-        outline_width: float | int | tuple[float | int, float | int] = 1.5,
-        outline_color: str | list[float] | tuple[str | list[float], str | list[float]] = "#000000",
-        outline_alpha: float | int = 0.0,
+        outline_width: float | int | tuple[float | int, float | int] | None = None,
+        outline_color: ColorLike | tuple[ColorLike] | None = None,
+        outline_alpha: float | int | tuple[float | int, float | int] | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         scale: float | int = 1.0,
@@ -186,15 +186,17 @@ class PlotAccessor:
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
             used.
-        color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
-            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
-            broadcasted to all elements. For this, the table in which the color key is found must annotate the
-            respective element (region must be set to the specific element). If the color column is found in multiple
-            locations, please provide the table_name to be used for the elements.
-        fill_alpha : float | int, default 1.0
-            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the user, this value
-            will multiply the value present in the cmap.
+        color : ColorLike | None
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
+            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
+            the color key is found must annotate the respective element (region must be set to the specific element). If
+            the color column is found in multiple locations, please provide the table_name to be used for the elements.
+        fill_alpha : float | int | None, default 1.0
+            Alpha value for the fill of shapes. If an alpha channel is present in a cmap passed by the user, this
+            value will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
@@ -204,20 +206,21 @@ class PlotAccessor:
             match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
             all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
         outline_width : float | int | tuple[float | int, float | int], default 1.5
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
-            In that case, and if < 2 outline_colors are specified, the default color (`outline_color`, "white") is used.
-        outline_color : str | list[float], default "#000000"
+        outline_color : ColorLike | tuple[ColorLike], default "#000000"
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
-            "#000000ff", the last two positions are ignored, since the alpha of the outlines is solely controlled by
-            `outline_alpha`. If 2 values are given (tuple), 2 borders are shown with these colors (outer & inner).
-            In that case, and if < 2 outline widths are specified, the default width (`outline_width`, 0.5) is used.
-        outline_alpha : float | int, default 0.0
-            Alpha value for the outline of shapes. Invisible by default.
+            "#000000ff", and `outline_alpha` is not given, this value controls the opacity of the outline. If 2 values
+            are given (tuple), 2 borders are shown with these colors (outer & inner).
+        outline_alpha : float | int | tuple[float | int, float | int] | None
+            Alpha value for the outline of shapes. Invisible by default, meaning outline_alpha=0.0 if both outline_color
+            and outline_width are not specified. Else, outlines are rendered with the alpha implied by outline_color, or
+            with outline_alpha=1.0 if outline_color does not imply an alpha. For two outlines, alpha values can be
+            passed in a tuple of length 2.
         cmap : Colormap | str | None, optional
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
@@ -249,8 +252,6 @@ class PlotAccessor:
         - Empty geometries will be removed at the time of plotting.
         - An `outline_width` of 0.0 leads to no border being plotted.
         - When passing a color-like to 'color', this has precendence over the potential existence as a column name.
-        - If a double outline is rendered, the alpha of the inner and outer border cannot be set individually. The value
-          of `outline_alpha` is always applied to both.
 
         Returns
         -------
@@ -287,8 +288,12 @@ class PlotAccessor:
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        outline_params = _set_outline(outline_alpha > 0, outline_width, outline_color)
         for element, param_values in params_dict.items():
+            final_outline_alpha, outline_params = _set_outline(
+                params_dict[element]["outline_alpha"],
+                params_dict[element]["outline_width"],
+                params_dict[element]["outline_color"],
+            )
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
                 norm=norm,
@@ -303,7 +308,7 @@ class PlotAccessor:
                 outline_params=outline_params,
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
-                outline_alpha=param_values["outline_alpha"],
+                outline_alpha=final_outline_alpha,
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
@@ -320,8 +325,8 @@ class PlotAccessor:
     def render_points(
         self,
         element: str | None = None,
-        color: str | None = None,
-        alpha: float | int = 1.0,
+        color: ColorLike | None = None,
+        alpha: float | int | None = None,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
@@ -348,12 +353,14 @@ class PlotAccessor:
             The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
             used.
         color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
-            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
-            broadcasted to all elements. For this, the table in which the color key is found must annotate the
-            respective element (region must be set to the specific element). If the color column is found in multiple
-            locations, please provide the table_name to be used for the elements.
-        alpha : float | int, default 1.0
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
+            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
+            the color key is found must annotate the respective element (region must be set to the specific element). If
+            the color column is found in multiple locations, please provide the table_name to be used for the elements.
+        alpha : float | int | None, default 1.0
             Alpha value for the points.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
@@ -364,7 +371,7 @@ class PlotAccessor:
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
             for all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
         cmap : Colormap | str | None, optional
@@ -605,7 +612,7 @@ class PlotAccessor:
         element : str | None
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
-        color : list[str] | str | None
+        color : str | None
             Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
             :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
             color column is found in multiple locations, please provide the table_name to be used for the element if you
