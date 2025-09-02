@@ -25,6 +25,7 @@ dependencies = [
     "matplotlib",
     "scikit-learn",
     "scanpy",
+    "numpy",
     "matplotlib_scalebar",
 ]
 
