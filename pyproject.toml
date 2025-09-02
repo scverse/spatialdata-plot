@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling", "hatch-vcs", "numpy"]
 
 [project]
 name = "spatialdata-plot"
@@ -25,7 +25,6 @@ dependencies = [
     "matplotlib",
     "scikit-learn",
     "scanpy",
-    "numpy",
     "matplotlib_scalebar",
 ]
 
