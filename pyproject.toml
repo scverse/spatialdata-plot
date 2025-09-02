@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling", "hatch-vcs", "numpy"]
+requires = ["hatchling", "hatch-vcs"]
 
 [project]
 name = "spatialdata-plot"
