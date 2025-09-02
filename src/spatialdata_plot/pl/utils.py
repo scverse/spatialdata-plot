@@ -1713,18 +1713,24 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
 
     if outline_color := param_dict.get("outline_color"):
-        if isinstance(outline_color, tuple):
+        if not isinstance(outline_color, str | tuple | list):
+            raise TypeError("Parameter 'color' must be a string or a tuple/list of floats or colors.")
+        if isinstance(outline_color, tuple | list):
+            if len(outline_color) < 1:
+                raise ValueError("Empty tuple is not supported as input for outline_color!")
             if len(outline_color) == 1:
                 param_dict["outline_color"] = Color(outline_color[0])
-            elif len(outline_color) < 1:
-                raise ValueError("Empty tuple is not supported as input for outline_color!")
-            else:
-                if len(outline_color) > 2:
-                    logger.warning(
-                        f"Tuple of length {len(outline_color)} was passed for outline_color, only first two positions "
-                        "are used since more than 2 outlines are not supported!"
-                    )
+            elif len(outline_color) == 2:
+                # assuming the case of 2 outlines
                 param_dict["outline_color"] = (Color(outline_color[0]), Color(outline_color[1]))
+            elif len(outline_color) in [3, 4]:
+                # assuming RGB(A) array
+                param_dict["outline_color"] = Color(outline_color)
+            else:
+                raise ValueError(
+                    f"Tuple/List of length {len(outline_color)} was passed for outline_color. Valid options would be: "
+                    "tuple of 2 colors (for 2 outlines) or an RGB(A) array, aka a list/tuple of 3-4 floats."
+                )
         else:
             param_dict["outline_color"] = Color(outline_color)
 
