@@ -526,6 +526,8 @@ def _prepare_cmap_norm(
 
     cmap = copy(cmap)
 
+    assert isinstance(cmap, Colormap), f"Invalid type of `cmap`: {type(cmap)}, expected `Colormap`."
+
     if norm is None:
         norm = Normalize(vmin=None, vmax=None, clip=False)
 
@@ -2076,7 +2078,7 @@ def _validate_image_render_params(
         if isinstance(palette, list):
             # case A: single palette for all channels
             if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
+                palette_length = len(channel_list) if channel_list is not None else len(spatial_element_ch)
                 palette = palette * palette_length
             # case B: one palette per channel (either given or derived from channel length)
             channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
@@ -2090,9 +2092,9 @@ def _validate_image_render_params(
 
         if (cmap := param_dict["cmap"]) is not None:
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
+                cmap_length = len(channel_list) if channel_list is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
+            if (channel_list is not None and len(cmap) != len(channel_list)) or len(cmap) != len(spatial_element_ch):
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
@@ -2388,7 +2390,9 @@ def _get_datashader_trans_matrix_of_single_element(
         # no flipping needed
         return tm
     # for a Translation, we need the transposed transformation matrix
-    return tm.T
+    tm_T = tm.T
+    assert isinstance(tm_T, np.ndarray)
+    return tm_T
 
 
 def _get_transformation_matrix_for_datashader(
