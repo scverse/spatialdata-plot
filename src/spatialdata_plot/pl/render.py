@@ -17,7 +17,7 @@ from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata import get_extent, get_values, get_element_annotators, join_spatialelement_table
+from spatialdata import get_element_annotators, get_extent, get_values, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -523,7 +523,9 @@ def _render_points(
                 if table_layer is None:
                     adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
                 else:
-                    adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
+                    adata_obs[col_for_color] = (
+                        sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
+                    )
             if groups is not None:
                 adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
             adata = AnnData(
