@@ -17,7 +17,7 @@ from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
-from spatialdata import get_extent, get_values, join_spatialelement_table
+from spatialdata import get_extent, get_values, get_element_annotators, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import get_transformation, set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -73,24 +73,36 @@ def _render_shapes(
     col_for_color = render_params.col_for_color
     groups = render_params.groups
     table_layer = render_params.table_layer
+    table_name = render_params.table_name
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=bool(render_params.table_name),
     )
-
-    if (table_name := render_params.table_name) is None:
+    if table_name is None:
         table = None
         shapes = sdata_filt[element]
     else:
-        element_dict, joined_table = join_spatialelement_table(
-            sdata, spatial_element_names=element, table_name=table_name, how="inner"
-        )
-        sdata_filt[element] = shapes = element_dict[element]
-        joined_table.uns["spatialdata_attrs"]["region"] = (
-            joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
-        )
-        sdata_filt[table_name] = table = joined_table
+        # Check if the table actually annotates the element
+        annotating_tables = get_element_annotators(sdata, element)
+        if table_name not in annotating_tables:
+            warnings.warn(
+                f"Table '{table_name}' does not annotate element '{element}'",
+                UserWarning,
+                stacklevel=2,
+            )
+            # Fall back to no table
+            table = None
+            shapes = sdata_filt[element]
+        else:
+            element_dict, joined_table = join_spatialelement_table(
+                sdata, spatial_element_names=element, table_name=table_name, how="inner"
+            )
+            sdata_filt[element] = shapes = element_dict[element]
+            joined_table.uns["spatialdata_attrs"]["region"] = (
+                joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
+            )
+            sdata_filt[table_name] = table = joined_table
 
     if (
         col_for_color is not None
@@ -490,22 +502,37 @@ def _render_points(
             dtype=points[["x", "y"]].values.dtype,
         )
     else:
-        adata_obs = sdata_filt[table_name].obs
-        # if the points are colored by values in X (or a different layer), add the values to obs
-        if col_for_color in sdata_filt[table_name].var_names:
-            if table_layer is None:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
-            else:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
-        if groups is not None:
-            adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
-        adata = AnnData(
-            X=points[["x", "y"]].values,
-            obs=adata_obs,
-            dtype=points[["x", "y"]].values.dtype,
-            uns=sdata_filt[table_name].uns,
-        )
-        sdata_filt[table_name] = adata
+        # Check if the table actually annotates the element
+        annotating_tables = get_element_annotators(sdata, element)
+        if table_name not in annotating_tables:
+            warnings.warn(
+                f"Table '{table_name}' does not annotate element '{element}'",
+                UserWarning,
+                stacklevel=2,
+            )
+            # Fall back to no table
+            adata = AnnData(
+                X=points[["x", "y"]].values,
+                obs=points[coords].reset_index(),
+                dtype=points[["x", "y"]].values.dtype,
+            )
+        else:
+            adata_obs = sdata_filt[table_name].obs
+            # if the points are colored by values in X (or a different layer), add the values to obs
+            if col_for_color in sdata_filt[table_name].var_names:
+                if table_layer is None:
+                    adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
+                else:
+                    adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
+            if groups is not None:
+                adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
+            adata = AnnData(
+                X=points[["x", "y"]].values,
+                obs=adata_obs,
+                dtype=points[["x", "y"]].values.dtype,
+                uns=sdata_filt[table_name].uns,
+            )
+            sdata_filt[table_name] = adata
 
     # we can modify the sdata because of dealing with a copy
 
@@ -1051,11 +1078,23 @@ def _render_labels(
         instance_id = np.unique(label)
         table = None
     else:
-        _, region_key, instance_key = get_table_keys(sdata[table_name])
-        table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
+        # Check if the table actually annotates the element
+        annotating_tables = get_element_annotators(sdata, element)
+        if table_name not in annotating_tables:
+            warnings.warn(
+                f"Table '{table_name}' does not annotate element '{element}'",
+                UserWarning,
+                stacklevel=2,
+            )
+            # Fall back to no table
+            instance_id = np.unique(label)
+            table = None
+        else:
+            _, region_key, instance_key = get_table_keys(sdata[table_name])
+            table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 
-        # get instance id based on subsetted table
-        instance_id = np.unique(table.obs[instance_key].values)
+            # get instance id based on subsetted table
+            instance_id = np.unique(table.obs[instance_key].values)
 
     _, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
