@@ -16,7 +16,7 @@ urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
 requires-python = ">=3.10"
 dynamic= [
-  "version" # allow version to be set by git tags
+    "version" # allow version to be set by git tags
 ]
 license = {file = "LICENSE"}
 readme = "README.md"
@@ -30,7 +30,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "bump2version",
+    "jupyterlab",
+    "notebook",
+    "ipykernel",
+    "ipywidgets",
+    "jupytext",
+    "pytest",
+    "pytest-cov",
+    "pooch",
+    "ruff",
+    "pre-commit",
 ]
 docs = [
     "sphinx>=4.5",
@@ -48,10 +57,6 @@ test = [
     "pytest",
     "pytest-cov",
     "pooch", # for scipy.datasets module
-]
-# this will be used by readthedocs and will make pip also look for pre-releases, generally installing the latest available version
-pre = [
-    "spatialdata>=0.1.0-pre0"
 ]
 
 [tool.coverage.run]
@@ -143,30 +148,45 @@ unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
     "tests/*" = ["D", "PT", "B024"]
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
     "docs/*" = ["D","B","E","A"]
-    # "src/spatialdata/transformations/transformations.py" = ["D101","D102", "D106", "B024", "T201", "RET504"]
     "tests/conftest.py"= ["E402", "RET504"]
     "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.bumpver]
-current_version = "0.0.2"
-version_pattern = "MAJOR.MINOR.PATCH"
-commit_message = "bump version {old_version} -> {new_version}"
-tag_message = "{new_version}"
-tag_scope = "default"
-pre_commit_hook = ""
-post_commit_hook = ""
-commit = true
-tag = true
-push = false
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
 
-[tool.bumpver.file_patterns]
-"pyproject.toml" = [
-    'current_version = "{version}"',
-]
-"README.md" = [
-    "{version}",
-    "{pep440_version}",
-]
+[tool.pixi.dependencies]
+python = ">=3.10"
+
+[tool.pixi.pypi-dependencies]
+spatialdata-plot = { path = ".", editable = true }
+
+# for gh-actions
+[tool.pixi.feature.py310.dependencies]
+python = "3.10.*"
+
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
+
+[tool.pixi.environments]
+# 3.10 lane (for gh-actions)
+dev-py310  = { features = ["dev", "test", "py310"], solve-group = "py310" }
+docs-py310 = { features = ["docs", "py310"],        solve-group = "py310" }
+
+# 3.12 lane 
+default    = { features = ["py312"],                 solve-group = "py312" }
+dev        = { features = ["dev", "test", "py312"],  solve-group = "py312" }
+docs       = { features = ["docs", "py312"],         solve-group = "py312" }
+test       = { features = ["test", "py312"],         solve-group = "py312" }
+
+[tool.pixi.tasks]
+lab = "jupyter lab"
+kernel-install = "python -m ipykernel install --user --name pixi-dev --display-name \"sdata-plot (dev)\""
+test = "pytest -v --cov --color=yes --cov-report=xml --tb=short --durations=10"
+lint = "ruff check ."
+format = "ruff format ."
+pre-commit-install = "pre-commit install"
+pre-commit-run = "pre-commit run --all-files"

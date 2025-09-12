@@ -3,67 +3,59 @@ name: Test
 on:
   push:
     branches: [main]
-    tags:
-      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
+    tags: ["v*"] # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
-    branches: "*"
+    branches: ["*"]
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash -e {0} # -e to fail on error
-
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.10", "3.12"]
-        os: [ubuntu-latest]
-
-    env:
-      OS: ${{ matrix.os }}
-      PYTHON: ${{ matrix.python }}
+        env: ["dev-py310", "dev-py312"]
 
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
 
-      - name: Get pip cache dir
-        id: pip-cache-dir
-        run: |
-          echo "::set-output name=dir::$(pip cache dir)"
-      - name: Restore pip cache
-        uses: actions/cache@v3
+      # Cache rattler's shared package cache (speeds up downloads)
+      - name: Restore rattler cache
+        uses: actions/cache@v4
         with:
-          path: ${{ steps.pip-cache-dir.outputs.dir }}
-          key: pip-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('**/pyproject.toml') }}
+          path: ~/.cache/rattler
+          key: rattler-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            pip-${{ runner.os }}-${{ env.pythonLocation }}-
-      - name: Install test dependencies
+            rattler-${{ runner.os }}-${{ matrix.env }}-
+            rattler-${{ runner.os }}-
+
+      # Install pixi and the requested environment
+      - uses: prefix-dev/setup-pixi@v0.9.0
+        with:
+          environments: ${{ matrix.env }}
+          # No lock committed ⇒ let it resolve fresh each run
+          locked: false
+          cache: false # disable lock-based env cache
+          activate-environment: ${{ matrix.env }}
+
+      - name: Show versions
         run: |
-          python -m pip install --upgrade pip wheel
-          pip install pytest-cov
-      - name: Install dependencies
-        run: |
-          pip install numpy
-          pip install --pre -e ".[dev,test,pre]"
-      - name: Test
+          python --version
+          pixi --version
+
+      - name: Run tests
         env:
           MPLBACKEND: agg
-          PLATFORM: ${{ matrix.os }}
-          DISPLAY: :42
+          DISPLAY: ":42"
         run: |
           pytest -v --cov --color=yes --cov-report=xml
+
       - name: Archive figures generated during testing
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: visual_test_results_${{ matrix.os }}-python${{ matrix.python }}
           path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
