@@ -94,11 +94,11 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_points_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         adata = AnnData(
-            get_standard_RNG.normal(size=(n_obs, 10)),
-            obs=pd.DataFrame(get_standard_RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = get_standard_RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_points"
         table = TableModel.parse(
@@ -114,11 +114,11 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_points_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         adata = AnnData(
-            get_standard_RNG.normal(size=(n_obs, 10)),
-            obs=pd.DataFrame(get_standard_RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = get_standard_RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_points"
         table = TableModel.parse(
@@ -362,7 +362,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_points_with_table_obs(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = get_standard_RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -386,7 +386,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_points_with_table_X(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = get_standard_RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -409,7 +409,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_points_with_table_and_groups(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = get_standard_RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -433,7 +433,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_points_with_table_layer(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = get_standard_RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -451,6 +451,6 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             instance_key="instance_id",
         )
         sdata_blobs["points_table"] = table
-        sdata_blobs["points_table"].layers["normalized"] = get_standard_RNG.random((nrows, ncols))
+        sdata_blobs["points_table"].layers["normalized"] = get_standard_RNG().random((nrows, ncols))
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
