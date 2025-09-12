@@ -63,6 +63,16 @@ class LegendParams:
 
 
 @dataclass
+class CaptionParams:
+    """Caption params."""
+
+    caption_fontsize: int | float | _FontSize | None = None
+    caption_fontweight: int | _FontWeight = "normal"
+    horizontal_alignment: str = "center"
+    vertical_alignment: str = "top"
+
+
+@dataclass
 class ScalebarParams:
     """Scalebar params."""
 

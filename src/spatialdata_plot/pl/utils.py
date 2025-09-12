@@ -160,6 +160,14 @@ def _is_color_like(color: Any) -> bool:
     return bool(colors.is_color_like(color))
 
 
+def _estimate_caption_lines(text_ls) -> int:
+    """Estimate number of lines based on explicit line breaks."""
+    counts = []
+    for caption in text_ls:
+        counts.append(caption.count("\\n") + 1)
+    return max(counts)
+
+
 def _prepare_params_plot(
     # this param is inferred when `pl.show`` is called
     num_panels: int,
@@ -175,11 +183,19 @@ def _prepare_params_plot(
     # this args will be inferred from coordinate system
     scalebar_dx: float | Sequence[float] | None = None,
     scalebar_units: str | Sequence[str] | None = None,
+    caption=None,
+    font_size=None,
 ) -> tuple[FigParams, ScalebarParams]:
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
     figsize = rcParams["figure.figsize"] if figsize is None else figsize
     dpi = rcParams["figure.dpi"] if dpi is None else dpi
+
+    if caption:
+        num_lines = _estimate_caption_lines(caption)
+        extra_height = num_lines * font_size / 72 * 1.2  # 1.2 is extra factor for line spacing
+        figsize[1] += extra_height + 2
+
     if num_panels > 1 and ax is None:
         fig, grid = _panel_grid(
             num_panels=num_panels, hspace=hspace, wspace=wspace, ncols=ncols, dpi=dpi, figsize=figsize
@@ -204,7 +220,7 @@ def _prepare_params_plot(
             # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
             fig.set_dpi(dpi)
-
+    fig.subplots_adjust(bottom=0.2)
     # set scalebar
     if scalebar_dx is not None:
         scalebar_dx, scalebar_units = _get_scalebar(scalebar_dx, scalebar_units, num_panels)

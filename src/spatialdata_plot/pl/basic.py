@@ -707,6 +707,9 @@ class PlotAccessor:
     def show(
         self,
         coordinate_systems: list[str] | str | None = None,
+        caption: list[str] | None = None,
+        caption_fontsize: int | float | _FontSize | None = None,
+        caption_fontweight: int | float | _FontSize | None = None,
         legend_fontsize: int | float | _FontSize | None = None,
         legend_fontweight: int | _FontWeight = "bold",
         legend_loc: str | None = "right margin",
@@ -738,6 +741,7 @@ class PlotAccessor:
             Name(s) of the coordinate system(s) to be plotted. If None, all coordinate systems are plotted.
             If a coordinate system doesn't contain any relevant elements (as specified in the render_* calls),
             it is automatically not plotted.
+
         legend_fontsize :
             Font size of the legend text.
         legend_fontweight :
@@ -922,6 +926,8 @@ class PlotAccessor:
             hspace=hspace,
             ncols=ncols,
             frameon=frameon,
+            caption=caption,
+            font_size=12,
         )
         legend_params = LegendParams(
             legend_fontsize=legend_fontsize,
@@ -1079,6 +1085,58 @@ class PlotAccessor:
                 y_max = max(ax_y_max, cs_y_max) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
+
+        if caption is not None:
+            # If one caption for all
+            if len(caption) == 1:
+                fig = fig_params.fig
+
+                fig.canvas.draw()
+                # Get bounding box of all tick labels in display coordinates
+                renderer = fig.canvas.get_renderer()
+                all_axes = fig.get_axes()
+                bboxes = []
+
+                for ax in all_axes:
+                    for label in ax.get_xticklabels():
+                        if label.get_visible():
+                            bbox = label.get_window_extent(renderer=renderer)
+                            bboxes.append(bbox)
+
+                if not bboxes:
+                    # Fallback: just use subplot bottom position
+                    min_y_display = min(ax.get_position().y0 for ax in all_axes)
+                else:
+                    # Convert from display to figure coordinates
+                    min_y_display = min(b.y0 for b in bboxes)
+                min_y_fig = min_y_display / fig.bbox.height
+
+                # Move 5% of the figure height below the tick labels
+                offset = 0.01  # fraction of figure height
+                caption_y = min_y_fig - offset
+
+                fig.text(0.5, caption_y, caption[0], ha="center", va="top", fontsize=legend_fontsize or 12)
+
+            # If captions per subplot
+            elif len(caption) == len(coordinate_systems):
+                for i, cap in enumerate(caption):
+                    ax_to_use = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
+                    # Position text slightly below x-axis
+                    xlim = ax_to_use.get_xlim()
+                    ymin, ymax = ax.get_ylim()
+                    offset = 0.4 * (ymax - ymin)
+                    y_text = ymin - offset
+                    ax_to_use.text(
+                        0.5,
+                        y_text,  # 5% below x-axis min
+                        cap,
+                        ha="center",
+                        va="top",
+                        fontsize=legend_fontsize or 12,
+                        clip_on=False,
+                    )
+            else:
+                raise ValueError("Length of 'caption' must be 1 or equal to the number of subplots.")
 
         existing_viewconfig = None
         if store_viewconfig_name:
