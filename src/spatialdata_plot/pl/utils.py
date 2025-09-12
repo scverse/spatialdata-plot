@@ -1833,7 +1833,8 @@ def _validate_label_render_params(
 
         element_params[el]["table_name"] = None
         element_params[el]["color"] = None
-        if (color := param_dict["color"]) is not None:
+        color = param_dict["color"]
+        if color is not None:
             color, table_name = _validate_col_for_column_table(sdata, el, color, param_dict["table_name"], labels=True)
             element_params[el]["table_name"] = table_name
             element_params[el]["color"] = color
@@ -1995,6 +1996,11 @@ def _validate_col_for_column_table(
         if table_name not in tables or (
             col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
         ):
+            warnings.warn(
+                f"Table '{table_name}' does not annotate element '{element_name}'.",
+                UserWarning,
+                stacklevel=2,
+            )
             table_name = None
             col_for_color = None
     else:
