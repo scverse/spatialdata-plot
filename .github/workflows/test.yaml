@@ -23,7 +23,7 @@ jobs:
       NUMEXPR_MAX_THREADS: "1"
       MPLBACKEND: "agg"
       DISPLAY: ":42"
-      PYTEST_ADDOPTS: "-n auto --dist=loadfile --durations=10"
+      PYTEST_ADDOPTS: "-n auto --dist=load --durations=10"
 
     steps:
       - uses: actions/checkout@v4
