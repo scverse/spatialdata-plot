@@ -300,21 +300,35 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_labels("blobs_labels_large", color="category", table_name="table").pl.show()
 
-    def test_warns_when_table_does_not_annotate_element(self, sdata_blobs: SpatialData):
-        """Test that a warning is issued when table_name is specified but doesn't annotate the element."""
+    def test_warns_when_table_does_not_annotate_element(
+        self,
+        sdata_blobs: SpatialData,
+    ):
+        """Test that a warning is issued when table_name is specified but
+        doesn't annotate the element."""
         from spatialdata.models import TableModel
 
         # Create minimal table annotating different element
-        adata = AnnData(X=RNG.random.rand(5, 2))
+        adata = AnnData(X=RNG.random((5, 3)))
         adata.obs["region"] = "blobs_points"
         adata.obs["instance_id"] = range(5)
-        adata.obs["test_color"] = RNG.random.rand(5)
+        adata.obs["test_color"] = RNG.random(5)
 
-        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_points",
+        )
         sdata_blobs.tables["non_annotating_table"] = table
 
         # This should warn because the table doesn't annotate blobs_labels
-        with pytest.warns(UserWarning, match="Table 'non_annotating_table' does not annotate element 'blobs_labels'"):
+        with pytest.warns(
+            UserWarning,
+            match=("Table 'non_annotating_table' does not annotate element 'blobs_labels'"),
+        ):
             sdata_blobs.pl.render_labels(
-                "blobs_labels", color="test_color", table_name="non_annotating_table"
+                "blobs_labels",
+                color="test_color",
+                table_name="non_annotating_table",
             ).pl.show()
