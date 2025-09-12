@@ -13,7 +13,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: ["dev-py310", "dev"]
+        env: ["dev-py310", "dev-py312"]
+
+    # Configure pytest-xdist
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_MAX_THREADS: "1"
+      MPLBACKEND: "agg"
+      DISPLAY: ":42"
+      PYTEST_ADDOPTS: "-n auto --dist=loadfile --durations=10"
 
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +42,9 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.9.0
         with:
           environments: ${{ matrix.env }}
-          # No lock committed ⇒ let it resolve fresh each run
+          # We're not comitting the pixi-lock file
           locked: false
-          cache: false # disable lock-based env cache
+          cache: false
           activate-environment: ${{ matrix.env }}
 
       - name: Show versions
