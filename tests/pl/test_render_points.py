@@ -21,12 +21,7 @@ from spatialdata.transformations import (
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
-
-
-def get_standard_RNG():
-    return np.random.default_rng(seed=42)
-
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")

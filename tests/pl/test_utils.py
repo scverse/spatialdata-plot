@@ -1,6 +1,5 @@
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
@@ -9,8 +8,6 @@ import spatialdata_plot
 from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-SEED = 42
-RNG = np.random.default_rng(seed=SEED)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner

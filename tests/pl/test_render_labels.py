@@ -1,7 +1,6 @@
 import dask.array as da
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
@@ -12,9 +11,8 @@ from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import Labels2DModel, TableModel
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
-RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -229,11 +227,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         instances = get_element_instances(sdata_blobs[labels_name])
         n_obs = len(instances)
         adata = AnnData(
-            RNG.normal(size=(n_obs, 10)),
-            obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = instances.values
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["category"][:3] = ["a", "b", "c"]
         adata.obs["region"] = labels_name
         table = TableModel.parse(
@@ -262,7 +260,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].layers["normalized"] = RNG.random(sdata_blobs["table"].X.shape)
+        sdata_blobs["table"].layers["normalized"] = get_standard_RNG().random(sdata_blobs["table"].X.shape)
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()
 
     def _prepare_small_labels(self, sdata_blobs: SpatialData) -> SpatialData:
