@@ -2440,6 +2440,7 @@ def _datashader_map_aggregate_to_color(
         how="linear",
     )
 
+
 def _hex_no_alpha(hex: str) -> str:
     """
     Return a hex color string without an alpha component.
