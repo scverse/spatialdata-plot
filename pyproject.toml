@@ -9,7 +9,7 @@ authors = [
     {name = "scverse"},
 ]
 maintainers = [
-    {name = "Tim Treis", email = "tim.treis@helmholtz-munich.de"},
+    {name = "Tim Treis", email = "tim.treis@scverse.org"},
 ]
 urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
