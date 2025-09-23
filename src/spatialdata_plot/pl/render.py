@@ -19,7 +19,7 @@ from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
-from spatialdata.transformations import get_transformation, set_transformation
+from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
