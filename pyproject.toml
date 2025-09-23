@@ -55,6 +55,8 @@ dependencies = [
 dev = [
     "pre-commit>=3.0.0",
     "hatch>=1.9.0",
+    "build",
+    "twine",
     "jupyterlab",
     "notebook",
     "ipykernel",
@@ -253,7 +255,7 @@ test-py313 = { features = ["test", "py313"],         solve-group = "py313" }
 [tool.pixi.tasks]
 lab = "jupyter lab"
 kernel-install = "python -m ipykernel install --user --name pixi-dev --display-name \"spatialdata-plot (dev)\""
-test = "pytest -v --color=yes --tb=short --durations=10"
+test = "pytest -v --cov --color=yes --cov-report=xml --tb=short --durations=10"
 lint = "ruff check ."
 format = "ruff format ."
 pre-commit-install = "pre-commit install"
