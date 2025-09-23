@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: ["dev-py310", "dev-py312"]
+        env: ["dev-py311", "dev-py313"]
 
     # Configure pytest-xdist
     env:
