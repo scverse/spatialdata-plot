@@ -1,5 +1,6 @@
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas as pd
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
