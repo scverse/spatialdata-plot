@@ -145,7 +145,6 @@ class CmapParams:
     cmap: Colormap
     norm: Normalize
     na_color: Color
-    # na_color_modified_by_user: bool = False # NOTE: na_color stores that info already
     cmap_is_default: bool = True
 
 
@@ -166,10 +165,8 @@ class FigParams:
 class OutlineParams:
     """Cmap params."""
 
-    # outer_outline: bool
     outer_outline_color: Color | None = None
     outer_outline_linewidth: float = 1.5
-    # inner_outline: bool = False
     inner_outline_color: Color | None = None
     inner_outline_linewidth: float = 0.5
 
