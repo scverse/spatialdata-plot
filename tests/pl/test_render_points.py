@@ -5,6 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 from anndata import AnnData
 from matplotlib.colors import Normalize
@@ -350,3 +351,25 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["points_table"].layers["normalized"] = RNG.random((nrows, ncols))
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
+
+
+def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+    # Work on an independent copy since we mutate tables
+    sdata_blobs_local = deepcopy(sdata_blobs)
+
+    # Create a table that annotates a DIFFERENT element than the one we will render
+    other_table = sdata_blobs_local["table"].copy()
+    other_table.obs["region"] = "blobs_labels"  # Different from blobs_points
+    other_table.uns["spatialdata_attrs"]["region"] = "blobs_labels"
+    sdata_blobs_local["other_table"] = other_table
+
+    # Rendering "blobs_points" with a table that annotates "blobs_labels"
+    # should raise a warning and fall back to using no table.
+    with pytest.warns(UserWarning, match="does not annotate element"):
+        (
+            sdata_blobs_local.pl.render_points(
+                "blobs_points",
+                color="channel_0_sum",
+                table_name="other_table",
+            ).pl.show()
+        )
