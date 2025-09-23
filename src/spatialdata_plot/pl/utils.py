@@ -66,10 +66,8 @@ from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
 
-# from spatialdata.transformations.transformations import Scale
-from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Translation
-from spatialdata.transformations import Sequence as SDSequence
 from spatialdata.transformations.operations import get_transformation
+from spatialdata.transformations.transformations import Scale
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
@@ -2379,102 +2377,6 @@ def _prepare_transformation(
     trans_data = trans + ax.transData if ax is not None else None
 
     return trans, trans_data
-
-
-def _get_datashader_trans_matrix_of_single_element(
-    trans: Identity | Scale | Affine | MapAxis | Translation,
-) -> npt.NDArray[Any]:
-    flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-    tm: npt.NDArray[Any] = trans.to_affine_matrix(("x", "y"), ("x", "y"))
-
-    if isinstance(trans, Identity):
-        return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    if isinstance(trans, (Scale | Affine)):
-        # idea: "flip the y-axis", apply transformation, flip back
-        flip_and_transform: npt.NDArray[Any] = flip_matrix @ tm @ flip_matrix
-        return flip_and_transform
-    if isinstance(trans, MapAxis):
-        # no flipping needed
-        return tm
-    # for a Translation, we need the transposed transformation matrix
-    tm_T = tm.T
-    assert isinstance(tm_T, np.ndarray)
-    return tm_T
-
-
-def _get_transformation_matrix_for_datashader(
-    trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
-) -> npt.NDArray[Any]:
-    """Get the affine matrix needed to transform shapes for rendering with datashader."""
-    if isinstance(trans, SDSequence):
-        tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-        for x in trans.transformations:
-            tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
-        return tm
-    return _get_datashader_trans_matrix_of_single_element(trans)
-
-
-def _datashader_map_aggregate_to_color(
-    agg: DataArray,
-    cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] = None,
-    min_alpha: float = 40,
-    span: None | list[float] = None,
-    clip: bool = True,
-) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
-    """ds.tf.shade() part, ensuring correct clipping behavior.
-
-    If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results.
-    This ensures the correct clipping behavior, because else datashader would always automatically clip.
-    """
-    if not clip and isinstance(cmap, Colormap) and span is not None:
-        # in case we use datashader together with a Normalize object where clip=False
-        # why we need this is documented in https://github.com/scverse/spatialdata-plot/issues/372
-        agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
-        img_in = ds.tf.shade(
-            agg_in,
-            cmap=cmap,
-            span=(span[0], span[1]),
-            how="linear",
-            color_key=color_key,
-            min_alpha=min_alpha,
-        )
-
-        agg_under = agg.where(agg < span[0])
-        img_under = ds.tf.shade(
-            agg_under,
-            cmap=[to_hex(cmap.get_under())[:7]],
-            min_alpha=min_alpha,
-            color_key=color_key,
-        )
-
-        agg_over = agg.where(agg > span[1])
-        img_over = ds.tf.shade(
-            agg_over,
-            cmap=[to_hex(cmap.get_over())[:7]],
-            min_alpha=min_alpha,
-            color_key=color_key,
-        )
-
-        # stack the 3 arrays manually: go from under, through in to over and always overlay the values where alpha=0
-        stack = img_under.to_numpy().base
-        if stack is None:
-            stack = img_in.to_numpy().base
-        else:
-            stack[stack[:, :, 3] == 0] = img_in.to_numpy().base[stack[:, :, 3] == 0]
-        img_over = img_over.to_numpy().base
-        if img_over is not None:
-            stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
-        return stack
-
-    return ds.tf.shade(
-        agg,
-        cmap=cmap,
-        color_key=color_key,
-        min_alpha=min_alpha,
-        span=span,
-        how="linear",
-    )
 
 
 def _hex_no_alpha(hex: str) -> str:

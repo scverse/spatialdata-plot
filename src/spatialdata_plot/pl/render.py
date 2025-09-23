@@ -189,7 +189,7 @@ def _render_shapes(
         element_trans = get_transformation(sdata_filt.shapes[element], to_coordinate_system=coordinate_system)
         tm = _get_transformation_matrix_for_datashader(element_trans)
         transformed_element = sdata_filt.shapes[element].transform(
-            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
+            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(
