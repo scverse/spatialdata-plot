@@ -186,8 +186,7 @@ def _render_shapes(
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # apply transformations to the individual points
-        element_trans = get_transformation(sdata_filt.shapes[element], to_coordinate_system=coordinate_system)
-        tm = _get_transformation_matrix_for_datashader(element_trans)
+        tm = trans.get_matrix()
         transformed_element = sdata_filt.shapes[element].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
