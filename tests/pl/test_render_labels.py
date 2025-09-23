@@ -299,7 +299,6 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels_large", color="category", table_name="table").pl.show()
 
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
-
         labels_name = "blobs_labels"
         instances = get_element_instances(sdata_blobs[labels_name])
         n_obs = len(instances)
@@ -319,7 +318,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"] #purple, green ,yellow
+        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green ,yellow
 
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
