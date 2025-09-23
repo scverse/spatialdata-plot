@@ -1,62 +1,35 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling", "hatch-vcs", "hatch-fancy-pypi-readme"]
+requires = ["hatchling", "hatch-vcs"]
 
 [project]
 name = "spatialdata-plot"
-dynamic = ["readme", "version"]
 description = "Static plotting for spatial data."
-requires-python = ">=3.11"
-license = "BSD-3-Clause"
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "Natural Language :: English",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS :: MacOS X",
-    "Typing :: Typed",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Environment :: Console",
-    "Framework :: Jupyter",
-    "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "Topic :: Scientific/Engineering :: Visualization",
-]
-keywords = [
-    "spatial omics",
-    "spatial data analysis",
-    "visualization",
-    "plotting",
-    "bio-informatics",
-    "single-cell",
-]
 authors = [
-    {name = "Tim Treis"},
-    {name = "Wouter-Michiel Vierdag"},
-    {name = "Sonja Stockhaus"},
+    {name = "scverse"},
 ]
 maintainers = [
-    {name = "Tim Treis", email = "tim.treis@helmholtz-munich.de"},
+    {name = "Tim Treis", email = "tim.treis@scverse.org"},
 ]
-
+urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
+urls.Source = "https://github.com/scverse/spatialdata-plot.git"
+urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
+requires-python = ">=3.11"
+dynamic= [
+    "version" # allow version to be set by git tags
+]
+license = {file = "LICENSE"}
+readme = "README.md"
 dependencies = [
     "spatialdata>=0.3.0",
-    "matplotlib>=3.3",
-    "matplotlib-scalebar>=0.8.0",
-    "scikit-learn>=0.24.0",
-    "scanpy>=1.9.3",
-    "numpy>=1.23.0",
-    "pandas>=2.1.0",
+    "matplotlib",
+    "scikit-learn",
+    "scanpy",
+    "matplotlib_scalebar",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pre-commit>=3.0.0",
-    "hatch>=1.9.0",
-    "build",
-    "twine",
     "jupyterlab",
     "notebook",
     "ipykernel",
@@ -64,84 +37,53 @@ dev = [
     "jupytext",
     "pytest",
     "pytest-cov",
+    "pooch",
     "ruff",
-]
-test = [
-    "pytest>=7",
-    "pytest-xdist>=3",
-    "pytest-mock>=3.5.0",
-    "pytest-cov>=4",
-    "coverage[toml]>=7",
-    "pytest-timeout>=2.1.0",
-    "pooch", # for scipy.datasets module
+    "pre-commit",
 ]
 docs = [
-    "ipython>=8.6.0",
-    "ipywidgets>=8.0.0",
-    "sphinx>=5.3",
-    "sphinx-autodoc-annotation",
-    "sphinx-autodoc-typehints>=1.10.3",
+    "sphinx>=4.5",
     "sphinx-book-theme>=1.0.0",
     "sphinx_rtd_theme",
-    "sphinxcontrib-bibtex>=2.3.0",
-    "myst-nb>=0.17.1",
+    "myst-nb",
+    "sphinxcontrib-bibtex>=1.0.0",
+    "sphinx-autodoc-typehints",
     "sphinx-design",
-    "sphinx-copybutton>=0.5.0",
+    # For notebooks
+    "ipython>=8.6.0",
+    "sphinx-copybutton",
 ]
-# this will be used by readthedocs and will make pip also look for pre-releases, generally installing the latest available version
-pre = [
-    "spatialdata>=0.1.0-pre0"
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pooch", # for scipy.datasets module
 ]
-
-[project.urls]
-Homepage = "https://github.com/scverse/spatialdata-plot"
-"Bug Tracker" = "https://github.com/scverse/spatialdata-plot/issues"
-Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
-"Source Code" = "https://github.com/scverse/spatialdata-plot"
 
 [tool.coverage.run]
-branch = true
-parallel = true
 source = ["spatialdata_plot"]
 omit = [
-    "*/__init__.py",
-    "*/_version.py",
     "**/test_*.py",
 ]
-
-[tool.coverage.paths]
-source = [
-    "spatialdata_plot",
-    "*/site-packages/spatialdata_plot",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "\\#.*pragma:\\s*no.?cover",
-    "^if __name__ == .__main__.:$",
-    "^\\s*raise AssertionError\\b",
-    "^\\s*raise NotImplementedError\\b",
-    "^\\s*return NotImplemented\\b",
-]
-show_missing = true
-precision = 2
-skip_empty = true
-sort = "Miss"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 xfail_strict = true
 addopts = [
+#    "-Werror",  # if 3rd party libs raise DeprecationWarnings, just use filterwarnings below
     "--import-mode=importlib",  # allow using test files with same name
     "-s"  # print output from tests
 ]
+# info on how to use this https://stackoverflow.com/questions/57925071/how-do-i-avoid-getting-deprecationwarning-from-inside-dependencies-with-pytest
 filterwarnings = [
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning",
+    #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
 ]
 
+[tool.jupytext]
+formats = "ipynb,md"
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/spatialdata_plot"]
+packages = ['src/spatialdata_plot']
 
 [tool.hatch.version]
 source = "vcs"
@@ -152,11 +94,6 @@ version-file = "_version.py"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.hatch.metadata.hooks.fancy-pypi-readme]
-content-type = "text/markdown"
-[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
-path = "README.md"
-
 [tool.ruff]
 line-length = 120
 exclude = [
@@ -166,62 +103,57 @@ exclude = [
     "build",
     "docs/_build",
     "dist",
-    "setup.py"
+    "setup.py",
 ]
-
-[tool.ruff.format]
-docstring-code-format = true
-
 [tool.ruff.lint]
 ignore = [
-    # line too long -> we accept long comment lines; formatter gets rid of long code lines
-    "E501",
     # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E731",
     # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
     "E741",
     # Missing docstring in public package
     "D104",
-    # ... imported but unused
-    "F401",
     # Missing docstring in public module
     "D100",
     # Missing docstring in __init__
     "D107",
+    # Missing docstring in magic method
+    "D105",
     # Do not perform function calls in argument defaults.
     "B008",
     # Missing docstring in magic method
     "D105",
-    # Missing blank line before section
-    "D411",
-    # B024 Do not use `__class__` for string comparisons.
-    "B024",
 ]
 select = [
+    "D", # flake8-docstrings
     "I", # isort
     "E", # pycodestyle
     "F", # pyflakes
     "W", # pycodestyle
-    # below are not autofixed
+    "Q", # flake8-quotes
+    "SIM", # flake8-simplify
+    "TID",  # flake-8-tidy-imports
+    "NPY",  # NumPy-specific rules
+    "PT",  # flake8-pytest-style
+    "B", # flake8-bugbear
     "UP", # pyupgrade
     "C4", # flake8-comprehensions
-    "B", # flake8-bugbear
     "BLE", # flake8-blind-except
+    "T20",  # flake8-print
+    "RET", # flake8-raise
+    "PGH", # pygrep-hooks
 ]
-unfixable = ["B", "C4", "BLE"]
-
-[tool.ruff.lint.isort]
-required-imports = ["from __future__ import annotations"]
+unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
 
 [tool.ruff.lint.per-file-ignores]
-"*/__init__.py" = ["D104", "F401"]
-"tests/*" = ["D"]
-"docs/*" = ["D", "B"]
-"src/spatialdata_plot/pl/utils.py" = ["PGH003"]
+    "tests/*" = ["D", "PT", "B024"]
+    "*/__init__.py" = ["F401", "D104", "D107", "E402"]
+    "docs/*" = ["D","B","E","A"]
+    "tests/conftest.py"= ["E402", "RET504"]
+    "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
 
-[tool.ruff.lint.flake8-tidy-imports]
-# Disallow all relative imports.
-ban-relative-imports = "all"
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
@@ -241,10 +173,9 @@ python = "3.11.*"
 python = "3.13.*"
 
 [tool.pixi.environments]
-# 3.11 lane
+# 3.11 lane (for gh-actions)
 dev-py311  = { features = ["dev", "test", "py311"], solve-group = "py311" }
 docs-py311 = { features = ["docs", "py311"],        solve-group = "py311" }
-test-py311 = { features = ["test", "py311"],        solve-group = "py311" }
 
 # 3.13 lane
 default    = { features = ["py313"],                 solve-group = "py313" }
@@ -254,8 +185,8 @@ test-py313 = { features = ["test", "py313"],         solve-group = "py313" }
 
 [tool.pixi.tasks]
 lab = "jupyter lab"
-kernel-install = "python -m ipykernel install --user --name pixi-dev --display-name \"spatialdata-plot (dev)\""
-test = "pytest -v --cov --color=yes --cov-report=xml --tb=short --durations=10"
+kernel-install = "python -m ipykernel install --user --name pixi-dev --display-name \"sdata-plot (dev)\""
+test = "pytest -v --color=yes --tb=short --durations=10"
 lint = "ruff check ."
 format = "ruff format ."
 pre-commit-install = "pre-commit install"

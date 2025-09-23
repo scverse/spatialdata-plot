@@ -3,56 +3,73 @@ name: Test
 on:
   push:
     branches: [main]
-    tags:
-      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
+    tags: ["v*"] # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
-    branches: "*"
+    branches: ["*"]
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash -l {0}
-
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.13"]
-        os: [ubuntu-latest, macos-latest]
+        env: ["dev-py311", "dev-py313"]
 
+    # Configure pytest-xdist
     env:
-      OS: ${{ matrix.os }}
-      PYTHON: ${{ matrix.python }}
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_MAX_THREADS: "1"
+      MPLBACKEND: "agg"
+      DISPLAY: ":42"
+      PYTEST_ADDOPTS: "-n auto --dist=load --durations=10"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@v0.8.1
+      # Cache rattler's shared package cache (speeds up downloads)
+      - name: Restore rattler cache
+        uses: actions/cache@v4
         with:
-          pixi-version: v0.34.0
-          cache: true
+          path: ~/.cache/rattler
+          key: rattler-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            rattler-${{ runner.os }}-${{ matrix.env }}-
+            rattler-${{ runner.os }}-
 
-      - name: Install dependencies and run tests
+      # Install pixi and the requested environment
+      - uses: prefix-dev/setup-pixi@v0.9.0
+        with:
+          environments: ${{ matrix.env }}
+          # We're not comitting the pixi-lock file
+          locked: false
+          cache: false
+          activate-environment: ${{ matrix.env }}
+
+      - name: Show versions
+        run: |
+          python --version
+          pixi --version
+
+      - name: Run tests
         env:
           MPLBACKEND: agg
-          PLATFORM: ${{ matrix.os }}
-          DISPLAY: :42
+          DISPLAY: ":42"
         run: |
-          pixi run -e dev-py${{ matrix.python }} test
+          pytest -v --cov --color=yes --cov-report=xml
+
       - name: Archive figures generated during testing
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: visual_test_results_${{ matrix.os }}-python${{ matrix.python }}
-          path: tests/figures/*
+          name: visual_test_results_${{ matrix.env }}
+          path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           name: coverage
           verbose: true
-          file: ./coverage.xml
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
