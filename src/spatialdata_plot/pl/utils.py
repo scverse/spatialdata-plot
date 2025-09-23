@@ -356,7 +356,7 @@ def _get_collection_shape(
 
     fill_c = ColorConverter().to_rgba_array(c)
     # fill_c[..., -1] *= fill_alpha # NOTE: this contradicts matplotlib behavior, therefore discarded
-    if fill_alpha:
+    if fill_alpha is not None:
         fill_c[..., -1] = fill_alpha
 
     if outline_alpha and outline_alpha > 0.0:
