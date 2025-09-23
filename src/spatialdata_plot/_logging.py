@@ -1,9 +1,10 @@
 # from https://github.com/scverse/spatialdata/blob/main/src/spatialdata/_logging.py
+from __future__ import annotations
 
 import logging
 
 
-def _setup_logger() -> "logging.Logger":
+def _setup_logger() -> logging.Logger:
     from rich.console import Console
     from rich.logging import RichHandler
 
