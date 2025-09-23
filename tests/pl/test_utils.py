@@ -1,6 +1,7 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
@@ -47,7 +48,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_colnames_that_are_valid_matplotlib_greyscale_colors_are_not_evaluated_as_colors(
         self, sdata_blobs: SpatialData, colname: str
     ):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"][colname] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color=colname).pl.show()
@@ -86,7 +87,6 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     ],
 )
 def test_is_color_like(color_result: tuple[ColorLike, bool]):
-
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
@@ -121,7 +121,6 @@ def test_utils_sanitise_na_color(input_output):
     ],
 )
 def test_utils_sanitise_na_color_accepts_valid_inputs(input_output):
-
     func_input, expected_output = input_output
 
     assert _sanitise_na_color(func_input) == expected_output
@@ -141,7 +140,6 @@ def test_utils_sanitise_na_color_fails_when_input_isnt_a_color():
     ],
 )
 def test_utils_get_subplots_produces_correct_axs_layout(input_output):
-
     num_images, ncols, len_axs, axs_visible = input_output
 
     _, axs = _get_subplots(num_images=num_images, ncols=ncols)
