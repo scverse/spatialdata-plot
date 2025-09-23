@@ -44,7 +44,6 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
-    _get_transformation_matrix_for_datashader,
     _hex_no_alpha,
     _is_coercable_to_float,
     _map_color_seg,
