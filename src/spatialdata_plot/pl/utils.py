@@ -782,7 +782,7 @@ def _set_color_source_vec(
         else:
             table_to_use = list(sdata.tables.keys())[0]
             logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
-        
+
         # Check if custom colors exist in the table's .uns slot
         if _has_colors_in_uns(sdata, table_name, value_to_plot):
             # Extract colors directly from the table's .uns slot
@@ -935,7 +935,7 @@ def _has_colors_in_uns(
 ) -> bool:
     """
     Check if <column_name>_colors exists in the specified table's .uns slot.
-    
+
     Parameters
     ----------
     sdata
@@ -944,7 +944,7 @@ def _has_colors_in_uns(
         Name of the table to check. If None, uses the first available table.
     col_to_colorby
         Name of the categorical column (e.g., "celltype")
-        
+
     Returns
     -------
     True if <col_to_colorby>_colors exists in the table's .uns, False otherwise
@@ -958,10 +958,10 @@ def _has_colors_in_uns(
         if len(sdata.tables) == 0:
             return False
         table_to_use = list(sdata.tables.keys())[0]
-    
+
     adata = sdata.tables[table_to_use]
     color_key = f"{col_to_colorby}_colors"
-    
+
     return color_key in adata.uns
 
 
@@ -974,10 +974,10 @@ def _extract_colors_from_table_uns(
 ) -> Mapping[str, str] | None:
     """
     Extract categorical colors from the <column_name>_colors pattern in adata.uns.
-    
+
     This function looks for colors stored in the format <col_to_colorby>_colors in the
     specified table's .uns slot and creates a mapping from categories to colors.
-    
+
     Parameters
     ----------
     sdata
@@ -990,7 +990,7 @@ def _extract_colors_from_table_uns(
         Categorical vector containing the categories to map
     na_color
         Color to use for NaN/missing values
-        
+
     Returns
     -------
     Mapping from category names to hex colors, or None if colors not found
@@ -1007,28 +1007,28 @@ def _extract_colors_from_table_uns(
             return None
         table_to_use = list(sdata.tables.keys())[0]
         logger.info(f"No table name provided, using '{table_to_use}' for color extraction.")
-    
+
     adata = sdata.tables[table_to_use]
     color_key = f"{col_to_colorby}_colors"
-    
+
     # Check if the color pattern exists
     if color_key not in adata.uns:
         logger.debug(f"Color key '{color_key}' not found in table '{table_to_use}' uns.")
         return None
-    
+
     # Extract colors and categories
     stored_colors = adata.uns[color_key]
     categories = color_source_vector.categories.tolist()
-    
+
     # Validate na_color format
     if "#" not in str(na_color):
         logger.warning("Expected `na_color` to be a hex color, converting...")
         na_color = to_hex(to_rgba(na_color)[:3])
-    
+
     # Strip alpha channel from na_color if present
     if len(str(na_color)) == 9:  # #rrggbbaa format
         na_color = str(na_color)[:7]  # Keep only #rrggbb
-    
+
     # Convert stored colors to hex format (without alpha channel)
     try:
         hex_colors = []
@@ -1042,10 +1042,10 @@ def _extract_colors_from_table_uns(
     except Exception as e:
         logger.warning(f"Error converting colors to hex format: {e}")
         return None
-    
+
     # Create the mapping
     color_mapping = {}
-    
+
     # Map categories to colors
     for i, category in enumerate(categories):
         if i < len(hex_colors):
@@ -1054,10 +1054,10 @@ def _extract_colors_from_table_uns(
             # Not enough colors provided, use na_color for extra categories
             logger.warning(f"Not enough colors provided for category '{category}', using na_color.")
             color_mapping[category] = na_color
-    
+
     # Add NaN category
     color_mapping["NaN"] = na_color
-    
+
     logger.info(f"Successfully extracted {len(hex_colors)} colors from '{color_key}' in table '{table_to_use}'.")
     return color_mapping
 
