@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dask.array as da
 import matplotlib
 import numpy as np

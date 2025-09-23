@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, ABCMeta
 from collections.abc import Callable
 from functools import wraps

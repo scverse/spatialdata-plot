@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import spatialdata as sd
 from xarray.core.extensions import _register_accessor
 
