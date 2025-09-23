@@ -11,7 +11,7 @@ import scanpy as sc
 from anndata import AnnData
 from matplotlib.colors import Normalize
 from shapely.geometry import MultiPolygon, Point, Polygon
-from spatialdata import SpatialData, deepcopy
+from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import ShapesModel, TableModel
 from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
 from spatialdata.transformations._utils import _set_transformations
@@ -583,3 +583,28 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
+    def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
+
+        labels_name = "blobs_labels"
+        instances = get_element_instances(sdata_blobs[labels_name])
+        n_obs = len(instances)
+        adata = AnnData(
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+        )
+        adata.obs["instance_id"] = instances.values
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs["region"] = labels_name
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region=labels_name,
+        )
+        sdata_blobs["other_table"] = table
+        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
+        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"] #purple, green ,yellow
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
