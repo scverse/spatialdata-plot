@@ -970,12 +970,16 @@ class PlotAccessor:
                             assert isinstance(params_copy.color, str)
                             colors = sc.get.obs_df(sdata[table], [params_copy.color])
                             if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
-                                _maybe_set_colors(
-                                    source=sdata[table],
-                                    target=sdata[table],
-                                    key=params_copy.color,
-                                    palette=params_copy.palette,
-                                )
+                                # Avoid mutating `.uns` by generating new colors implicitly.
+                                # Only copy colors if they already exist in `.uns`.
+                                color_key = f"{params_copy.color}_colors"
+                                if color_key in sdata[table].uns:
+                                    _maybe_set_colors(
+                                        source=sdata[table],
+                                        target=sdata[table],
+                                        key=params_copy.color,
+                                        palette=params_copy.palette,
+                                    )
 
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)

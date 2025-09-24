@@ -785,6 +785,7 @@ def _set_color_source_vec(
 
         # Check if custom colors exist in the table's .uns slot
         if _has_colors_in_uns(sdata, table_name, value_to_plot):
+            print("no")
             # Extract colors directly from the table's .uns slot
             color_mapping = _extract_colors_from_table_uns(
                 sdata=sdata,
@@ -955,12 +956,14 @@ def _has_colors_in_uns(
             return False
         table_to_use = table_name
     else:
-        if len(sdata.tables) == 0:
+        if len(sdata.tables.keys()) == 0:
             return False
         table_to_use = list(sdata.tables.keys())[0]
 
     adata = sdata.tables[table_to_use]
     color_key = f"{col_to_colorby}_colors"
+    print(f"color_key: {color_key}")
+    print(f"adata.uns: {adata.uns}")
 
     return color_key in adata.uns
 
