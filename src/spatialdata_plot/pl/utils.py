@@ -784,8 +784,7 @@ def _set_color_source_vec(
             logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
 
         # Check if custom colors exist in the table's .uns slot
-        if _has_colors_in_uns(sdata, table_name, value_to_plot):
-            print("no")
+        if value_to_plot is not None and _has_colors_in_uns(sdata, table_name, value_to_plot):
             # Extract colors directly from the table's .uns slot
             color_mapping = _extract_colors_from_table_uns(
                 sdata=sdata,
@@ -962,9 +961,6 @@ def _has_colors_in_uns(
 
     adata = sdata.tables[table_to_use]
     color_key = f"{col_to_colorby}_colors"
-    print(f"color_key: {color_key}")
-    print(f"adata.uns: {adata.uns}")
-
     return color_key in adata.uns
 
 
@@ -1042,7 +1038,7 @@ def _extract_colors_from_table_uns(
             if len(hex_color) == 9:  # #rrggbbaa format
                 hex_color = hex_color[:7]  # Keep only #rrggbb
             hex_colors.append(hex_color)
-    except Exception as e:
+    except (TypeError, ValueError) as e:
         logger.warning(f"Error converting colors to hex format: {e}")
         return None
 
