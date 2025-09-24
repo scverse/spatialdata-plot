@@ -16,6 +16,7 @@ import spatialdata as sd
 from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
@@ -842,8 +843,10 @@ def _render_images(
         )
 
         if legend_params.colorbar:
+            ax_divider = make_axes_locatable(ax)
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
-            fig_params.fig.colorbar(sm, ax=ax)
+            cax = ax_divider.append_axes("right", size="7%", pad="2%")
+            fig_params.fig.colorbar(sm, ax=ax, cax=cax)
 
     # 2) Image has any number of channels but 1
     else:
