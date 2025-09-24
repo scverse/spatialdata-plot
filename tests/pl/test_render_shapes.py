@@ -586,6 +586,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
+
 def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
     sdata_blobs_local = deepcopy(sdata_blobs)
@@ -606,5 +607,3 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
-
-
