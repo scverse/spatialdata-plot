@@ -563,7 +563,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
-
         labels_name = "blobs_labels"
         instances = get_element_instances(sdata_blobs[labels_name])
         n_obs = len(instances)
@@ -583,7 +582,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         )
         sdata_blobs["other_table"] = table
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"] #purple, green ,yellow
+        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green ,yellow
 
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
 
@@ -607,4 +606,5 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
 
