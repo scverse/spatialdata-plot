@@ -17,9 +17,8 @@ from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequen
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
-RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -287,10 +286,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_shapes_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_polygons"])
-        adata = AnnData(RNG.normal(size=(n_obs, 10)))
-        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
         table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
@@ -300,10 +299,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_shapes_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_polygons"])
-        adata = AnnData(RNG.normal(size=(n_obs, 10)))
-        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
         table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
@@ -322,11 +321,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(method="datashader", fill_alpha=0.7).pl.show()
 
     def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
-        RNG = np.random.default_rng(seed=42)
         n_obs = len(sdata_blobs["blobs_polygons"])
-        adata = AnnData(RNG.normal(size=(n_obs, 10)))
-        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
         table = TableModel.parse(
@@ -340,11 +338,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()
 
     def test_plot_datashader_can_color_by_category_with_cmap(self, sdata_blobs: SpatialData):
-        RNG = np.random.default_rng(seed=42)
         n_obs = len(sdata_blobs["blobs_polygons"])
-        adata = AnnData(RNG.normal(size=(n_obs, 10)))
-        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
         table = TableModel.parse(
@@ -360,11 +357,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_can_color_by_category_with_cmap(self, sdata_blobs: SpatialData):
-        RNG = np.random.default_rng(seed=42)
         n_obs = len(sdata_blobs["blobs_polygons"])
-        adata = AnnData(RNG.normal(size=(n_obs, 10)))
-        adata.obs = pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+        adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_polygons"
         table = TableModel.parse(
@@ -556,7 +552,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_shapes_with_table_layer(self, sdata_blobs: SpatialData):
         nrows, ncols = 5, 3
-        feature_matrix = RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_circles"].index
@@ -569,7 +565,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
         table = TableModel.parse(table, region="blobs_circles", region_key="region", instance_key="instance_id")
         sdata_blobs["circle_table"] = table
-        sdata_blobs["circle_table"].layers["normalized"] = RNG.random((nrows, ncols))
+        sdata_blobs["circle_table"].layers["normalized"] = get_standard_RNG().random((nrows, ncols))
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
