@@ -19,7 +19,7 @@ from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
-from spatialdata.transformations import get_transformation, set_transformation
+from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
@@ -46,7 +46,6 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
-    _get_transformation_matrix_for_datashader,
     _hex_no_alpha,
     _is_coercable_to_float,
     _map_color_seg,
@@ -137,7 +136,7 @@ def _render_shapes(
     if isinstance(groups, list) and color_source_vector is not None:
         mask = color_source_vector.isin(groups)
         shapes = shapes[mask]
-        shapes = shapes.reset_index()
+        shapes = shapes.reset_index(drop=True)
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
 
@@ -190,10 +189,9 @@ def _render_shapes(
             sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # apply transformations to the individual points
-        element_trans = get_transformation(sdata_filt.shapes[element], to_coordinate_system=coordinate_system)
-        tm = _get_transformation_matrix_for_datashader(element_trans)
+        tm = trans.get_matrix()
         transformed_element = sdata_filt.shapes[element].transform(
-            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm)[:, :2]
+            lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(
@@ -363,8 +361,10 @@ def _render_shapes(
         cax = None
         if aggregate_with_reduction is not None:
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
-            vmax = aggregate_with_reduction[1].values if norm.vmin is None else norm.vmax
+            vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
+                assert norm.vmin is not None
+                assert norm.vmax is not None
                 # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
                 # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
                 vmin = norm.vmin - 0.5
@@ -766,6 +766,8 @@ def _render_points(
             vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
             vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
             if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
+                assert norm.vmin is not None
+                assert norm.vmax is not None
                 # value (vmin=vmax) is placed in the middle of the colorbar so that we can distinguish it from over and
                 # under values in case clip=True or clip=False with cmap(under)=cmap(0) & cmap(over)=cmap(1)
                 vmin = norm.vmin - 0.5
@@ -922,20 +924,22 @@ def _render_images(
     # 2) Image has any number of channels but 1
     else:
         layers = {}
-        for ch_index, c in enumerate(channels):
-            layers[c] = img.sel(c=c).copy(deep=True).squeeze()
-
-            if not isinstance(render_params.cmap_params, list):
-                if render_params.cmap_params.norm is not None:
-                    layers[c] = render_params.cmap_params.norm(layers[c])
+        for ch_idx, ch in enumerate(channels):
+            layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
+            if isinstance(render_params.cmap_params, list):
+                ch_norm = render_params.cmap_params[ch_idx].norm
+                ch_cmap_is_default = render_params.cmap_params[ch_idx].cmap_is_default
             else:
-                if render_params.cmap_params[ch_index].norm is not None:
-                    layers[c] = render_params.cmap_params[ch_index].norm(layers[c])
+                ch_norm = render_params.cmap_params.norm
+                ch_cmap_is_default = render_params.cmap_params.cmap_is_default
+
+            if not ch_cmap_is_default and ch_norm is not None:
+                layers[ch_idx] = ch_norm(layers[ch_idx])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
-                stacked = np.stack([layers[c] for c in channels], axis=-1)
+                stacked = np.stack([layers[ch] for ch in layers], axis=-1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
@@ -968,12 +972,54 @@ def _render_images(
             # overwrite if n_channels == 2 for intuitive result
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
-            else:
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
+            elif n_channels == 3:
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+                colored = np.stack(
+                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
+                    0,
+                ).sum(0)
+                colored = colored[:, :, :3]
+            else:
+                if isinstance(render_params.cmap_params, list):
+                    cmap_is_default = render_params.cmap_params[0].cmap_is_default
+                else:
+                    cmap_is_default = render_params.cmap_params.cmap_is_default
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-            colored = np.stack([channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+                if cmap_is_default:
+                    seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
+                else:
+                    # Sample n_channels colors evenly from the colormap
+                    if isinstance(render_params.cmap_params, list):
+                        seed_colors = [
+                            render_params.cmap_params[i].cmap(i / (n_channels - 1)) for i in range(n_channels)
+                        ]
+                    else:
+                        seed_colors = [render_params.cmap_params.cmap(i / (n_channels - 1)) for i in range(n_channels)]
+                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+
+                # Stack (n_channels, height, width) → (height*width, n_channels)
+                H, W = next(iter(layers.values())).shape
+                comp_rgb = np.zeros((H, W, 3), dtype=float)
+
+                # For each channel: map to RGBA, apply constant alpha, then add
+                for ch_idx, ch in enumerate(channels):
+                    layer_arr = layers[ch]
+                    rgba = channel_cmaps[ch_idx](layer_arr)
+                    rgba[..., 3] = render_params.alpha
+                    comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
+
+                colored = np.clip(comp_rgb, 0, 1)
+                logger.info(
+                    f"Your image has {n_channels} channels. Sampling categorical colors and using "
+                    f"multichannel strategy 'stack' to render."
+                )  # TODO: update when pca is added as strategy
 
             _ax_show_and_transform(
                 colored,
@@ -1019,6 +1065,7 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
+        # 2D) Image has n channels, no palette but cmap info
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 

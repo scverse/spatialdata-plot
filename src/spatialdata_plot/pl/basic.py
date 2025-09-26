@@ -912,6 +912,7 @@ class PlotAccessor:
                 cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
             )
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
+            assert isinstance(ax, Axes)
 
             wants_images = False
             wants_labels = False

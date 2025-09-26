@@ -1,6 +1,6 @@
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
@@ -9,8 +9,6 @@ import spatialdata_plot
 from spatialdata_plot.pl.utils import _get_subplots
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-SEED = 42
-RNG = np.random.default_rng(seed=SEED)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -47,7 +45,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_colnames_that_are_valid_matplotlib_greyscale_colors_are_not_evaluated_as_colors(
         self, sdata_blobs: SpatialData, colname: str
     ):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"][colname] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color=colname).pl.show()

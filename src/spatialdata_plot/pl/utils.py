@@ -65,11 +65,8 @@ from spatialdata import (
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement
-
-# from spatialdata.transformations.transformations import Scale
-from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Translation
-from spatialdata.transformations import Sequence as SDSequence
 from spatialdata.transformations.operations import get_transformation
+from spatialdata.transformations.transformations import Scale
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
@@ -504,6 +501,8 @@ def _prepare_cmap_norm(
 
     cmap = copy(cmap)
 
+    assert isinstance(cmap, Colormap), f"Invalid type of `cmap`: {type(cmap)}, expected `Colormap`."
+
     if norm is None:
         norm = Normalize(vmin=None, vmax=None, clip=False)
 
@@ -824,8 +823,9 @@ def _set_color_source_vec(
 
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
 
+        # TODO check why table_name is not passed here.
         color_mapping = _get_categorical_color_mapping(
-            adata=sdata.table,
+            adata=sdata["table"],
             cluster_key=value_to_plot,
             color_source_vector=color_source_vector,
             cmap_params=cmap_params,
@@ -1940,7 +1940,8 @@ def _validate_label_render_params(
 
         element_params[el]["table_name"] = None
         element_params[el]["color"] = None
-        if (color := param_dict["color"]) is not None:
+        color = param_dict["color"]
+        if color is not None:
             color, table_name = _validate_col_for_column_table(sdata, el, color, param_dict["table_name"], labels=True)
             element_params[el]["table_name"] = table_name
             element_params[el]["color"] = color
@@ -2102,6 +2103,11 @@ def _validate_col_for_column_table(
         if table_name not in tables or (
             col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
         ):
+            warnings.warn(
+                f"Table '{table_name}' does not annotate element '{element_name}'.",
+                UserWarning,
+                stacklevel=2,
+            )
             table_name = None
             col_for_color = None
     else:
@@ -2115,7 +2121,7 @@ def _validate_col_for_column_table(
             table_name = next(iter(tables))
             if len(tables) > 1:
                 warnings.warn(
-                    f"Multiple tables contain color column, using {table_name}",
+                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -2151,25 +2157,49 @@ def _validate_image_render_params(
         element_params[el] = {}
         spatial_element = param_dict["sdata"][el]
 
+        # robustly get channel names from image or multiscale image
         spatial_element_ch = (
-            spatial_element.c if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c
+            spatial_element.c.values if isinstance(spatial_element, DataArray) else spatial_element["scale0"].c.values
         )
-        if (channel := param_dict["channel"]) is not None and (
-            (isinstance(channel[0], int) and max([abs(ch) for ch in channel]) <= len(spatial_element_ch))
-            or all(ch in spatial_element_ch for ch in channel)
-        ):
+        channel = param_dict["channel"]
+        if channel is not None:
+            # Normalize channel to always be a list of str or a list of int
+            if isinstance(channel, str):
+                channel = [channel]
+
+            if isinstance(channel, int):
+                channel = [channel]
+
+            # If channel is a list, ensure all elements are the same type
+            if not (isinstance(channel, list) and channel and all(isinstance(c, type(channel[0])) for c in channel)):
+                raise TypeError("Each item in 'channel' list must be of the same type, either string or integer.")
+
+            invalid = [c for c in channel if c not in spatial_element_ch]
+            if invalid:
+                raise ValueError(
+                    f"Invalid channel(s): {', '.join(str(c) for c in invalid)}. Valid choices are: {spatial_element_ch}"
+                )
             element_params[el]["channel"] = channel
         else:
             element_params[el]["channel"] = None
 
         element_params[el]["alpha"] = param_dict["alpha"]
 
-        if isinstance(palette := param_dict["palette"], list):
+        palette = param_dict["palette"]
+        assert isinstance(palette, list | type(None))  # if present, was converted to list, just to make sure
+
+        if isinstance(palette, list):
+            # case A: single palette for all channels
             if len(palette) == 1:
                 palette_length = len(channel) if channel is not None else len(spatial_element_ch)
                 palette = palette * palette_length
-            if (channel is not None and len(palette) != len(channel)) and len(palette) != len(spatial_element_ch):
-                palette = None
+            # case B: one palette per channel (either given or derived from channel length)
+            channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
+            if channels_to_use is not None and len(palette) != len(channels_to_use):
+                raise ValueError(
+                    f"Palette length ({len(palette)}) does not match channel length "
+                    f"({', '.join(str(c) for c in channels_to_use)})."
+                )
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
@@ -2455,37 +2485,6 @@ def _prepare_transformation(
     trans_data = trans + ax.transData if ax is not None else None
 
     return trans, trans_data
-
-
-def _get_datashader_trans_matrix_of_single_element(
-    trans: Identity | Scale | Affine | MapAxis | Translation,
-) -> ArrayLike:
-    flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-    tm: ArrayLike = trans.to_affine_matrix(("x", "y"), ("x", "y"))
-
-    if isinstance(trans, Identity):
-        return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    if isinstance(trans, (Scale | Affine)):
-        # idea: "flip the y-axis", apply transformation, flip back
-        flip_and_transform: ArrayLike = flip_matrix @ tm @ flip_matrix
-        return flip_and_transform
-    if isinstance(trans, MapAxis):
-        # no flipping needed
-        return tm
-    # for a Translation, we need the transposed transformation matrix
-    return tm.T
-
-
-def _get_transformation_matrix_for_datashader(
-    trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
-) -> ArrayLike:
-    """Get the affine matrix needed to transform shapes for rendering with datashader."""
-    if isinstance(trans, SDSequence):
-        tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-        for x in trans.transformations:
-            tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
-        return tm
-    return _get_datashader_trans_matrix_of_single_element(trans)
 
 
 def _datashader_map_aggregate_to_color(
