@@ -186,7 +186,7 @@ class PlotAccessor:
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
             used.
-        color : ColorLike | None
+        color : ColorLike | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
             indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
@@ -194,9 +194,10 @@ class PlotAccessor:
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
             the color column is found in multiple locations, please provide the table_name to be used for the elements.
-        fill_alpha : float | int | None, default 1.0
-            Alpha value for the fill of shapes. If an alpha channel is present in a cmap passed by the user, this
-            value will overwrite the value present in the cmap.
+        fill_alpha : float | int | None, optional
+            Alpha value for the fill of shapes. By default, it is set to 1.0 or, if a color is given that implies an
+            alpha, that value is used for `fill_alpha`. If an alpha channel is present in a cmap passed by the user,
+            `fill_alpha` will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
@@ -209,14 +210,18 @@ class PlotAccessor:
             Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline_width : float | int | tuple[float | int, float | int], default 1.5
+        outline_width : float | int | tuple[float | int, float | int], optional
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
-        outline_color : ColorLike | tuple[ColorLike], default "#000000"
+            If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
+            default outline widths 1.5 and 0.5 are used for outer/only and inner outline respectively.
+        outline_color : ColorLike | tuple[ColorLike], optional
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
             "#000000ff", and `outline_alpha` is not given, this value controls the opacity of the outline. If 2 values
-            are given (tuple), 2 borders are shown with these colors (outer & inner).
-        outline_alpha : float | int | tuple[float | int, float | int] | None
+            are given (tuple), 2 borders are shown with these colors (outer & inner). If `outline_width` and/or
+            `outline_alpha` are used to indicate that one/two outlines should be drawn, the default outline colors
+            "#000000" and "#ffffff are used for outer/only and inner outline respectively.
+        outline_alpha : float | int | tuple[float | int, float | int] | None, optional
             Alpha value for the outline of shapes. Invisible by default, meaning outline_alpha=0.0 if both outline_color
             and outline_width are not specified. Else, outlines are rendered with the alpha implied by outline_color, or
             with outline_alpha=1.0 if outline_color does not imply an alpha. For two outlines, alpha values can be
@@ -352,7 +357,7 @@ class PlotAccessor:
         element : str | None, optional
             The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
             used.
-        color : str | None
+        color : str | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
             indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
@@ -360,8 +365,9 @@ class PlotAccessor:
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
             the color column is found in multiple locations, please provide the table_name to be used for the elements.
-        alpha : float | int | None, default 1.0
-            Alpha value for the points.
+        alpha : float | int | None, optional
+            Alpha value for the points. By default, it is set to 1.0 or, if a color is given that implies an alpha, that
+            value is used instead.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. If `element` is `None`, broadcasting behaviour is attempted (use the same
@@ -637,7 +643,7 @@ class PlotAccessor:
             won't be shown.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
-        fill_alpha : float | int, default 0.3
+        fill_alpha : float | int, default 0.4
             Alpha value for the fill of the labels.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
