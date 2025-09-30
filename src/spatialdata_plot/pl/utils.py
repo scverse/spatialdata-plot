@@ -777,10 +777,11 @@ def _set_color_source_vec(
     alpha: float = 1.0,
     table_name: str | None = None,
     table_layer: str | None = None,
-    render_type: Literal["points"] | None = None,
+    render_type: Literal["points", "labels"] | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
-        color = np.full(len(element), na_color.get_hex_with_alpha())
+        n_elements = len(element) if render_type != "labels" else len(dask.array.unique(element.data).compute())
+        color = np.full(n_elements, na_color.get_hex_with_alpha())
         return color, color, False
 
     # Figure out where to get the color from
@@ -1000,7 +1001,7 @@ def _get_categorical_color_mapping(
     alpha: float = 1,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
-    render_type: Literal["points"] | None = None,
+    render_type: Literal["points", "labels"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
@@ -1648,7 +1649,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     }:
         if not isinstance(color, str | tuple | list):
             raise TypeError("Parameter 'color' must be a string or a tuple/list of floats.")
-        if element_type in {"shapes", "points"}:
+        if element_type in {"shapes", "points", "labels"}:
             if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
@@ -1656,7 +1657,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 if param_dict["color"].alpha_is_user_defined():
                     if element_type == "points" and param_dict.get("alpha") is None:
                         param_dict["alpha"] = param_dict["color"].get_alpha_as_float()
-                    elif element_type == "shapes" and param_dict.get("fill_alpha") is None:
+                    elif element_type in ["shapes", "labels"] and param_dict.get("fill_alpha") is None:
                         param_dict["fill_alpha"] = param_dict["color"].get_alpha_as_float()
                     else:
                         logger.info(
@@ -1668,7 +1669,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 param_dict["color"] = None
             else:
                 raise ValueError(f"{color} is not a valid RGB(A) array and therefore can't be used as 'color' value.")
-    elif "color" in param_dict and element_type != "labels":
+    elif "color" in param_dict and element_type != "images":
         param_dict["col_for_color"] = None
 
     if outline_width := param_dict.get("outline_width"):
@@ -1754,6 +1755,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif element_type == "shapes":
         # set default fill_alpha for shapes if not given by user explicitly or implicitly (as part of color)
         param_dict["fill_alpha"] = 1.0
+    elif element_type == "lables":
+        param_dict["fill_alpha"] = 0.4
 
     if (cmap := param_dict.get("cmap")) is not None and (palette := param_dict.get("palette")) is not None:
         raise ValueError("Both `palette` and `cmap` are specified. Please specify only one of them.")
@@ -1894,7 +1897,7 @@ def _validate_label_render_params(
     element: str | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     color: str | None,
-    fill_alpha: float | int,
+    fill_alpha: float | int | None,
     contour_px: int | None,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
@@ -1939,12 +1942,23 @@ def _validate_label_render_params(
         element_params[el]["table_layer"] = param_dict["table_layer"]
 
         element_params[el]["table_name"] = None
-        element_params[el]["color"] = None
-        color = param_dict["color"]
-        if color is not None:
-            color, table_name = _validate_col_for_column_table(sdata, el, color, param_dict["table_name"], labels=True)
+
+        # element_params[el]["color"] = None # TODO: delete
+        # color = param_dict["color"]
+        # if color is not None:
+        #     color, table_name = _validate_col_for_column_table(sdata, el, color, param_dict["table_name"],
+        #           labels=True)
+        #     element_params[el]["table_name"] = table_name
+        #     element_params[el]["color"] = color
+        element_params[el]["color"] = param_dict["color"]
+
+        element_params[el]["col_for_color"] = None
+        if (col_for_color := param_dict["col_for_color"]) is not None:
+            col_for_color, table_name = _validate_col_for_column_table(
+                sdata, el, col_for_color, param_dict["table_name"], labels=True
+            )
             element_params[el]["table_name"] = table_name
-            element_params[el]["color"] = color
+            element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if element_params[el]["table_name"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if element_params[el]["table_name"] is not None else None

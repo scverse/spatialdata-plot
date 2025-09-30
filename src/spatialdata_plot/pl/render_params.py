@@ -254,7 +254,8 @@ class LabelsRenderParams:
 
     cmap_params: CmapParams
     element: str
-    color: str | None = None
+    color: Color | None = None
+    col_for_color: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
     outline: bool = False

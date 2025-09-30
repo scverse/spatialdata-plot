@@ -598,7 +598,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
         outline_alpha: float | int = 0.0,
-        fill_alpha: float | int = 0.4,
+        fill_alpha: float | int | None = None,
         scale: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
@@ -643,8 +643,9 @@ class PlotAccessor:
             won't be shown.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
-        fill_alpha : float | int, default 0.4
-            Alpha value for the fill of the labels.
+        fill_alpha : float | int, optional.
+            Alpha value for the fill of the labels. When no alpha is implied by the passed color, a default value of 0.4
+            is used.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -702,6 +703,7 @@ class PlotAccessor:
             sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
                 cmap_params=cmap_params,
@@ -984,13 +986,13 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         if (table := params_copy.table_name) is not None:
-                            assert isinstance(params_copy.color, str)
-                            colors = sc.get.obs_df(sdata[table], [params_copy.color])
-                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
+                            assert isinstance(params_copy.col_for_color, str)
+                            colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
+                            if isinstance(colors[params_copy.col_for_color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],
-                                    key=params_copy.color,
+                                    key=params_copy.col_for_color,
                                     palette=params_copy.palette,
                                 )
 
