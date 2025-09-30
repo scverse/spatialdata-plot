@@ -1755,7 +1755,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif element_type == "shapes":
         # set default fill_alpha for shapes if not given by user explicitly or implicitly (as part of color)
         param_dict["fill_alpha"] = 1.0
-    elif element_type == "lables":
+    elif element_type == "labels":
         param_dict["fill_alpha"] = 0.4
 
     if (cmap := param_dict.get("cmap")) is not None and (palette := param_dict.get("palette")) is not None:
