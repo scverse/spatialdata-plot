@@ -9,14 +9,14 @@ authors = [
     {name = "scverse"},
 ]
 maintainers = [
-    {name = "scverse", email = "tim.treis@helmholtz-munich.de"},
+    {name = "Tim Treis", email = "tim.treis@helmholtz-munich.de"},
 ]
 urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic= [
-  "version" # allow version to be set by git tags
+    "version" # allow version to be set by git tags
 ]
 license = {file = "LICENSE"}
 readme = "README.md"
@@ -30,7 +30,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "bump2version",
+    "jupyterlab",
+    "notebook",
+    "ipykernel",
+    "ipywidgets",
+    "jupytext",
+    "pytest",
+    "pytest-cov",
+    "pooch",
+    "ruff",
+    "pre-commit",
 ]
 docs = [
     "sphinx>=4.5",
@@ -47,11 +56,8 @@ docs = [
 test = [
     "pytest",
     "pytest-cov",
+    "pytest-xdist",
     "pooch", # for scipy.datasets module
-]
-# this will be used by readthedocs and will make pip also look for pre-releases, generally installing the latest available version
-pre = [
-    "spatialdata>=0.1.0-pre0"
 ]
 
 [tool.coverage.run]
@@ -73,27 +79,6 @@ filterwarnings = [
     #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
 ]
 
-[tool.black]
-line-length = 120
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-(
-  /(
-      \.eggs
-    | \.git
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | buck-out
-    | build
-    | dist
-  )/
-)
-'''
-
 [tool.jupytext]
 formats = "ipynb,md"
 
@@ -110,6 +95,7 @@ version-file = "_version.py"
 allow-direct-references = true
 
 [tool.ruff]
+line-length = 120
 exclude = [
     ".git",
     ".tox",
@@ -119,7 +105,8 @@ exclude = [
     "dist",
     "setup.py",
 ]
-lint.ignore = [
+[tool.ruff.lint]
+ignore = [
     # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E731",
     # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
@@ -137,8 +124,7 @@ lint.ignore = [
     # Missing docstring in magic method
     "D105",
 ]
-line-length = 120
-lint.select = [
+select = [
     "D", # flake8-docstrings
     "I", # isort
     "E", # pycodestyle
@@ -157,36 +143,51 @@ lint.select = [
     "RET", # flake8-raise
     "PGH", # pygrep-hooks
 ]
-lint.unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
-target-version = "py310"
+unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
+
 [tool.ruff.lint.per-file-ignores]
     "tests/*" = ["D", "PT", "B024"]
     "*/__init__.py" = ["F401", "D104", "D107", "E402"]
     "docs/*" = ["D","B","E","A"]
-    # "src/spatialdata/transformations/transformations.py" = ["D101","D102", "D106", "B024", "T201", "RET504"]
     "tests/conftest.py"= ["E402", "RET504"]
     "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.bumpver]
-current_version = "0.0.2"
-version_pattern = "MAJOR.MINOR.PATCH"
-commit_message = "bump version {old_version} -> {new_version}"
-tag_message = "{new_version}"
-tag_scope = "default"
-pre_commit_hook = ""
-post_commit_hook = ""
-commit = true
-tag = true
-push = false
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
 
-[tool.bumpver.file_patterns]
-"pyproject.toml" = [
-    'current_version = "{version}"',
-]
-"README.md" = [
-    "{version}",
-    "{pep440_version}",
-]
+[tool.pixi.dependencies]
+python = ">=3.11"
 
+[tool.pixi.pypi-dependencies]
+spatialdata-plot = { path = ".", editable = true }
+
+# for gh-actions
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py313.dependencies]
+python = "3.13.*"
+
+[tool.pixi.environments]
+# 3.11 lane (for gh-actions)
+dev-py311  = { features = ["dev", "test", "py311"], solve-group = "py311" }
+docs-py311 = { features = ["docs", "py311"],        solve-group = "py311" }
+
+# 3.13 lane
+default    = { features = ["py313"],                 solve-group = "py313" }
+dev-py313  = { features = ["dev", "test", "py313"],  solve-group = "py313" }
+docs-py313 = { features = ["docs", "py313"],         solve-group = "py313" }
+test-py313 = { features = ["test", "py313"],         solve-group = "py313" }
+
+[tool.pixi.tasks]
+lab = "jupyter lab"
+kernel-install = "python -m ipykernel install --user --name pixi-dev --display-name \"sdata-plot (dev)\""
+test = "pytest -v --color=yes --tb=short --durations=10"
+lint = "ruff check ."
+format = "ruff format ."
+pre-commit-install = "pre-commit install"
+pre-commit-run = "pre-commit run --all-files"

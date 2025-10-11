@@ -1,0 +1,270 @@
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "alphabetic",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "d5405acd-617c-4caf-b56e-7d2b74d9ec5f",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.4.1rc1.dev4+gb5239b43c"
+            }
+        },
+        {
+            "name": "raccoon_6e9d0e98-9fde-4ddc-85bd-30276a2493ed",
+            "format": {
+                "type": "RasterFormatV03",
+                "version": "0.3"
+            },
+            "source": "d5405acd-617c-4caf-b56e-7d2b74d9ec5f",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "raccoon"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                },
+                {
+                    "type": "filter_scale",
+                    "expr": "full"
+                },
+                {
+                    "type": "filter_channel",
+                    "expr": null
+                }
+            ]
+        },
+        {
+            "name": "segmentation_4b1a989a-4667-4f47-b10f-24dc8e1c075d",
+            "format": {
+                "type": "RasterFormatV03",
+                "version": "0.3"
+            },
+            "source": "d5405acd-617c-4caf-b56e-7d2b74d9ec5f",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "segmentation"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                },
+                {
+                    "type": "filter_scale",
+                    "expr": "full"
+                }
+            ]
+        },
+        {
+            "name": "circles_cc846c7b-4b49-43f5-bbc4-2ec8fe0b552f",
+            "format": {
+                "type": "ShapesFormatV03",
+                "version": "0.3"
+            },
+            "source": "d5405acd-617c-4caf-b56e-7d2b74d9ec5f",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "circles"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                }
+            ]
+        }
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [0.0, 2048.0],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [768.0, 0.0],
+            "range": "height"
+        },
+        {
+            "name": "color_7a0d83bf-c20d-41f4-b910-a3bb2c7a87e8",
+            "type": "linear",
+            "domain": {
+                "data": "raccoon_6e9d0e98-9fde-4ddc-85bd-30276a2493ed",
+                "field": "value"
+            },
+            "range": {
+                "scheme": "viridis",
+                "count": 256
+            }
+        },
+        {
+            "name": "color_d5cd3fd0-445b-44a2-9c57-fac899ef48fd",
+            "type": "ordinal",
+            "domain": {
+                "data": "segmentation_4b1a989a-4667-4f47-b10f-24dc8e1c075d",
+                "field": "value"
+            },
+            "range": ["random"]
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 500, 1000, 1500, 2000],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [0, 500],
+            "zindex": 1.5
+        }
+    ],
+    "marks": [
+        {
+            "type": "raster_image",
+            "from": {
+                "data": "raccoon_6e9d0e98-9fde-4ddc-85bd-30276a2493ed"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "opacity": {
+                        "value": 1.0
+                    },
+                    "fill": [
+                        {
+                            "scale": "color_7a0d83bf-c20d-41f4-b910-a3bb2c7a87e8",
+                            "value": "value"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "raster_label",
+            "from": {
+                "data": "segmentation_4b1a989a-4667-4f47-b10f-24dc8e1c075d"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "stroke": [
+                        {
+                            "scale": "color_d5cd3fd0-445b-44a2-9c57-fac899ef48fd",
+                            "value": "value"
+                        }
+                    ],
+                    "fill": [
+                        {
+                            "scale": "color_d5cd3fd0-445b-44a2-9c57-fac899ef48fd",
+                            "value": "value"
+                        }
+                    ],
+                    "fillOpacity": {
+                        "value": 0.4
+                    },
+                    "strokeOpacity": {
+                        "value": 0.0
+                    },
+                    "strokeWidth": {
+                        "value": 3
+                    }
+                }
+            }
+        },
+        {
+            "type": "path",
+            "from": {
+                "data": "circles_cc846c7b-4b49-43f5-bbc4-2ec8fe0b552f"
+            },
+            "zindex": 2,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "fill": {
+                        "value": "#d3d3d3"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,156 @@
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "alphabetic",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "e659d717-0c6b-4826-87eb-517297667c35",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.4.1rc1.dev4+gb5239b43c"
+            }
+        },
+        {
+            "name": "blobs_points_5cea07d8-3bdc-4623-9b60-49325832a913",
+            "format": {
+                "type": "PointsFormatV02",
+                "version": "0.2"
+            },
+            "source": "e659d717-0c6b-4826-87eb-517297667c35",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "blobs_points"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                }
+            ]
+        }
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [3.0, 509.0],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [507.0, 4.0],
+            "range": "height"
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [200, 400],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [100, 200, 300, 400, 500],
+            "zindex": 1.5
+        }
+    ],
+    "marks": [
+        {
+            "type": "symbol",
+            "from": {
+                "data": "blobs_points_5cea07d8-3bdc-4623-9b60-49325832a913"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "stroke": {
+                        "value": "#ff0000"
+                    },
+                    "fill": {
+                        "value": "#ff0000"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    },
+                    "size": {
+                        "value": 1.0
+                    },
+                    "shape": {
+                        "value": "circle"
+                    }
+                }
+            }
+        }
+    ]
+}

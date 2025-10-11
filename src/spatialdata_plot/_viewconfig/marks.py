@@ -30,9 +30,9 @@ def _create_marks_fill_color_from_params(
         The fill color object for the points or shapes element.
     """
     if not color_scale_array and not params.color:
-        return {"value": mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)}
+        return {"value": params.cmap_params.na_color.get_hex()}
     if color_scale_array is not None and params.color:
-        return {"value": mcolors.to_hex(params.color, keep_alpha=False)}
+        return {"value": params.color.get_hex()}
 
     if color_scale_array and (params.color or params.col_for_color):
         if isinstance(params.colortype, dict):
@@ -61,11 +61,10 @@ def _create_encode_update(params: PointsRenderParams | ShapesRenderParams, field
     -------
     The encode update object for the points or shapes element.
     """
-    hex_na = mcolors.to_hex(params.cmap_params.na_color, keep_alpha=False)
     update = [
         {
             "test": f"!isValid(datum.{params.col_for_color})",
-            "value": hex_na,
+            "value": params.cmap_params.na_color.get_hex(),
         }
     ]
 
@@ -191,14 +190,14 @@ def create_shapes_marks_object(
     if encode_update:
         mark["encode"]["update"] = encode_update  # type: ignore[index]
 
-    if params.outline_params.outline and params.outline_alpha != 0:
+    if params.outline_params.outer_outline_linewidth and params.outline_alpha[0] != 0:
         outline_par = params.outline_params
-        stroke_color = {"value": mcolors.to_hex(outline_par.outline_color, keep_alpha=False)}
+        stroke_color = {"value": outline_par.outer_outline_color.get_hex()}
 
         mark["encode"]["enter"].update(  # type: ignore[index]
             {
                 "stroke": stroke_color,
-                "strokeWidth": {"value": outline_par.linewidth},
+                "strokeWidth": {"value": outline_par.outer_outline_linewidth},
                 "strokeOpacity": {"value": params.outline_alpha},
             }
         )
@@ -304,7 +303,7 @@ def create_raster_label_marks_object(
         encode_update = {
             "fill": [
                 {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": field},
-                {"value": params.cmap_params.na_color},
+                {"value": params.cmap_params.na_color.get_hex_with_alpha()},
             ]
         }
     elif isinstance(params.colortype, dict) and color_scale_array is not None:
@@ -312,7 +311,7 @@ def create_raster_label_marks_object(
         encode_update = {
             "fill": [
                 {"test": "isValid(datum.value)", "scale": color_scale_array[0]["name"], "field": params.color},
-                {"value": params.cmap_params.na_color},
+                {"value": params.cmap_params.na_color.get_hex_with_alpha()},
             ]
         }
     elif params.colortype == "random":

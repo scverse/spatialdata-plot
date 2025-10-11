@@ -43,7 +43,10 @@ VIEWCONFIG_EXPECTED = HERE / "_figures_viewconfig"
 TOL = 15
 DPI = 80
 
-RNG = np.random.default_rng(seed=42)
+
+def get_standard_RNG():
+    # we init from scratch each time to ensure same results in each test
+    return np.random.default_rng(seed=42)
 
 
 @pytest.fixture()
@@ -128,7 +131,10 @@ def test_sdata_multiple_images_with_table():
     instance_key = "instance_id"
     region_key = "annotated_region"
 
-    adata = AnnData(RNG.normal(size=(30, 10)), obs=pd.DataFrame(RNG.normal(size=(30, 3)), columns=["a", "b", "c"]))
+    adata = AnnData(
+        get_standard_RNG().normal(size=(30, 10)),
+        obs=pd.DataFrame(get_standard_RNG().normal(size=(30, 3)), columns=["a", "b", "c"]),
+    )
     adata.obs[instance_key] = list(range(3)) + list(range(7)) + list(range(20))
     adata.obs[region_key] = ["data1"] * 3 + ["data2"] * 7 + ["data3"] * 20
     table = TableModel.parse(
@@ -166,7 +172,7 @@ def test_sdata_multiple_images_diverging_dims():
 def sdata_blobs_shapes_annotated() -> SpatialData:
     """Get blobs sdata with continuous annotation of polygons."""
     blob = blobs()
-    blob["table"].obs["region"] = "blobs_polygons"
+    blob["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * blob["table"].n_obs)
     blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
     blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
     return blob
@@ -226,8 +232,7 @@ def empty_table() -> SpatialData:
 
 @pytest.fixture(
     # params=["labels"]
-    params=["full", "empty"]
-    + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
+    params=["full", "empty"] + ["images", "labels", "points", "table_single_annotation", "table_multiple_annotations"]
     # + ["empty_" + x for x in ["table"]] # TODO: empty table not supported yet
 )
 def sdata(request) -> SpatialData:
@@ -250,23 +255,29 @@ def _get_images() -> dict[str, DataArray | DataTree]:
     out = {}
     dims_2d = ("c", "y", "x")
     dims_3d = ("z", "y", "x", "c")
-    out["image2d"] = Image2DModel.parse(RNG.normal(size=(3, 64, 64)), dims=dims_2d, c_coords=["r", "g", "b"])
-    out["image2d_multiscale"] = Image2DModel.parse(
-        RNG.normal(size=(3, 64, 64)), scale_factors=[2, 2], dims=dims_2d, c_coords=["r", "g", "b"]
+    out["image2d"] = Image2DModel.parse(
+        get_standard_RNG().normal(size=(3, 64, 64)), dims=dims_2d, c_coords=["r", "g", "b"]
     )
-    out["image2d_xarray"] = Image2DModel.parse(DataArray(RNG.normal(size=(3, 64, 64)), dims=dims_2d), dims=None)
+    out["image2d_multiscale"] = Image2DModel.parse(
+        get_standard_RNG().normal(size=(3, 64, 64)), scale_factors=[2, 2], dims=dims_2d, c_coords=["r", "g", "b"]
+    )
+    out["image2d_xarray"] = Image2DModel.parse(
+        DataArray(get_standard_RNG().normal(size=(3, 64, 64)), dims=dims_2d), dims=None
+    )
     out["image2d_multiscale_xarray"] = Image2DModel.parse(
-        DataArray(RNG.normal(size=(3, 64, 64)), dims=dims_2d),
+        DataArray(get_standard_RNG().normal(size=(3, 64, 64)), dims=dims_2d),
         scale_factors=[2, 4],
         dims=None,
     )
-    out["image3d_numpy"] = Image3DModel.parse(RNG.normal(size=(2, 64, 64, 3)), dims=dims_3d)
+    out["image3d_numpy"] = Image3DModel.parse(get_standard_RNG().normal(size=(2, 64, 64, 3)), dims=dims_3d)
     out["image3d_multiscale_numpy"] = Image3DModel.parse(
-        RNG.normal(size=(2, 64, 64, 3)), scale_factors=[2], dims=dims_3d
+        get_standard_RNG().normal(size=(2, 64, 64, 3)), scale_factors=[2], dims=dims_3d
     )
-    out["image3d_xarray"] = Image3DModel.parse(DataArray(RNG.normal(size=(2, 64, 64, 3)), dims=dims_3d), dims=None)
+    out["image3d_xarray"] = Image3DModel.parse(
+        DataArray(get_standard_RNG().normal(size=(2, 64, 64, 3)), dims=dims_3d), dims=None
+    )
     out["image3d_multiscale_xarray"] = Image3DModel.parse(
-        DataArray(RNG.normal(size=(2, 64, 64, 3)), dims=dims_3d),
+        DataArray(get_standard_RNG().normal(size=(2, 64, 64, 3)), dims=dims_3d),
         scale_factors=[2],
         dims=None,
     )
@@ -278,27 +289,27 @@ def _get_labels() -> dict[str, DataArray | DataTree]:
     dims_2d = ("y", "x")
     dims_3d = ("z", "y", "x")
 
-    out["labels2d"] = Labels2DModel.parse(RNG.integers(0, 100, size=(64, 64)), dims=dims_2d)
+    out["labels2d"] = Labels2DModel.parse(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d)
     out["labels2d_multiscale"] = Labels2DModel.parse(
-        RNG.integers(0, 100, size=(64, 64)), scale_factors=[2, 4], dims=dims_2d
+        get_standard_RNG().integers(0, 100, size=(64, 64)), scale_factors=[2, 4], dims=dims_2d
     )
     out["labels2d_xarray"] = Labels2DModel.parse(
-        DataArray(RNG.integers(0, 100, size=(64, 64)), dims=dims_2d), dims=None
+        DataArray(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d), dims=None
     )
     out["labels2d_multiscale_xarray"] = Labels2DModel.parse(
-        DataArray(RNG.integers(0, 100, size=(64, 64)), dims=dims_2d),
+        DataArray(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d),
         scale_factors=[2, 4],
         dims=None,
     )
-    out["labels3d_numpy"] = Labels3DModel.parse(RNG.integers(0, 100, size=(10, 64, 64)), dims=dims_3d)
+    out["labels3d_numpy"] = Labels3DModel.parse(get_standard_RNG().integers(0, 100, size=(10, 64, 64)), dims=dims_3d)
     out["labels3d_multiscale_numpy"] = Labels3DModel.parse(
-        RNG.integers(0, 100, size=(10, 64, 64)), scale_factors=[2, 4], dims=dims_3d
+        get_standard_RNG().integers(0, 100, size=(10, 64, 64)), scale_factors=[2, 4], dims=dims_3d
     )
     out["labels3d_xarray"] = Labels3DModel.parse(
-        DataArray(RNG.integers(0, 100, size=(10, 64, 64)), dims=dims_3d), dims=None
+        DataArray(get_standard_RNG().integers(0, 100, size=(10, 64, 64)), dims=dims_3d), dims=None
     )
     out["labels3d_multiscale_xarray"] = Labels3DModel.parse(
-        DataArray(RNG.integers(0, 100, size=(10, 64, 64)), dims=dims_3d),
+        DataArray(get_standard_RNG().integers(0, 100, size=(10, 64, 64)), dims=dims_3d),
         scale_factors=[2, 4],
         dims=None,
     )
@@ -348,7 +359,7 @@ def _get_polygons() -> dict[str, GeoDataFrame]:
 
 def _get_shapes() -> dict[str, AnnData]:
     out = {}
-    arr = RNG.normal(size=(100, 2))
+    arr = get_standard_RNG().normal(size=(100, 2))
     out["shapes_0"] = ShapesModel.parse(arr, shape_type="Square", shape_size=3)
     out["shapes_1"] = ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr)))
 
@@ -362,10 +373,10 @@ def _get_points() -> dict[str, pa.Table]:
     out = {}
     for i, v in enumerate(var_names):
         name = f"{name}_{i}"
-        arr = RNG.normal(size=(100, 2))
+        arr = get_standard_RNG().normal(size=(100, 2))
         # randomly assign some values from v to the points
-        points_assignment0 = pd.Series(RNG.choice(v, size=arr.shape[0]))
-        points_assignment1 = pd.Series(RNG.choice(v, size=arr.shape[0]))
+        points_assignment0 = pd.Series(get_standard_RNG().choice(v, size=arr.shape[0]))
+        points_assignment1 = pd.Series(get_standard_RNG().choice(v, size=arr.shape[0]))
         annotations = pa.table(
             {"points_assignment0": points_assignment0, "points_assignment1": points_assignment1},
         )
@@ -380,13 +391,16 @@ def _get_table(
 ) -> AnnData:
     region_key = region_key or "annotated_region"
     instance_key = instance_key or "instance_id"
-    adata = AnnData(RNG.normal(size=(100, 10)), obs=pd.DataFrame(RNG.normal(size=(100, 3)), columns=["a", "b", "c"]))
+    adata = AnnData(
+        get_standard_RNG().normal(size=(100, 10)),
+        obs=pd.DataFrame(get_standard_RNG().normal(size=(100, 3)), columns=["a", "b", "c"]),
+    )
     adata.obs[instance_key] = np.arange(adata.n_obs)
     if isinstance(region, str):
         table = TableModel.parse(adata=adata, region=region, instance_key=instance_key)
     elif isinstance(region, list):
-        adata.obs[region_key] = RNG.choice(region, size=adata.n_obs)
-        adata.obs[instance_key] = RNG.integers(0, 10, size=(100,))
+        adata.obs[region_key] = get_standard_RNG().choice(region, size=adata.n_obs)
+        adata.obs[instance_key] = get_standard_RNG().integers(0, 10, size=(100,))
         table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
     else:
         table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)

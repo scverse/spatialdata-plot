@@ -1,0 +1,195 @@
+{
+    "$schema": "https://spatialdata-plot.github.io/schema/viewconfig/v1.json",
+    "height": 320.0,
+    "width": 320.0,
+    "padding": {
+        "left": 57.599999999999994,
+        "top": 28.79999999999999,
+        "right": 12.800000000000011,
+        "bottom": 48.0
+    },
+    "title": {
+        "text": "global",
+        "orient": "top",
+        "anchor": "middle",
+        "baseline": "alphabetic",
+        "color": "black",
+        "font": "Arial",
+        "fontSize": 15.555555555555555,
+        "fontStyle": "normal",
+        "fontWeight": "normal"
+    },
+    "data": [
+        {
+            "name": "1a41421e-51b8-4956-863b-db1587da47f6",
+            "url": "sdata.zarr",
+            "format": {
+                "type": "SpatialData",
+                "version": "0.4.1rc1.dev4+gb5239b43c"
+            }
+        },
+        {
+            "name": "blobs_polygons_63141571-dec5-4b13-b62b-8c85666d699c",
+            "format": {
+                "type": "ShapesFormatV03",
+                "version": "0.3"
+            },
+            "source": "1a41421e-51b8-4956-863b-db1587da47f6",
+            "transform": [
+                {
+                    "type": "filter_element",
+                    "expr": "blobs_polygons"
+                },
+                {
+                    "type": "filter_cs",
+                    "expr": "global"
+                }
+            ]
+        }
+    ],
+    "scales": [
+        {
+            "name": "X_scale",
+            "type": "linear",
+            "domain": [149.92618678876784, 446.7026437060826],
+            "range": "width"
+        },
+        {
+            "name": "Y_scale",
+            "type": "linear",
+            "domain": [461.8520923943867, 188.62348968860152],
+            "range": "height"
+        },
+        {
+            "name": "color_ca281b3e-c33c-4219-a89f-dd7a7666be8d",
+            "type": "linear",
+            "domain": {
+                "data": "blobs_polygons_63141571-dec5-4b13-b62b-8c85666d699c",
+                "field": "1"
+            },
+            "range": {
+                "scheme": "viridis",
+                "count": 256
+            }
+        }
+    ],
+    "axes": [
+        {
+            "scale": "X_scale",
+            "orient": "bottom",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [200, 300, 400],
+            "zindex": 1.5
+        },
+        {
+            "scale": "Y_scale",
+            "orient": "left",
+            "domain": true,
+            "domainOpacity": 1,
+            "domainColor": "#000000",
+            "domainWidth": 0.8888888888888888,
+            "grid": true,
+            "gridOpacity": 1.0,
+            "gridCap": "butt",
+            "gridColor": "#cccccc",
+            "gridWidth": 1.1111111111111112,
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "ticks": true,
+            "tickOpacity": 1,
+            "tickColor": "#000000",
+            "tickCap": "butt",
+            "tickWidth": 1.6666666666666667,
+            "tickSize": 3.888888888888889,
+            "values": [200, 250, 300, 350, 400, 450],
+            "zindex": 1.5
+        }
+    ],
+    "legend": [
+        {
+            "type": "gradient",
+            "direction": "vertical",
+            "orient": "none",
+            "fill": "color_ca281b3e-c33c-4219-a89f-dd7a7666be8d",
+            "fillColor": "#ffffff",
+            "gradientLength": 243.2,
+            "gradientOpacity": null,
+            "gradientThickness": 8.106666666666662,
+            "gradientStrokeColor": "#000000",
+            "gradientStrokeWidth": 0.8888888888888888,
+            "values": [0.0, 5.0, 10.0, 15.0, 20.0],
+            "labelAlign": "left",
+            "labelColor": "#000000",
+            "labelOpacity": 1,
+            "labelFont": "Arial",
+            "labelFontSize": 15.555555555555555,
+            "labelFontStyle": "normal",
+            "labelFontWeight": "normal",
+            "legendX": 287.23199999999997,
+            "legendY": 22.80000000000001,
+            "zindex": 0
+        }
+    ],
+    "marks": [
+        {
+            "type": "path",
+            "from": {
+                "data": "blobs_polygons_63141571-dec5-4b13-b62b-8c85666d699c"
+            },
+            "zindex": 0,
+            "encode": {
+                "enter": {
+                    "x": {
+                        "scale": "X_scale",
+                        "field": "x"
+                    },
+                    "y": {
+                        "scale": "Y_scale",
+                        "field": "y"
+                    },
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "fill": {
+                        "scale": "color_ca281b3e-c33c-4219-a89f-dd7a7666be8d",
+                        "value": "1"
+                    },
+                    "fillOpacity": {
+                        "value": 1.0
+                    }
+                },
+                "update": {
+                    "fill": [
+                        {
+                            "test": "!isValid(datum.1)",
+                            "value": "#d3d3d3"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}

@@ -168,7 +168,7 @@
             "gradientThickness": 8.106666666666662,
             "gradientStrokeColor": "#000000",
             "gradientStrokeWidth": 0.8888888888888888,
-            "values": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            "values": [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
             "labelAlign": "left",
             "labelColor": "#000000",
             "labelOpacity": 1,
