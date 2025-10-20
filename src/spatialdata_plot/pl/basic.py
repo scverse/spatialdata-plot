@@ -5,7 +5,7 @@ import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -170,6 +170,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        shape: Literal["circle", "hex", "square"] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -242,6 +243,9 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        shape: Literal["circle", "hex", "square"] | None
+            If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
+            specified, the shapes are converted to a circle/hexagon/square before rendering.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -286,6 +290,7 @@ class PlotAccessor:
             scale=scale,
             table_name=table_name,
             table_layer=table_layer,
+            shape=shape,
             method=method,
             ds_reduction=kwargs.get("datashader_reduction"),
         )
@@ -318,6 +323,7 @@ class PlotAccessor:
                 transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
+                shape=param_values["shape"],
                 zorder=n_steps,
                 method=param_values["method"],
                 ds_reduction=param_values["ds_reduction"],

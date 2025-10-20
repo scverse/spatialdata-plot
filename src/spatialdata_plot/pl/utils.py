@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import warnings
 from collections import OrderedDict
@@ -51,6 +52,7 @@ from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
+from scipy.spatial import ConvexHull
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -1818,6 +1820,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
 
+    if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
+        if not isinstance(shape, str):
+            raise TypeError("Parameter 'shape' must be a String from ['circle', 'hex', 'square'] if not None.")
+        if shape not in ["circle", "hex", "square"]:
+            raise ValueError(
+                f"'{shape}' is not supported for 'shape', please choose from[None, 'circle', 'hex', 'square']."
+            )
+
     table_name = param_dict.get("table_name")
     table_layer = param_dict.get("table_layer")
     if table_name and not isinstance(param_dict["table_name"], str):
@@ -2030,6 +2040,7 @@ def _validate_shape_render_params(
     scale: float | int,
     table_name: str | None,
     table_layer: str | None,
+    shape: Literal["circle", "hex", "square"] | None,
     method: str | None,
     ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
@@ -2049,6 +2060,7 @@ def _validate_shape_render_params(
         "scale": scale,
         "table_name": table_name,
         "table_layer": table_layer,
+        "shape": shape,
         "method": method,
         "ds_reduction": ds_reduction,
     }
@@ -2069,6 +2081,7 @@ def _validate_shape_render_params(
         element_params[el]["norm"] = param_dict["norm"]
         element_params[el]["scale"] = param_dict["scale"]
         element_params[el]["table_layer"] = param_dict["table_layer"]
+        element_params[el]["shape"] = param_dict["shape"]
 
         element_params[el]["color"] = param_dict["color"]
 
@@ -2487,6 +2500,39 @@ def _prepare_transformation(
     return trans, trans_data
 
 
+def _get_datashader_trans_matrix_of_single_element(
+    trans: Identity | Scale | Affine | MapAxis | Translation,
+) -> ArrayLike:
+    flip_matrix = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+    tm: ArrayLike = trans.to_affine_matrix(("x", "y"), ("x", "y"))
+
+    if isinstance(trans, Identity):
+        return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    if isinstance(trans, (Scale | Affine)):
+        # idea: "flip the y-axis", apply transformation, flip back
+        flip_and_transform: ArrayLike = flip_matrix @ tm @ flip_matrix
+        return flip_and_transform
+    if isinstance(trans, MapAxis):
+        # no flipping needed
+        return tm
+    # for a Translation, we need the transposed transformation matrix
+    tm_T = tm.T
+    assert isinstance(tm_T, np.ndarray)
+    return tm_T
+
+
+def _get_transformation_matrix_for_datashader(
+    trans: Scale | Identity | Affine | MapAxis | Translation | SDSequence,
+) -> ArrayLike:
+    """Get the affine matrix needed to transform shapes for rendering with datashader."""
+    if isinstance(trans, SDSequence):
+        tm = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        for x in trans.transformations:
+            tm = tm @ _get_datashader_trans_matrix_of_single_element(x)
+        return tm
+    return _get_datashader_trans_matrix_of_single_element(trans)
+
+
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
@@ -2586,6 +2632,124 @@ def _hex_no_alpha(hex: str) -> str:
         return "#" + hex_digits[:6]
 
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
+
+
+def _convert_shapes(
+    shapes: GeoDataFrame, target_shape: str, max_extent: float, warn_above_extent_fraction: float = 0.5
+) -> GeoDataFrame:
+    """Convert the shapes stored in a GeoDataFrame (geometry column) to the target_shape."""
+    # NOTE: possible follow-up: when converting equally sized shapes to hex, automatically scale resulting hexagons
+    # so that they are perfectly adjacent to each other
+
+    if warn_above_extent_fraction < 0.0 or warn_above_extent_fraction > 1.0:
+        warn_above_extent_fraction = 0.5  # set to default if the value is outside [0, 1]
+    warn_shape_size = False
+
+    # define individual conversion methods
+    def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+        vertices = [
+            (center.x + radius * math.cos(math.radians(angle)), center.y + radius * math.sin(math.radians(angle)))
+            for angle in range(0, 360, 60)
+        ]
+        return shapely.Polygon(vertices), None
+
+    def _circle_to_square(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+        vertices = [
+            (center.x + radius * math.cos(math.radians(angle)), center.y + radius * math.sin(math.radians(angle)))
+            for angle in range(45, 360, 90)
+        ]
+        return shapely.Polygon(vertices), None
+
+    def _circle_to_circle(center: shapely.Point, radius: float) -> tuple[shapely.Point, float]:
+        return center, radius
+
+    def _polygon_to_hexagon(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _polygon_to_circle(polygon)
+        return _circle_to_hexagon(center, radius)
+
+    def _polygon_to_square(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _polygon_to_circle(polygon)
+        return _circle_to_square(center, radius)
+
+    def _polygon_to_circle(polygon: shapely.Polygon) -> tuple[shapely.Point, float]:
+        coords = np.array(polygon.exterior.coords)
+        circle_points = coords[ConvexHull(coords).vertices]
+        center = np.mean(circle_points, axis=0)
+        radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
+        assert isinstance(radius, float)  # shut up mypy
+        if 2 * radius > max_extent * warn_above_extent_fraction:
+            nonlocal warn_shape_size
+            warn_shape_size = True
+        return shapely.Point(center), radius
+
+    def _multipolygon_to_hexagon(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _multipolygon_to_circle(multipolygon)
+        return _circle_to_hexagon(center, radius)
+
+    def _multipolygon_to_square(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
+        center, radius = _multipolygon_to_circle(multipolygon)
+        return _circle_to_square(center, radius)
+
+    def _multipolygon_to_circle(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Point, float]:
+        coords = []
+        for polygon in multipolygon.geoms:
+            coords.extend(polygon.exterior.coords)
+        points = np.array(coords)
+        circle_points = points[ConvexHull(points).vertices]
+        center = np.mean(circle_points, axis=0)
+        radius = max(float(np.linalg.norm(p - center)) for p in circle_points)
+        assert isinstance(radius, float)  # shut up mypy
+        if 2 * radius > max_extent * warn_above_extent_fraction:
+            nonlocal warn_shape_size
+            warn_shape_size = True
+        return shapely.Point(center), radius
+
+    # define dict with all conversion methods
+    if target_shape == "circle":
+        conversion_methods = {
+            "Point": _circle_to_circle,
+            "Polygon": _polygon_to_circle,
+            "Multipolygon": _multipolygon_to_circle,
+        }
+        pass
+    elif target_shape == "hex":
+        conversion_methods = {
+            "Point": _circle_to_hexagon,
+            "Polygon": _polygon_to_hexagon,
+            "Multipolygon": _multipolygon_to_hexagon,
+        }
+    else:
+        conversion_methods = {
+            "Point": _circle_to_square,
+            "Polygon": _polygon_to_square,
+            "Multipolygon": _multipolygon_to_square,
+        }
+
+    # convert every shape
+    for i in range(shapes.shape[0]):
+        if shapes["geometry"][i].type == "Point":
+            converted, radius = conversion_methods["Point"](shapes["geometry"][i], shapes["radius"][i])  # type: ignore
+        elif shapes["geometry"][i].type == "Polygon":
+            converted, radius = conversion_methods["Polygon"](shapes["geometry"][i])  # type: ignore
+        elif shapes["geometry"][i].type == "MultiPolygon":
+            converted, radius = conversion_methods["Multipolygon"](shapes["geometry"][i])  # type: ignore
+        else:
+            error_type = shapes["geometry"][i].type
+            raise ValueError(f"Converting shape {error_type} to {target_shape} is not supported.")
+        shapes["geometry"][i] = converted
+        if radius is not None:
+            if "radius" not in shapes.columns:
+                shapes["radius"] = np.nan
+            shapes["radius"][i] = radius
+
+    if warn_shape_size:
+        logger.info(
+            f"When converting the shapes, the size of at least one target shape extends "
+            f"{warn_above_extent_fraction * 100}% of the original total bound of the shapes. The conversion"
+            " might not give satisfying results in this scenario."
+        )
+
+    return shapes
 
 
 def _convert_alpha_to_datashader_range(alpha: float) -> float:

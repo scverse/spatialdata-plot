@@ -37,6 +37,7 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _convert_alpha_to_datashader_range,
+    _convert_shapes,
     _create_image_from_datashader_result,
     _datashader_aggregate_with_function,
     _datashader_map_aggregate_to_color,
@@ -163,6 +164,15 @@ def _render_shapes(
     trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+    # convert shapes if necessary
+    if render_params.shape is not None:
+        current_type = shapes["geometry"].type
+        if not (render_params.shape == "circle" and (current_type == "Point").all()):
+            logger.info(f"Converting {shapes.shape[0]} shapes to {render_params.shape}.")
+            max_extent = np.max(
+                [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
+            )
+            shapes = _convert_shapes(shapes, render_params.shape, max_extent)
 
     # Determine which method to use for rendering
     method = render_params.method
@@ -186,17 +196,17 @@ def _render_shapes(
         # Handle circles encoded as points with radius
         if is_point.any():
             scale = shapes[is_point]["radius"] * render_params.scale
-            sdata_filt.shapes[element].loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
+            shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
         # apply transformations to the individual points
         tm = trans.get_matrix()
-        transformed_element = sdata_filt.shapes[element].transform(
+        transformed_geometry = shapes["geometry"].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(
-                data=sdata_filt.shapes[element].drop("geometry", axis=1),
-                geometry=transformed_element,
+                data=shapes.drop("geometry", axis=1),
+                geometry=transformed_geometry,
             )
         )
 
