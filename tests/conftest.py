@@ -154,7 +154,7 @@ def test_sdata_multiple_images_diverging_dims():
 def sdata_blobs_shapes_annotated() -> SpatialData:
     """Get blobs sdata with continuous annotation of polygons."""
     blob = blobs()
-    blob["table"].obs["region"] = "blobs_polygons"
+    blob["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * blob["table"].n_obs)
     blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
     blob.shapes["blobs_polygons"]["value"] = [1, 2, 3, 4, 5]
     return blob
