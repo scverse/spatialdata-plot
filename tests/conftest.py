@@ -528,11 +528,11 @@ def get_sdata_with_multiple_images(request) -> sd.SpatialData:
     return _get_sdata_with_multiple_images
 
 
-# Visium hex test fixtures
 @pytest.fixture
 def sdata_hexagonal_grid_spots():
     """Create a hexagonal grid of points for testing visium_hex functionality."""
     from shapely.geometry import Point
+    from spatialdata.models import ShapesModel
 
     spacing = 10.0
     n_rows, n_cols = 4, 4
@@ -548,5 +548,7 @@ def sdata_hexagonal_grid_spots():
     gdf = GeoDataFrame(geometry=points)
     gdf["radius"] = 2.0  # Small radius for original circles
 
-    # Create SpatialData object
-    return SpatialData(shapes={"spots": gdf})
+    # Use ShapesModel.parse() to create a properly validated GeoDataFrame
+    shapes_gdf = ShapesModel.parse(gdf)
+
+    return SpatialData(shapes={"spots": shapes_gdf})
