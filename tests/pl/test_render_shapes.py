@@ -601,7 +601,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle").pl.show()
 
-    def test_plot_visium_hex_hexagonal_grid_comparison(self, sdata_hexagonal_grid_spots: SpatialData):
+    def test_plot_visium_hex_hexagonal_grid(self, sdata_hexagonal_grid_spots: SpatialData):
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
         sdata_hexagonal_grid_spots.pl.render_shapes(element="spots", shape="circle").pl.show(ax=axs[0])
