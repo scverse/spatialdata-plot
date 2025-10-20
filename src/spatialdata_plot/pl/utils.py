@@ -1802,7 +1802,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (norm := param_dict.get("norm")) is not None:
         if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
-        if element_type in ["shapes", "points"] and not isinstance(norm, bool | Normalize):
+        if element_type in {"shapes", "points"} and not isinstance(
+            norm, bool | Normalize
+        ):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
@@ -1821,11 +1823,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise ValueError("Parameter 'size' must be a positive number.")
 
     if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
+        valid_shapes = {"circle", "hex", "visium_hex", "square"}    
         if not isinstance(shape, str):
-            raise TypeError("Parameter 'shape' must be a String from ['circle', 'hex', 'square'] if not None.")
-        if shape not in ["circle", "hex", "square"]:
+            raise TypeError(
+                f"Parameter 'shape' must be a String from {valid_shapes} if not None."
+            )
+        if shape not in valid_shapes:
             raise ValueError(
-                f"'{shape}' is not supported for 'shape', please choose from[None, 'circle', 'hex', 'square']."
+                f"'{shape}' is not supported for 'shape', please choose from {valid_shapes}."
             )
 
     table_name = param_dict.get("table_name")
@@ -2040,7 +2045,7 @@ def _validate_shape_render_params(
     scale: float | int,
     table_name: str | None,
     table_layer: str | None,
-    shape: Literal["circle", "hex", "square"] | None,
+    shape: Literal["circle", "hex", "visium_hex", "square"] | None,
     method: str | None,
     ds_reduction: str | None,
 ) -> dict[str, dict[str, Any]]:
@@ -2647,9 +2652,10 @@ def _convert_shapes(
 
     # define individual conversion methods
     def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+        # Create hexagon with point at top (30° offset from standard orientation)
         vertices = [
             (center.x + radius * math.cos(math.radians(angle)), center.y + radius * math.sin(math.radians(angle)))
-            for angle in range(0, 360, 60)
+            for angle in range(30, 390, 60)  # Start at 30° and go every 60°
         ]
         return shapely.Polygon(vertices), None
 
@@ -2718,6 +2724,62 @@ def _convert_shapes(
             "Polygon": _polygon_to_hexagon,
             "Multipolygon": _multipolygon_to_hexagon,
         }
+    elif target_shape == "visium_hex":
+        # For visium_hex, we only support Points and warn for other geometry types
+        point_centers = []
+        non_point_count = 0
+
+        for i in range(shapes.shape[0]):
+            if shapes["geometry"][i].type == "Point":
+                point_centers.append((shapes["geometry"][i].x, shapes["geometry"][i].y))
+            else:
+                non_point_count += 1
+
+        if non_point_count > 0:
+            warnings.warn(
+                f"visium_hex conversion only supports Point geometries. Found {non_point_count} non-Point geometries "
+                f"that will be converted using regular hex conversion. Consider using shape='hex' for mixed geometry types.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        if len(point_centers) < 2:
+            # If we have fewer than 2 points, fall back to regular hex conversion
+            conversion_methods = {
+                "Point": _circle_to_hexagon,
+                "Polygon": _polygon_to_hexagon,
+                "Multipolygon": _multipolygon_to_hexagon,
+            }
+        else:
+            # Calculate typical spacing between point centers
+            centers_array = np.array(point_centers)
+            distances = []
+            for i in range(len(point_centers)):
+                for j in range(i + 1, len(point_centers)):
+                    dist = np.linalg.norm(centers_array[i] - centers_array[j])
+                    distances.append(dist)
+
+            # Use min dist of closest neighbors as the side length for radius calc
+            side_length = np.min(distances)
+            hex_radius = (side_length * 2.0 / math.sqrt(3)) / 2.0
+
+            # Create conversion methods
+            def _circle_to_visium_hex(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+                return _circle_to_hexagon(center, hex_radius)
+
+            def _polygon_to_visium_hex(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
+                # Fall back to regular hex conversion for non-points
+                return _polygon_to_hexagon(polygon)
+
+            def _multipolygon_to_visium_hex(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
+                # Fall back to regular hex conversion for non-points
+                return _multipolygon_to_hexagon(multipolygon)
+
+            conversion_methods = {
+                "Point": _circle_to_visium_hex,
+                "Polygon": _polygon_to_visium_hex,
+                "Multipolygon": _multipolygon_to_visium_hex,
+            }
     else:
         conversion_methods = {
             "Point": _circle_to_square,
