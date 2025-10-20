@@ -1,17 +1,14 @@
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
 
 import spatialdata_plot
-from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
+from spatialdata_plot.pl.utils import _get_subplots
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-SEED = 42
-RNG = np.random.default_rng(seed=SEED)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -90,45 +87,6 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
-
-
-@pytest.mark.parametrize(
-    "input_output",
-    [
-        (None, ("#FFFFFF00", True)),
-        ("default", ("#d3d3d3ff", False)),
-        ("red", ("#ff0000ff", True)),
-        ((1, 0, 0), ("#ff0000ff", True)),
-        ((1, 0, 0, 0.5), ("#ff000080", True)),
-    ],
-)
-def test_utils_sanitise_na_color(input_output):
-    from spatialdata_plot.pl.utils import _sanitise_na_color
-
-    func_input, expected_output = input_output
-
-    assert _sanitise_na_color(func_input) == expected_output
-
-
-@pytest.mark.parametrize(
-    "input_output",
-    [
-        (None, ("#FFFFFF00", True)),
-        ("default", ("#d3d3d3ff", False)),
-        ("red", ("#ff0000ff", True)),
-        ((1, 0, 0), ("#ff0000ff", True)),
-        ((1, 0, 0, 0.5), ("#ff000080", True)),
-    ],
-)
-def test_utils_sanitise_na_color_accepts_valid_inputs(input_output):
-    func_input, expected_output = input_output
-
-    assert _sanitise_na_color(func_input) == expected_output
-
-
-def test_utils_sanitise_na_color_fails_when_input_isnt_a_color():
-    with pytest.raises(ValueError):
-        _sanitise_na_color((1, 0))
 
 
 @pytest.mark.parametrize(
