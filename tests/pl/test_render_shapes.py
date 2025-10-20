@@ -614,7 +614,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_datashader_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle", method="datashader").pl.show()
 
-
 def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
     sdata_blobs_local = deepcopy(sdata_blobs)
