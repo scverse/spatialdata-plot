@@ -141,6 +141,15 @@ def _render_shapes(
         color_source_vector = color_source_vector[mask]
         color_vector = color_vector[mask]
 
+    # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
+    if color_source_vector is None and not values_are_categorical:
+        color_vector = np.asarray(color_vector, dtype=float)
+        if np.isnan(color_vector).any():
+            nan_count = int(np.isnan(color_vector).sum())
+            logger.warning(
+                f"Found {nan_count} NaN values in color data. These observations will be colored with the 'na_color'."
+            )
+
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
     # order of color in the palette should agree to order of occurence
@@ -447,12 +456,13 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     if not values_are_categorical:
-        # If the user passed a Normalize object with vmin/vmax we'll use those,
-        # if not we'll use the min/max of the color_vector
-        _cax.set_clim(
-            vmin=render_params.cmap_params.norm.vmin or min(color_vector),
-            vmax=render_params.cmap_params.norm.vmax or max(color_vector),
-        )
+        vmin = render_params.cmap_params.norm.vmin
+        vmax = render_params.cmap_params.norm.vmax
+        if vmin is None:
+            vmin = float(np.nanmin(color_vector))
+        if vmax is None:
+            vmax = float(np.nanmax(color_vector))
+        _cax.set_clim(vmin=vmin, vmax=vmax)
 
     if (
         len(set(color_vector)) != 1
