@@ -200,13 +200,13 @@ def _render_shapes(
 
         # apply transformations to the individual points
         tm = trans.get_matrix()
-        transformed_element = sdata_filt.shapes[element].transform(
+        transformed_geometry = shapes["geometry"].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
         transformed_element = ShapesModel.parse(
             gpd.GeoDataFrame(
                 data=shapes.drop("geometry", axis=1),
-                geometry=transformed_element,
+                geometry=transformed_geometry,
             )
         )
 
