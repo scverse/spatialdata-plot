@@ -1802,9 +1802,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (norm := param_dict.get("norm")) is not None:
         if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
-        if element_type in {"shapes", "points"} and not isinstance(
-            norm, bool | Normalize
-        ):
+        if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
@@ -1823,15 +1821,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise ValueError("Parameter 'size' must be a positive number.")
 
     if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
-        valid_shapes = {"circle", "hex", "visium_hex", "square"}    
+        valid_shapes = {"circle", "hex", "visium_hex", "square"}
         if not isinstance(shape, str):
-            raise TypeError(
-                f"Parameter 'shape' must be a String from {valid_shapes} if not None."
-            )
+            raise TypeError(f"Parameter 'shape' must be a String from {valid_shapes} if not None.")
         if shape not in valid_shapes:
-            raise ValueError(
-                f"'{shape}' is not supported for 'shape', please choose from {valid_shapes}."
-            )
+            raise ValueError(f"'{shape}' is not supported for 'shape', please choose from {valid_shapes}.")
 
     table_name = param_dict.get("table_name")
     table_layer = param_dict.get("table_layer")
