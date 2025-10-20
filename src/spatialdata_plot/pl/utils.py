@@ -24,7 +24,6 @@ import numpy.typing as npt
 import pandas as pd
 import shapely
 import spatialdata as sd
-import xarray as xr
 from anndata import AnnData
 from cycler import Cycler, cycler
 from datashader.core import Canvas
@@ -325,8 +324,11 @@ def _get_collection_shape(
         return ColorConverter().to_rgba_array(x)
 
     # Case A: per-row numeric colors given as Nx3 or Nx4 float array
-    if c_arr.ndim == 2 and c_arr.shape[0] == len(shapes) and c_arr.shape[1] in (3, 4) and np.issubdtype(
-        c_arr.dtype, np.number
+    if (
+        c_arr.ndim == 2
+        and c_arr.shape[0] == len(shapes)
+        and c_arr.shape[1] in (3, 4)
+        and np.issubdtype(c_arr.dtype, np.number)
     ):
         fill_c = _as_rgba_array(c_arr)
 
@@ -352,7 +354,7 @@ def _get_collection_shape(
         fill_c[:] = na_rgba
         if finite_mask.any():
             fill_c[finite_mask] = cmap(used_norm(c_arr[finite_mask]))
-            
+
     elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and c_arr.dtype == object:
         # Split into numeric vs color-like
         s = pd.Series(c_arr, copy=False)
@@ -435,7 +437,9 @@ def _get_collection_shape(
             "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * scale),
         }
 
-    def _create_patches(shapes_df_: GeoDataFrame, fill_colors: list[Any], outline_colors: list[Any], scale: float) -> pd.DataFrame:
+    def _create_patches(
+        shapes_df_: GeoDataFrame, fill_colors: list[Any], outline_colors: list[Any], scale: float
+    ) -> pd.DataFrame:
         rows: list[dict[str, Any]] = []
         is_multiple = len(shapes_df_) > 1
         for idx, row in shapes_df_.iterrows():
@@ -1765,9 +1769,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if (norm := param_dict.get("norm")) is not None:
         if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
-        if element_type in {"shapes", "points"} and not isinstance(
-            norm, bool | Normalize
-        ):
+        if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
     if (scale := param_dict.get("scale")) is not None:
@@ -1786,15 +1788,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise ValueError("Parameter 'size' must be a positive number.")
 
     if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
-        valid_shapes = {"circle", "hex", "visium_hex", "square"}    
+        valid_shapes = {"circle", "hex", "visium_hex", "square"}
         if not isinstance(shape, str):
-            raise TypeError(
-                f"Parameter 'shape' must be a String from {valid_shapes} if not None."
-            )
+            raise TypeError(f"Parameter 'shape' must be a String from {valid_shapes} if not None.")
         if shape not in valid_shapes:
-            raise ValueError(
-                f"'{shape}' is not supported for 'shape', please choose from {valid_shapes}."
-            )
+            raise ValueError(f"'{shape}' is not supported for 'shape', please choose from {valid_shapes}.")
 
     table_name = param_dict.get("table_name")
     table_layer = param_dict.get("table_layer")
@@ -2568,6 +2566,7 @@ def _hex_no_alpha(hex: str) -> str:
 
     raise ValueError("Invalid hex color length: must be either '#RRGGBB' or '#RRGGBBAA'")
 
+
 def _convert_shapes(
     shapes: GeoDataFrame,
     target_shape: str,
@@ -2747,7 +2746,6 @@ def _convert_shapes(
         )
 
     return shapes
-
 
 
 def _convert_alpha_to_datashader_range(alpha: float) -> float:
