@@ -170,7 +170,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
-        shape: Literal["circle", "hex", "square"] | None = None,
+        shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -243,9 +243,11 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
-        shape: Literal["circle", "hex", "square"] | None
+        shape: Literal["circle", "hex", "visium_hex", "square"] | None
             If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
-            specified, the shapes are converted to a circle/hexagon/square before rendering.
+            specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
+            specified, the shapes are assumed to be Visium spots and the size of the hexagons is adjusted to be adjacent
+            to each other.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
