@@ -17,6 +17,7 @@ import matplotlib
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import matplotlib.transforms as mtransforms
 import numpy as np
 import numpy.ma as ma
@@ -1143,6 +1144,12 @@ def _decorate_axs(
             # TODO: na_in_legend should have some effect here
             cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
             cb.solids.set_alpha(alpha)
+            # Ensure colorbar values are always displayed as floats
+            cb.formatter.set_powerlimits((0, 0))  # Disable scientific notation
+            cb.formatter.set_useOffset(False)  # Disable offset
+            cb.formatter.set_scientific(False)  # Disable scientific notation
+            # Set a custom formatter that always shows decimal places
+            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f'{x:.1f}')
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)

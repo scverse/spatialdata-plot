@@ -9,6 +9,7 @@ import datashader as ds
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -956,7 +957,13 @@ def _render_images(
 
         if legend_params.colorbar:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
-            fig_params.fig.colorbar(sm, ax=ax)
+            cb = fig_params.fig.colorbar(sm, ax=ax)
+            # Ensure colorbar values are always displayed as floats
+            cb.formatter.set_powerlimits((0, 0))  # Disable scientific notation
+            cb.formatter.set_useOffset(False)  # Disable offset
+            cb.formatter.set_scientific(False)  # Disable scientific notation
+            # Set a custom formatter that always shows decimal places
+            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f'{x:.1f}')
 
     # 2) Image has any number of channels but 1
     else:
