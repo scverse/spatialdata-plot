@@ -109,21 +109,16 @@ def test_extract_scalar_value():
     assert _extract_scalar_value([], default=1.0) == 1.0
 
 
-def test_plot_can_handle_per_row_rgba_colors(sdata_blobs: SpatialData):
-    """Test handling of per-row RGBA color arrays."""
+def test_plot_can_handle_rgba_color_specifications(sdata_blobs: SpatialData):
+    """Test handling of RGBA color specifications."""
+    # Test with RGBA tuple
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(1.0, 0.0, 0.0, 0.8)).pl.show()
 
-    rgba_colors = np.array(
-        [
-            [1.0, 0.0, 0.0, 1.0],  # red
-            [0.0, 1.0, 0.0, 1.0],  # green
-            [0.0, 0.0, 1.0, 1.0],  # blue
-            [1.0, 1.0, 0.0, 1.0],  # yellow
-            [1.0, 0.0, 1.0, 1.0],  # magenta
-        ]
-    )
-    sdata_blobs.shapes["blobs_circles"]["rgba_colors"] = rgba_colors.tolist()
+    # Test with RGB tuple (no alpha)
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(0.0, 1.0, 0.0)).pl.show()
 
-    sdata_blobs.pl.render_shapes(element="blobs_circles", color="rgba_colors").pl.show()
+    # Test with string color
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="blue").pl.show()
 
 
 @pytest.mark.parametrize(
