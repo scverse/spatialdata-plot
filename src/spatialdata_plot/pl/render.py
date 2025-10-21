@@ -959,11 +959,7 @@ def _render_images(
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
             cb = fig_params.fig.colorbar(sm, ax=ax)
             # Ensure colorbar values are always displayed as floats
-            cb.formatter.set_powerlimits((0, 0))  # Disable scientific notation
-            cb.formatter.set_useOffset(False)  # Disable offset
-            cb.formatter.set_scientific(False)  # Disable scientific notation
-            # Set a custom formatter that always shows decimal places
-            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f'{x:.1f}')
+            cb.formatter = matplotlib.ticker.FormatStrFormatter('%.3g')
 
     # 2) Image has any number of channels but 1
     else:
