@@ -1144,8 +1144,6 @@ def _decorate_axs(
             # TODO: na_in_legend should have some effect here
             cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
             cb.solids.set_alpha(alpha)
-            # Ensure colorbar values are always displayed as floats
-            cb.formatter = matplotlib.ticker.FormatStrFormatter('%.3g')
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
