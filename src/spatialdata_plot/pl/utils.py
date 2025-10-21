@@ -97,17 +97,17 @@ ColorLike = tuple[float, ...] | list[float] | str
 def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
     """
     Extract a scalar float value from various data types.
-    
+
     Handles pandas Series, arrays, lists, and other iterables by taking the first element.
     Converts non-numeric values to the default value.
-    
+
     Parameters
     ----------
     value : Any
         The value to extract a scalar from
     default : float, default 0.0
         Default value to return if conversion fails
-        
+
     Returns
     -------
     float
@@ -115,25 +115,25 @@ def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
     """
     try:
         # Handle pandas Series or similar objects with iloc
-        if hasattr(value, 'iloc'):
+        if hasattr(value, "iloc"):
             if len(value) > 0:
                 value = value.iloc[0]
             else:
                 return default
-        
+
         # Handle other array-like objects
-        elif hasattr(value, '__len__') and not isinstance(value, (str, bytes)):
+        elif hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
             if len(value) > 0:
                 value = value[0]
             else:
                 return default
-        
+
         # Convert to float, handling NaN values
         if pd.isna(value):
             return default
-        
+
         return float(value)
-        
+
     except (TypeError, ValueError, IndexError):
         return default
 
@@ -482,7 +482,7 @@ def _get_collection_shape(
         radius_value = _extract_scalar_value(row["radius"], default=0.0)
         scale_value = _extract_scalar_value(scale, default=1.0)
         radius = radius_value * scale_value
-        
+
         return {
             **row.to_dict(),
             "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=radius),

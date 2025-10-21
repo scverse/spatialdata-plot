@@ -207,7 +207,7 @@ def _render_shapes(
         if is_point.any():
             radius_values = shapes[is_point]["radius"]
             # Convert to numeric, replacing non-numeric values with NaN
-            radius_numeric = pd.to_numeric(radius_values, errors='coerce')
+            radius_numeric = pd.to_numeric(radius_values, errors="coerce")
             scale = radius_numeric * render_params.scale
             shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
@@ -239,12 +239,12 @@ def _render_shapes(
                 else:
                     # If lengths don't match, pad or truncate to match
                     if len(color_vector) > len(transformed_element):
-                        color_vector = color_vector[:len(transformed_element)]
+                        color_vector = color_vector[: len(transformed_element)]
                     else:
                         # Pad with the last color or na_color
                         na_color = render_params.cmap_params.na_color.get_hex_with_alpha()
                         color_vector = list(color_vector) + [na_color] * (len(transformed_element) - len(color_vector))
-            
+
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
