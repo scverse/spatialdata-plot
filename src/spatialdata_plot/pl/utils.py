@@ -350,7 +350,8 @@ def _get_collection_shape(
     **kwargs: Any,
 ) -> PatchCollection:
     """
-    Build a PatchCollection for shapes with correct handling of:
+    Build a PatchCollection for shapes with correct handling of.
+
       - continuous numeric vectors with NaNs,
       - per-row RGBA arrays,
       - a single color or a list of color specs.
@@ -367,7 +368,7 @@ def _get_collection_shape(
     fill_c: np.ndarray
 
     def _as_rgba_array(x: Any) -> np.ndarray:
-        return ColorConverter().to_rgba_array(x)
+        return np.asarray(ColorConverter().to_rgba_array(x))
 
     # Case A: per-row numeric colors given as Nx3 or Nx4 float array
     if (
@@ -403,12 +404,12 @@ def _get_collection_shape(
 
     elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and c_arr.dtype == object:
         # Split into numeric vs color-like
-        s = pd.Series(c_arr, copy=False)
-        num = pd.to_numeric(s, errors="coerce").to_numpy()
+        c_series = pd.Series(c_arr, copy=False)
+        num = pd.to_numeric(c_series, errors="coerce").to_numpy()
         is_num = np.isfinite(num)
 
         # init with na color
-        fill_c = np.empty((len(s), 4), dtype=float)
+        fill_c = np.empty((len(c_series), 4), dtype=float)
         fill_c[:] = na_rgba
 
         # numeric entries via cmap(norm)
@@ -425,7 +426,7 @@ def _get_collection_shape(
 
         # non-numeric entries as explicit colors
         if (~is_num).any():
-            fill_c[~is_num] = ColorConverter().to_rgba_array(s[~is_num].tolist())
+            fill_c[~is_num] = ColorConverter().to_rgba_array(c_series[~is_num].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:
@@ -438,12 +439,11 @@ def _get_collection_shape(
 
     # Outline handling
     if outline_alpha and outline_alpha > 0.0:
-        outline_c = _as_rgba_array(outline_color)
-        outline_c[..., -1] = outline_alpha
-        outline_c = outline_c.tolist()
+        outline_c_array = _as_rgba_array(outline_color)
+        outline_c_array[..., -1] = outline_alpha
+        outline_c = outline_c_array.tolist()
     else:
-        outline_c = [None]
-    outline_c = outline_c * fill_c.shape[0]
+        outline_c = [None] * fill_c.shape[0]
 
     # Build DataFrame of valid geometries
     shapes_df = pd.DataFrame(shapes, copy=True)
@@ -507,7 +507,9 @@ def _get_collection_shape(
                 rows.append(pr)
         return pd.DataFrame(rows)
 
-    patches = _create_patches(shapes_df, fill_c, outline_c, s)
+    patches = _create_patches(
+        shapes_df, fill_c.tolist(), outline_c.tolist() if hasattr(outline_c, "tolist") else outline_c, s
+    )
 
     return PatchCollection(
         patches["geometry"].values.tolist(),
@@ -2677,8 +2679,8 @@ def _convert_shapes(
         pts = []
         for poly in multipolygon.geoms:
             pts.extend(poly.exterior.coords)
-        pts = np.array(pts)
-        hull_pts = pts[ConvexHull(pts).vertices]
+        pts_array = np.array(pts)
+        hull_pts = pts_array[ConvexHull(pts_array).vertices]
         center = np.mean(hull_pts, axis=0)
         radius = float(np.max(np.linalg.norm(hull_pts - center, axis=1)))
         nonlocal warn_shape_size
@@ -2695,6 +2697,7 @@ def _convert_shapes(
         return _circle_to_square(c, r)
 
     # choose conversion methods
+    conversion_methods: dict[str, Any]
     if target_shape == "circle":
         conversion_methods = {
             "Point": _circle_to_circle,
@@ -2792,8 +2795,8 @@ def _convert_shapes(
 
     if warn_shape_size:
         logger.info(
-            f"At least one converted shape spans >= {warn_above_extent_fraction * 100:.0f}% of the original total bound. "
-            "Results may be suboptimal."
+            f"At least one converted shape spans >= {warn_above_extent_fraction * 100:.0f}% of the "
+            "original total bound. Results may be suboptimal."
         )
 
     return shapes

@@ -957,7 +957,7 @@ def _render_images(
 
         if legend_params.colorbar:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
-            cb = fig_params.fig.colorbar(sm, ax=ax)
+            fig_params.fig.colorbar(sm, ax=ax)
 
     # 2) Image has any number of channels but 1
     else:
