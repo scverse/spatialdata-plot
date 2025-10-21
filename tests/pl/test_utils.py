@@ -1,5 +1,6 @@
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
@@ -87,6 +88,37 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
+
+
+def test_extract_scalar_value():
+    """Test the new _extract_scalar_value function for robust numeric conversion."""
+
+    from spatialdata_plot.pl.utils import _extract_scalar_value
+
+    # Test basic functionality
+    assert _extract_scalar_value(3.14) == 3.14
+    assert _extract_scalar_value(42) == 42.0
+
+    # Test with collections
+    assert _extract_scalar_value(pd.Series([1.0, 2.0, 3.0])) == 1.0
+    assert _extract_scalar_value([1.0, 2.0, 3.0]) == 1.0
+
+    # Test edge cases
+    assert _extract_scalar_value(np.nan) == 0.0
+    assert _extract_scalar_value("invalid") == 0.0
+    assert _extract_scalar_value([], default=1.0) == 1.0
+
+
+def test_plot_can_handle_rgba_color_specifications(sdata_blobs: SpatialData):
+    """Test handling of RGBA color specifications."""
+    # Test with RGBA tuple
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(1.0, 0.0, 0.0, 0.8)).pl.show()
+
+    # Test with RGB tuple (no alpha)
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(0.0, 1.0, 0.0)).pl.show()
+
+    # Test with string color
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="blue").pl.show()
 
 
 @pytest.mark.parametrize(
