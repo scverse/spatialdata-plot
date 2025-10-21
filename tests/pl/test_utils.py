@@ -92,15 +92,15 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
 def test_extract_scalar_value():
     """Test the new _extract_scalar_value function for robust numeric conversion."""
     from spatialdata_plot.pl.utils import _extract_scalar_value
-    
+
     # Test basic functionality
     assert _extract_scalar_value(3.14) == 3.14
     assert _extract_scalar_value(42) == 42.0
-    
+
     # Test with collections
     assert _extract_scalar_value(pd.Series([1.0, 2.0, 3.0])) == 1.0
     assert _extract_scalar_value([1.0, 2.0, 3.0]) == 1.0
-    
+
     # Test edge cases
     assert _extract_scalar_value(np.nan) == 0.0
     assert _extract_scalar_value("invalid") == 0.0
@@ -109,15 +109,17 @@ def test_extract_scalar_value():
 
 def test_plot_can_handle_per_row_rgba_colors(sdata_blobs: SpatialData):
     """Test handling of per-row RGBA color arrays."""
-    rgba_colors = np.array([
-        [1.0, 0.0, 0.0, 1.0],  # red
-        [0.0, 1.0, 0.0, 1.0],  # green
-        [0.0, 0.0, 1.0, 1.0],  # blue
-        [1.0, 1.0, 0.0, 1.0],  # yellow
-        [1.0, 0.0, 1.0, 1.0],  # magenta
-    ])
+    rgba_colors = np.array(
+        [
+            [1.0, 0.0, 0.0, 1.0],  # red
+            [0.0, 1.0, 0.0, 1.0],  # green
+            [0.0, 0.0, 1.0, 1.0],  # blue
+            [1.0, 1.0, 0.0, 1.0],  # yellow
+            [1.0, 0.0, 1.0, 1.0],  # magenta
+        ]
+    )
     sdata_blobs.shapes["blobs_circles"]["rgba_colors"] = rgba_colors.tolist()
-    
+
     sdata_blobs.pl.render_shapes(element="blobs_circles", color="rgba_colors").pl.show()
 
 
