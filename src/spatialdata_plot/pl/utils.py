@@ -93,6 +93,50 @@ to_hex = partial(colors.to_hex, keep_alpha=True)
 ColorLike = tuple[float, ...] | list[float] | str
 
 
+def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
+    """
+    Extract a scalar float value from various data types.
+    
+    Handles pandas Series, arrays, lists, and other iterables by taking the first element.
+    Converts non-numeric values to the default value.
+    
+    Parameters
+    ----------
+    value : Any
+        The value to extract a scalar from
+    default : float, default 0.0
+        Default value to return if conversion fails
+        
+    Returns
+    -------
+    float
+        The extracted scalar value
+    """
+    try:
+        # Handle pandas Series or similar objects with iloc
+        if hasattr(value, 'iloc'):
+            if len(value) > 0:
+                value = value.iloc[0]
+            else:
+                return default
+        
+        # Handle other array-like objects
+        elif hasattr(value, '__len__') and not isinstance(value, (str, bytes)):
+            if len(value) > 0:
+                value = value[0]
+            else:
+                return default
+        
+        # Convert to float, handling NaN values
+        if pd.isna(value):
+            return default
+        
+        return float(value)
+        
+    except (TypeError, ValueError, IndexError):
+        return default
+
+
 def _verify_plotting_tree(sdata: SpatialData) -> SpatialData:
     """Verify that the plotting tree exists, and if not, create it."""
     if not hasattr(sdata, "plotting_tree"):
@@ -285,9 +329,10 @@ def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, fl
 
 
 def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
+    scale_value = _extract_scalar_value(scale_factor, default=1.0)
     centroid = _get_centroid_of_pathpatch(pathpatch)
     vertices = pathpatch.get_path().vertices
-    scaled_vertices = np.array([centroid + (vertex - centroid) * scale_factor for vertex in vertices])
+    scaled_vertices = np.array([centroid + (vertex - centroid) * scale_value for vertex in vertices])
     pathpatch.get_path().vertices = scaled_vertices
 
 
@@ -421,7 +466,8 @@ def _get_collection_shape(
     def _process_polygon(row: pd.Series, scale: float) -> dict[str, Any]:
         coords = np.array(row["geometry"].exterior.coords)
         centroid = np.mean(coords, axis=0)
-        scaled = (centroid + (coords - centroid) * scale).tolist()
+        scale_value = _extract_scalar_value(scale, default=1.0)
+        scaled = (centroid + (coords - centroid) * scale_value).tolist()
         return {**row.to_dict(), "geometry": mpatches.Polygon(scaled, closed=True)}
 
     def _process_multipolygon(row: pd.Series, scale: float) -> list[dict[str, Any]]:
@@ -432,9 +478,13 @@ def _get_collection_shape(
         return [{**row_dict, "geometry": m} for m in mp]
 
     def _process_point(row: pd.Series, scale: float) -> dict[str, Any]:
+        radius_value = _extract_scalar_value(row["radius"], default=0.0)
+        scale_value = _extract_scalar_value(scale, default=1.0)
+        radius = radius_value * scale_value
+        
         return {
             **row.to_dict(),
-            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=row["radius"] * scale),
+            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=radius),
         }
 
     def _create_patches(
