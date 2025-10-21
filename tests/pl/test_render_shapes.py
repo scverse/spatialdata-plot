@@ -684,3 +684,52 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
+    def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData):
+        """Test that NaN values in color data are handled gracefully."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        
+        # Add color column with NaN values
+        sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+        
+        # Test that rendering works with NaN values and issues warning
+        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
+            sdata_blobs.pl.render_shapes(
+                element="blobs_circles", 
+                color="color_with_nan", 
+                na_color="red"
+            ).pl.show()
+
+    def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
+        """Test that colorbar normalization works correctly with NaN values."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        
+        sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+        
+        # Test colorbar with NaN values - should use nanmin/nanmax
+        sdata_blobs.pl.render_shapes(
+            element="blobs_polygons", 
+            color="color_with_nan",
+            na_color="gray"
+        ).pl.show()
+
+    def test_plot_can_handle_non_numeric_radius_values(self, sdata_blobs: SpatialData):
+        """Test that non-numeric radius values are handled gracefully."""
+        sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+        
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+    def test_plot_can_handle_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
+        """Test handling of mixed numeric and color-like data."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        
+        sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+        
+        sdata_blobs.pl.render_shapes(
+            element="blobs_circles", 
+            color="mixed_data",
+            na_color="gray"
+        ).pl.show()
