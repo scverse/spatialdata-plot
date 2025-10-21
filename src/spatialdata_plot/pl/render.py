@@ -963,7 +963,7 @@ def _render_images(
             cb.formatter.set_useOffset(False)  # Disable offset
             cb.formatter.set_scientific(False)  # Disable scientific notation
             # Set a custom formatter that always shows decimal places
-            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f'{x:.1f}')
+            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f"{x:.1f}")
 
     # 2) Image has any number of channels but 1
     else:

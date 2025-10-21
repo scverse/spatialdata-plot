@@ -1149,7 +1149,7 @@ def _decorate_axs(
             cb.formatter.set_useOffset(False)  # Disable offset
             cb.formatter.set_scientific(False)  # Disable scientific notation
             # Set a custom formatter that always shows decimal places
-            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f'{x:.1f}')
+            cb.formatter = matplotlib.ticker.FuncFormatter(lambda x, p: f"{x:.1f}")
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
