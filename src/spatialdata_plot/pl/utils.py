@@ -853,7 +853,7 @@ def _set_color_source_vec(
         color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
 
         color_mapping = _get_categorical_color_mapping(
-            adata=sdata[table_name],
+            adata=sdata.get(table_name, None),
             cluster_key=value_to_plot,
             color_source_vector=color_source_vector,
             cmap_params=cmap_params,
@@ -946,7 +946,7 @@ def _map_color_seg(
 
 
 def _generate_base_categorial_color_mapping(
-    adata: AnnData,
+    adata: AnnData | None,
     cluster_key: str,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     na_color: Color,
@@ -1020,7 +1020,7 @@ def _get_default_categorial_color_mapping(
 
 
 def _get_categorical_color_mapping(
-    adata: AnnData,
+    adata: AnnData | None,
     na_color: Color,
     cluster_key: str | None = None,
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
