@@ -1280,7 +1280,7 @@ def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatc
             inside, outside = _split_multipolygon_into_outer_and_inner(mp)
             if len(inside) > 0:
                 codes_inside = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
-                codes_inside[0] = mpath.Path.MOVETO                
+                codes_inside[0] = mpath.Path.MOVETO
                 codes_outside = np.ones(len(outside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
                 codes_outside[0] = mpath.Path.MOVETO
                 all_codes = np.concatenate((codes_inside, codes_outside))
@@ -1289,7 +1289,7 @@ def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatc
                 vertices = np.array(outside)
                 all_codes = np.ones(len(outside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
                 all_codes[0] = mpath.Path.MOVETO
-            
+
             patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
 
     return patches
