@@ -1268,7 +1268,7 @@ def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type:
     return interior_coords, exterior_coords
 
 
-def _make_patch_from_multipolygon(mp: MultiPolygon) -> mpatches.PathPatch:
+def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
     # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
 
     patches = []
@@ -1293,7 +1293,6 @@ def _make_patch_from_multipolygon(mp: MultiPolygon) -> mpatches.PathPatch:
             patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
 
     return patches
-
 
 
 def _mpl_ax_contains_elements(ax: Axes) -> bool:
