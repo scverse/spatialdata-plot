@@ -18,51 +18,26 @@ defaults:
     shell: bash -euo pipefail {0}
 
 jobs:
-  # Get the test environment from hatch as defined in pyproject.toml.
-  # This ensures that the pyproject.toml is the single point of truth for test definitions and the same tests are
-  # run locally and on continuous integration.
-  # Check [[tool.hatch.envs.hatch-test.matrix]] in pyproject.toml and https://hatch.pypa.io/latest/environment/ for
-  # more details.
-  get-environments:
-    runs-on: ubuntu-latest
-    outputs:
-      envs: ${{ steps.get-envs.outputs.envs }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          filter: blob:none
-          fetch-depth: 0
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: pyproject.toml
-      - name: Install hatch
-        run: uv tool install hatch
-      - name: Get test environments
-        id: get-envs
-        run: |
-          ENVS_JSON=$(hatch env show --json 2>/dev/null | jq -c 'to_entries
-            | map(
-                select(.key | startswith("hatch-test"))
-                | {
-                    name: .key,
-                    label: (if (.key | contains("pre")) then .key + " (PRE-RELEASE DEPENDENCIES)" else .key end),
-                    python: .value.python,
-                    test_type: (if (.key | contains("py3.13-stable")) then "coverage" else null end)
-                  }
-              )')
-          echo "envs=${ENVS_JSON}" | tee $GITHUB_OUTPUT
-
-  # Run tests through hatch. Spawns a separate runner for each environment defined in the hatch matrix obtained above.
+  # Run tests through hatch. Spawns a separate runner for each environment defined in the matrix below.
+  # The matrix is based on [[tool.hatch.envs.hatch-test.matrix]] in pyproject.toml
   test:
-    needs: get-environments
-
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        env: ${{ fromJSON(needs.get-environments.outputs.envs) }}
+        env:
+          - name: hatch-test.py3.11-stable
+            label: hatch-test.py3.11-stable
+            python: "3.11"
+            test_type: null
+          - name: hatch-test.py3.13-stable
+            label: hatch-test.py3.13-stable
+            python: "3.13"
+            test_type: coverage
+          - name: hatch-test.py3.13-pre
+            label: hatch-test.py3.13-pre (PRE-RELEASE DEPENDENCIES)
+            python: "3.13"
+            test_type: null
 
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
@@ -115,7 +90,6 @@ jobs:
     name: Tests pass in all hatch environments
     if: always()
     needs:
-      - get-environments
       - test
     runs-on: ubuntu-latest
     steps:
