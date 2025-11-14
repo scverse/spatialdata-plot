@@ -34,6 +34,9 @@ jobs:
           fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
       - name: Get test environments
         id: get-envs
         run: |
