@@ -12,84 +12,128 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_COLOR: "1"
+  MPLBACKEND: agg
+  UV_COMPILE_BYTECODE: "1"
+  COVERAGE_FILE: ${{ github.workspace }}/.coverage
+
 defaults:
   run:
-    # to fail on error in multiline statements (-e), in pipes (-o pipefail), and on unset variables (-u).
+    # fail on error in multiline statements (-e), in pipes (-o pipefail), and on unset variables (-u)
     shell: bash -euo pipefail {0}
 
 jobs:
-  # Run tests through hatch. Spawns a separate runner for each environment defined in the matrix below.
-  # The matrix is based on [[tool.hatch.envs.hatch-test.matrix]] in pyproject.toml
+  # Discover hatch test environments from pyproject.toml, similar to squidpy.
+  get-environments:
+    runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.get-envs.outputs.envs }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          filter: blob:none
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Get test environments
+        id: get-envs
+        run: |
+          ENVS_JSON=$(NO_COLOR=1 uvx --quiet hatch env show --json | jq -c 'to_entries
+            | map(
+                select(.key | startswith("hatch-test"))
+                | {
+                    name: .key,
+                    label: (if (.key | contains("pre")) then .key + " (PRE-RELEASE DEPENDENCIES)" else .key end),
+                    python: .value.python,
+                    test_type: (if (.key | contains("py3.13-stable")) then "coverage" else null end)
+                  }
+              )')
+          echo "envs=${ENVS_JSON}" | tee "$GITHUB_OUTPUT"
+
+  # Run tests through hatch for each discovered environment.
   test:
+    needs: [get-environments]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        env:
-          - name: hatch-test.py3.11-stable
-            label: hatch-test.py3.11-stable
-            python: "3.11"
-            test_type: null
-          - name: hatch-test.py3.13-stable
-            label: hatch-test.py3.13-stable
-            python: "3.13"
-            test_type: coverage
-          - name: hatch-test.py3.13-pre
-            label: hatch-test.py3.13-pre (PRE-RELEASE DEPENDENCIES)
-            python: "3.13"
-            test_type: null
-
-    name: ${{ matrix.env.label }}
+        env: ${{ fromJSON(needs.get-environments.outputs.envs) }}
+    name: ${{ matrix.env.label }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-
-    # Configure pytest-xdist and matplotlib for plotting tests
+    # Configure pytest-xdist and BLAS threading as before
     env:
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
       NUMEXPR_MAX_THREADS: "1"
       PYTEST_ADDOPTS: "-n auto --dist=load --durations=10"
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           filter: blob:none
           fetch-depth: 0
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.env.python }}
           cache-dependency-glob: pyproject.toml
+
+      - name: Ensure figure directory exists
+        run: mkdir -p "$GITHUB_WORKSPACE/tests/figures"
+
       - name: create hatch environment
         run: uvx hatch env create ${{ matrix.env.name }}
+
       - name: run tests using hatch
+        if: matrix.env.test_type == null
         env:
-          MPLBACKEND: agg
           PLATFORM: ${{ matrix.os }}
           DISPLAY: :42
-        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+        run: uvx hatch run ${{ matrix.env.name }}:run -v --color=yes
+
+      - name: run tests using hatch (coverage)
+        if: matrix.env.test_type == 'coverage'
+        env:
+          PLATFORM: ${{ matrix.os }}
+          DISPLAY: :42
+        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes
+
       - name: generate coverage report
+        if: matrix.env.test_type == 'coverage'
         run: |
           # See https://coverage.readthedocs.io/en/latest/config.html#run-patch
           test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
           uvx hatch run ${{ matrix.env.name }}:cov-report   # report visibly
           uvx hatch run ${{ matrix.env.name }}:coverage xml # create report for upload
+
       - name: Archive figures generated during testing
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: visual_test_results_${{ matrix.env.name }}
-          path: tests/figures/*
+          name: visual_test_results_${{ runner.os }}_${{ matrix.env.name }}
+          path: ${{ github.workspace }}/tests/figures/*
           if-no-files-found: ignore
-      - name: Upload coverage
-        uses: codecov/codecov-action@v5
 
-  # Check that all tests defined above pass. This makes it easy to set a single "required" test in branch
-  # protection instead of having to update it frequently. See https://github.com/re-actors/alls-green#why.
+      - name: Upload coverage
+        if: matrix.env.test_type == 'coverage'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
+  # Single “required” check that aggregates all test jobs, as in squidpy.
   check:
     name: Tests pass in all hatch environments
     if: always()
     needs:
+      - get-environments
       - test
     runs-on: ubuntu-latest
     steps:

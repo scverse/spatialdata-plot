@@ -6,7 +6,7 @@ requires = [ "hatch-vcs", "hatchling" ]
 name = "spatialdata-plot"
 description = "Static plotting for spatial data."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "BSD-3-Clause"
 maintainers = [
   { name = "Tim Treis", email = "tim.treis@helmholtz-munich.de" },
 ]
@@ -46,7 +46,7 @@ optional-dependencies.dev = [
   "ruff",
   "twine>=4.0.2",
 ]
-optional-dependencies.doc = [
+optional-dependencies.docs = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
   # For notebooks
   "ipython>=8.6",
@@ -71,12 +71,14 @@ optional-dependencies.test = [
   "pytest-cov",
   "pytest-xdist",
 ]
+
+urls."Bug Tracker" = "https://github.com/scverse/spatialdata-plot/issues"
 urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
-urls.Homepage = "https://github.com/scverse/spatialdata-plot.git"
+urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 
 [tool.hatch.build.targets.wheel]
-packages = [ 'src/spatialdata_plot' ]
+packages = [ "src/spatialdata_plot" ]
 
 [tool.hatch.version]
 source = "vcs"
@@ -92,7 +94,7 @@ installer = "uv"
 features = [ "dev" ]
 
 [tool.hatch.envs.docs]
-features = [ "doc" ]
+features = [ "docs" ]
 scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
@@ -109,14 +111,12 @@ python = [ "3.13" ]
 
 [tool.hatch.envs.hatch-test]
 features = [ "dev", "test" ]
-
-[tool.hatch.envs.hatch-test.scripts]
-run = "pytest {args:tests}"
-run-cov = "pytest --cov --cov-report=term-missing {args:tests}"
-cov = "coverage combine"
-cov-combine = "coverage combine"
-cov-report = "coverage report"
-coverage = "coverage {args}"
+scripts.run = "pytest {args:tests}"
+scripts.run-cov = "pytest --cov --cov-report=term-missing {args:tests}"
+scripts.cov = "coverage combine"
+scripts.cov-combine = "coverage combine"
+scripts.cov-report = "coverage report"
+scripts.coverage = "python -m coverage {args}"
 
 [tool.hatch.envs.hatch-test.overrides]
 # If the matrix variable `deps` is set to "pre",
