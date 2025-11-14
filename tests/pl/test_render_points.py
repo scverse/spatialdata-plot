@@ -21,7 +21,7 @@ from spatialdata.transformations import (
 )
 from spatialdata.transformations._utils import _set_transformations
 
-import spatialdata_plot  # noqa: F401
+import spatialdata_plot
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
