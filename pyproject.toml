@@ -109,14 +109,14 @@ python = [ "3.13" ]
 
 [tool.hatch.envs.hatch-test]
 features = [ "dev", "test" ]
-scripts = [
-  "run = pytest {args:tests}",
-  "run-cov = pytest --cov --cov-report=term-missing {args:tests}",
-  "cov = coverage combine",
-  "cov-combine = coverage combine",
-  "cov-report = coverage report",
-  "coverage = coverage {args}",
-]
+
+[tool.hatch.envs.hatch-test.scripts]
+run = "pytest {args:tests}"
+run-cov = "pytest --cov --cov-report=term-missing {args:tests}"
+cov = "coverage combine"
+cov-combine = "coverage combine"
+cov-report = "coverage report"
+coverage = "coverage {args}"
 
 [tool.hatch.envs.hatch-test.overrides]
 # If the matrix variable `deps` is set to "pre",
