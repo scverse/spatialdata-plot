@@ -85,6 +85,9 @@ nb_output_stderr = "remove"
 nb_execution_mode = "off"
 nb_merge_streams = True
 typehints_defaults = "braces"
+autodoc_type_aliases = {
+    "ColorLike": "spatialdata_plot.pl.basic.ColorLike",
+}
 
 source_suffix = {
     ".rst": "restructuredtext",
@@ -135,5 +138,12 @@ pygments_style = "default"
 nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
+    ("py:class", "Colormap"),
+    ("py:class", "Normalize"),
+    ("py:class", "ColorLike"),
+]
+nitpick_ignore_regex = [
+    ("py:class", r"default .+"),
+    ("py:class", r"gets set to .+"),
+    ("py:class", r"optional"),
 ]

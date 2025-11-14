@@ -187,11 +187,15 @@ class PlotAccessor:
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
             used.
-        color : ColorLike | None, optional
+        color : ColorLike | str | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
-            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
-            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            indicated, the value of `fill_alpha` takes precedence if given) or a string referencing stored annotations.
+            When the provided key matches a column on the shapes element itself, those values are used directly. When
+            the key references an AnnData table annotating the element, both ``obs`` columns and ``var_names`` entries
+            (optionally pulled from ``layers``) are supported; use `table_name` to disambiguate which table should be
+            consulted. The string form can therefore represent categorical or continuous measurements tied to the shapes
+            element.
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
             the color column is found in multiple locations, please provide the table_name to be used for the elements.
@@ -241,8 +245,8 @@ class PlotAccessor:
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
         table_layer: str | None
-            Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
-            :attr:`sdata.table.X` is used for coloring.
+            Layer of the table to use for coloring if `color` is present in the ``var_names`` of the table. If None, the
+            data stored in ``X`` is used for coloring.
         shape: Literal["circle", "hex", "visium_hex", "square"] | None
             If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
             specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
@@ -368,8 +372,9 @@ class PlotAccessor:
         color : str | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
-            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
-            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in the ``obs``
+            dataframe of the table providing annotations. The latter can be used to color by categorical or continuous
+            variables. If
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
             the color column is found in multiple locations, please provide the table_name to be used for the elements.
@@ -403,8 +408,8 @@ class PlotAccessor:
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
             elements, as specified under element.
         table_layer: str | None
-            Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
-            :attr:`sdata.table.X` is used for coloring.
+            Layer of the table to use for coloring if `color` is present in the ``var_names`` of the table. If None, the
+            data stored in ``X`` is used for coloring.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -627,8 +632,8 @@ class PlotAccessor:
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
         color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
-            :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
+            Can either be string representing a color-like or key in the ``obs`` dataframe or ``var`` index of the
+            associated table. The latter can be used to color by categorical or continuous variables. If the
             color column is found in multiple locations, please provide the table_name to be used for the element if you
             would like a specific table to be used. By default one table will automatically be choosen.
         groups : list[str] | str | None
@@ -664,8 +669,8 @@ class PlotAccessor:
         table_name: str | None
             Name of the table containing the color columns.
         table_layer: str | None
-            Layer of the AnnData table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None,
-            :attr:`sdata.table.X` of the default table is used for coloring.
+            Layer of the AnnData table to use for coloring if `color` is present in the ``var_names`` of the default
+            table. If None, the ``X`` matrix of the default table is used for coloring.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
