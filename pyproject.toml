@@ -199,7 +199,6 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = [ "spatialdata_plot" ]
-patch = [ "subprocess" ]
 omit = [
   "**/test_*.py",
 ]
