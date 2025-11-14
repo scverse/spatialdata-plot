@@ -37,10 +37,12 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
+      - name: Install hatch
+        run: uv tool install hatch
       - name: Get test environments
         id: get-envs
         run: |
-          ENVS_JSON=$(NO_COLOR=1 uvx --quiet hatch env show --json | jq -c 'to_entries
+          ENVS_JSON=$(hatch env show --json | jq -c 'to_entries
             | map(
                 select(.key | startswith("hatch-test"))
                 | {
