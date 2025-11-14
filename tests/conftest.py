@@ -405,7 +405,7 @@ class PlotTesterMeta(ABCMeta):
         return super().__new__(cls, clsname, superclasses, attributedict)
 
 
-class PlotTester(ABC):  # noqa: B024
+class PlotTester(ABC):
     @classmethod
     def compare(cls, basename: str, tolerance: float | None = None):
         ACTUAL.mkdir(parents=True, exist_ok=True)
