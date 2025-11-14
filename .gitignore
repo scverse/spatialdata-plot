@@ -6,16 +6,45 @@ buck-out/
 # Compiled files
 .venv/
 __pycache__/
+.mypy_cache/
+.ruff_cache/
 .*cache/
+/node_modules
 
 # Distribution / packaging
+/build/
 /dist/
+/*.egg-info/
 
 # Tests and coverage
+/.pytest_cache/
+/.cache/
 /data/
-/node_modules/
-/.coverage*
+*failed-diff.png
 
 # docs
 /docs/generated/
 /docs/_build/
+
+# IDEs
+/.idea/
+/.vscode/
+
+format.sh
+
+# test
+tests/figures/
+
+# jupyter checkpoints
+.ipynb_checkpoints
+
+# sphinx files
+*.swp
+
+# other
+_version.py
+/temp/
+
+# pixi
+/pixi/
+pixi.lock

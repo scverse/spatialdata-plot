@@ -61,6 +61,14 @@ jobs:
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
 
+    # Configure pytest-xdist and matplotlib for plotting tests
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_MAX_THREADS: "1"
+      PYTEST_ADDOPTS: "-n auto --dist=load --durations=10"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,6 +93,13 @@ jobs:
           test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
           uvx hatch run ${{ matrix.env.name }}:cov-report   # report visibly
           uvx hatch run ${{ matrix.env.name }}:coverage xml # create report for upload
+      - name: Archive figures generated during testing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual_test_results_${{ matrix.env.name }}
+          path: tests/figures/*
+          if-no-files-found: ignore
       - name: Upload coverage
         uses: codecov/codecov-action@v5
 
@@ -98,6 +113,6 @@ jobs:
       - test
     runs-on: ubuntu-latest
     steps:
-        - uses: re-actors/alls-green@release/v1
-          with:
-            jobs: ${{ toJSON(needs) }}
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
