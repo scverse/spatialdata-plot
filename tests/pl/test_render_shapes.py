@@ -183,16 +183,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         shapes = sdata_blobs.shapes[element]
         n_shapes = len(shapes)
         rng = get_standard_RNG()
+        shape_ids = [f"shape_{i}" for i in range(n_shapes)]
+        shapes.index = shape_ids
         adata = AnnData(rng.normal(size=(n_shapes, 3)))
         adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
-        adata.obs["instance_id"] = [f"id_{i}" for i in range(n_shapes)]
+        adata.obs["instance_id"] = shape_ids
         adata.obs["region"] = pd.Categorical([element] * n_shapes)
         table = TableModel.parse(adata=adata, region=element, region_key="region", instance_key="instance_id")
         instance_key = table.uns["spatialdata_attrs"]["instance_key"]
-        original_instance_ids = table.obs[instance_key].tolist()
         table.obs.at[table.obs.index[1], instance_key] = table.obs.at[table.obs.index[0], instance_key]
         sdata_blobs["table"] = table
-        shapes.index = original_instance_ids
 
         with pytest.raises(ValueError, match="duplicate 'instance"):
             sdata_blobs.pl.render_shapes(
