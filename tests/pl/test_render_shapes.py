@@ -156,7 +156,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_render_shapes_duplicate_shape_indices_error(self, sdata_blobs: SpatialData):
         element = "blobs_polygons"
-        shapes = sdata_blobs.shapes[element]
+        shapes = sdata_blobs.shapes[element].copy()
         n_shapes = len(shapes)
         rng = get_standard_RNG()
         adata = AnnData(rng.normal(size=(n_shapes, 3)))
@@ -185,6 +185,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         rng = get_standard_RNG()
         shape_ids = [f"shape_{i}" for i in range(n_shapes)]
         shapes.index = shape_ids
+        sdata_blobs.shapes[element] = shapes
         adata = AnnData(rng.normal(size=(n_shapes, 3)))
         adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
         adata.obs["instance_id"] = shape_ids

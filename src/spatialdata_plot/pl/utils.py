@@ -819,13 +819,12 @@ def _ensure_one_to_one_mapping(
     if table_name is None or element_name is None:
         return
 
-    _validate_shape_index_uniqueness(element, element_name, table_name)
-
     table = sdata.get(table_name, None)
     if table is None:
         return
 
     _validate_table_instance_uniqueness(table, element_name, table_name)
+    _validate_shape_index_uniqueness(element, element_name, table_name)
 
 
 def _validate_shape_index_uniqueness(
