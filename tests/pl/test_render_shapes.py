@@ -170,6 +170,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         duplicated_index = shapes.index.to_list()
         duplicated_index[1] = duplicated_index[0]
         shapes.index = duplicated_index
+        sdata_blobs.shapes[element] = shapes
 
         with pytest.raises(ValueError, match="duplicate index values"):
             sdata_blobs.pl.render_shapes(
