@@ -1268,7 +1268,7 @@ def _collect_polygon_rings(
 
 
 def _create_ring_codes(length: int) -> npt.NDArray[np.uint8]:
-    codes = np.ones(length, dtype=mpath.Path.code_type)
+    codes = np.full(length, mpath.Path.LINETO, dtype=mpath.Path.code_type)
     codes[0] = mpath.Path.MOVETO
     return codes
 
