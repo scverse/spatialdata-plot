@@ -125,15 +125,15 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sd_polygons = ShapesModel.parse(cell_polygon_table)
 
         adata = anndata.AnnData(pd.DataFrame({"value": [1]}))
-        adata.obs["region"] = "two_holes"
+        adata.obs["region"] = pd.Categorical(["two_holes"] * adata.n_obs)
         adata.obs["instance_id"] = [0]
         adata.obs["category"] = ["holey"]
         table = TableModel.parse(adata, region="two_holes", region_key="region", instance_key="instance_id")
 
-        sdata = SpatialData(shapes={"two_holes": sd_polygons}, tables=table)
+        sdata = SpatialData(shapes={"two_holes": sd_polygons}, tables={"table": table})
 
         fig, ax = plt.subplots()
-        sdata.pl.render_shapes(element="two_holes", color="category").pl.show(ax=ax)
+        sdata.pl.render_shapes(element="two_holes", color="category", table_name="table").pl.show(ax=ax)
         ax.set_xlim(-1, 6)
         ax.set_ylim(-1, 6)
 
