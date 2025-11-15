@@ -99,6 +99,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata["table"] = table
         sdata.pl.render_shapes(color="val", fill_alpha=0.3).pl.show()
 
+    def test_plot_can_render_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+        sdata = SpatialData(shapes={"two_holes": sd_polygons})
+        sdata.pl.render_shapes(element="two_holes").pl.show()
+
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
         blob["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * blob["table"].n_obs)
