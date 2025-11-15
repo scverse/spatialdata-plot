@@ -516,6 +516,7 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
 
 
 def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):
+    # Fast regression for https://github.com/scverse/spatialdata-plot/issues/479.
     n_obs = len(sdata_blobs["blobs_points"])
     obs = pd.DataFrame(
         {
