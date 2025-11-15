@@ -107,7 +107,13 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
         sd_polygons = ShapesModel.parse(cell_polygon_table)
         sdata = SpatialData(shapes={"two_holes": sd_polygons})
-        sdata.pl.render_shapes(element="two_holes").pl.show()
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
 
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
