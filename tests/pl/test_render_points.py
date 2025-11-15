@@ -178,6 +178,32 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_points"])
+        obs = pd.DataFrame(
+            {
+                "instance_id": np.arange(n_obs),
+                "region": pd.Categorical(["blobs_points"] * n_obs),
+                "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+            }
+        )
+
+        table = TableModel.parse(
+            adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
+        sdata_blobs["datashader_table"] = table
+
+        sdata_blobs.pl.render_points(
+            "blobs_points",
+            color="foo",
+            table_name="datashader_table",
+            method="datashader",
+            size=5,
+        ).pl.show()
+
     def test_plot_datashader_can_use_sum_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
             element="blobs_points",
@@ -487,3 +513,30 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
+
+def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):
+    n_obs = len(sdata_blobs["blobs_points"])
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(n_obs),
+            "region": pd.Categorical(["blobs_points"] * n_obs),
+            "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+        }
+    )
+
+    table = TableModel.parse(
+        adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+        region="blobs_points",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata_blobs["datashader_table"] = table
+
+    sdata_blobs.pl.render_points(
+        "blobs_points",
+        color="foo",
+        table_name="datashader_table",
+        method="datashader",
+        size=5,
+    ).pl.show()
