@@ -154,6 +154,50 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         norm = Normalize(vmin=0, vmax=5, clip=True)
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
+    def test_render_shapes_duplicate_shape_indices_error(self, sdata_blobs: SpatialData):
+        element = "blobs_polygons"
+        shapes = sdata_blobs.shapes[element]
+        n_shapes = len(shapes)
+        rng = get_standard_RNG()
+        adata = AnnData(rng.normal(size=(n_shapes, 3)))
+        adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
+        adata.obs["instance_id"] = [f"id_{i}" for i in range(n_shapes)]
+        table = TableModel.parse(adata=adata, region=element, instance_key="instance_id")
+        sdata_blobs["table"] = table
+        instance_key = table.uns["spatialdata_attrs"]["instance_key"]
+        shapes.index = table.obs[instance_key].tolist()
+        duplicated_index = shapes.index.to_list()
+        duplicated_index[1] = duplicated_index[0]
+        shapes.index = duplicated_index
+
+        with pytest.raises(ValueError, match="duplicate index values"):
+            sdata_blobs.pl.render_shapes(
+                element=element,
+                color="annotation",
+                table_name="table",
+            ).pl.show()
+
+    def test_render_shapes_duplicate_table_rows_error(self, sdata_blobs: SpatialData):
+        element = "blobs_polygons"
+        shapes = sdata_blobs.shapes[element]
+        n_shapes = len(shapes)
+        rng = get_standard_RNG()
+        adata = AnnData(rng.normal(size=(n_shapes, 3)))
+        adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
+        adata.obs["instance_id"] = [f"id_{i}" for i in range(n_shapes)]
+        table = TableModel.parse(adata=adata, region=element, instance_key="instance_id")
+        instance_key = table.uns["spatialdata_attrs"]["instance_key"]
+        table.obs.at[table.obs.index[1], instance_key] = table.obs.at[table.obs.index[0], instance_key]
+        sdata_blobs["table"] = table
+        shapes.index = table.obs[instance_key].tolist()
+
+        with pytest.raises(ValueError, match="duplicate 'instance"):
+            sdata_blobs.pl.render_shapes(
+                element=element,
+                color="annotation",
+                table_name="table",
+            ).pl.show()
+
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
         blob = SpatialData.init_from_elements(
