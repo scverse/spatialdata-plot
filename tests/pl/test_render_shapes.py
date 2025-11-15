@@ -115,6 +115,30 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         fig.tight_layout()
 
+    def test_plot_can_color_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        cell_polygon_table["instance_id"] = [0]
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+
+        adata = anndata.AnnData(pd.DataFrame({"value": [1]}))
+        adata.obs["region"] = "two_holes"
+        adata.obs["instance_id"] = [0]
+        adata.obs["category"] = ["holey"]
+        table = TableModel.parse(adata, region="two_holes", region_key="region", instance_key="instance_id")
+
+        sdata = SpatialData(shapes={"two_holes": sd_polygons}, table=table)
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes", color="category").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
+
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
         blob["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * blob["table"].n_obs)
