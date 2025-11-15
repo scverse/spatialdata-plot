@@ -189,9 +189,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata.obs["region"] = pd.Categorical([element] * n_shapes)
         table = TableModel.parse(adata=adata, region=element, region_key="region", instance_key="instance_id")
         instance_key = table.uns["spatialdata_attrs"]["instance_key"]
+        original_instance_ids = table.obs[instance_key].tolist()
         table.obs.at[table.obs.index[1], instance_key] = table.obs.at[table.obs.index[0], instance_key]
         sdata_blobs["table"] = table
-        shapes.index = table.obs[instance_key].tolist()
+        shapes.index = original_instance_ids
 
         with pytest.raises(ValueError, match="duplicate 'instance"):
             sdata_blobs.pl.render_shapes(
