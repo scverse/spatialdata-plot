@@ -162,7 +162,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata = AnnData(rng.normal(size=(n_shapes, 3)))
         adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
         adata.obs["instance_id"] = [f"id_{i}" for i in range(n_shapes)]
-        table = TableModel.parse(adata=adata, region=element, instance_key="instance_id")
+        adata.obs["region"] = pd.Categorical([element] * n_shapes)
+        table = TableModel.parse(adata=adata, region=element, region_key="region", instance_key="instance_id")
         sdata_blobs["table"] = table
         instance_key = table.uns["spatialdata_attrs"]["instance_key"]
         shapes.index = table.obs[instance_key].tolist()
@@ -185,7 +186,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata = AnnData(rng.normal(size=(n_shapes, 3)))
         adata.obs["annotation"] = rng.choice(["a", "b"], size=n_shapes)
         adata.obs["instance_id"] = [f"id_{i}" for i in range(n_shapes)]
-        table = TableModel.parse(adata=adata, region=element, instance_key="instance_id")
+        adata.obs["region"] = pd.Categorical([element] * n_shapes)
+        table = TableModel.parse(adata=adata, region=element, region_key="region", instance_key="instance_id")
         instance_key = table.uns["spatialdata_attrs"]["instance_key"]
         table.obs.at[table.obs.index[1], instance_key] = table.obs.at[table.obs.index[0], instance_key]
         sdata_blobs["table"] = table
