@@ -8,6 +8,7 @@ buck-out/
 __pycache__/
 .mypy_cache/
 .ruff_cache/
+.*cache/
 /node_modules
 
 # Distribution / packaging
@@ -31,7 +32,6 @@ __pycache__/
 
 format.sh
 
-
 # test
 tests/figures/
 
@@ -44,3 +44,7 @@ tests/figures/
 # other
 _version.py
 /temp/
+
+# pixi
+/pixi/
+pixi.lock

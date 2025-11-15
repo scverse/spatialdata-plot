@@ -3,73 +3,140 @@ name: Test
 on:
   push:
     branches: [main]
-    tags: ["v*"] # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
-    branches: ["*"]
+    branches: [main]
+  schedule:
+    - cron: "0 5 1,15 * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  MPLBACKEND: agg
+  UV_COMPILE_BYTECODE: "1"
+  COVERAGE_FILE: ${{ github.workspace }}/.coverage
+
+defaults:
+  run:
+    # fail on error in multiline statements (-e), in pipes (-o pipefail), and on unset variables (-u)
+    shell: bash -euo pipefail {0}
 
 jobs:
-  test:
+  # Discover hatch test environments from pyproject.toml, similar to squidpy.
+  get-environments:
     runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.get-envs.outputs.envs }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          filter: blob:none
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Get test environments
+        id: get-envs
+        run: |
+          ENVS_JSON=$(NO_COLOR=1 uvx --quiet hatch env show --json | jq -c 'to_entries
+            | map(
+                select(.key | startswith("hatch-test"))
+                | {
+                    name: .key,
+                    label: (if (.key | contains("pre")) then .key + " (PRE-RELEASE DEPENDENCIES)" else .key end),
+                    python: .value.python,
+                    test_type: (if (.key | contains("py3.13-stable")) then "coverage" else null end)
+                  }
+              )')
+          echo "envs=${ENVS_JSON}" | tee "$GITHUB_OUTPUT"
+
+  # Run tests through hatch for each discovered environment.
+  test:
+    needs: [get-environments]
     strategy:
       fail-fast: false
       matrix:
-        env: ["dev-py311", "dev-py313"]
-
-    # Configure pytest-xdist
+        os: [ubuntu-latest]
+        env: ${{ fromJSON(needs.get-environments.outputs.envs) }}
+    name: ${{ matrix.env.label }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Configure pytest-xdist and BLAS threading as before
     env:
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
       NUMEXPR_MAX_THREADS: "1"
-      MPLBACKEND: "agg"
-      DISPLAY: ":42"
       PYTEST_ADDOPTS: "-n auto --dist=load --durations=10"
-
     steps:
-      - uses: actions/checkout@v4
-
-      # Cache rattler's shared package cache (speeds up downloads)
-      - name: Restore rattler cache
-        uses: actions/cache@v4
+      - uses: actions/checkout@v5
         with:
-          path: ~/.cache/rattler
-          key: rattler-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            rattler-${{ runner.os }}-${{ matrix.env }}-
-            rattler-${{ runner.os }}-
+          filter: blob:none
+          fetch-depth: 0
 
-      # Install pixi and the requested environment
-      - uses: prefix-dev/setup-pixi@v0.9.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
         with:
-          environments: ${{ matrix.env }}
-          # We're not comitting the pixi-lock file
-          locked: false
-          cache: false
-          activate-environment: ${{ matrix.env }}
+          python-version: ${{ matrix.env.python }}
+          cache-dependency-glob: pyproject.toml
 
-      - name: Show versions
-        run: |
-          python --version
-          pixi --version
+      - name: Ensure figure directory exists
+        run: mkdir -p "$GITHUB_WORKSPACE/tests/figures"
 
-      - name: Run tests
+      - name: create hatch environment
+        run: uvx hatch env create ${{ matrix.env.name }}
+
+      - name: run tests using hatch
+        if: matrix.env.test_type == null
         env:
-          MPLBACKEND: agg
-          DISPLAY: ":42"
+          PLATFORM: ${{ matrix.os }}
+          DISPLAY: :42
+        run: uvx hatch run ${{ matrix.env.name }}:run -v --color=yes
+
+      - name: run tests using hatch (coverage)
+        if: matrix.env.test_type == 'coverage'
+        env:
+          PLATFORM: ${{ matrix.os }}
+          DISPLAY: :42
+        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes
+
+      - name: generate coverage report
+        if: matrix.env.test_type == 'coverage'
         run: |
-          pytest -v --cov --color=yes --cov-report=xml
+          # See https://coverage.readthedocs.io/en/latest/config.html#run-patch
+          test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
+          uvx hatch run ${{ matrix.env.name }}:cov-report   # report visibly
+          uvx hatch run ${{ matrix.env.name }}:coverage xml # create report for upload
 
       - name: Archive figures generated during testing
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: visual_test_results_${{ matrix.env }}
-          path: /home/runner/work/spatialdata-plot/spatialdata-plot/tests/figures/*
+          name: visual_test_results_${{ runner.os }}_${{ matrix.env.name }}
+          path: ${{ github.workspace }}/tests/figures/*
+          if-no-files-found: ignore
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage
+        if: matrix.env.test_type == 'coverage'
+        uses: codecov/codecov-action@v5
         with:
-          name: coverage
-          verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
+  # Single “required” check that aggregates all test jobs, as in squidpy.
+  check:
+    name: Tests pass in all hatch environments
+    if: always()
+    needs:
+      - get-environments
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}

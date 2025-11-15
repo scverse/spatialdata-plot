@@ -138,6 +138,27 @@ def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _ensure_region_is_categorical(table: AnnData) -> None:
+    """Ensure the region column used for annotation remains categorical."""
+    attrs = table.uns.get("spatialdata_attrs", {})
+    region_key = attrs.get("region_key")
+
+    if not region_key or region_key not in table.obs:
+        return
+
+    if not isinstance(table.obs[region_key].dtype, CategoricalDtype):
+        table.obs[region_key] = table.obs[region_key].astype("category")
+
+
+def _ensure_tables_have_categorical_regions(sdata: SpatialData) -> None:
+    """Cast the region columns of all tables to categorical if necessary."""
+    if sdata.tables is None:
+        return
+
+    for table in sdata.tables.values():
+        _ensure_region_is_categorical(table)
+
+
 def _verify_plotting_tree(sdata: SpatialData) -> SpatialData:
     """Verify that the plotting tree exists, and if not, create it."""
     if not hasattr(sdata, "plotting_tree"):
@@ -2127,6 +2148,8 @@ def _validate_col_for_column_table(
     table_name: str | None,
     labels: bool = False,
 ) -> tuple[str | None, str | None]:
+    _ensure_tables_have_categorical_regions(sdata)
+
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:

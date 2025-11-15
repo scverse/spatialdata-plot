@@ -5,7 +5,7 @@ from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 
-import spatialdata_plot  # noqa: F401
+import spatialdata_plot
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 sc.pl.set_rcParams_defaults()
