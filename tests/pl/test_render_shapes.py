@@ -130,7 +130,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         adata.obs["category"] = ["holey"]
         table = TableModel.parse(adata, region="two_holes", region_key="region", instance_key="instance_id")
 
-        sdata = SpatialData(shapes={"two_holes": sd_polygons}, table=table)
+        sdata = SpatialData(shapes={"two_holes": sd_polygons}, tables=table)
 
         fig, ax = plt.subplots()
         sdata.pl.render_shapes(element="two_holes", color="category").pl.show(ax=ax)
