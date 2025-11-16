@@ -1122,7 +1122,8 @@ def _render_labels(
     table_name = render_params.table_name
     table_layer = render_params.table_layer
     palette = render_params.palette
-    color = render_params.color
+    color = render_params.color.get_hex() if render_params.color else None
+    col_for_color = render_params.col_for_color
     groups = render_params.groups
     scale = render_params.scale
 
@@ -1175,18 +1176,21 @@ def _render_labels(
         sdata=sdata_filt,
         element=label,
         element_name=element,
-        value_to_plot=color,
+        # value_to_plot=color, # TODO
+        value_to_plot=col_for_color,
         groups=groups,
         palette=palette,
-        na_color=render_params.cmap_params.na_color,
+        # na_color=render_params.cmap_params.na_color, # TODO
+        na_color=render_params.color if render_params.color is not None else render_params.cmap_params.na_color,
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        render_type="labels",
     )
 
     # rasterize could have removed labels from label
     # only problematic if color is specified
-    if rasterize and color is not None:
+    if rasterize and (color is not None or col_for_color is not None):
         labels_in_rasterized_image = np.unique(label.values)
         mask = np.isin(instance_id, labels_in_rasterized_image)
         instance_id = instance_id[mask]
@@ -1195,8 +1199,8 @@ def _render_labels(
             color_vector = color_vector.remove_unused_categories()
             assert color_source_vector is not None
             color_source_vector = color_source_vector[mask]
-        else:
-            assert color_source_vector is None
+        # else:
+        #     assert color_source_vector is None # TODO: delete?
 
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
@@ -1266,7 +1270,8 @@ def _render_labels(
         cax=cax,
         fig_params=fig_params,
         adata=table,
-        value_to_plot=color,
+        # value_to_plot=color, # TODO
+        value_to_plot=col_for_color,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
