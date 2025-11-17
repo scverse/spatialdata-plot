@@ -57,6 +57,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_transformation,
     _rasterize_if_necessary,
     _set_color_source_vec,
+    _validate_polygons,
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
@@ -183,6 +184,8 @@ def _render_shapes(
                 [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
             )
             shapes = _convert_shapes(shapes, render_params.shape, max_extent)
+
+    shapes = _validate_polygons(shapes)
 
     # Determine which method to use for rendering
     method = render_params.method

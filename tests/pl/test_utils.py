@@ -1,13 +1,15 @@
+import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
+from shapely.geometry import Polygon
 from spatialdata import SpatialData
 
 import spatialdata_plot
-from spatialdata_plot.pl.utils import _get_subplots
+from spatialdata_plot.pl.utils import _get_subplots, _validate_polygons
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -136,3 +138,18 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
 
     assert len_axs == len(axs.flatten())
     assert axs_visible == [ax.axison for ax in axs.flatten()]
+
+
+def test_validate_polygons_converts_holed_polygons(caplog):
+    shell = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)]
+    hole = [(0.2, 0.2), (0.2, 0.8), (0.8, 0.8), (0.8, 0.2), (0.2, 0.2)]
+    holed_polygon = Polygon(shell, [hole])
+    plain_polygon = Polygon([(2.0, 0.0), (2.0, 1.0), (3.0, 1.0), (3.0, 0.0), (2.0, 0.0)])
+    shapes = gpd.GeoDataFrame({"geometry": [holed_polygon, plain_polygon]})
+
+    with caplog.at_level("INFO"):
+        validated = _validate_polygons(shapes.copy())
+
+    assert validated.iloc[0].geometry.geom_type == "MultiPolygon"
+    assert validated.iloc[1].geometry.geom_type == "Polygon"
+    assert "Converted 1 Polygon" in caplog.text
