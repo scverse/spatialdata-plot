@@ -1253,7 +1253,7 @@ def _validate_polygons(shapes: GeoDataFrame) -> GeoDataFrame:
     Parameters
     ----------
     shapes
-        GeoDataFrame containing a ``geometry`` column.
+        GeoDataFrame containing a `geometry` column.
 
     Returns
     -------
