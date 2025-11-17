@@ -1246,47 +1246,52 @@ def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegme
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
 
-def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
-    # https://stackoverflow.com/a/21922058
+def _collect_polygon_rings(
+    geom: shapely.Polygon | shapely.MultiPolygon,
+) -> list[tuple[np.ndarray, list[np.ndarray]]]:
+    """Collect exterior/interior coordinate rings from (Multi)Polygons."""
+    polygons: list[tuple[np.ndarray, list[np.ndarray]]] = []
 
-    for geom in mp.geoms:
-        if geom.geom_type == "MultiPolygon":
-            exterior_coords = []
-            interior_coords = []
-            for part in geom:
-                epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
-                exterior_coords += epc["exterior_coords"]
-                interior_coords += epc["interior_coords"]
-        elif geom.geom_type == "Polygon":
-            exterior_coords = geom.exterior.coords[:]
-            interior_coords = []
-            for interior in geom.interiors:
-                interior_coords += interior.coords[:]
+    def _collect(part: shapely.Polygon | shapely.MultiPolygon) -> None:
+        if part.geom_type == "Polygon":
+            exterior = np.asarray(part.exterior.coords)
+            interiors = [np.asarray(interior.coords) for interior in part.interiors]
+            polygons.append((exterior, interiors))
+        elif part.geom_type == "MultiPolygon":
+            for child in part.geoms:
+                _collect(child)
         else:
-            raise ValueError(f"Unhandled geometry type: {repr(geom.type)}")
+            raise ValueError(f"Unhandled geometry type: {repr(part.geom_type)}")
 
-    return interior_coords, exterior_coords
+    _collect(geom)
+    return polygons
+
+
+def _create_ring_codes(length: int) -> npt.NDArray[np.uint8]:
+    codes = np.full(length, mpath.Path.LINETO, dtype=mpath.Path.code_type)
+    codes[0] = mpath.Path.MOVETO
+    return codes
 
 
 def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
     # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
 
     patches = []
-    for geom in mp.geoms:
-        if len(geom.interiors) == 0:
-            # polygon has no holes
-            patches += [mpatches.Polygon(geom.exterior.coords, closed=True)]
-        else:
-            inside, outside = _split_multipolygon_into_outer_and_inner(mp)
-            if len(inside) > 0:
-                codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
-                codes[0] = mpath.Path.MOVETO
-                all_codes = np.concatenate((codes, codes))
-                vertices = np.concatenate((outside, inside[::-1]))
-            else:
-                all_codes = []
-                vertices = np.concatenate(outside)
-            patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
+    for exterior, interiors in _collect_polygon_rings(mp):
+        if len(interiors) == 0:
+            patches.append(mpatches.Polygon(exterior, closed=True))
+            continue
+
+        ring_vertices = [exterior]
+        ring_codes = [_create_ring_codes(len(exterior))]
+        for hole in interiors:
+            reversed_hole = hole[::-1]
+            ring_vertices.append(reversed_hole)
+            ring_codes.append(_create_ring_codes(len(reversed_hole)))
+
+        vertices = np.concatenate(ring_vertices)
+        all_codes = np.concatenate(ring_codes)
+        patches.append(mpatches.PathPatch(mpath.Path(vertices, all_codes)))
 
     return patches
 
