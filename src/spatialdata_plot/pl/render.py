@@ -570,6 +570,23 @@ def _render_points(
         coords += [col_for_color]
         points = points[coords].compute()
 
+    added_color_from_table = False
+    if col_for_color is not None and col_for_color not in points.columns:
+        color_values = get_values(
+            value_key=col_for_color,
+            sdata=sdata_filt,
+            element_name=element,
+            table_name=table_name,
+            table_layer=table_layer,
+        )
+        points = points.merge(
+            color_values[[col_for_color]],
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+        added_color_from_table = True
+
     if groups is not None and col_for_color is not None:
         if col_for_color in points.columns:
             points_color_values = points[col_for_color]
@@ -587,6 +604,14 @@ def _render_points(
         points = points[points_color_values.isin(groups)]
         if len(points) <= 0:
             raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
+
+    n_points = len(points)
+    points_pd_with_color = points
+    points_for_model = (
+        points_pd_with_color.drop(columns=[col_for_color], errors="ignore")
+        if added_color_from_table and col_for_color is not None
+        else points_pd_with_color
+    )
 
     # we construct an anndata to hack the plotting functions
     if table_name is None:
@@ -617,7 +642,7 @@ def _render_points(
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
-    points = dask.dataframe.from_pandas(points, npartitions=1)
+    points = dask.dataframe.from_pandas(points_for_model, npartitions=1)
     sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
     # restore transformation in coordinate system of interest
     set_transformation(
@@ -658,6 +683,16 @@ def _render_points(
         render_type="points",
     )
 
+    if added_color_from_table and col_for_color is not None:
+        points_with_color_dd = dask.dataframe.from_pandas(points_pd_with_color, npartitions=1)
+        sdata_filt.points[element] = PointsModel.parse(points_with_color_dd, coordinates={"x": "x", "y": "y"})
+        set_transformation(
+            element=sdata_filt.points[element],
+            transformation=transformation_in_cs,
+            to_coordinate_system=coordinate_system,
+        )
+        points = points_with_color_dd
+
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
@@ -669,7 +704,7 @@ def _render_points(
     method = render_params.method
 
     if method is None:
-        method = "datashader" if len(points) > 10000 else "matplotlib"
+        method = "datashader" if n_points > 10000 else "matplotlib"
 
     if method != "matplotlib":
         # we only notify the user when we switched away from matplotlib
