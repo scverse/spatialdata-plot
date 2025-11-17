@@ -10,7 +10,7 @@ from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import Labels2DModel, TableModel
 
-import spatialdata_plot  # noqa: F401
+import spatialdata_plot
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()

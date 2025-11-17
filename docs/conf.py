@@ -23,9 +23,8 @@ project_name = info["Name"]
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}"
 version = info["Version"]
-
-# repository_url = f"https://github.com/scverse/{project_name}"
-
+urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
+repository_url = urls["Source"]
 
 # The full version, including alpha/beta/rc tags
 release = info["Version"]
@@ -56,14 +55,15 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
     "sphinx_autodoc_typehints",
+    "sphinx_design",
+    "sphinx_tabs.tabs",
     "sphinx.ext.mathjax",
     "IPython.sphinxext.ipython_console_highlighting",
-    "sphinx_design",
+    "sphinxext.opengraph",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
 autosummary_generate = True
-autodoc_process_signature = True
 autodoc_member_order = "groupwise"
 default_role = "literal"
 napoleon_google_docstring = False
@@ -71,7 +71,7 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
 napoleon_use_param = True
-myst_heading_anchors = 3  # create anchors for h1-h3
+myst_heading_anchors = 6  # create anchors for h1-h6
 myst_enable_extensions = [
     "amsmath",
     "colon_fence",
@@ -85,6 +85,9 @@ nb_output_stderr = "remove"
 nb_execution_mode = "off"
 nb_merge_streams = True
 typehints_defaults = "braces"
+autodoc_type_aliases = {
+    "ColorLike": "spatialdata_plot.pl.basic.ColorLike",
+}
 
 source_suffix = {
     ".rst": "restructuredtext",
@@ -93,33 +96,23 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "geopandas": ("https://geopandas.org/en/stable/", None),
     "xarray": ("https://docs.xarray.dev/en/stable/", None),
     "datatree": ("https://datatree.readthedocs.io/en/latest/", None),
     "dask": ("https://docs.dask.org/en/latest/", None),
+    "spatialdata": ("https://spatialdata.scverse.org/en/stable/", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
 }
-
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = [
-    "_build",
-    "Thumbs.db",
-    "**.ipynb_checkpoints",
-    "tutorials/notebooks/index.md",
-    "tutorials/notebooks/README.md",
-    "tutorials/notebooks/references.md",
-    "tutorials/notebooks/notebooks/paper_reproducibility/*",
-]
-# Ignore warnings.
-nitpicky = False  # TODO: solve upstream.
-# nitpick_ignore = [
-#     ("py:class", "spatial_image.SpatialImage"),
-#     ("py:class", "multiscale_spatial_image.multiscale_spatial_image.MultiscaleSpatialImage"),
-# ]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -128,36 +121,29 @@ nitpicky = False  # TODO: solve upstream.
 # a list of builtin themes.
 #
 html_theme = "sphinx_book_theme"
-# html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
-html_title = project_name
-html_logo = "_static/img/spatialdata_horizontal.png"
+html_css_files = ["css/custom.css"]
 
-# html_theme_options = {
-# "repository_url": repository_url,
-# "use_repository_button": True,
-# }
+html_title = project_name
+
+html_theme_options = {
+    "repository_url": repository_url,
+    "use_repository_button": True,
+    "path_to_docs": "docs/",
+    "navigation_with_keys": False,
+}
 
 pygments_style = "default"
 
 nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
-    ("py:class", "igraph.Graph"),
+    ("py:class", "Colormap"),
+    ("py:class", "Normalize"),
+    ("py:class", "ColorLike"),
 ]
-
-
-def setup(app):
-    """App setup hook."""
-    app.add_config_value(
-        "recommonmark_config",
-        {
-            "auto_toc_tree_section": "Contents",
-            "enable_auto_toc_tree": True,
-            "enable_math": True,
-            "enable_inline_math": False,
-            "enable_eval_rst": True,
-        },
-        True,
-    )
-    app.add_css_file("css/custom.css")
+nitpick_ignore_regex = [
+    ("py:class", r"default .+"),
+    ("py:class", r"gets set to .+"),
+    ("py:class", r"optional"),
+]
