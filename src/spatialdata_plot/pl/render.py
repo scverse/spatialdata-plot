@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections import abc
 from copy import copy
 
@@ -101,11 +100,9 @@ def _render_shapes(
         and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
         and not _is_coercable_to_float(color_col)
     ):
-        warnings.warn(
+        logger.warning(
             f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
-            f"Consider converting before plotting.",
-            UserWarning,
-            stacklevel=2,
+            f"Consider converting before plotting."
         )
         sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
 
@@ -555,11 +552,9 @@ def _render_points(
     coords = ["x", "y"]
 
     if table_name is not None and col_for_color not in points.columns:
-        warnings.warn(
+        logger.warning(
             f"Annotating points with {col_for_color} which is stored in the table `{table_name}`. "
-            f"To improve performance, it is advisable to store point annotations directly in the .parquet file.",
-            UserWarning,
-            stacklevel=2,
+            f"To improve performance, it is advisable to store point annotations directly in the .parquet file."
         )
 
     if col_for_color is None or (
@@ -573,11 +568,9 @@ def _render_points(
             and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
             and not _is_coercable_to_float(color_col)
         ):
-            warnings.warn(
+            logger.warning(
                 f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
-                f"plotting. Consider converting before plotting.",
-                UserWarning,
-                stacklevel=2,
+                f"plotting. Consider converting before plotting."
             )
             sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
     else:

@@ -17,6 +17,7 @@ from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequen
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
@@ -764,7 +765,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         # Add color column with NaN values
         sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
+        with logger_warns(caplog, logger, match="Found 1 NaN values in color data"):
             sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
 
     def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
@@ -2163,11 +2162,7 @@ def _validate_col_for_column_table(
             )
         table_name = next(iter(tables))
         if len(tables) > 1:
-            warnings.warn(
-                f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-                UserWarning,
-                stacklevel=2,
-            )
+            logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
     return col_for_color, table_name
 
 
@@ -2731,11 +2726,7 @@ def _convert_shapes(
             else:
                 non_point_count += 1
         if non_point_count > 0:
-            warnings.warn(
-                "visium_hex supports Points best. Non-Point geometries will use regular hex conversion.",
-                UserWarning,
-                stacklevel=2,
-            )
+            logger.warning("visium_hex supports Points best. Non-Point geometries will use regular hex conversion.")
         if len(point_centers) >= 2:
             centers = np.array(point_centers, dtype=float)
             # pairwise min distance
