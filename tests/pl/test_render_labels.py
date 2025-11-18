@@ -299,7 +299,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels_large", color="category", table_name="table").pl.show()
 
 
-def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
     sdata_blobs_local = deepcopy(sdata_blobs)
 
@@ -310,12 +310,13 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     sdata_blobs_local["other_table"] = other_table
 
     # Rendering "blobs_labels" with a table that annotates "blobs_multiscale_labels"
-    # should raise a warning and fall back to using no table.
-    with pytest.warns(UserWarning, match="does not annotate element"):
-        (
-            sdata_blobs_local.pl.render_labels(
-                "blobs_labels",
-                color="channel_0_sum",
-                table_name="other_table",
-            ).pl.show()
-        )
+    # should now raise to alert the user about the mismatch.
+    with pytest.raises(
+        KeyError,
+        match="Table 'other_table' does not annotate element 'blobs_labels'",
+    ):
+        sdata_blobs_local.pl.render_labels(
+            "blobs_labels",
+            color="channel_0_sum",
+            table_name="other_table",
+        ).pl.show()
