@@ -194,6 +194,36 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         norm = Normalize(vmin=0, vmax=5, clip=True)
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
+    def test_render_shapes_raises_when_color_key_missing(self, sdata_blobs_shapes_annotated: SpatialData):
+        with pytest.raises(KeyError, match="Unable to locate color key 'ghost'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons",
+                color="ghost",
+            ).pl.show()
+
+    def test_render_shapes_raises_for_invalid_table_name(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        table.obs["valid_col"] = np.arange(table.n_obs)
+
+        with pytest.raises(KeyError, match="Table 'not_a_table' does not annotate element 'blobs_polygons'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="valid_col", table_name="not_a_table"
+            )
+
+    def test_render_shapes_raises_for_missing_column_in_table(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+
+        with pytest.raises(
+            KeyError, match="Column 'not_a_column' not found in obs/var of table 'table' for element 'blobs_polygons'"
+        ):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="not_a_column", table_name="table"
+            )
+
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
         blob = SpatialData.init_from_elements(

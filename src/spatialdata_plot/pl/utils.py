@@ -873,9 +873,14 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    color = np.full(sdata[table_name].n_obs, na_color.get_hex_with_alpha())
-    return color, color, False
+    if table_name is None:
+        raise KeyError(
+            f"Unable to locate color key '{value_to_plot}' for element '{element_name}'. "
+            "Please ensure the key exists in a table annotating this element."
+        )
+    raise KeyError(
+        f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
+    )
 
 
 def _map_color_seg(
@@ -2136,16 +2141,12 @@ def _validate_col_for_column_table(
         table_name = None
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
-        if table_name not in tables or (
-            col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
-        ):
-            warnings.warn(
-                f"Table '{table_name}' does not annotate element '{element_name}'.",
-                UserWarning,
-                stacklevel=2,
+        if table_name not in tables:
+            raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
+        if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
+            raise KeyError(
+                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
             )
-            table_name = None
-            col_for_color = None
     else:
         tables = get_element_annotators(sdata, element_name)
         for table_name in tables.copy():
