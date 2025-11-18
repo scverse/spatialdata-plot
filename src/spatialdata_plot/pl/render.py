@@ -487,10 +487,33 @@ def _render_shapes(
     if not values_are_categorical:
         vmin = render_params.cmap_params.norm.vmin
         vmax = render_params.cmap_params.norm.vmax
-        if vmin is None:
-            vmin = float(np.nanmin(color_vector))
-        if vmax is None:
-            vmax = float(np.nanmax(color_vector))
+        if vmin is None or vmax is None:
+            # Extract numeric values only (filter out strings and other non-numeric types)
+            if isinstance(color_vector, np.ndarray):
+                if np.issubdtype(color_vector.dtype, np.number):
+                    # Already numeric, can use directly
+                    numeric_values = color_vector
+                else:
+                    # Mixed types - extract only numeric values using pandas
+                    numeric_values = pd.to_numeric(color_vector, errors="coerce")
+                    numeric_values = numeric_values[np.isfinite(numeric_values)]
+                if len(numeric_values) > 0:
+                    if vmin is None:
+                        vmin = float(np.nanmin(numeric_values))
+                    if vmax is None:
+                        vmax = float(np.nanmax(numeric_values))
+                else:
+                    # No numeric values found, use defaults
+                    if vmin is None:
+                        vmin = 0.0
+                    if vmax is None:
+                        vmax = 1.0
+            else:
+                # Not a numpy array, use defaults
+                if vmin is None:
+                    vmin = 0.0
+                if vmax is None:
+                    vmax = 1.0
         _cax.set_clim(vmin=vmin, vmax=vmax)
 
     if (

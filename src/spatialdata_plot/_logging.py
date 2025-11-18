@@ -42,10 +42,25 @@ def logger_warns(
         with logger_warns(caplog, logger, match="Found 1 NaN"):
             call_code_that_logs()
     """
-    with caplog.at_level(level, logger=logger.name):
-        yield
+    # Store initial record count to only check new records
+    initial_record_count = len(caplog.records)
 
-    records = [r for r in caplog.records if r.levelno >= level]
+    # Add caplog's handler directly to the logger to capture logs even if propagate=False
+    handler = caplog.handler
+    logger.addHandler(handler)
+    original_level = logger.level
+    logger.setLevel(level)
+
+    # Use caplog.at_level to ensure proper capture setup
+    with caplog.at_level(level, logger=logger.name):
+        try:
+            yield
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+
+    # Only check records that were added during this context
+    records = [r for r in caplog.records[initial_record_count:] if r.levelno >= level]
 
     if match is not None:
         pattern = re.compile(match)
