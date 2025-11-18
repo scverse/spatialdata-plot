@@ -423,9 +423,10 @@ def _get_collection_shape(
                 used_norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fill_c[is_num] = cmap(used_norm(num[is_num]))
 
-        # non-numeric entries as explicit colors
-        if (~is_num).any():
-            fill_c[~is_num] = ColorConverter().to_rgba_array(c_series[~is_num].tolist())
+        # non-numeric, non-NaN entries as explicit colors
+        non_numeric_color_mask = (~is_num) & c_series.notna().to_numpy()
+        if non_numeric_color_mask.any():
+            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_color_mask].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:
