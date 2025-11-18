@@ -194,23 +194,36 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         norm = Normalize(vmin=0, vmax=5, clip=True)
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
-    def test_render_shapes_missing_color_column_raises_key_error(
-        self, sdata_blobs_shapes_annotated: SpatialData
-    ) -> None:
-        with pytest.raises(KeyError, match="does_not_exist"):
-            sdata_blobs_shapes_annotated.pl.render_shapes(element="blobs_polygons", color="does_not_exist")
+    def test_render_shapes_raises_when_color_key_missing(self, sdata_blobs_shapes_annotated: SpatialData):
+        missing_col = "__non_existent_column__"
+        with pytest.raises(KeyError, match=f"Unable to locate color key '{missing_col}'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons",
+                color=missing_col,
+            ).pl.show()
 
-    def test_render_shapes_missing_region_for_table_raises_key_error(
-        self, sdata_blobs_shapes_annotated: SpatialData
-    ) -> None:
-        blob = deepcopy(sdata_blobs_shapes_annotated)
-        blob["table"].obs["table_value"] = np.arange(blob["table"].n_obs)
-        other_table = blob["table"].copy()
-        other_table.obs["region"] = pd.Categorical(["other"] * other_table.n_obs)
-        other_table.uns["spatialdata_attrs"]["region"] = "other"
-        blob["other_table"] = other_table
-        with pytest.raises(KeyError, match="does not annotate element"):
-            blob.pl.render_shapes(element="blobs_polygons", color="table_value", table_name="other_table")
+    def test_render_shapes_raises_for_invalid_table_name(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        table.obs["valid_col"] = np.arange(table.n_obs)
+
+        with pytest.raises(KeyError, match="Table 'not_a_table' does not annotate element 'blobs_polygons'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="valid_col", table_name="not_a_table"
+            )
+
+    def test_render_shapes_raises_for_missing_column_in_table(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+
+        with pytest.raises(
+            KeyError, match="Column 'not_a_column' not found in obs/var of table 'table' for element 'blobs_polygons'"
+        ):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="not_a_column", table_name="table"
+            )
 
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
@@ -721,27 +734,27 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_raises_when_table_does_not_annotate_element(self, sdata_blobs: SpatialData):
+        # Work on an independent copy since we mutate tables
+        sdata_blobs_local = deepcopy(sdata_blobs)
 
-def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
-    # Work on an independent copy since we mutate tables
-    sdata_blobs_local = deepcopy(sdata_blobs)
+        # Create a table that annotates a DIFFERENT element than the one we will render
+        other_table = sdata_blobs_local["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["blobs_points"] * other_table.n_obs)  # Different region
+        other_table.uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs_local["other_table"] = other_table
 
-    # Create a table that annotates a DIFFERENT element than the one we will render
-    other_table = sdata_blobs_local["table"].copy()
-    other_table.obs["region"] = pd.Categorical(["blobs_points"] * other_table.n_obs)  # Different region
-    other_table.uns["spatialdata_attrs"]["region"] = "blobs_points"
-    sdata_blobs_local["other_table"] = other_table
-
-    # Rendering "blobs_circles" with a table that annotates "blobs_points"
-    # should raise a warning and fall back to using no table.
-    with pytest.warns(UserWarning, match="does not annotate element"):
-        (
+        # Rendering "blobs_circles" with a table that annotates "blobs_points"
+        # should now raise to alert the user about the mismatch.
+        with pytest.raises(
+            KeyError,
+            match="Table 'other_table' does not annotate element 'blobs_circles'",
+        ):
             sdata_blobs_local.pl.render_shapes(
                 "blobs_circles",
                 color="channel_0_sum",
                 table_name="other_table",
             ).pl.show()
-        )
 
     def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData):
         """Test that NaN values in color data are handled gracefully."""

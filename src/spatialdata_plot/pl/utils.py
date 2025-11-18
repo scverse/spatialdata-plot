@@ -874,11 +874,13 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    table_repr = f"'{table_name}'" if table_name is not None else "unspecified table"
-    coord_repr = f"'{coordinate_system}'" if coordinate_system is not None else "unspecified coordinate system"
+    if table_name is None:
+        raise KeyError(
+            f"Unable to locate color key '{value_to_plot}' for element '{element_name}'. "
+            "Please ensure the key exists in a table annotating this element."
+        )
     raise KeyError(
-        f"Color key '{value_to_plot}' for element '{element_name}' could not be resolved "
-        f"(table={table_repr}, coordinate_system={coord_repr})."
+        f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
     )
 
 
@@ -2140,50 +2142,32 @@ def _validate_col_for_column_table(
         return None, None
 
     if not labels and col_for_color in sdata[element_name].columns:
-        return col_for_color, None
-
-    tables = list(get_element_annotators(sdata, element_name))
-
-    def _table_has_column(tname: str) -> bool:
-        table = sdata[tname]
-        return col_for_color in table.obs.columns or col_for_color in table.var_names
-
-    def _region_message(tname: str) -> str:
-        if tname not in sdata.tables:
-            return ""
-        attrs = sdata.tables[tname].uns.get("spatialdata_attrs", {})
-        regions: list[str] = []
-        if (region_key := attrs.get("region_key")) and region_key in sdata.tables[tname].obs.columns:
-            regions = sorted({str(r) for r in sdata.tables[tname].obs[region_key].unique().tolist()})
-        elif (region_values := attrs.get("region")) is not None:
-            if isinstance(region_values, str):
-                regions = [region_values]
-            elif isinstance(region_values, list):
-                regions = [str(r) for r in region_values]
-        if regions:
-            return f" Regions available in table '{tname}': {regions}."
-        return ""
-
-    if table_name is not None:
+        table_name = None
+    elif table_name is not None:
+        tables = get_element_annotators(sdata, element_name)
         if table_name not in tables:
+            raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
+        if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
             raise KeyError(
-                f"Table '{table_name}' does not annotate element '{element_name}'.{_region_message(table_name)}"
+                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
             )
-        if not _table_has_column(table_name):
-            raise KeyError(f"Column '{col_for_color}' not found in table '{table_name}'.")
-        return col_for_color, table_name
-
-    candidate_tables = [tname for tname in tables if _table_has_column(tname)]
-    if not candidate_tables:
-        raise KeyError(f"Column '{col_for_color}' not found in any table annotating element '{element_name}'.")
-
-    table_name = candidate_tables[0]
-    if len(candidate_tables) > 1:
-        warnings.warn(
-            f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-            UserWarning,
-            stacklevel=2,
-        )
+    else:
+        tables = get_element_annotators(sdata, element_name)
+        for annotates in tables.copy():
+            if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
+                tables.remove(annotates)
+        if len(tables) == 0:
+            raise KeyError(
+                f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "
+                "Please ensure the key exists in a table annotating this element."
+            )
+        table_name = next(iter(tables))
+        if len(tables) > 1:
+            warnings.warn(
+                f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
+                UserWarning,
+                stacklevel=2,
+            )
     return col_for_color, table_name
 
 
