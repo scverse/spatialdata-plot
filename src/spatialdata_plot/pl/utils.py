@@ -2149,19 +2149,21 @@ def _validate_col_for_column_table(
             )
     else:
         tables = get_element_annotators(sdata, element_name)
-        for table_name in tables.copy():
-            if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-                tables.remove(table_name)
+        for annotates in tables.copy():
+            if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
+                tables.remove(annotates)
         if len(tables) == 0:
-            col_for_color = None
-        elif len(tables) >= 1:
-            table_name = next(iter(tables))
-            if len(tables) > 1:
-                warnings.warn(
-                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            raise KeyError(
+                f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "
+                "Please ensure the key exists in a table annotating this element."
+            )
+        table_name = next(iter(tables))
+        if len(tables) > 1:
+            warnings.warn(
+                f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
+                UserWarning,
+                stacklevel=2,
+            )
     return col_for_color, table_name
 
 

@@ -734,7 +734,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
-    def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+    def test_raises_when_table_does_not_annotate_element(self, sdata_blobs: SpatialData):
         # Work on an independent copy since we mutate tables
         sdata_blobs_local = deepcopy(sdata_blobs)
 

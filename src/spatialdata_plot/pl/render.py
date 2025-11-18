@@ -144,12 +144,25 @@ def _render_shapes(
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_source_vector is None and not values_are_categorical:
-        color_vector = np.asarray(color_vector, dtype=float)
-        if np.isnan(color_vector).any():
-            nan_count = int(np.isnan(color_vector).sum())
-            logger.warning(
-                f"Found {nan_count} NaN values in color data. These observations will be colored with the 'na_color'."
-            )
+        _series = color_vector if isinstance(color_vector, pd.Series) else pd.Series(color_vector)
+
+        try:
+            color_vector = np.asarray(_series, dtype=float)
+        except (TypeError, ValueError):
+            nan_count = int(_series.isna().sum())
+            if nan_count:
+                logger.warning(
+                    f"Found {nan_count} NaN values in color data. "
+                    "These observations will be colored with the 'na_color'."
+                )
+            color_vector = _series.to_numpy()
+        else:
+            if np.isnan(color_vector).any():
+                nan_count = int(np.isnan(color_vector).sum())
+                logger.warning(
+                    f"Found {nan_count} NaN values in color data. "
+                    "These observations will be colored with the 'na_color'."
+                )
 
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
