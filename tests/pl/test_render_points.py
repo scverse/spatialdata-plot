@@ -178,6 +178,24 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_render_points_missing_color_column_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        with pytest.raises(KeyError, match="does_not_exist"):
+            sdata_blobs.pl.render_points(element="blobs_points", color="does_not_exist")
+
+    def test_render_points_missing_region_for_table_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = pd.Categorical(["blobs_points"] * blob["table"].n_obs)
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        blob["table"].obs["table_value"] = np.arange(blob["table"].n_obs)
+        other_table = blob["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["other"] * other_table.n_obs)
+        other_table.uns["spatialdata_attrs"]["region"] = "other"
+        blob["other_table"] = other_table
+        with pytest.raises(KeyError, match="does not annotate element"):
+            blob.pl.render_points(element="blobs_points", color="table_value", table_name="other_table")
+
     def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         obs = pd.DataFrame(

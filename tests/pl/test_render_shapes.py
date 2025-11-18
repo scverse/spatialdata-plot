@@ -194,6 +194,24 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         norm = Normalize(vmin=0, vmax=5, clip=True)
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", groups=["c1"], norm=norm).pl.show()
 
+    def test_render_shapes_missing_color_column_raises_key_error(
+        self, sdata_blobs_shapes_annotated: SpatialData
+    ) -> None:
+        with pytest.raises(KeyError, match="does_not_exist"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(element="blobs_polygons", color="does_not_exist")
+
+    def test_render_shapes_missing_region_for_table_raises_key_error(
+        self, sdata_blobs_shapes_annotated: SpatialData
+    ) -> None:
+        blob = deepcopy(sdata_blobs_shapes_annotated)
+        blob["table"].obs["table_value"] = np.arange(blob["table"].n_obs)
+        other_table = blob["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["other"] * other_table.n_obs)
+        other_table.uns["spatialdata_attrs"]["region"] = "other"
+        blob["other_table"] = other_table
+        with pytest.raises(KeyError, match="does not annotate element"):
+            blob.pl.render_shapes(element="blobs_polygons", color="table_value", table_name="other_table")
+
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
         blob = SpatialData.init_from_elements(

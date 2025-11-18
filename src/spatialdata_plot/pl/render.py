@@ -121,6 +121,7 @@ def _render_shapes(
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        coordinate_system=coordinate_system,
     )
 
     values_are_categorical = color_source_vector is not None
@@ -681,6 +682,7 @@ def _render_points(
         alpha=render_params.alpha,
         table_name=table_name,
         render_type="points",
+        coordinate_system=coordinate_system,
     )
 
     if added_color_from_table and col_for_color is not None:
@@ -1217,6 +1219,7 @@ def _render_labels(
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        coordinate_system=coordinate_system,
     )
 
     # rasterize could have removed labels from label

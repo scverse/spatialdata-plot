@@ -807,6 +807,7 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
     render_type: Literal["points"] | None = None,
+    coordinate_system: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color.get_hex_with_alpha())
@@ -873,9 +874,12 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    color = np.full(sdata[table_name].n_obs, na_color.get_hex_with_alpha())
-    return color, color, False
+    table_repr = f"'{table_name}'" if table_name is not None else "unspecified table"
+    coord_repr = f"'{coordinate_system}'" if coordinate_system is not None else "unspecified coordinate system"
+    raise KeyError(
+        f"Color key '{value_to_plot}' for element '{element_name}' could not be resolved "
+        f"(table={table_repr}, coordinate_system={coord_repr})."
+    )
 
 
 def _map_color_seg(
@@ -2132,35 +2136,54 @@ def _validate_col_for_column_table(
     table_name: str | None,
     labels: bool = False,
 ) -> tuple[str | None, str | None]:
+    if col_for_color is None:
+        return None, None
+
     if not labels and col_for_color in sdata[element_name].columns:
-        table_name = None
-    elif table_name is not None:
-        tables = get_element_annotators(sdata, element_name)
-        if table_name not in tables or (
-            col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
-        ):
-            warnings.warn(
-                f"Table '{table_name}' does not annotate element '{element_name}'.",
-                UserWarning,
-                stacklevel=2,
+        return col_for_color, None
+
+    tables = list(get_element_annotators(sdata, element_name))
+
+    def _table_has_column(tname: str) -> bool:
+        table = sdata[tname]
+        return col_for_color in table.obs.columns or col_for_color in table.var_names
+
+    def _region_message(tname: str) -> str:
+        if tname not in sdata.tables:
+            return ""
+        attrs = sdata.tables[tname].uns.get("spatialdata_attrs", {})
+        regions: list[str] = []
+        if (region_key := attrs.get("region_key")) and region_key in sdata.tables[tname].obs.columns:
+            regions = sorted({str(r) for r in sdata.tables[tname].obs[region_key].unique().tolist()})
+        elif (region_values := attrs.get("region")) is not None:
+            if isinstance(region_values, str):
+                regions = [region_values]
+            elif isinstance(region_values, list):
+                regions = [str(r) for r in region_values]
+        if regions:
+            return f" Regions available in table '{tname}': {regions}."
+        return ""
+
+    if table_name is not None:
+        if table_name not in tables:
+            raise KeyError(
+                f"Table '{table_name}' does not annotate element '{element_name}'.{_region_message(table_name)}"
             )
-            table_name = None
-            col_for_color = None
-    else:
-        tables = get_element_annotators(sdata, element_name)
-        for table_name in tables.copy():
-            if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-                tables.remove(table_name)
-        if len(tables) == 0:
-            col_for_color = None
-        elif len(tables) >= 1:
-            table_name = next(iter(tables))
-            if len(tables) > 1:
-                warnings.warn(
-                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        if not _table_has_column(table_name):
+            raise KeyError(f"Column '{col_for_color}' not found in table '{table_name}'.")
+        return col_for_color, table_name
+
+    candidate_tables = [tname for tname in tables if _table_has_column(tname)]
+    if not candidate_tables:
+        raise KeyError(f"Column '{col_for_color}' not found in any table annotating element '{element_name}'.")
+
+    table_name = candidate_tables[0]
+    if len(candidate_tables) > 1:
+        warnings.warn(
+            f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
+            UserWarning,
+            stacklevel=2,
+        )
     return col_for_color, table_name
 
 
