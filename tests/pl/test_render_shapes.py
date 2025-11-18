@@ -764,10 +764,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         # Add color column with NaN values
         sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-        # Test that rendering works with NaN values and issues warning
-        with caplog.at_level("WARNING", logger="spatialdata_plot._logging"):
+        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
             sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
-            assert "Found 1 NaN values in color data" in caplog.text
 
     def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
         """Test that colorbar normalization works correctly with NaN values."""
