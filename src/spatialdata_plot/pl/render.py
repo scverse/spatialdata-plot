@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections import abc
 from copy import copy
 
@@ -49,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _hex_no_alpha,
-    _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
@@ -57,6 +55,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_transformation,
     _rasterize_if_necessary,
     _set_color_source_vec,
+    _validate_polygons,
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
@@ -94,20 +93,7 @@ def _render_shapes(
         )
         sdata_filt[table_name] = table = joined_table
 
-    if (
-        col_for_color is not None
-        and table_name is not None
-        and col_for_color in sdata_filt[table_name].obs.columns
-        and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-        and not _is_coercable_to_float(color_col)
-    ):
-        warnings.warn(
-            f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
-            f"Consider converting before plotting.",
-            UserWarning,
-            stacklevel=2,
-        )
-        sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+    shapes = sdata_filt[element]
 
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
@@ -121,6 +107,7 @@ def _render_shapes(
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        coordinate_system=coordinate_system,
     )
 
     values_are_categorical = color_source_vector is not None
@@ -144,12 +131,25 @@ def _render_shapes(
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_source_vector is None and not values_are_categorical:
-        color_vector = np.asarray(color_vector, dtype=float)
-        if np.isnan(color_vector).any():
-            nan_count = int(np.isnan(color_vector).sum())
-            logger.warning(
-                f"Found {nan_count} NaN values in color data. These observations will be colored with the 'na_color'."
-            )
+        _series = color_vector if isinstance(color_vector, pd.Series) else pd.Series(color_vector)
+
+        try:
+            color_vector = np.asarray(_series, dtype=float)
+        except (TypeError, ValueError):
+            nan_count = int(_series.isna().sum())
+            if nan_count:
+                logger.warning(
+                    f"Found {nan_count} NaN values in color data. "
+                    "These observations will be colored with the 'na_color'."
+                )
+            color_vector = _series.to_numpy()
+        else:
+            if np.isnan(color_vector).any():
+                nan_count = int(np.isnan(color_vector).sum())
+                logger.warning(
+                    f"Found {nan_count} NaN values in color data. "
+                    "These observations will be colored with the 'na_color'."
+                )
 
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
@@ -183,6 +183,8 @@ def _render_shapes(
                 [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
             )
             shapes = _convert_shapes(shapes, render_params.shape, max_extent)
+
+    shapes = _validate_polygons(shapes)
 
     # Determine which method to use for rendering
     method = render_params.method
@@ -476,10 +478,33 @@ def _render_shapes(
     if not values_are_categorical:
         vmin = render_params.cmap_params.norm.vmin
         vmax = render_params.cmap_params.norm.vmax
-        if vmin is None:
-            vmin = float(np.nanmin(color_vector))
-        if vmax is None:
-            vmax = float(np.nanmax(color_vector))
+        if vmin is None or vmax is None:
+            # Extract numeric values only (filter out strings and other non-numeric types)
+            if isinstance(color_vector, np.ndarray):
+                if np.issubdtype(color_vector.dtype, np.number):
+                    # Already numeric, can use directly
+                    numeric_values = color_vector
+                else:
+                    # Mixed types - extract only numeric values using pandas
+                    numeric_values = pd.to_numeric(color_vector, errors="coerce")
+                    numeric_values = numeric_values[np.isfinite(numeric_values)]
+                if len(numeric_values) > 0:
+                    if vmin is None:
+                        vmin = float(np.nanmin(numeric_values))
+                    if vmax is None:
+                        vmax = float(np.nanmax(numeric_values))
+                else:
+                    # No numeric values found, use defaults
+                    if vmin is None:
+                        vmin = 0.0
+                    if vmax is None:
+                        vmax = 1.0
+            else:
+                # Not a numpy array, use defaults
+                if vmin is None:
+                    vmin = 0.0
+                if vmax is None:
+                    vmax = 1.0
         _cax.set_clim(vmin=vmin, vmax=vmax)
 
     if (
@@ -541,11 +566,9 @@ def _render_points(
     coords = ["x", "y"]
 
     if table_name is not None and col_for_color not in points.columns:
-        warnings.warn(
+        logger.warning(
             f"Annotating points with {col_for_color} which is stored in the table `{table_name}`. "
-            f"To improve performance, it is advisable to store point annotations directly in the .parquet file.",
-            UserWarning,
-            stacklevel=2,
+            f"To improve performance, it is advisable to store point annotations directly in the .parquet file."
         )
 
     if col_for_color is None or (
@@ -553,22 +576,26 @@ def _render_points(
         and (col_for_color in sdata_filt[table_name].obs.columns or col_for_color in sdata_filt[table_name].var_names)
     ):
         points = points[coords].compute()
-        if (
-            col_for_color
-            and col_for_color in sdata_filt[table_name].obs.columns
-            and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-            and not _is_coercable_to_float(color_col)
-        ):
-            warnings.warn(
-                f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
-                f"plotting. Consider converting before plotting.",
-                UserWarning,
-                stacklevel=2,
-            )
-            sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
     else:
         coords += [col_for_color]
         points = points[coords].compute()
+
+    added_color_from_table = False
+    if col_for_color is not None and col_for_color not in points.columns:
+        color_values = get_values(
+            value_key=col_for_color,
+            sdata=sdata_filt,
+            element_name=element,
+            table_name=table_name,
+            table_layer=table_layer,
+        )
+        points = points.merge(
+            color_values[[col_for_color]],
+            how="left",
+            left_index=True,
+            right_index=True,
+        )
+        added_color_from_table = True
 
     if groups is not None and col_for_color is not None:
         if col_for_color in points.columns:
@@ -587,6 +614,14 @@ def _render_points(
         points = points[points_color_values.isin(groups)]
         if len(points) <= 0:
             raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
+
+    n_points = len(points)
+    points_pd_with_color = points
+    points_for_model = (
+        points_pd_with_color.drop(columns=[col_for_color], errors="ignore")
+        if added_color_from_table and col_for_color is not None
+        else points_pd_with_color
+    )
 
     # we construct an anndata to hack the plotting functions
     if table_name is None:
@@ -617,7 +652,7 @@ def _render_points(
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
-    points = dask.dataframe.from_pandas(points, npartitions=1)
+    points = dask.dataframe.from_pandas(points_for_model, npartitions=1)
     sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
     # restore transformation in coordinate system of interest
     set_transformation(
@@ -631,12 +666,14 @@ def _render_points(
         cols = sc.get.obs_df(adata, [col_for_color])
         # maybe set color based on type
         if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
-            _maybe_set_colors(
-                source=adata,
-                target=adata,
-                key=col_for_color,
-                palette=palette,
-            )
+            uns_color_key = f"{col_for_color}_colors"
+            if uns_color_key in adata.uns:
+                _maybe_set_colors(
+                    source=adata,
+                    target=adata,
+                    key=col_for_color,
+                    palette=palette,
+                )
 
     # when user specified a single color, we emulate the form of `na_color` and use it
     default_color = (
@@ -656,7 +693,18 @@ def _render_points(
         alpha=render_params.alpha,
         table_name=table_name,
         render_type="points",
+        coordinate_system=coordinate_system,
     )
+
+    if added_color_from_table and col_for_color is not None:
+        points_with_color_dd = dask.dataframe.from_pandas(points_pd_with_color, npartitions=1)
+        sdata_filt.points[element] = PointsModel.parse(points_with_color_dd, coordinates={"x": "x", "y": "y"})
+        set_transformation(
+            element=sdata_filt.points[element],
+            transformation=transformation_in_cs,
+            to_coordinate_system=coordinate_system,
+        )
+        points = points_with_color_dd
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
@@ -669,7 +717,7 @@ def _render_points(
     method = render_params.method
 
     if method is None:
-        method = "datashader" if len(points) > 10000 else "matplotlib"
+        method = "datashader" if n_points > 10000 else "matplotlib"
 
     if method != "matplotlib":
         # we only notify the user when we switched away from matplotlib
@@ -743,7 +791,7 @@ def _render_points(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key = (
+        color_key: list[str] | None = (
             list(color_vector.categories.values)
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)
@@ -1182,6 +1230,7 @@ def _render_labels(
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        coordinate_system=coordinate_system,
     )
 
     # rasterize could have removed labels from label

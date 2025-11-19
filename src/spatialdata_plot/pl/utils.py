@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
@@ -46,7 +45,7 @@ from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_bool_dtype, is_numeric_dtype, is_string_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
@@ -424,9 +423,10 @@ def _get_collection_shape(
                 used_norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fill_c[is_num] = cmap(used_norm(num[is_num]))
 
-        # non-numeric entries as explicit colors
-        if (~is_num).any():
-            fill_c[~is_num] = ColorConverter().to_rgba_array(c_series[~is_num].tolist())
+        # non-numeric, non-NaN entries as explicit colors
+        non_numeric_color_mask = (~is_num) & c_series.notna().to_numpy()
+        if non_numeric_color_mask.any():
+            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_color_mask].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:
@@ -802,6 +802,14 @@ def _format_element_names(element_name: list[str] | str | None) -> str:
     return ", ".join(f"'{name}'" for name in element_name)
 
 
+def _format_element_name(element_name: list[str] | str | None) -> str:
+    if isinstance(element_name, str):
+        return element_name
+    if isinstance(element_name, list) and len(element_name) > 0:
+        return ", ".join(element_name)
+    return "<unknown>"
+
+
 def _preview_values(values: Sequence[Any], limit: int = 5) -> str:
     values = list(values)
     preview = ", ".join(map(str, values[:limit]))
@@ -882,6 +890,56 @@ def _validate_table_instance_uniqueness(
     )
 
 
+def _infer_color_data_kind(
+    series: pd.Series,
+    value_to_plot: str,
+    element_name: list[str] | str | None,
+    table_name: str | None,
+    warn_on_object_to_categorical: bool = False,
+) -> tuple[Literal["numeric", "categorical"], pd.Series | pd.Categorical]:
+    element_label = _format_element_name(element_name)
+
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return "categorical", pd.Categorical(series)
+
+    if is_bool_dtype(series.dtype):
+        return "numeric", series.astype(float)
+
+    if is_numeric_dtype(series.dtype):
+        return "numeric", pd.to_numeric(series, errors="coerce")
+
+    if is_string_dtype(series.dtype) or series.dtype == object:
+        non_na = series[~pd.isna(series)]
+        if len(non_na) == 0:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        numeric_like = pd.to_numeric(non_na, errors="coerce")
+        has_numeric = numeric_like.notna().any()
+        has_non_numeric = numeric_like.isna().any()
+
+        if has_numeric and has_non_numeric:
+            invalid_examples = non_na[numeric_like.isna()].astype(str).unique()[:3]
+            location = f" in table '{table_name}'" if table_name is not None else ""
+            raise TypeError(
+                f"Column '{value_to_plot}' for element '{element_label}'{location} contains both numeric and "
+                f"non-numeric values (e.g. {', '.join(invalid_examples)}). "
+                "Please ensure that the column stores consistent data."
+            )
+
+        if has_numeric:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        if warn_on_object_to_categorical:
+            logger.warning(
+                f"Converting copy of '{value_to_plot}' column to categorical dtype for categorical plotting. "
+                "Consider converting before plotting."
+            )
+
+        return "categorical", pd.Categorical(series)
+
+    return "numeric", pd.to_numeric(series, errors="coerce")
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -895,6 +953,7 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
     render_type: Literal["points"] | None = None,
+    coordinate_system: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color.get_hex_with_alpha())
@@ -913,8 +972,8 @@ def _set_color_source_vec(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
         )
 
-    if len(origins) == 1:
-        if table_name is not None and value_to_plot is not None:
+    if len(origins) == 1 and value_to_plot is not None:
+        if table_name is not None:
             _ensure_one_to_one_mapping(
                 sdata=sdata,
                 element=element,
@@ -929,9 +988,20 @@ def _set_color_source_vec(
             table_layer=table_layer,
         )[value_to_plot]
 
-        # numerical case, return early
-        # TODO temporary split until refactor is complete
-        if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
+        color_series = (
+            color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
+        )
+
+        kind, processed = _infer_color_data_kind(
+            series=color_series,
+            value_to_plot=value_to_plot,
+            element_name=element_name,
+            table_name=table_name,
+            warn_on_object_to_categorical=table_name is not None,
+        )
+
+        if kind == "numeric":
+            numeric_vector = processed
             if (
                 not isinstance(element, GeoDataFrame)
                 and isinstance(palette, list)
@@ -943,21 +1013,78 @@ def _set_color_source_vec(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
                 )
-            return None, color_source_vector, False
+            return None, numeric_vector, False
 
-        color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
+        assert isinstance(processed, pd.Categorical)
+        color_source_vector = processed  # convert, e.g., `pd.Series`
 
-        color_mapping = _get_categorical_color_mapping(
-            adata=sdata.get(table_name, None),
-            cluster_key=value_to_plot,
-            color_source_vector=color_source_vector,
-            cmap_params=cmap_params,
-            alpha=alpha,
-            groups=groups,
-            palette=palette,
-            na_color=na_color,
-            render_type=render_type,
-        )
+        # Use the provided table_name parameter, fall back to only one present
+        table_to_use: str | None
+        if table_name is not None and table_name in sdata.tables:
+            table_to_use = table_name
+        elif table_name is not None and table_name not in sdata.tables:
+            logger.warning(f"Table '{table_name}' not found in `sdata.tables`. Falling back to default behavior.")
+            table_to_use = None
+        else:
+            table_keys = list(sdata.tables.keys())
+            if table_keys:
+                table_to_use = table_keys[0]
+                logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
+            else:
+                table_to_use = None
+
+        adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
+
+        # Check if custom colors exist in the table's .uns slot
+        if value_to_plot is not None and _has_colors_in_uns(sdata, table_name, value_to_plot):
+            # Extract colors directly from the table's .uns slot
+            # Convert Color to ColorLike (str) for the function
+            na_color_like: ColorLike = na_color.get_hex() if isinstance(na_color, Color) else na_color
+            color_mapping = _extract_colors_from_table_uns(
+                sdata=sdata,
+                table_name=table_name,
+                col_to_colorby=value_to_plot,
+                color_source_vector=color_source_vector,
+                na_color=na_color_like,
+            )
+            if color_mapping is not None:
+                if isinstance(palette, str):
+                    palette = [palette]
+                color_mapping = _modify_categorical_color_mapping(
+                    mapping=color_mapping,
+                    groups=groups,
+                    palette=palette,
+                )
+            else:
+                logger.warning(f"Failed to extract colors for '{value_to_plot}', falling back to default mapping.")
+                # Fall back to the existing method if extraction fails
+                color_mapping = _get_categorical_color_mapping(
+                    adata=sdata[table_to_use],
+                    cluster_key=value_to_plot,
+                    color_source_vector=color_source_vector,
+                    cmap_params=cmap_params,
+                    alpha=alpha,
+                    groups=groups,
+                    palette=palette,
+                    na_color=na_color,
+                    render_type=render_type,
+                )
+        else:
+            color_mapping = None
+
+        if color_mapping is None:
+            # Use the existing color mapping method
+            color_mapping = _get_categorical_color_mapping(
+                adata=adata_for_mapping,
+                cluster_key=value_to_plot,
+                color_source_vector=color_source_vector,
+                cmap_params=cmap_params,
+                alpha=alpha,
+                groups=groups,
+                palette=palette,
+                na_color=na_color,
+                render_type=render_type,
+            )
 
         color_source_vector = color_source_vector.set_categories(color_mapping.keys())
         if color_mapping is None:
@@ -968,9 +1095,14 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    color = np.full(sdata[table_name].n_obs, na_color.get_hex_with_alpha())
-    return color, color, False
+    if table_name is None:
+        raise KeyError(
+            f"Unable to locate color key '{value_to_plot}' for element '{element_name}'. "
+            "Please ensure the key exists in a table annotating this element."
+        )
+    raise KeyError(
+        f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
+    )
 
 
 def _map_color_seg(
@@ -1011,8 +1143,9 @@ def _map_color_seg(
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
             val_im = map_array(seg.copy(), cell_id, cell_id)
-            if "#" in str(color_vector[0]):
-                # we have hex colors
+            first_value = color_vector.iloc[0] if isinstance(color_vector, pd.Series) else color_vector[0]
+            if _is_color_like(first_value):
+                # we have color-like values (e.g., hex or named colors)
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
             else:
@@ -1059,6 +1192,172 @@ def _generate_base_categorial_color_mapping(
         return dict(zip(categories, colors, strict=True))
 
     return _get_default_categorial_color_mapping(color_source_vector=color_source_vector, cmap_params=cmap_params)
+
+
+def _has_colors_in_uns(
+    sdata: sd.SpatialData,
+    table_name: str | None,
+    col_to_colorby: str,
+) -> bool:
+    """
+    Check if <column_name>_colors exists in the specified table's .uns slot.
+
+    Parameters
+    ----------
+    sdata
+        SpatialData object containing tables
+    table_name
+        Name of the table to check. If None, uses the first available table.
+    col_to_colorby
+        Name of the categorical column (e.g., "celltype")
+
+    Returns
+    -------
+    True if <col_to_colorby>_colors exists in the table's .uns, False otherwise
+    """
+    color_key = f"{col_to_colorby}_colors"
+
+    # Determine which table to use
+    if table_name is not None:
+        if table_name not in sdata.tables:
+            return False
+        table_to_use = table_name
+    else:
+        if len(sdata.tables.keys()) == 0:
+            return False
+        # When no table is specified, check all tables for the color key
+        return any(color_key in adata.uns for adata in sdata.tables.values())
+
+    adata = sdata.tables[table_to_use]
+    return color_key in adata.uns
+
+
+def _extract_colors_from_table_uns(
+    sdata: sd.SpatialData,
+    table_name: str | None,
+    col_to_colorby: str,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+    na_color: ColorLike,
+) -> Mapping[str, str] | None:
+    """
+    Extract categorical colors from the <column_name>_colors pattern in adata.uns.
+
+    This function looks for colors stored in the format <col_to_colorby>_colors in the
+    specified table's .uns slot and creates a mapping from categories to colors.
+
+    Parameters
+    ----------
+    sdata
+        SpatialData object containing tables
+    table_name
+        Name of the table to look in. If None, uses the first available table.
+    col_to_colorby
+        Name of the categorical column (e.g., "celltype")
+    color_source_vector
+        Categorical vector containing the categories to map
+    na_color
+        Color to use for NaN/missing values
+
+    Returns
+    -------
+    Mapping from category names to hex colors, or None if colors not found
+    """
+    color_key = f"{col_to_colorby}_colors"
+
+    # Determine which table to use
+    if table_name is not None:
+        if table_name not in sdata.tables:
+            logger.warning(f"Table '{table_name}' not found in sdata. Available tables: {list(sdata.tables.keys())}")
+            return None
+        table_to_use = table_name
+    else:
+        if len(sdata.tables) == 0:
+            logger.warning("No tables found in sdata.")
+            return None
+        # No explicit table provided: search all tables for the color key
+        candidate_tables: list[str] = [
+            name
+            for name, ad in sdata.tables.items()
+            if color_key in ad.uns  # type: ignore[union-attr]
+        ]
+        if not candidate_tables:
+            logger.debug(f"Color key '{color_key}' not found in any table uns.")
+            return None
+        table_to_use = candidate_tables[0]
+        if len(candidate_tables) > 1:
+            logger.warning(
+                f"Color key '{color_key}' found in multiple tables {candidate_tables}; using table '{table_to_use}'."
+            )
+        logger.info(f"No table name provided, using '{table_to_use}' for color extraction.")
+
+    adata = sdata.tables[table_to_use]
+
+    # Check if the color pattern exists
+    if color_key not in adata.uns:
+        logger.debug(f"Color key '{color_key}' not found in table '{table_to_use}' uns.")
+        return None
+
+    # Extract colors and categories
+    stored_colors = adata.uns[color_key]
+    categories = color_source_vector.categories.tolist()
+
+    # Validate na_color format and convert to hex string
+    if isinstance(na_color, Color):
+        na_color_hex = na_color.get_hex()
+    else:
+        na_color_str = str(na_color)
+        if "#" not in na_color_str:
+            logger.warning("Expected `na_color` to be a hex color, converting...")
+            na_color_hex = to_hex(to_rgba(na_color)[:3])
+        else:
+            na_color_hex = na_color_str
+
+    # Strip alpha channel from na_color if present
+    if len(na_color_hex) == 9:  # #rrggbbaa format
+        na_color_hex = na_color_hex[:7]  # Keep only #rrggbb
+
+    def _to_hex_no_alpha(color_value: Any) -> str | None:
+        try:
+            rgba = to_rgba(color_value)[:3]
+            hex_color: str = to_hex(rgba)
+            if len(hex_color) == 9:
+                hex_color = hex_color[:7]
+            return hex_color
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Error converting color '{color_value}' to hex format: {e}")
+            return None
+
+    color_mapping: dict[str, str] = {}
+
+    if isinstance(stored_colors, Mapping):
+        for category in categories:
+            raw_color = stored_colors.get(category)
+            if raw_color is None:
+                logger.warning(f"No color specified for '{category}' in '{color_key}', using na_color.")
+                color_mapping[category] = na_color_hex
+                continue
+            hex_color = _to_hex_no_alpha(raw_color)
+            color_mapping[category] = hex_color if hex_color is not None else na_color_hex
+        logger.info(f"Successfully extracted {len(color_mapping)} colors from '{color_key}' in table '{table_to_use}'.")
+    else:
+        try:
+            hex_colors = [_to_hex_no_alpha(color) for color in stored_colors]
+        except TypeError:
+            logger.warning(f"Unsupported color storage for '{color_key}'. Expected sequence or mapping.")
+            return None
+
+        for i, category in enumerate(categories):
+            if i < len(hex_colors) and hex_colors[i] is not None:
+                hex_color = hex_colors[i]
+                assert hex_color is not None  # type narrowing for mypy
+                color_mapping[category] = hex_color
+            else:
+                logger.warning(f"Not enough colors provided for category '{category}', using na_color.")
+                color_mapping[category] = na_color_hex
+        logger.info(f"Successfully extracted {len(hex_colors)} colors from '{color_key}' in table '{table_to_use}'.")
+
+    color_mapping["NaN"] = na_color_hex
+    return color_mapping
 
 
 def _modify_categorical_color_mapping(
@@ -1341,47 +1640,84 @@ def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegme
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
 
-def _split_multipolygon_into_outer_and_inner(mp: shapely.MultiPolygon):  # type: ignore
-    # https://stackoverflow.com/a/21922058
+def _validate_polygons(shapes: GeoDataFrame) -> GeoDataFrame:
+    """
+    Convert Polygons with holes to MultiPolygons to keep interior rings during rendering.
 
-    for geom in mp.geoms:
-        if geom.geom_type == "MultiPolygon":
-            exterior_coords = []
-            interior_coords = []
-            for part in geom:
-                epc = _split_multipolygon_into_outer_and_inner(part)  # Recursive call
-                exterior_coords += epc["exterior_coords"]
-                interior_coords += epc["interior_coords"]
-        elif geom.geom_type == "Polygon":
-            exterior_coords = geom.exterior.coords[:]
-            interior_coords = []
-            for interior in geom.interiors:
-                interior_coords += interior.coords[:]
+    Parameters
+    ----------
+    shapes
+        GeoDataFrame containing a `geometry` column.
+
+    Returns
+    -------
+    GeoDataFrame
+        ``shapes`` with holed Polygons converted to MultiPolygons.
+    """
+    if "geometry" not in shapes:
+        return shapes
+
+    converted_count = 0
+    for idx, geom in shapes["geometry"].items():
+        if isinstance(geom, shapely.Polygon) and len(geom.interiors) > 0:
+            shapes.at[idx, "geometry"] = shapely.MultiPolygon([geom])
+            converted_count += 1
+
+    if converted_count > 0:
+        logger.info(
+            "Converted %d Polygon(s) with holes to MultiPolygon(s) for correct rendering.",
+            converted_count,
+        )
+
+    return shapes
+
+
+def _collect_polygon_rings(
+    geom: shapely.Polygon | shapely.MultiPolygon,
+) -> list[tuple[np.ndarray, list[np.ndarray]]]:
+    """Collect exterior/interior coordinate rings from (Multi)Polygons."""
+    polygons: list[tuple[np.ndarray, list[np.ndarray]]] = []
+
+    def _collect(part: shapely.Polygon | shapely.MultiPolygon) -> None:
+        if part.geom_type == "Polygon":
+            exterior = np.asarray(part.exterior.coords)
+            interiors = [np.asarray(interior.coords) for interior in part.interiors]
+            polygons.append((exterior, interiors))
+        elif part.geom_type == "MultiPolygon":
+            for child in part.geoms:
+                _collect(child)
         else:
-            raise ValueError(f"Unhandled geometry type: {repr(geom.type)}")
+            raise ValueError(f"Unhandled geometry type: {repr(part.geom_type)}")
 
-    return interior_coords, exterior_coords
+    _collect(geom)
+    return polygons
+
+
+def _create_ring_codes(length: int) -> npt.NDArray[np.uint8]:
+    codes = np.full(length, mpath.Path.LINETO, dtype=mpath.Path.code_type)
+    codes[0] = mpath.Path.MOVETO
+    return codes
 
 
 def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
     # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
 
     patches = []
-    for geom in mp.geoms:
-        if len(geom.interiors) == 0:
-            # polygon has no holes
-            patches += [mpatches.Polygon(geom.exterior.coords, closed=True)]
-        else:
-            inside, outside = _split_multipolygon_into_outer_and_inner(mp)
-            if len(inside) > 0:
-                codes = np.ones(len(inside), dtype=mpath.Path.code_type) * mpath.Path.LINETO
-                codes[0] = mpath.Path.MOVETO
-                all_codes = np.concatenate((codes, codes))
-                vertices = np.concatenate((outside, inside[::-1]))
-            else:
-                all_codes = []
-                vertices = np.concatenate(outside)
-            patches += [mpatches.PathPatch(mpath.Path(vertices, all_codes))]
+    for exterior, interiors in _collect_polygon_rings(mp):
+        if len(interiors) == 0:
+            patches.append(mpatches.Polygon(exterior, closed=True))
+            continue
+
+        ring_vertices = [exterior]
+        ring_codes = [_create_ring_codes(len(exterior))]
+        for hole in interiors:
+            reversed_hole = hole[::-1]
+            ring_vertices.append(reversed_hole)
+            ring_codes.append(_create_ring_codes(len(reversed_hole)))
+
+        vertices = np.concatenate(ring_vertices)
+        all_codes = np.concatenate(ring_codes)
+        patches.append(mpatches.PathPatch(mpath.Path(vertices, all_codes)))
 
     return patches
 
@@ -2222,35 +2558,39 @@ def _validate_col_for_column_table(
     table_name: str | None,
     labels: bool = False,
 ) -> tuple[str | None, str | None]:
+    if col_for_color is None:
+        return None, None
+
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
-        if table_name not in tables or (
-            col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
-        ):
-            warnings.warn(
-                f"Table '{table_name}' does not annotate element '{element_name}'.",
-                UserWarning,
-                stacklevel=2,
+        if table_name not in tables:
+            raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
+        if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
+            raise KeyError(
+                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
             )
-            table_name = None
-            col_for_color = None
     else:
         tables = get_element_annotators(sdata, element_name)
-        for table_name in tables.copy():
-            if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-                tables.remove(table_name)
         if len(tables) == 0:
-            col_for_color = None
-        elif len(tables) >= 1:
-            table_name = next(iter(tables))
-            if len(tables) > 1:
-                warnings.warn(
-                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            raise KeyError(
+                f"Element '{element_name}' has no annotating tables. "
+                f"Cannot use column '{col_for_color}' for coloring. "
+                "Please ensure the element is annotated by at least one table."
+            )
+        # Now check which tables contain the column
+        for annotates in tables.copy():
+            if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
+                tables.remove(annotates)
+        if len(tables) == 0:
+            raise KeyError(
+                f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "
+                "Please ensure the key exists in a table annotating this element."
+            )
+        table_name = next(iter(tables))
+        if len(tables) > 1:
+            logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
     return col_for_color, table_name
 
 
@@ -2371,11 +2711,6 @@ def _get_wanted_render_elements(
         return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
 
     raise ValueError(f"Unknown element type {element_type}")
-
-
-def _is_coercable_to_float(series: pd.Series) -> bool:
-    numeric_series = pd.to_numeric(series, errors="coerce")
-    return not numeric_series.isnull().any()
 
 
 def _ax_show_and_transform(
@@ -2814,11 +3149,7 @@ def _convert_shapes(
             else:
                 non_point_count += 1
         if non_point_count > 0:
-            warnings.warn(
-                "visium_hex supports Points best. Non-Point geometries will use regular hex conversion.",
-                UserWarning,
-                stacklevel=2,
-            )
+            logger.warning("visium_hex supports Points best. Non-Point geometries will use regular hex conversion.")
         if len(point_centers) >= 2:
             centers = np.array(point_centers, dtype=float)
             # pairwise min distance

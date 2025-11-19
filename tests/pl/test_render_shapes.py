@@ -17,6 +17,7 @@ from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequen
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
@@ -98,6 +99,60 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         table = TableModel.parse(adata, region="p", region_key="region", instance_key="val")
         sdata["table"] = table
         sdata.pl.render_shapes(color="val", fill_alpha=0.3).pl.show()
+
+    def test_plot_can_render_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 3.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+        sdata = SpatialData(shapes={"two_holes": sd_polygons})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
+
+    def test_plot_can_render_multipolygons_that_say_they_are_polygons(self):
+        exterior = [(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]
+        interior = [(0.1, 0.1), (0.1, 0.9), (0.9, 0.9), (0.9, 0.1), (0.1, 0.1)]
+        polygon = Polygon(exterior, [interior])
+        geo_df = gpd.GeoDataFrame(geometry=[polygon])
+        sdata = SpatialData(shapes={"test": ShapesModel.parse(geo_df)})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="test").pl.show(ax=ax)
+        ax.set_xlim(-1, 2)
+        ax.set_ylim(-1, 2)
+
+        fig.tight_layout()
+
+    def test_plot_can_color_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        cell_polygon_table["instance_id"] = [0]
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+
+        adata = anndata.AnnData(pd.DataFrame({"value": [1]}))
+        adata.obs["region"] = pd.Categorical(["two_holes"] * adata.n_obs)
+        adata.obs["instance_id"] = [0]
+        adata.obs["category"] = ["holey"]
+        table = TableModel.parse(adata, region="two_holes", region_key="region", instance_key="instance_id")
+
+        sdata = SpatialData(shapes={"two_holes": sd_polygons}, tables={"table": table})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes", color="category", table_name="table").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
 
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
@@ -202,6 +257,37 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
                 color="annotation",
                 table_name="table",
             ).pl.show()
+
+    def test_render_shapes_raises_when_color_key_missing(self, sdata_blobs_shapes_annotated: SpatialData):
+        missing_col = "__non_existent_column__"
+        with pytest.raises(KeyError, match=f"Unable to locate color key '{missing_col}'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons",
+                color=missing_col,
+            ).pl.show()
+
+    def test_render_shapes_raises_for_invalid_table_name(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        table.obs["valid_col"] = np.arange(table.n_obs)
+
+        with pytest.raises(KeyError, match="Table 'not_a_table' does not annotate element 'blobs_polygons'"):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="valid_col", table_name="not_a_table"
+            )
+
+    def test_render_shapes_raises_for_missing_column_in_table(self, sdata_blobs_shapes_annotated: SpatialData):
+        table = sdata_blobs_shapes_annotated["table"]
+        table.obs["region"] = pd.Categorical(["blobs_polygons"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+
+        with pytest.raises(
+            KeyError, match="Column 'not_a_column' not found in obs/var of table 'table' for element 'blobs_polygons'"
+        ):
+            sdata_blobs_shapes_annotated.pl.render_shapes(
+                element="blobs_polygons", color="not_a_column", table_name="table"
+            )
 
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
@@ -626,6 +712,20 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
+    def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
+        shapes_name = "blobs_polygons"
+        # Ensure that the table annotations point to the shapes element
+        sdata_blobs["table"].obs["region"] = pd.Categorical([shapes_name] * sdata_blobs["table"].n_obs)
+        sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
+
+        categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
+        categories[:3] = ["a", "b", "c"]
+        categories = pd.Categorical(categories, categories=["a", "b", "c"])
+        sdata_blobs["table"].obs["category"] = categories
+        sdata_blobs["table"].uns["category_colors"] = ["red", "green", "blue"]
+
+        sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
+
     def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
 
@@ -712,61 +812,89 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_raises_when_table_does_not_annotate_element(self, sdata_blobs: SpatialData):
+        # Work on an independent copy since we mutate tables
+        sdata_blobs_local = deepcopy(sdata_blobs)
 
-def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
-    # Work on an independent copy since we mutate tables
-    sdata_blobs_local = deepcopy(sdata_blobs)
+        # Create a table that annotates a DIFFERENT element than the one we will render
+        other_table = sdata_blobs_local["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["blobs_points"] * other_table.n_obs)  # Different region
+        other_table.uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs_local["other_table"] = other_table
 
-    # Create a table that annotates a DIFFERENT element than the one we will render
-    other_table = sdata_blobs_local["table"].copy()
-    other_table.obs["region"] = pd.Categorical(["blobs_points"] * other_table.n_obs)  # Different region
-    other_table.uns["spatialdata_attrs"]["region"] = "blobs_points"
-    sdata_blobs_local["other_table"] = other_table
-
-    # Rendering "blobs_circles" with a table that annotates "blobs_points"
-    # should raise a warning and fall back to using no table.
-    with pytest.warns(UserWarning, match="does not annotate element"):
-        (
+        # Rendering "blobs_circles" with a table that annotates "blobs_points"
+        # should now raise to alert the user about the mismatch.
+        with pytest.raises(
+            KeyError,
+            match="Table 'other_table' does not annotate element 'blobs_circles'",
+        ):
             sdata_blobs_local.pl.render_shapes(
                 "blobs_circles",
                 color="channel_0_sum",
                 table_name="other_table",
             ).pl.show()
-        )
 
-    def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData):
-        """Test that NaN values in color data are handled gracefully."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    def test_raises_when_element_has_no_annotating_tables(self, sdata_blobs: SpatialData):
+        """Test that rendering an element with no annotating tables raises a clear error."""
+        # Work on an independent copy since we mutate tables
+        sdata_blobs_local = deepcopy(sdata_blobs)
 
-        # Add color column with NaN values
-        sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+        # Change the region to something else so it no longer annotates "blobs_circles"
+        table = sdata_blobs_local["table"].copy()
+        table.obs["region"] = pd.Categorical(["blobs_points"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs_local["table"] = table
 
-        # Test that rendering works with NaN values and issues warning
-        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
-            sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
+        # Now "blobs_circles" should have no annotating tables
+        # Trying to render it with a color column should raise an error
+        with pytest.raises(
+            KeyError,
+            match="Element 'blobs_circles' has no annotating tables",
+        ):
+            sdata_blobs_local.pl.render_shapes(
+                "blobs_circles",
+                color="channel_0_sum",
+            ).pl.show()
 
-    def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
-        """Test that colorbar normalization works correctly with NaN values."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
 
-        sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
+    """Test that NaN values in color data are handled gracefully and logged."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        # Test colorbar with NaN values - should use nanmin/nanmax
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
+    # Add color column with NaN values
+    sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-    def test_plot_can_handle_non_numeric_radius_values(self, sdata_blobs: SpatialData):
-        """Test that non-numeric radius values are handled gracefully."""
-        sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+    # Expect a logger warning about NaN values
+    with logger_warns(caplog, logger, match="Found 1 NaN values in color data"):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
 
-        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
 
-    def test_plot_can_handle_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
-        """Test handling of mixed numeric and color-like data."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+def test_plot_colorbar_normalization_with_nan_values(sdata_blobs: SpatialData):
+    """Test that colorbar normalization works correctly with NaN values."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
 
-        sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+    sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
+    # Test colorbar with NaN values - should use nanmin/nanmax under the hood and not crash
+    sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
+
+
+def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
+    """Test that non-numeric radius values are handled gracefully."""
+    sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+
+def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
+    """Test that mixed numeric and color-like data raises a clear error."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+
+    sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+
+    # Mixed numeric / non-numeric values should raise a TypeError
+    with pytest.raises(TypeError, match="contains both numeric and non-numeric values"):
         sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()

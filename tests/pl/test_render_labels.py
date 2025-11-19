@@ -263,7 +263,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].layers["normalized"] = get_standard_RNG().random(sdata_blobs["table"].X.shape)
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()
 
-    def _prepare_small_labels(self, sdata_blobs: SpatialData) -> SpatialData:
+    def _prepare_labels_with_small_objects(self, sdata_blobs: SpatialData) -> SpatialData:
         # add a categorical column
         adata = sdata_blobs["table"]
         sdata_blobs["table"].obs["category"] = ["a"] * 10 + ["b"] * 10 + ["c"] * 6
@@ -289,17 +289,78 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_handle_dropping_small_labels_after_rasterize_continuous(self, sdata_blobs: SpatialData):
         # reported here https://github.com/scverse/spatialdata-plot/issues/443
-        sdata_blobs = self._prepare_small_labels(sdata_blobs)
+        sdata_blobs = self._prepare_labels_with_small_objects(sdata_blobs)
 
         sdata_blobs.pl.render_labels("blobs_labels_large", color="channel_0_sum", table_name="table").pl.show()
 
     def test_plot_can_handle_dropping_small_labels_after_rasterize_categorical(self, sdata_blobs: SpatialData):
-        sdata_blobs = self._prepare_small_labels(sdata_blobs)
+        sdata_blobs = self._prepare_labels_with_small_objects(sdata_blobs)
 
         sdata_blobs.pl.render_labels("blobs_labels_large", color="category", table_name="table").pl.show()
 
+    def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
+        labels_name = "blobs_labels"
+        instances = get_element_instances(sdata_blobs[labels_name])
+        n_obs = len(instances)
+        adata = AnnData(
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+        )
+        adata.obs["instance_id"] = instances.values
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs["region"] = labels_name
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region=labels_name,
+        )
+        sdata_blobs["other_table"] = table
+        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
+        sdata_blobs["other_table"].uns["category_colors"] = ["red", "green", "blue"]  # purple, green ,yellow
 
-def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+
+    def test_plot_respects_custom_colors_from_uns_with_groups_and_palette(
+        self,
+        sdata_blobs: SpatialData,
+    ):
+        labels_name = "blobs_labels"
+        instances = get_element_instances(sdata_blobs[labels_name])
+        n_obs = len(instances)
+        adata = AnnData(
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
+        )
+        adata.obs["instance_id"] = instances.values
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs["region"] = labels_name
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region=labels_name,
+        )
+        sdata_blobs["other_table"] = table
+        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
+        sdata_blobs["other_table"].uns["category_colors"] = {
+            "a": "red",
+            "b": "green",
+            "c": "blue",
+        }
+
+        # palette overwrites uns colors
+        sdata_blobs.pl.render_labels(
+            "blobs_labels",
+            color="category",
+            groups=["a", "b"],
+            palette=["yellow", "cyan"],
+        ).pl.show()
+
+
+def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
     sdata_blobs_local = deepcopy(sdata_blobs)
 
@@ -310,12 +371,13 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     sdata_blobs_local["other_table"] = other_table
 
     # Rendering "blobs_labels" with a table that annotates "blobs_multiscale_labels"
-    # should raise a warning and fall back to using no table.
-    with pytest.warns(UserWarning, match="does not annotate element"):
-        (
-            sdata_blobs_local.pl.render_labels(
-                "blobs_labels",
-                color="channel_0_sum",
-                table_name="other_table",
-            ).pl.show()
-        )
+    # should now raise to alert the user about the mismatch.
+    with pytest.raises(
+        KeyError,
+        match="Table 'other_table' does not annotate element 'blobs_labels'",
+    ):
+        sdata_blobs_local.pl.render_labels(
+            "blobs_labels",
+            color="channel_0_sum",
+            table_name="other_table",
+        ).pl.show()
