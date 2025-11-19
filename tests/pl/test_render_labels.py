@@ -351,6 +351,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "c": "blue",
         }
 
+        # palette overwrites uns colors
         sdata_blobs.pl.render_labels(
             "blobs_labels",
             color="category",

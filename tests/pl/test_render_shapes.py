@@ -631,24 +631,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
 
-    def test_plot_respects_custom_colors_from_uns_dict(self, sdata_blobs: SpatialData):
-        shapes_name = "blobs_polygons"
-        # Ensure that the table annotations point to the shapes element
-        sdata_blobs["table"].obs["region"] = pd.Categorical([shapes_name] * sdata_blobs["table"].n_obs)
-        sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
-
-        categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
-        categories[:3] = ["a", "b", "c"]
-        categories = pd.Categorical(categories, categories=["a", "b", "c"])
-        sdata_blobs["table"].obs["category"] = categories
-        sdata_blobs["table"].uns["category_colors"] = {
-            "a": "red",
-            "b": "green",
-            "c": "blue",
-        }
-
-        sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
-
     def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
 
