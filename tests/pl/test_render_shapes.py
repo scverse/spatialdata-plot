@@ -116,6 +116,20 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         fig.tight_layout()
 
+    def test_plot_can_render_multipolygons_that_say_they_are_polygons(self):
+        exterior = [(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]
+        interior = [(0.1, 0.1), (0.1, 0.9), (0.9, 0.9), (0.9, 0.1), (0.1, 0.1)]
+        polygon = Polygon(exterior, [interior])
+        geo_df = gpd.GeoDataFrame(geometry=[polygon])
+        sdata = SpatialData(shapes={"test": ShapesModel.parse(geo_df)})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="test").pl.show(ax=ax)
+        ax.set_xlim(-1, 2)
+        ax.set_ylim(-1, 2)
+
+        fig.tight_layout()
+
     def test_plot_can_color_multipolygons_with_multiple_holes(self):
         square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
         first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]

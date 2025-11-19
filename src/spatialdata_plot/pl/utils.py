@@ -1545,6 +1545,38 @@ def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegme
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
 
 
+def _validate_polygons(shapes: GeoDataFrame) -> GeoDataFrame:
+    """
+    Convert Polygons with holes to MultiPolygons to keep interior rings during rendering.
+
+    Parameters
+    ----------
+    shapes
+        GeoDataFrame containing a `geometry` column.
+
+    Returns
+    -------
+    GeoDataFrame
+        ``shapes`` with holed Polygons converted to MultiPolygons.
+    """
+    if "geometry" not in shapes:
+        return shapes
+
+    converted_count = 0
+    for idx, geom in shapes["geometry"].items():
+        if isinstance(geom, shapely.Polygon) and len(geom.interiors) > 0:
+            shapes.at[idx, "geometry"] = shapely.MultiPolygon([geom])
+            converted_count += 1
+
+    if converted_count > 0:
+        logger.info(
+            "Converted %d Polygon(s) with holes to MultiPolygon(s) for correct rendering.",
+            converted_count,
+        )
+
+    return shapes
+
+
 def _collect_polygon_rings(
     geom: shapely.Polygon | shapely.MultiPolygon,
 ) -> list[tuple[np.ndarray, list[np.ndarray]]]:
