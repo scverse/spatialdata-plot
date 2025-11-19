@@ -190,6 +190,24 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_render_points_missing_color_column_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        with pytest.raises(KeyError, match="does_not_exist"):
+            sdata_blobs.pl.render_points(element="blobs_points", color="does_not_exist")
+
+    def test_render_points_missing_region_for_table_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = pd.Categorical(["blobs_points"] * blob["table"].n_obs)
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        blob["table"].obs["table_value"] = np.arange(blob["table"].n_obs)
+        other_table = blob["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["other"] * other_table.n_obs)
+        other_table.uns["spatialdata_attrs"]["region"] = "other"
+        blob["other_table"] = other_table
+        with pytest.raises(KeyError, match="does not annotate element"):
+            blob.pl.render_points(element="blobs_points", color="table_value", table_name="other_table")
+
     def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         obs = pd.DataFrame(
@@ -505,7 +523,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
 
 
-def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
     sdata_blobs_local = deepcopy(sdata_blobs)
 
@@ -516,15 +534,16 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     sdata_blobs_local["other_table"] = other_table
 
     # Rendering "blobs_points" with a table that annotates "blobs_labels"
-    # should raise a warning and fall back to using no table.
-    with pytest.warns(UserWarning, match="does not annotate element"):
-        (
-            sdata_blobs_local.pl.render_points(
-                "blobs_points",
-                color="channel_0_sum",
-                table_name="other_table",
-            ).pl.show()
-        )
+    # should now raise to alert the user about the mismatch.
+    with pytest.raises(
+        KeyError,
+        match="Table 'other_table' does not annotate element 'blobs_points'",
+    ):
+        sdata_blobs_local.pl.render_points(
+            "blobs_points",
+            color="channel_0_sum",
+            table_name="other_table",
+        ).pl.show()
 
 
 def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):

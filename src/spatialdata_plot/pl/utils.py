@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import warnings
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
@@ -46,7 +45,7 @@ from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_bool_dtype, is_numeric_dtype, is_string_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
@@ -424,11 +423,10 @@ def _get_collection_shape(
                 used_norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
             fill_c[is_num] = cmap(used_norm(num[is_num]))
 
-        # non-numeric entries as explicit colors
-        # treat missing values as na_color, and only convert valid color-like entries
-        non_numeric_mask = (~is_num) & c_series.notna()
-        if non_numeric_mask.any():
-            fill_c[non_numeric_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_mask].tolist())
+        # non-numeric, non-NaN entries as explicit colors
+        non_numeric_color_mask = (~is_num) & c_series.notna().to_numpy()
+        if non_numeric_color_mask.any():
+            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_color_mask].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:
@@ -796,6 +794,64 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
+def _format_element_name(element_name: list[str] | str | None) -> str:
+    if isinstance(element_name, str):
+        return element_name
+    if isinstance(element_name, list) and len(element_name) > 0:
+        return ", ".join(element_name)
+    return "<unknown>"
+
+
+def _infer_color_data_kind(
+    series: pd.Series,
+    value_to_plot: str,
+    element_name: list[str] | str | None,
+    table_name: str | None,
+    warn_on_object_to_categorical: bool = False,
+) -> tuple[Literal["numeric", "categorical"], pd.Series | pd.Categorical]:
+    element_label = _format_element_name(element_name)
+
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return "categorical", pd.Categorical(series)
+
+    if is_bool_dtype(series.dtype):
+        return "numeric", series.astype(float)
+
+    if is_numeric_dtype(series.dtype):
+        return "numeric", pd.to_numeric(series, errors="coerce")
+
+    if is_string_dtype(series.dtype) or series.dtype == object:
+        non_na = series[~pd.isna(series)]
+        if len(non_na) == 0:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        numeric_like = pd.to_numeric(non_na, errors="coerce")
+        has_numeric = numeric_like.notna().any()
+        has_non_numeric = numeric_like.isna().any()
+
+        if has_numeric and has_non_numeric:
+            invalid_examples = non_na[numeric_like.isna()].astype(str).unique()[:3]
+            location = f" in table '{table_name}'" if table_name is not None else ""
+            raise TypeError(
+                f"Column '{value_to_plot}' for element '{element_label}'{location} contains both numeric and "
+                f"non-numeric values (e.g. {', '.join(invalid_examples)}). "
+                "Please ensure that the column stores consistent data."
+            )
+
+        if has_numeric:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        if warn_on_object_to_categorical:
+            logger.warning(
+                f"Converting copy of '{value_to_plot}' column to categorical dtype for categorical plotting. "
+                "Consider converting before plotting."
+            )
+
+        return "categorical", pd.Categorical(series)
+
+    return "numeric", pd.to_numeric(series, errors="coerce")
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -809,6 +865,7 @@ def _set_color_source_vec(
     table_name: str | None = None,
     table_layer: str | None = None,
     render_type: Literal["points"] | None = None,
+    coordinate_system: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color.get_hex_with_alpha())
@@ -827,7 +884,7 @@ def _set_color_source_vec(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
         )
 
-    if len(origins) == 1:
+    if len(origins) == 1 and value_to_plot is not None:
         color_source_vector = get_values(
             value_key=value_to_plot,
             sdata=sdata,
@@ -836,33 +893,35 @@ def _set_color_source_vec(
             table_layer=table_layer,
         )[value_to_plot]
 
-        # numerical vs. categorical case
-        if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
-            is_numeric_like = pd.api.types.is_numeric_dtype(color_source_vector.dtype)
-            is_object_series = isinstance(color_source_vector, pd.Series) and color_source_vector.dtype == "O"
+        color_series = (
+            color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
+        )
 
-            # If it's an object-typed series but not coercible to float, treat as categorical
-            if is_object_series and not _is_coercable_to_float(color_source_vector):
-                color_source_vector = pd.Categorical(color_source_vector)
-            else:
-                is_numeric_like = True
+        kind, processed = _infer_color_data_kind(
+            series=color_series,
+            value_to_plot=value_to_plot,
+            element_name=element_name,
+            table_name=table_name,
+            warn_on_object_to_categorical=table_name is not None,
+        )
 
-            # Continuous case: return early
-            if is_numeric_like:
-                if (
-                    not isinstance(element, GeoDataFrame)
-                    and isinstance(palette, list)
-                    and palette[0] is not None
-                    or isinstance(element, GeoDataFrame)
-                    and isinstance(palette, list)
-                ):
-                    logger.warning(
-                        "Ignoring categorical palette which is given for a continuous variable. "
-                        "Consider using `cmap` to pass a ColorMap."
-                    )
-                return None, color_source_vector, False
+        if kind == "numeric":
+            numeric_vector = processed
+            if (
+                not isinstance(element, GeoDataFrame)
+                and isinstance(palette, list)
+                and palette[0] is not None
+                or isinstance(element, GeoDataFrame)
+                and isinstance(palette, list)
+            ):
+                logger.warning(
+                    "Ignoring categorical palette which is given for a continuous variable. "
+                    "Consider using `cmap` to pass a ColorMap."
+                )
+            return None, numeric_vector, False
 
-        color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
+        assert isinstance(processed, pd.Categorical)
+        color_source_vector = processed  # convert, e.g., `pd.Series`
 
         # Use the provided table_name parameter, fall back to only one present
         table_to_use: str | None
@@ -941,11 +1000,14 @@ def _set_color_source_vec(
 
         return color_source_vector, color_vector, True
 
-    logger.warning(f"Color key '{value_to_plot}' for element '{element_name}' not been found, using default colors.")
-    # Fallback: color everything with na_color; use element length when table is unknown
-    n_obs = len(element) if element is not None else (sdata[table_name].n_obs if table_name in sdata.tables else 0)
-    color = np.full(n_obs, na_color.get_hex_with_alpha())
-    return color, color, False
+    if table_name is None:
+        raise KeyError(
+            f"Unable to locate color key '{value_to_plot}' for element '{element_name}'. "
+            "Please ensure the key exists in a table annotating this element."
+        )
+    raise KeyError(
+        f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
+    )
 
 
 def _map_color_seg(
@@ -2369,35 +2431,39 @@ def _validate_col_for_column_table(
     table_name: str | None,
     labels: bool = False,
 ) -> tuple[str | None, str | None]:
+    if col_for_color is None:
+        return None, None
+
     if not labels and col_for_color in sdata[element_name].columns:
         table_name = None
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
-        if table_name not in tables or (
-            col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names
-        ):
-            warnings.warn(
-                f"Table '{table_name}' does not annotate element '{element_name}'.",
-                UserWarning,
-                stacklevel=2,
+        if table_name not in tables:
+            raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
+        if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
+            raise KeyError(
+                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
             )
-            table_name = None
-            col_for_color = None
     else:
         tables = get_element_annotators(sdata, element_name)
-        for table_name in tables.copy():
-            if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-                tables.remove(table_name)
         if len(tables) == 0:
-            col_for_color = None
-        elif len(tables) >= 1:
-            table_name = next(iter(tables))
-            if len(tables) > 1:
-                warnings.warn(
-                    f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            raise KeyError(
+                f"Element '{element_name}' has no annotating tables. "
+                f"Cannot use column '{col_for_color}' for coloring. "
+                "Please ensure the element is annotated by at least one table."
+            )
+        # Now check which tables contain the column
+        for annotates in tables.copy():
+            if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
+                tables.remove(annotates)
+        if len(tables) == 0:
+            raise KeyError(
+                f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "
+                "Please ensure the key exists in a table annotating this element."
+            )
+        table_name = next(iter(tables))
+        if len(tables) > 1:
+            logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
     return col_for_color, table_name
 
 
@@ -2518,11 +2584,6 @@ def _get_wanted_render_elements(
         return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
 
     raise ValueError(f"Unknown element type {element_type}")
-
-
-def _is_coercable_to_float(series: pd.Series) -> bool:
-    numeric_series = pd.to_numeric(series, errors="coerce")
-    return not numeric_series.isnull().any()
 
 
 def _ax_show_and_transform(
@@ -2961,11 +3022,7 @@ def _convert_shapes(
             else:
                 non_point_count += 1
         if non_point_count > 0:
-            warnings.warn(
-                "visium_hex supports Points best. Non-Point geometries will use regular hex conversion.",
-                UserWarning,
-                stacklevel=2,
-            )
+            logger.warning("visium_hex supports Points best. Non-Point geometries will use regular hex conversion.")
         if len(point_centers) >= 2:
             centers = np.array(point_centers, dtype=float)
             # pairwise min distance
