@@ -45,7 +45,7 @@ from matplotlib.transforms import CompositeGenericTransform
 from matplotlib_scalebar.scalebar import ScaleBar
 from numpy.ma.core import MaskedArray
 from numpy.random import default_rng
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_bool_dtype, is_numeric_dtype, is_string_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
@@ -794,6 +794,64 @@ def _get_colors_for_categorical_obs(
     return palette[:len_cat]  # type: ignore[return-value]
 
 
+def _format_element_name(element_name: list[str] | str | None) -> str:
+    if isinstance(element_name, str):
+        return element_name
+    if isinstance(element_name, list) and len(element_name) > 0:
+        return ", ".join(element_name)
+    return "<unknown>"
+
+
+def _infer_color_data_kind(
+    series: pd.Series,
+    value_to_plot: str,
+    element_name: list[str] | str | None,
+    table_name: str | None,
+    warn_on_object_to_categorical: bool = False,
+) -> tuple[Literal["numeric", "categorical"], pd.Series | pd.Categorical]:
+    element_label = _format_element_name(element_name)
+
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return "categorical", pd.Categorical(series)
+
+    if is_bool_dtype(series.dtype):
+        return "numeric", series.astype(float)
+
+    if is_numeric_dtype(series.dtype):
+        return "numeric", pd.to_numeric(series, errors="coerce")
+
+    if is_string_dtype(series.dtype) or series.dtype == object:
+        non_na = series[~pd.isna(series)]
+        if len(non_na) == 0:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        numeric_like = pd.to_numeric(non_na, errors="coerce")
+        has_numeric = numeric_like.notna().any()
+        has_non_numeric = numeric_like.isna().any()
+
+        if has_numeric and has_non_numeric:
+            invalid_examples = non_na[numeric_like.isna()].astype(str).unique()[:3]
+            location = f" in table '{table_name}'" if table_name is not None else ""
+            raise TypeError(
+                f"Column '{value_to_plot}' for element '{element_label}'{location} contains both numeric and "
+                f"non-numeric values (e.g. {', '.join(invalid_examples)}). "
+                "Please ensure that the column stores consistent data."
+            )
+
+        if has_numeric:
+            return "numeric", pd.to_numeric(series, errors="coerce")
+
+        if warn_on_object_to_categorical:
+            logger.warning(
+                f"Converting copy of '{value_to_plot}' column to categorical dtype for categorical plotting. "
+                "Consider converting before plotting."
+            )
+
+        return "categorical", pd.Categorical(series)
+
+    return "numeric", pd.to_numeric(series, errors="coerce")
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -826,7 +884,7 @@ def _set_color_source_vec(
             f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
         )
 
-    if len(origins) == 1:
+    if len(origins) == 1 and value_to_plot is not None:
         color_source_vector = get_values(
             value_key=value_to_plot,
             sdata=sdata,
@@ -835,9 +893,20 @@ def _set_color_source_vec(
             table_layer=table_layer,
         )[value_to_plot]
 
-        # numerical case, return early
-        # TODO temporary split until refactor is complete
-        if color_source_vector is not None and not isinstance(color_source_vector.dtype, pd.CategoricalDtype):
+        color_series = (
+            color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
+        )
+
+        kind, processed = _infer_color_data_kind(
+            series=color_series,
+            value_to_plot=value_to_plot,
+            element_name=element_name,
+            table_name=table_name,
+            warn_on_object_to_categorical=table_name is not None,
+        )
+
+        if kind == "numeric":
+            numeric_vector = processed
             if (
                 not isinstance(element, GeoDataFrame)
                 and isinstance(palette, list)
@@ -849,9 +918,10 @@ def _set_color_source_vec(
                     "Ignoring categorical palette which is given for a continuous variable. "
                     "Consider using `cmap` to pass a ColorMap."
                 )
-            return None, color_source_vector, False
+            return None, numeric_vector, False
 
-        color_source_vector = pd.Categorical(color_source_vector)  # convert, e.g., `pd.Series`
+        assert isinstance(processed, pd.Categorical)
+        color_source_vector = processed  # convert, e.g., `pd.Series`
 
         color_mapping = _get_categorical_color_mapping(
             adata=sdata.get(table_name, None),
@@ -2284,11 +2354,6 @@ def _get_wanted_render_elements(
         return sdata_wanted_elements, wanted_elements_on_cs, wants_elements
 
     raise ValueError(f"Unknown element type {element_type}")
-
-
-def _is_coercable_to_float(series: pd.Series) -> bool:
-    numeric_series = pd.to_numeric(series, errors="coerce")
-    return not numeric_series.isnull().any()
 
 
 def _ax_show_and_transform(

@@ -778,17 +778,12 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         # Test colorbar with NaN values - should use nanmin/nanmax
         sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
 
-    def test_plot_can_handle_non_numeric_radius_values(self, sdata_blobs: SpatialData):
-        """Test that non-numeric radius values are handled gracefully."""
-        sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
-
-        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
-
-    def test_plot_can_handle_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
-        """Test handling of mixed numeric and color-like data."""
+    def test_render_shapes_raises_on_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
+        """Columns containing both numeric values and colors should raise errors."""
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
         sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
 
-        sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
+        with pytest.raises(TypeError, match="mixed_data"):
+            sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()

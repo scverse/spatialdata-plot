@@ -48,7 +48,6 @@ from spatialdata_plot.pl.utils import (
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _hex_no_alpha,
-    _is_coercable_to_float,
     _map_color_seg,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
@@ -93,18 +92,7 @@ def _render_shapes(
         )
         sdata_filt[table_name] = table = joined_table
 
-    if (
-        col_for_color is not None
-        and table_name is not None
-        and col_for_color in sdata_filt[table_name].obs.columns
-        and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-        and not _is_coercable_to_float(color_col)
-    ):
-        logger.warning(
-            f"Converting copy of '{col_for_color}' column to categorical dtype for categorical plotting. "
-            f"Consider converting before plotting."
-        )
-        sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
+    shapes = sdata_filt[element]
 
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
@@ -585,17 +573,6 @@ def _render_points(
         and (col_for_color in sdata_filt[table_name].obs.columns or col_for_color in sdata_filt[table_name].var_names)
     ):
         points = points[coords].compute()
-        if (
-            col_for_color
-            and col_for_color in sdata_filt[table_name].obs.columns
-            and (color_col := sdata_filt[table_name].obs[col_for_color]).dtype == "O"
-            and not _is_coercable_to_float(color_col)
-        ):
-            logger.warning(
-                f"Converting copy of '{col_for_color}' column to categorical dtype for categorical "
-                f"plotting. Consider converting before plotting."
-            )
-            sdata_filt[table_name].obs[col_for_color] = sdata_filt[table_name].obs[col_for_color].astype("category")
     else:
         coords += [col_for_color]
         points = points[coords].compute()
