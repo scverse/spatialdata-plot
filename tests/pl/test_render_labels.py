@@ -383,7 +383,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels",
             color="category",
             groups=["a", "b"],
-            palette=["#111111", "#222222"],
+            palette=["red", "blue"],
         ).pl.show()
 
 

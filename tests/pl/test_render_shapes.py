@@ -627,7 +627,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         categories[:3] = ["a", "b", "c"]
         categories = pd.Categorical(categories, categories=["a", "b", "c"])
         sdata_blobs["table"].obs["category"] = categories
-        sdata_blobs["table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green, yellow
+        sdata_blobs["table"].uns["category_colors"] = ["red", "green", "blue"]  # purple, green, yellow
 
         sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
 
@@ -642,9 +642,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         categories = pd.Categorical(categories, categories=["a", "b", "c"])
         sdata_blobs["table"].obs["category"] = categories
         sdata_blobs["table"].uns["category_colors"] = {
-            "a": "#800080",
-            "b": "#008000",
-            "c": "#FFFF00",
+            "a": "red",
+            "b": "green",
+            "c": "blue",
         }
 
         sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
