@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
@@ -23,6 +22,7 @@ from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -272,11 +272,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
@@ -423,11 +419,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -544,11 +536,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -679,11 +667,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
@@ -918,9 +902,7 @@ class PlotAccessor:
         # go through tree
 
         for i, cs in enumerate(coordinate_systems):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning)
-                sdata = self._copy()
+            sdata = self._copy()
             _, has_images, has_labels, has_points, has_shapes = (
                 cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
             )

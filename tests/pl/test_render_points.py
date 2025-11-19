@@ -70,6 +70,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             palette=["lightgreen", "darkblue"],
         ).pl.show()
 
+    def test_plot_respects_custom_colors_from_uns_for_points(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+
+        # set a custom palette in `.uns` for the categorical column
+        sdata_blobs["table"].uns["genes_colors"] = ["#800080", "#008000", "#FFFF00"]
+
+        sdata_blobs.pl.render_points(
+            element="blobs_points",
+            color="genes",
+        ).pl.show()
+
     def test_plot_coloring_with_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
