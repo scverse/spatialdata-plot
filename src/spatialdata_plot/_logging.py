@@ -4,8 +4,10 @@ import logging
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
-from _pytest.logging import LogCaptureFixture
+if TYPE_CHECKING:  # pragma: no cover
+    from _pytest.logging import LogCaptureFixture
 
 
 def _setup_logger() -> "logging.Logger":
@@ -30,7 +32,7 @@ logger = _setup_logger()
 
 @contextmanager
 def logger_warns(
-    caplog: LogCaptureFixture,
+    caplog: "LogCaptureFixture",
     logger: logging.Logger,
     match: str | None = None,
     level: int = logging.WARNING,
