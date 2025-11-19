@@ -425,8 +425,10 @@ def _get_collection_shape(
             fill_c[is_num] = cmap(used_norm(num[is_num]))
 
         # non-numeric entries as explicit colors
-        if (~is_num).any():
-            fill_c[~is_num] = ColorConverter().to_rgba_array(c_series[~is_num].tolist())
+        # treat missing values as na_color, and only convert valid color-like entries
+        non_numeric_mask = (~is_num) & c_series.notna()
+        if non_numeric_mask.any():
+            fill_c[non_numeric_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_mask].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:

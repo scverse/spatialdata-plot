@@ -619,6 +619,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
         shapes_name = "blobs_polygons"
+        # Ensure that the table annotations point to the shapes element
+        sdata_blobs["table"].obs["region"] = pd.Categorical([shapes_name] * sdata_blobs["table"].n_obs)
         sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
 
         categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
@@ -631,6 +633,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_respects_custom_colors_from_uns_dict(self, sdata_blobs: SpatialData):
         shapes_name = "blobs_polygons"
+        # Ensure that the table annotations point to the shapes element
+        sdata_blobs["table"].obs["region"] = pd.Categorical([shapes_name] * sdata_blobs["table"].n_obs)
         sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
 
         categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
