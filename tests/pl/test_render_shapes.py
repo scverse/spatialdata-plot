@@ -640,6 +640,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green ,yellow
 
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+
     def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
 
