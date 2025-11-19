@@ -829,23 +829,14 @@ def _infer_color_data_kind(
         has_numeric = numeric_like.notna().any()
         has_non_numeric = numeric_like.isna().any()
 
-        # For table-backed columns, mixed numeric/non-numeric values are considered an error.
-        # For element-backed data (no table_name), fall back to categorical handling to remain robust.
         if has_numeric and has_non_numeric:
-            if table_name is not None:
-                invalid_examples = non_na[numeric_like.isna()].astype(str).unique()[:3]
-                location = f" in table '{table_name}'" if table_name is not None else ""
-                raise TypeError(
-                    f"Column '{value_to_plot}' for element '{element_label}'{location} contains both numeric and "
-                    f"non-numeric values (e.g. {', '.join(invalid_examples)}). "
-                    "Please ensure that the column stores consistent data."
-                )
-            if warn_on_object_to_categorical:
-                logger.warning(
-                    f"Converting copy of '{value_to_plot}' column to categorical dtype for categorical plotting. "
-                    "Consider converting before plotting."
-                )
-            return "categorical", pd.Categorical(series)
+            invalid_examples = non_na[numeric_like.isna()].astype(str).unique()[:3]
+            location = f" in table '{table_name}'" if table_name is not None else ""
+            raise TypeError(
+                f"Column '{value_to_plot}' for element '{element_label}'{location} contains both numeric and "
+                f"non-numeric values (e.g. {', '.join(invalid_examples)}). "
+                "Please ensure that the column stores consistent data."
+            )
 
         if has_numeric:
             return "numeric", pd.to_numeric(series, errors="coerce")

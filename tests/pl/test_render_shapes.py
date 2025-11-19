@@ -795,17 +795,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
 
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
-    """Test that NaN values in color data are handled gracefully (warning + log)."""
+    """Test that NaN values in color data are handled gracefully and logged."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
     sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
     # Add color column with NaN values
     sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-    # Expect both a UserWarning and a logger warning
+    # Expect a logger warning about NaN values
     with logger_warns(caplog, logger, match="Found 1 NaN values in color data"):
-        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
-            sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
 
 
 def test_plot_colorbar_normalization_with_nan_values(sdata_blobs: SpatialData):
@@ -827,11 +826,12 @@ def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
 
 
 def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
-    """Test handling of mixed numeric and color-like data without raising."""
+    """Test that mixed numeric and color-like data raises a clear error."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
     sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
     sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
 
-    # Should not raise; underlying code treats data robustly
-    sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
+    # Mixed numeric / non-numeric values should raise a TypeError
+    with pytest.raises(TypeError, match="contains both numeric and non-numeric values"):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()

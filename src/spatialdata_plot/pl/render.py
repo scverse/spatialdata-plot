@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections import abc
 from copy import copy
 
@@ -138,22 +137,18 @@ def _render_shapes(
         except (TypeError, ValueError):
             nan_count = int(_series.isna().sum())
             if nan_count:
-                msg = (
+                logger.warning(
                     f"Found {nan_count} NaN values in color data. "
                     "These observations will be colored with the 'na_color'."
                 )
-                warnings.warn(msg, UserWarning, stacklevel=2)
-                logger.warning(msg)
             color_vector = _series.to_numpy()
         else:
             if np.isnan(color_vector).any():
                 nan_count = int(np.isnan(color_vector).sum())
-                msg = (
+                logger.warning(
                     f"Found {nan_count} NaN values in color data. "
                     "These observations will be colored with the 'na_color'."
                 )
-                warnings.warn(msg, UserWarning, stacklevel=2)
-                logger.warning(msg)
 
     # Using dict.fromkeys here since set returns in arbitrary order
     # remove the color of NaN values, else it might be assigned to a category
