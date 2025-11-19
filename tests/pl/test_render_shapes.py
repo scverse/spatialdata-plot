@@ -757,6 +757,28 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
                 table_name="other_table",
             ).pl.show()
 
+    def test_raises_when_element_has_no_annotating_tables(self, sdata_blobs: SpatialData):
+        """Test that rendering an element with no annotating tables raises a clear error."""
+        # Work on an independent copy since we mutate tables
+        sdata_blobs_local = deepcopy(sdata_blobs)
+
+        # Change the region to something else so it no longer annotates "blobs_circles"
+        table = sdata_blobs_local["table"].copy()
+        table.obs["region"] = pd.Categorical(["blobs_points"] * table.n_obs)
+        table.uns["spatialdata_attrs"]["region"] = "blobs_points"
+        sdata_blobs_local["table"] = table
+
+        # Now "blobs_circles" should have no annotating tables
+        # Trying to render it with a color column should raise an error
+        with pytest.raises(
+            KeyError,
+            match="Element 'blobs_circles' has no annotating tables",
+        ):
+            sdata_blobs_local.pl.render_shapes(
+                "blobs_circles",
+                color="channel_0_sum",
+            ).pl.show()
+
     def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData, caplog):
         """Test that NaN values in color data are handled gracefully."""
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)

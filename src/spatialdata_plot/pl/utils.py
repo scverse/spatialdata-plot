@@ -2223,6 +2223,13 @@ def _validate_col_for_column_table(
             )
     else:
         tables = get_element_annotators(sdata, element_name)
+        if len(tables) == 0:
+            raise KeyError(
+                f"Element '{element_name}' has no annotating tables. "
+                f"Cannot use column '{col_for_color}' for coloring. "
+                "Please ensure the element is annotated by at least one table."
+            )
+        # Now check which tables contain the column
         for annotates in tables.copy():
             if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
                 tables.remove(annotates)
