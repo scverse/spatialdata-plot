@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
@@ -23,6 +22,7 @@ from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -272,11 +272,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
@@ -423,11 +419,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -544,11 +536,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -679,11 +667,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
@@ -918,9 +902,7 @@ class PlotAccessor:
         # go through tree
 
         for i, cs in enumerate(coordinate_systems):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning)
-                sdata = self._copy()
+            sdata = self._copy()
             _, has_images, has_labels, has_points, has_shapes = (
                 cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
             )
@@ -1000,16 +982,12 @@ class PlotAccessor:
                             assert isinstance(params_copy.color, str)
                             colors = sc.get.obs_df(sdata[table], [params_copy.color])
                             if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
-                                # Avoid mutating `.uns` by generating new colors implicitly.
-                                # Only copy colors if they already exist in `.uns`.
-                                color_key = f"{params_copy.color}_colors"
-                                if color_key in sdata[table].uns:
-                                    _maybe_set_colors(
-                                        source=sdata[table],
-                                        target=sdata[table],
-                                        key=params_copy.color,
-                                        palette=params_copy.palette,
-                                    )
+                                _maybe_set_colors(
+                                    source=sdata[table],
+                                    target=sdata[table],
+                                    key=params_copy.color,
+                                    palette=params_copy.palette,
+                                )
 
                         rasterize = (params_copy.scale is None) or (
                             isinstance(params_copy.scale, str)

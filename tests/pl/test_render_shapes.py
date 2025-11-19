@@ -11,7 +11,7 @@ import scanpy as sc
 from anndata import AnnData
 from matplotlib.colors import Normalize
 from shapely.geometry import MultiPolygon, Point, Polygon
-from spatialdata import SpatialData, deepcopy, get_element_instances
+from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
 from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
 from spatialdata.transformations._utils import _set_transformations
@@ -618,28 +618,32 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
-        labels_name = "blobs_labels"
-        instances = get_element_instances(sdata_blobs[labels_name])
-        n_obs = len(instances)
-        adata = AnnData(
-            get_standard_RNG().normal(size=(n_obs, 10)),
-            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
-        )
-        adata.obs["instance_id"] = instances.values
-        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
-        adata.obs["category"][:3] = ["a", "b", "c"]
-        adata.obs["region"] = labels_name
-        table = TableModel.parse(
-            adata=adata,
-            region_key="region",
-            instance_key="instance_id",
-            region=labels_name,
-        )
-        sdata_blobs["other_table"] = table
-        sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
-        sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green ,yellow
+        shapes_name = "blobs_polygons"
+        sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
 
-        sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+        categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
+        categories[:3] = ["a", "b", "c"]
+        categories = pd.Categorical(categories, categories=["a", "b", "c"])
+        sdata_blobs["table"].obs["category"] = categories
+        sdata_blobs["table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green, yellow
+
+        sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
+
+    def test_plot_respects_custom_colors_from_uns_dict(self, sdata_blobs: SpatialData):
+        shapes_name = "blobs_polygons"
+        sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
+
+        categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
+        categories[:3] = ["a", "b", "c"]
+        categories = pd.Categorical(categories, categories=["a", "b", "c"])
+        sdata_blobs["table"].obs["category"] = categories
+        sdata_blobs["table"].uns["category_colors"] = {
+            "a": "#800080",
+            "b": "#008000",
+            "c": "#FFFF00",
+        }
+
+        sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
 
     def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
@@ -749,39 +753,43 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
             ).pl.show()
         )
 
-    def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData):
-        """Test that NaN values in color data are handled gracefully."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        # Add color column with NaN values
-        sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData):
+    """Test that NaN values in color data are handled gracefully."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        # Test that rendering works with NaN values and issues warning
-        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
-            sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
+    # Add color column with NaN values
+    sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-    def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
-        """Test that colorbar normalization works correctly with NaN values."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    # Test that rendering works with NaN values and issues warning
+    with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
 
-        sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-        # Test colorbar with NaN values - should use nanmin/nanmax
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
+def test_plot_colorbar_normalization_with_nan_values(sdata_blobs: SpatialData):
+    """Test that colorbar normalization works correctly with NaN values."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
 
-    def test_plot_can_handle_non_numeric_radius_values(self, sdata_blobs: SpatialData):
-        """Test that non-numeric radius values are handled gracefully."""
-        sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+    sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+    # Test colorbar with NaN values - should use nanmin/nanmax
+    sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
 
-    def test_plot_can_handle_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
-        """Test handling of mixed numeric and color-like data."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
+    """Test that non-numeric radius values are handled gracefully."""
+    sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
 
-        sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+
+def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
+    """Test handling of mixed numeric and color-like data."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+
+    sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
