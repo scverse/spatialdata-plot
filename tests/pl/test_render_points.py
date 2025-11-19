@@ -84,8 +84,23 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
-    def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
+    def test_plot_can_color_by_color_name(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points", color="red").pl.show()
+
+    def test_plot_can_color_by_rgb_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0]).pl.show()
+
+    def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
+
+    def test_plot_can_color_by_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color="#88a136").pl.show()
+
+    def test_plot_can_color_by_hex_with_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color="#88a13688").pl.show()
+
+    def test_plot_alpha_overwrites_opacity_from_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0, 0.5], alpha=1.0).pl.show()
 
     def test_plot_points_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
@@ -161,6 +176,32 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             palette="lightgreen",
             size=20,
             method="datashader",
+        ).pl.show()
+
+    def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_points"])
+        obs = pd.DataFrame(
+            {
+                "instance_id": np.arange(n_obs),
+                "region": pd.Categorical(["blobs_points"] * n_obs),
+                "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+            }
+        )
+
+        table = TableModel.parse(
+            adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
+        sdata_blobs["datashader_table"] = table
+
+        sdata_blobs.pl.render_points(
+            "blobs_points",
+            color="foo",
+            table_name="datashader_table",
+            method="datashader",
+            size=5,
         ).pl.show()
 
     def test_plot_datashader_can_use_sum_as_reduction(self, sdata_blobs: SpatialData):
@@ -458,7 +499,7 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
 
     # Create a table that annotates a DIFFERENT element than the one we will render
     other_table = sdata_blobs_local["table"].copy()
-    other_table.obs["region"] = "blobs_labels"  # Different from blobs_points
+    other_table.obs["region"] = pd.Categorical(["blobs_labels"] * other_table.n_obs)  # Different from blobs_points
     other_table.uns["spatialdata_attrs"]["region"] = "blobs_labels"
     sdata_blobs_local["other_table"] = other_table
 
@@ -472,3 +513,31 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
+
+def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):
+    # Fast regression for https://github.com/scverse/spatialdata-plot/issues/479.
+    n_obs = len(sdata_blobs["blobs_points"])
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(n_obs),
+            "region": pd.Categorical(["blobs_points"] * n_obs),
+            "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+        }
+    )
+
+    table = TableModel.parse(
+        adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+        region="blobs_points",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata_blobs["datashader_table"] = table
+
+    sdata_blobs.pl.render_points(
+        "blobs_points",
+        color="foo",
+        table_name="datashader_table",
+        method="datashader",
+        size=5,
+    ).pl.show()

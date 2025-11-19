@@ -329,7 +329,7 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
 
     # Create a table that annotates a DIFFERENT element than the one we will render
     other_table = sdata_blobs_local["table"].copy()
-    other_table.obs["region"] = "blobs_multiscale_labels"
+    other_table.obs["region"] = pd.Categorical(["blobs_multiscale_labels"] * other_table.n_obs)
     other_table.uns["spatialdata_attrs"]["region"] = "blobs_multiscale_labels"
     sdata_blobs_local["other_table"] = other_table
 

@@ -99,6 +99,46 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata["table"] = table
         sdata.pl.render_shapes(color="val", fill_alpha=0.3).pl.show()
 
+    def test_plot_can_render_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+        sdata = SpatialData(shapes={"two_holes": sd_polygons})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
+
+    def test_plot_can_color_multipolygons_with_multiple_holes(self):
+        square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
+        first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
+        cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
+        cell_polygon_table["instance_id"] = [0]
+        sd_polygons = ShapesModel.parse(cell_polygon_table)
+
+        adata = anndata.AnnData(pd.DataFrame({"value": [1]}))
+        adata.obs["region"] = pd.Categorical(["two_holes"] * adata.n_obs)
+        adata.obs["instance_id"] = [0]
+        adata.obs["category"] = ["holey"]
+        table = TableModel.parse(adata, region="two_holes", region_key="region", instance_key="instance_id")
+
+        sdata = SpatialData(shapes={"two_holes": sd_polygons}, tables={"table": table})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="two_holes", color="category", table_name="table").pl.show(ax=ax)
+        ax.set_xlim(-1, 6)
+        ax.set_ylim(-1, 6)
+
+        fig.tight_layout()
+
     def test_plot_can_color_from_geodataframe(self, sdata_blobs: SpatialData):
         blob = deepcopy(sdata_blobs)
         blob["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * blob["table"].n_obs)
@@ -270,8 +310,23 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
-    def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
-        (sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show())
+    def test_plot_can_color_by_color_name(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+    def test_plot_can_color_by_rgb_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color=[0.5, 0.5, 1.0]).pl.show()
+
+    def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
+
+    def test_plot_can_color_by_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="#88a136").pl.show()
+
+    def test_plot_can_color_by_hex_with_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="#88a13688").pl.show()
+
+    def test_plot_alpha_overwrites_opacity_from_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color=[0.5, 0.5, 1.0, 0.5], fill_alpha=1.0).pl.show()
 
     def test_plot_shapes_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_polygons"])
@@ -585,6 +640,91 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["other_table"].uns["category_colors"] = ["#800080", "#008000", "#FFFF00"]  # purple, green ,yellow
 
         sdata_blobs.pl.render_labels("blobs_labels", color="category").pl.show()
+    def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
+
+    def test_plot_can_render_circles_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="square").pl.show()
+
+    def test_plot_can_render_polygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="hex").pl.show()
+
+    def test_plot_can_render_polygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="square").pl.show()
+
+    def test_plot_can_render_polygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="circle").pl.show()
+
+    def test_plot_can_render_multipolygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="hex").pl.show()
+
+    def test_plot_can_render_multipolygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="square").pl.show()
+
+    def test_plot_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle").pl.show()
+
+    def test_plot_visium_hex_hexagonal_grid(self, sdata_hexagonal_grid_spots: SpatialData):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+
+        sdata_hexagonal_grid_spots.pl.render_shapes(element="spots", shape="circle").pl.show(ax=axs[0])
+        sdata_hexagonal_grid_spots.pl.render_shapes(element="spots", shape="visium_hex").pl.show(ax=axs[1])
+
+    def test_plot_datashader_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_circles_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_circles", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_polygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", shape="circle", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="hex", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_square(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="square", method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_multipolygons_to_circle(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(element="blobs_multipolygons", shape="circle", method="datashader").pl.show()
+
+    def test_plot_can_render_shapes_with_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes("blobs_circles", outline_width=(10.0, 5.0)).pl.show()
+
+    def test_plot_can_render_shapes_with_colored_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", outline_width=(10.0, 5.0), outline_color=("purple", "orange")
+        ).pl.show()
+
+    def test_plot_can_render_double_outline_with_diff_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            element="blobs_circles", outline_color=("red", "blue"), outline_alpha=(0.7, 0.3), outline_width=(20, 10)
+        ).pl.show()
+
+    def test_plot_outline_alpha_takes_precedence(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            element="blobs_circles",
+            outline_color=("#ff660033", "#33aa0066"),
+            outline_width=(20, 10),
+            outline_alpha=(1.0, 1.0),
+        ).pl.show()
+
+    def test_plot_datashader_can_render_shapes_with_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes("blobs_circles", outline_width=(10.0, 5.0), method="datashader").pl.show()
+
+    def test_plot_datashader_can_render_shapes_with_colored_double_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons",
+            outline_width=(10.0, 5.0),
+            outline_color=("purple", "orange"),
+            method="datashader",
+        ).pl.show()
 
 
 def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
@@ -593,7 +733,7 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
 
     # Create a table that annotates a DIFFERENT element than the one we will render
     other_table = sdata_blobs_local["table"].copy()
-    other_table.obs["region"] = "blobs_points"  # Different from blobs_circles
+    other_table.obs["region"] = pd.Categorical(["blobs_points"] * other_table.n_obs)  # Different region
     other_table.uns["spatialdata_attrs"]["region"] = "blobs_points"
     sdata_blobs_local["other_table"] = other_table
 
@@ -607,3 +747,40 @@ def test_warns_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
                 table_name="other_table",
             ).pl.show()
         )
+
+    def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData):
+        """Test that NaN values in color data are handled gracefully."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+
+        # Add color column with NaN values
+        sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+
+        # Test that rendering works with NaN values and issues warning
+        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
+            sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
+
+    def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
+        """Test that colorbar normalization works correctly with NaN values."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+
+        sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+
+        # Test colorbar with NaN values - should use nanmin/nanmax
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
+
+    def test_plot_can_handle_non_numeric_radius_values(self, sdata_blobs: SpatialData):
+        """Test that non-numeric radius values are handled gracefully."""
+        sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+    def test_plot_can_handle_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
+        """Test handling of mixed numeric and color-like data."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+
+        sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+
+        sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
