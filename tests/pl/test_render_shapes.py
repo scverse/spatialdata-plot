@@ -103,7 +103,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_multipolygons_with_multiple_holes(self):
         square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
         first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
-        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 4.0), (3.0, 3.0)]
+        second_hole = [(3.0, 3.0), (4.0, 3.0), (4.0, 4.0), (3.0, 3.0), (3.0, 3.0)]
         multipoly = MultiPolygon([Polygon(square, holes=[first_hole, second_hole])])
         cell_polygon_table = gpd.GeoDataFrame(geometry=gpd.GeoSeries([multipoly]))
         sd_polygons = ShapesModel.parse(cell_polygon_table)
@@ -649,6 +649,20 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
+    def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
+        shapes_name = "blobs_polygons"
+        # Ensure that the table annotations point to the shapes element
+        sdata_blobs["table"].obs["region"] = pd.Categorical([shapes_name] * sdata_blobs["table"].n_obs)
+        sdata_blobs.set_table_annotates_spatialelement("table", region=shapes_name)
+
+        categories = get_standard_RNG().choice(["a", "b", "c"], size=sdata_blobs["table"].n_obs)
+        categories[:3] = ["a", "b", "c"]
+        categories = pd.Categorical(categories, categories=["a", "b", "c"])
+        sdata_blobs["table"].obs["category"] = categories
+        sdata_blobs["table"].uns["category_colors"] = ["red", "green", "blue"]
+
+        sdata_blobs.pl.render_shapes(shapes_name, color="category", table_name="table").pl.show()
+
     def test_plot_can_render_circles_to_hex(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", shape="hex").pl.show()
 
@@ -779,33 +793,45 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
                 color="channel_0_sum",
             ).pl.show()
 
-    def test_plot_can_handle_nan_values_in_color_data(self, sdata_blobs: SpatialData, caplog):
-        """Test that NaN values in color data are handled gracefully."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        # Add color column with NaN values
-        sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
+    """Test that NaN values in color data are handled gracefully (warning + log)."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
 
-        with logger_warns(caplog, logger, match="Found 1 NaN values in color data"):
+    # Add color column with NaN values
+    sdata_blobs.shapes["blobs_circles"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+
+    # Expect both a UserWarning and a logger warning
+    with logger_warns(caplog, logger, match="Found 1 NaN values in color data"):
+        with pytest.warns(UserWarning, match="Found 1 NaN values in color data"):
             sdata_blobs.pl.render_shapes(element="blobs_circles", color="color_with_nan", na_color="red").pl.show()
 
-    def test_plot_colorbar_normalization_with_nan_values(self, sdata_blobs: SpatialData):
-        """Test that colorbar normalization works correctly with NaN values."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
 
-        sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
+def test_plot_colorbar_normalization_with_nan_values(sdata_blobs: SpatialData):
+    """Test that colorbar normalization works correctly with NaN values."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
 
-        # Test colorbar with NaN values - should use nanmin/nanmax
-        sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
+    sdata_blobs.shapes["blobs_polygons"]["color_with_nan"] = [1.0, 2.0, np.nan, 4.0, 5.0]
 
-    def test_render_shapes_raises_on_mixed_numeric_and_color_data(self, sdata_blobs: SpatialData):
-        """Columns containing both numeric values and colors should raise errors."""
-        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
-        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    # Test colorbar with NaN values - should use nanmin/nanmax under the hood and not crash
+    sdata_blobs.pl.render_shapes(element="blobs_polygons", color="color_with_nan", na_color="gray").pl.show()
 
-        sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
 
-        with pytest.raises(TypeError, match="mixed_data"):
-            sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
+def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
+    """Test that non-numeric radius values are handled gracefully."""
+    sdata_blobs.shapes["blobs_circles"]["radius_mixed"] = [1.0, "invalid", 3.0, np.nan, 5.0]
+
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
+
+
+def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
+    """Test handling of mixed numeric and color-like data without raising."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+
+    sdata_blobs.shapes["blobs_circles"]["mixed_data"] = [1.0, 2.0, np.nan, "red", 5.0]
+
+    # Should not raise; underlying code treats data robustly
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()

@@ -663,12 +663,14 @@ def _render_points(
         cols = sc.get.obs_df(adata, [col_for_color])
         # maybe set color based on type
         if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
-            _maybe_set_colors(
-                source=adata,
-                target=adata,
-                key=col_for_color,
-                palette=palette,
-            )
+            uns_color_key = f"{col_for_color}_colors"
+            if uns_color_key in adata.uns:
+                _maybe_set_colors(
+                    source=adata,
+                    target=adata,
+                    key=col_for_color,
+                    palette=palette,
+                )
 
     # when user specified a single color, we emulate the form of `na_color` and use it
     default_color = (
@@ -786,7 +788,7 @@ def _render_points(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key = (
+        color_key: list[str] | None = (
             list(color_vector.categories.values)
             if (type(color_vector) is pd.core.arrays.categorical.Categorical)
             and (len(color_vector.categories.values) > 1)

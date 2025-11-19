@@ -923,17 +923,73 @@ def _set_color_source_vec(
         assert isinstance(processed, pd.Categorical)
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
-        color_mapping = _get_categorical_color_mapping(
-            adata=sdata.get(table_name, None),
-            cluster_key=value_to_plot,
-            color_source_vector=color_source_vector,
-            cmap_params=cmap_params,
-            alpha=alpha,
-            groups=groups,
-            palette=palette,
-            na_color=na_color,
-            render_type=render_type,
-        )
+        # Use the provided table_name parameter, fall back to only one present
+        table_to_use: str | None
+        if table_name is not None and table_name in sdata.tables:
+            table_to_use = table_name
+        elif table_name is not None and table_name not in sdata.tables:
+            logger.warning(f"Table '{table_name}' not found in `sdata.tables`. Falling back to default behavior.")
+            table_to_use = None
+        else:
+            table_keys = list(sdata.tables.keys())
+            if table_keys:
+                table_to_use = table_keys[0]
+                logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
+            else:
+                table_to_use = None
+
+        adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
+
+        # Check if custom colors exist in the table's .uns slot
+        if value_to_plot is not None and _has_colors_in_uns(sdata, table_name, value_to_plot):
+            # Extract colors directly from the table's .uns slot
+            # Convert Color to ColorLike (str) for the function
+            na_color_like: ColorLike = na_color.get_hex() if isinstance(na_color, Color) else na_color
+            color_mapping = _extract_colors_from_table_uns(
+                sdata=sdata,
+                table_name=table_name,
+                col_to_colorby=value_to_plot,
+                color_source_vector=color_source_vector,
+                na_color=na_color_like,
+            )
+            if color_mapping is not None:
+                if isinstance(palette, str):
+                    palette = [palette]
+                color_mapping = _modify_categorical_color_mapping(
+                    mapping=color_mapping,
+                    groups=groups,
+                    palette=palette,
+                )
+            else:
+                logger.warning(f"Failed to extract colors for '{value_to_plot}', falling back to default mapping.")
+                # Fall back to the existing method if extraction fails
+                color_mapping = _get_categorical_color_mapping(
+                    adata=sdata[table_to_use],
+                    cluster_key=value_to_plot,
+                    color_source_vector=color_source_vector,
+                    cmap_params=cmap_params,
+                    alpha=alpha,
+                    groups=groups,
+                    palette=palette,
+                    na_color=na_color,
+                    render_type=render_type,
+                )
+        else:
+            color_mapping = None
+
+        if color_mapping is None:
+            # Use the existing color mapping method
+            color_mapping = _get_categorical_color_mapping(
+                adata=adata_for_mapping,
+                cluster_key=value_to_plot,
+                color_source_vector=color_source_vector,
+                cmap_params=cmap_params,
+                alpha=alpha,
+                groups=groups,
+                palette=palette,
+                na_color=na_color,
+                render_type=render_type,
+            )
 
         color_source_vector = color_source_vector.set_categories(color_mapping.keys())
         if color_mapping is None:
@@ -992,8 +1048,9 @@ def _map_color_seg(
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
             val_im = map_array(seg.copy(), cell_id, cell_id)
-            if "#" in str(color_vector[0]):
-                # we have hex colors
+            first_value = color_vector.iloc[0] if isinstance(color_vector, pd.Series) else color_vector[0]
+            if _is_color_like(first_value):
+                # we have color-like values (e.g., hex or named colors)
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
             else:
@@ -1040,6 +1097,172 @@ def _generate_base_categorial_color_mapping(
         return dict(zip(categories, colors, strict=True))
 
     return _get_default_categorial_color_mapping(color_source_vector=color_source_vector, cmap_params=cmap_params)
+
+
+def _has_colors_in_uns(
+    sdata: sd.SpatialData,
+    table_name: str | None,
+    col_to_colorby: str,
+) -> bool:
+    """
+    Check if <column_name>_colors exists in the specified table's .uns slot.
+
+    Parameters
+    ----------
+    sdata
+        SpatialData object containing tables
+    table_name
+        Name of the table to check. If None, uses the first available table.
+    col_to_colorby
+        Name of the categorical column (e.g., "celltype")
+
+    Returns
+    -------
+    True if <col_to_colorby>_colors exists in the table's .uns, False otherwise
+    """
+    color_key = f"{col_to_colorby}_colors"
+
+    # Determine which table to use
+    if table_name is not None:
+        if table_name not in sdata.tables:
+            return False
+        table_to_use = table_name
+    else:
+        if len(sdata.tables.keys()) == 0:
+            return False
+        # When no table is specified, check all tables for the color key
+        return any(color_key in adata.uns for adata in sdata.tables.values())
+
+    adata = sdata.tables[table_to_use]
+    return color_key in adata.uns
+
+
+def _extract_colors_from_table_uns(
+    sdata: sd.SpatialData,
+    table_name: str | None,
+    col_to_colorby: str,
+    color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
+    na_color: ColorLike,
+) -> Mapping[str, str] | None:
+    """
+    Extract categorical colors from the <column_name>_colors pattern in adata.uns.
+
+    This function looks for colors stored in the format <col_to_colorby>_colors in the
+    specified table's .uns slot and creates a mapping from categories to colors.
+
+    Parameters
+    ----------
+    sdata
+        SpatialData object containing tables
+    table_name
+        Name of the table to look in. If None, uses the first available table.
+    col_to_colorby
+        Name of the categorical column (e.g., "celltype")
+    color_source_vector
+        Categorical vector containing the categories to map
+    na_color
+        Color to use for NaN/missing values
+
+    Returns
+    -------
+    Mapping from category names to hex colors, or None if colors not found
+    """
+    color_key = f"{col_to_colorby}_colors"
+
+    # Determine which table to use
+    if table_name is not None:
+        if table_name not in sdata.tables:
+            logger.warning(f"Table '{table_name}' not found in sdata. Available tables: {list(sdata.tables.keys())}")
+            return None
+        table_to_use = table_name
+    else:
+        if len(sdata.tables) == 0:
+            logger.warning("No tables found in sdata.")
+            return None
+        # No explicit table provided: search all tables for the color key
+        candidate_tables: list[str] = [
+            name
+            for name, ad in sdata.tables.items()
+            if color_key in ad.uns  # type: ignore[union-attr]
+        ]
+        if not candidate_tables:
+            logger.debug(f"Color key '{color_key}' not found in any table uns.")
+            return None
+        table_to_use = candidate_tables[0]
+        if len(candidate_tables) > 1:
+            logger.warning(
+                f"Color key '{color_key}' found in multiple tables {candidate_tables}; using table '{table_to_use}'."
+            )
+        logger.info(f"No table name provided, using '{table_to_use}' for color extraction.")
+
+    adata = sdata.tables[table_to_use]
+
+    # Check if the color pattern exists
+    if color_key not in adata.uns:
+        logger.debug(f"Color key '{color_key}' not found in table '{table_to_use}' uns.")
+        return None
+
+    # Extract colors and categories
+    stored_colors = adata.uns[color_key]
+    categories = color_source_vector.categories.tolist()
+
+    # Validate na_color format and convert to hex string
+    if isinstance(na_color, Color):
+        na_color_hex = na_color.get_hex()
+    else:
+        na_color_str = str(na_color)
+        if "#" not in na_color_str:
+            logger.warning("Expected `na_color` to be a hex color, converting...")
+            na_color_hex = to_hex(to_rgba(na_color)[:3])
+        else:
+            na_color_hex = na_color_str
+
+    # Strip alpha channel from na_color if present
+    if len(na_color_hex) == 9:  # #rrggbbaa format
+        na_color_hex = na_color_hex[:7]  # Keep only #rrggbb
+
+    def _to_hex_no_alpha(color_value: Any) -> str | None:
+        try:
+            rgba = to_rgba(color_value)[:3]
+            hex_color: str = to_hex(rgba)
+            if len(hex_color) == 9:
+                hex_color = hex_color[:7]
+            return hex_color
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Error converting color '{color_value}' to hex format: {e}")
+            return None
+
+    color_mapping: dict[str, str] = {}
+
+    if isinstance(stored_colors, Mapping):
+        for category in categories:
+            raw_color = stored_colors.get(category)
+            if raw_color is None:
+                logger.warning(f"No color specified for '{category}' in '{color_key}', using na_color.")
+                color_mapping[category] = na_color_hex
+                continue
+            hex_color = _to_hex_no_alpha(raw_color)
+            color_mapping[category] = hex_color if hex_color is not None else na_color_hex
+        logger.info(f"Successfully extracted {len(color_mapping)} colors from '{color_key}' in table '{table_to_use}'.")
+    else:
+        try:
+            hex_colors = [_to_hex_no_alpha(color) for color in stored_colors]
+        except TypeError:
+            logger.warning(f"Unsupported color storage for '{color_key}'. Expected sequence or mapping.")
+            return None
+
+        for i, category in enumerate(categories):
+            if i < len(hex_colors) and hex_colors[i] is not None:
+                hex_color = hex_colors[i]
+                assert hex_color is not None  # type narrowing for mypy
+                color_mapping[category] = hex_color
+            else:
+                logger.warning(f"Not enough colors provided for category '{category}', using na_color.")
+                color_mapping[category] = na_color_hex
+        logger.info(f"Successfully extracted {len(hex_colors)} colors from '{color_key}' in table '{table_to_use}'.")
+
+    color_mapping["NaN"] = na_color_hex
+    return color_mapping
 
 
 def _modify_categorical_color_mapping(
