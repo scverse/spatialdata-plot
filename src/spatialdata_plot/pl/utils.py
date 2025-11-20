@@ -446,8 +446,6 @@ def _get_collection_shape(
     else:
         outline_c = [None] * fill_c.shape[0]
 
-    # Build DataFrame of valid geometries
-    # Prefer working directly on a GeoDataFrame copy when possible
     if isinstance(shapes, GeoDataFrame):
         shapes_df: GeoDataFrame | pd.DataFrame = shapes.copy()
     else:
