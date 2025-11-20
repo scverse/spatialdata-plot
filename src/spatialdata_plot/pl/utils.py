@@ -52,6 +52,7 @@ from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
+from shapely.errors import GEOSException
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -446,7 +447,36 @@ def _get_collection_shape(
         outline_c = [None] * fill_c.shape[0]
 
     # Build DataFrame of valid geometries
-    shapes_df = pd.DataFrame(shapes, copy=True)
+    # Prefer working directly on a GeoDataFrame copy when possible
+    if isinstance(shapes, GeoDataFrame):
+        shapes_df: GeoDataFrame | pd.DataFrame = shapes.copy()
+    else:
+        shapes_df = pd.DataFrame(shapes, copy=True)
+
+    # Robustly normalise geometries to a canonical representation.
+    # This ensures consistent exterior/interior ring orientation so that
+    # matplotlib's fill rules handle holes correctly regardless of user input.
+    if "geometry" in shapes_df.columns:
+
+        def _normalize_geom(geom: Any) -> Any:
+            if geom is None or getattr(geom, "is_empty", False):
+                return geom
+            # shapely.normalize is available in shapely>=2; fall back to geom.normalize()
+            normalize_func = getattr(shapely, "normalize", None)
+            if callable(normalize_func):
+                try:
+                    return normalize_func(geom)
+                except (GEOSException, TypeError, ValueError):
+                    return geom
+            if hasattr(geom, "normalize"):
+                try:
+                    return geom.normalize()
+                except (GEOSException, TypeError, ValueError):
+                    return geom
+            return geom
+
+        shapes_df["geometry"] = shapes_df["geometry"].apply(_normalize_geom)
+
     shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
     shapes_df = shapes_df.reset_index(drop=True)
 
@@ -1672,52 +1702,36 @@ def _validate_polygons(shapes: GeoDataFrame) -> GeoDataFrame:
     return shapes
 
 
-def _collect_polygon_rings(
-    geom: shapely.Polygon | shapely.MultiPolygon,
-) -> list[tuple[np.ndarray, list[np.ndarray]]]:
-    """Collect exterior/interior coordinate rings from (Multi)Polygons."""
-    polygons: list[tuple[np.ndarray, list[np.ndarray]]] = []
+def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> list[mpatches.PathPatch]:
+    """
+    Create PathPatches from a MultiPolygon, preserving holes robustly.
 
-    def _collect(part: shapely.Polygon | shapely.MultiPolygon) -> None:
-        if part.geom_type == "Polygon":
-            exterior = np.asarray(part.exterior.coords)
-            interiors = [np.asarray(interior.coords) for interior in part.interiors]
-            polygons.append((exterior, interiors))
-        elif part.geom_type == "MultiPolygon":
-            for child in part.geoms:
-                _collect(child)
-        else:
-            raise ValueError(f"Unhandled geometry type: {repr(part.geom_type)}")
+    This follows the same strategy as GeoPandas' internal Polygon plotting:
+    each (multi)polygon part becomes a compound Path composed of the exterior
+    ring and all interior rings. Orientation is handled by prior geometry
+    normalization rather than manual ring reversal.
+    """
+    patches: list[mpatches.PathPatch] = []
 
-    _collect(geom)
-    return polygons
+    for poly in mp.geoms:
+        if poly.is_empty:
+            continue
 
+        # Ensure 2D vertices in case geometries carry Z
+        exterior = np.asarray(poly.exterior.coords)[..., :2]
+        interiors = [np.asarray(ring.coords)[..., :2] for ring in poly.interiors]
 
-def _create_ring_codes(length: int) -> npt.NDArray[np.uint8]:
-    codes = np.full(length, mpath.Path.LINETO, dtype=mpath.Path.code_type)
-    codes[0] = mpath.Path.MOVETO
-    return codes
-
-
-def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> mpatches.PathPatch:
-    # https://matplotlib.org/stable/gallery/shapes_and_collections/donut.html
-
-    patches = []
-    for exterior, interiors in _collect_polygon_rings(mp):
         if len(interiors) == 0:
+            # Simple polygon without holes
             patches.append(mpatches.Polygon(exterior, closed=True))
             continue
 
-        ring_vertices = [exterior]
-        ring_codes = [_create_ring_codes(len(exterior))]
-        for hole in interiors:
-            reversed_hole = hole[::-1]
-            ring_vertices.append(reversed_hole)
-            ring_codes.append(_create_ring_codes(len(reversed_hole)))
-
-        vertices = np.concatenate(ring_vertices)
-        all_codes = np.concatenate(ring_codes)
-        patches.append(mpatches.PathPatch(mpath.Path(vertices, all_codes)))
+        # Build a compound path: exterior + all interior rings
+        compound_path = mpath.Path.make_compound_path(
+            mpath.Path(exterior, closed=True),
+            *[mpath.Path(ring, closed=True) for ring in interiors],
+        )
+        patches.append(mpatches.PathPatch(compound_path))
 
     return patches
 
