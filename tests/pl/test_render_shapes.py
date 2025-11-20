@@ -130,6 +130,81 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         fig.tight_layout()
 
+    def test_plot_can_render_polygon_with_inverted_inner_ring(self):
+        ext = [
+            (7.866043666934409, 32.80184055229537),
+            (19.016191271980425, 203.48380872801957),
+            (75.90086964475744, 236.02570144190528),
+            (229.48380872801957, 235.98380872801957),
+            (235.98380872801957, 5.516191271980426),
+            (197.42585593903195, 6.144892860751103),
+            (116.5, 96.4575926540027),
+            (55.65582863082729, 12.531294107459374),
+            (7.866043666934409, 32.80184055229537),
+        ]
+
+        interior = [
+            (160.12353079731844, 173.21221665537414),
+            (181.80184055229537, 159.13395633306558),
+            (198.86604366693442, 179.80184055229537),
+            (178.19815944770465, 198.86604366693442),
+            (160.12353079731844, 173.21221665537414),
+        ]
+
+        polygon = Polygon(ext, [interior])
+        geo_df = gpd.GeoDataFrame(geometry=[polygon])
+        sdata = SpatialData(shapes={"inverted_ring": ShapesModel.parse(geo_df)})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="inverted_ring").pl.show(ax=ax)
+        ax.set_xlim(0, 250)
+        ax.set_ylim(0, 250)
+
+        fig.tight_layout()
+
+    def test_plot_can_render_multipolygon_with_inverted_inner_ring_and_disjoint_part(self):
+        ext = [
+            (7.866043666934409, 32.80184055229537),
+            (19.016191271980425, 203.48380872801957),
+            (75.90086964475744, 236.02570144190528),
+            (229.48380872801957, 235.98380872801957),
+            (235.98380872801957, 5.516191271980426),
+            (197.42585593903195, 6.144892860751103),
+            (116.5, 96.4575926540027),
+            (55.65582863082729, 12.531294107459374),
+            (7.866043666934409, 32.80184055229537),
+        ]
+
+        interior = [
+            (160.12353079731844, 173.21221665537414),
+            (181.80184055229537, 159.13395633306558),
+            (198.86604366693442, 179.80184055229537),
+            (178.19815944770465, 198.86604366693442),
+            (160.12353079731844, 173.21221665537414),
+        ]
+
+        # Part with a hole and non-standard orientation, plus a disjoint simple part
+        poly_with_hole = Polygon(ext, [interior])
+        disjoint_poly = Polygon(
+            [
+                (300.0, 300.0),
+                (320.0, 300.0),
+                (320.0, 320.0),
+                (300.0, 320.0),
+                (300.0, 300.0),
+            ]
+        )
+        multipoly = MultiPolygon([poly_with_hole, disjoint_poly])
+        geo_df = gpd.GeoDataFrame(geometry=[multipoly])
+        sdata = SpatialData(shapes={"inverted_ring_multipoly": ShapesModel.parse(geo_df)})
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_shapes(element="inverted_ring_multipoly").pl.show(ax=ax)
+        ax.set_xlim(0, 350)
+        ax.set_ylim(0, 350)
+
+        fig.tight_layout()
+
     def test_plot_can_color_multipolygons_with_multiple_holes(self):
         square = [(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]
         first_hole = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
