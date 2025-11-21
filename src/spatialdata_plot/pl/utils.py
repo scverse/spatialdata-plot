@@ -2278,9 +2278,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-        if len(groups) != len(palette):
+        if len(groups) != len(palette_group):
             raise ValueError(
-                f"The length of 'palette' and 'groups' must be the same, length is {len(palette)} and"
+                f"The length of 'palette' and 'groups' must be the same, length is {len(palette_group)} and"
                 f"{len(groups)} respectively."
             )
 
