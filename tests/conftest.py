@@ -302,7 +302,6 @@ def _get_labels() -> dict[str, DataArray | DataTree]:
 
 def _get_polygons() -> dict[str, GeoDataFrame]:
     # TODO: add polygons from geojson and from ragged arrays since now only the GeoDataFrame initializer is tested.
-    out = {}
     poly = GeoDataFrame(
         {
             "geometry": [
@@ -335,20 +334,19 @@ def _get_polygons() -> dict[str, GeoDataFrame]:
         }
     )
 
-    out["poly"] = ShapesModel.parse(poly, name="poly")
-    out["multipoly"] = ShapesModel.parse(multipoly, name="multipoly")
-
-    return out
+    return {
+        "poly": ShapesModel.parse(poly, name="poly"),
+        "multipoly": ShapesModel.parse(multipoly, name="multipoly"),
+    }
 
 
 def _get_shapes() -> dict[str, AnnData]:
     arr = get_standard_RNG().normal(size=(100, 2))
 
-    out = {}
-    out["shapes_0"] = ShapesModel.parse(arr, shape_type="Square", shape_size=3)
-    out["shapes_1"] = ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr)))
-
-    return out
+    return {
+        "shapes_0": ShapesModel.parse(arr, shape_type="Square", shape_size=3),
+        "shapes_1": ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr))),
+    }
 
 
 def _get_points() -> dict[str, pa.Table]:
@@ -382,15 +380,22 @@ def _get_table(
     )
     adata.obs[instance_key] = np.arange(adata.n_obs)
     if isinstance(region, str):
-        table = TableModel.parse(adata=adata, region=region, instance_key=instance_key)
-    elif isinstance(region, list):
+        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+    if isinstance(region, list):
         adata.obs[region_key] = get_standard_RNG().choice(region, size=adata.n_obs)
         adata.obs[instance_key] = get_standard_RNG().integers(0, 10, size=(100,))
-        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
-    else:
-        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
-
-    return table
+        return TableModel.parse(
+            adata=adata,
+            region=region,
+            region_key=region_key,
+            instance_key=instance_key,
+        )
+    return TableModel.parse(
+        adata=adata,
+        region=region,
+        region_key=region_key,
+        instance_key=instance_key,
+    )
 
 
 class PlotTesterMeta(ABCMeta):
