@@ -976,20 +976,18 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
             offset = location_offsets.get(location, 0.0)
-            pad = pad + offset
-            # update offset for the next bar on the same side (space consumed = pad + fraction)
-            location_offsets[location] = offset + pad + fraction
+            pos_offset = offset + pad
 
             if location == "right":
-                bbox = [1 + pad, 0, fraction, 1]
+                bbox = [1 + pos_offset, 0, fraction, 1]
             elif location == "left":
-                bbox = [-(pad + fraction), 0, fraction, 1]
+                bbox = [-(pos_offset + fraction), 0, fraction, 1]
             elif location == "top":
-                bbox = [0, 1 + pad, 1, fraction]
+                bbox = [0, 1 + pos_offset, 1, fraction]
             elif location == "bottom":
-                bbox = [0, -(pad + fraction), 1, fraction]
+                bbox = [0, -(pos_offset + fraction), 1, fraction]
             else:
-                bbox = [1 + pad, 0, fraction, 1]
+                bbox = [1 + pos_offset, 0, fraction, 1]
 
             cax = inset_axes(
                 spec.ax,
@@ -1025,6 +1023,27 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
+            fig_params.fig.canvas.draw()
+            bbox_axes = cb.ax.get_tightbbox(fig_params.fig.canvas.get_renderer()).transformed(
+                spec.ax.transAxes.inverted()
+            )
+            span = float(bbox_axes.width if location in {"left", "right"} else bbox_axes.height)
+            location_offsets[location] = offset + pad + span
+
+        def _get_axes_exterior_offsets(ax: Axes) -> dict[str, float]:
+            """Compute extra space occupied by ticks/labels/title relative to the axes box (in axes units)."""
+            fig = ax.figure
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            axes_bbox = ax.get_window_extent(renderer)
+            tight_bbox = ax.get_tightbbox(renderer)
+            width = axes_bbox.width if axes_bbox.width != 0 else 1.0
+            height = axes_bbox.height if axes_bbox.height != 0 else 1.0
+            left = max(0.0, (axes_bbox.x0 - tight_bbox.x0) / width)
+            right = max(0.0, (tight_bbox.x1 - axes_bbox.x1) / width)
+            bottom = max(0.0, (axes_bbox.y0 - tight_bbox.y0) / height)
+            top = max(0.0, (tight_bbox.y1 - axes_bbox.y1) / height)
+            return {"left": left, "right": right, "top": top, "bottom": bottom}
 
         cs_contents = _get_cs_contents(sdata)
 
@@ -1038,7 +1057,6 @@ class PlotAccessor:
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             assert isinstance(ax, Axes)
             axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params.colorbar else None
-            location_offsets: dict[str, float] = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
 
             wants_images = False
             wants_labels = False
@@ -1175,6 +1193,13 @@ class PlotAccessor:
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
             if legend_params.colorbar and axis_colorbar_requests:
+                base_offsets = _get_axes_exterior_offsets(ax)
+                location_offsets: dict[str, float] = {
+                    "left": base_offsets["left"],
+                    "right": base_offsets["right"],
+                    "top": base_offsets["top"],
+                    "bottom": base_offsets["bottom"],
+                }
                 # keep only unique bars per (location, label, layout+kwargs). Last request wins.
                 unique_specs_map: dict[tuple[Any, ...], ColorbarSpec] = {}
                 for spec in axis_colorbar_requests:

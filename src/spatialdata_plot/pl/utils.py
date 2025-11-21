@@ -2755,14 +2755,14 @@ def _validate_image_render_params(
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
-    scale = param_dict["scale"]
-    if scale and isinstance(sdata[el], DataTree):
-        if scale not in list(sdata[el].keys()) and scale != "full":
-            element_params[el]["scale"] = None
+        scale = param_dict["scale"]
+        if scale and isinstance(param_dict["sdata"][el], DataTree):
+            if scale not in list(param_dict["sdata"][el].keys()) and scale != "full":
+                element_params[el]["scale"] = None
+            else:
+                element_params[el]["scale"] = scale
         else:
             element_params[el]["scale"] = scale
-    else:
-        element_params[el]["scale"] = scale
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
