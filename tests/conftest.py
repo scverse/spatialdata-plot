@@ -1,3 +1,4 @@
+import contextlib
 import itertools
 from abc import ABC, ABCMeta
 from collections.abc import Callable
@@ -416,8 +417,16 @@ class PlotTester(ABC):  # noqa: B024
         fig.set_size_inches(width / DPI, height / DPI)
         fig.set_dpi(DPI)
 
-        # Apply constrained layout and save the plot
-        fig.set_constrained_layout(True)
+        # Ensure all elements (including colorbars) are visible
+        # Use tight_layout to adjust spacing, then set as current figure
+        try:
+            fig.tight_layout()
+        except (ValueError, RuntimeError):
+            # If tight_layout fails (e.g., constrained_layout already enabled), try constrained_layout
+            with contextlib.suppress(ValueError, RuntimeError):
+                fig.set_constrained_layout(True)
+        plt.figure(fig.number)  # Ensure this figure is current
+
         plt.savefig(out_path, dpi=DPI)
         plt.close()
 
@@ -433,7 +442,28 @@ class PlotTester(ABC):  # noqa: B024
 def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
     @wraps(fn)
     def save_and_compare(self, *args, **kwargs):
+        # Get all figures before the test runs
+        figures_before = set(plt.get_fignums())
+
         fn(self, *args, **kwargs)
+
+        # Get all figures after the test runs
+        figures_after = set(plt.get_fignums())
+
+        # Find the figure(s) created during the test
+        new_figures = figures_after - figures_before
+
+        if new_figures:
+            # Use the most recently created figure (highest number)
+            fig_num = max(new_figures)
+            plt.figure(fig_num)
+        elif figures_after:
+            # If no new figures were created, use the current figure
+            # but ensure it's set as current
+            current_fig = plt.gcf()
+            plt.figure(current_fig.number)
+        # If no figures exist, plt.gcf() will create one, which is fine
+
         self.compare(fig_name)
 
     if not callable(fn):
