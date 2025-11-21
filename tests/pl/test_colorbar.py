@@ -28,7 +28,11 @@ class TestColorbarControls(PlotTester, metaclass=PlotTesterMeta):
         return SpatialData(images={"img1": img1, "img2": img2}, labels={"lab": labels})
 
     def test_plot_image_auto_colorbar_for_single_channel(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_images(element="blobs_image").pl.show()
+        # Create a single-channel image by selecting only channel 0
+        original_img = sdata_blobs["blobs_image"]
+        single_channel_img = original_img.isel(c=0).expand_dims("c")
+        sdata_blobs["blobs_image_1c"] = single_channel_img
+        sdata_blobs.pl.render_images(element="blobs_image_1c").pl.show()
 
     def test_plot_colorbar_img_default_location(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_image", channel=0, cmap="Reds").pl.show()
