@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import sys
-import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
@@ -771,7 +770,7 @@ class PlotAccessor:
         legend_loc: str | None = "right margin",
         legend_fontoutline: int | None = None,
         na_in_legend: bool = True,
-        colorbar: bool | None = None,
+        colorbar: bool = True,
         colorbar_params: dict[str, object] | None = None,
         wspace: float | None = None,
         hspace: float = 0.25,
@@ -811,8 +810,7 @@ class PlotAccessor:
         return_ax :
             Whether to return the axes object created. False by default.
         colorbar :
-            DEPRECATED: use per-layer ``colorbar``/``colorbar_params`` instead. If provided, it will be honored
-            but will emit a DeprecationWarning.
+            Global switch to enable/disable all colorbars. Per-layer settings are ignored when this is False.
         colorbar_params :
             Global overrides passed to colorbars for all axes. Accepts the same keys as per-layer ``colorbar_params``
             (e.g., ``loc``, ``width``, ``pad``, ``label``).
@@ -943,16 +941,7 @@ class PlotAccessor:
             ncols=ncols,
             frameon=frameon,
         )
-        # colorbar is deprecated: warn when explicitly provided
-        legend_colorbar = True if colorbar is None else colorbar
-        if colorbar is not None:
-            warnings.warn(
-                "Parameter 'colorbar' in `.show()` is deprecated. "
-                "Please control colorbars via the per-layer `colorbar` and `colorbar_params` arguments.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
+        legend_colorbar = colorbar
         legend_params = LegendParams(
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,
@@ -1200,22 +1189,15 @@ class PlotAccessor:
                     "top": base_offsets["top"],
                     "bottom": base_offsets["bottom"],
                 }
-                # keep only unique bars per (location, label, layout+kwargs). Last request wins.
-                unique_specs_map: dict[tuple[Any, ...], ColorbarSpec] = {}
+                # keep only one bar per unique mappable on an axes; allow multiple bars even with identical params.
+                unique_specs: list[ColorbarSpec] = []
+                seen_mappables: set[int] = set()
                 for spec in axis_colorbar_requests:
-                    layer_layout, layer_kwargs, layer_label_override = _split_colorbar_params(spec.params)
-                    global_layout, global_kwargs, global_label_override = _split_colorbar_params(colorbar_params)
-                    layout = {**{"location": "right"}, **layer_layout, **global_layout}
-                    kwargs_key = tuple(sorted({**layer_kwargs, **global_kwargs}.items()))
-                    label_key = global_label_override or layer_label_override or spec.label
-                    key = (
-                        layout.get("location", "right"),
-                        label_key,
-                        tuple(sorted(layout.items())),
-                        kwargs_key,
-                    )
-                    unique_specs_map[key] = spec
-                unique_specs = list(unique_specs_map.values())
+                    mappable_id = id(spec.mappable)
+                    if mappable_id in seen_mappables:
+                        continue
+                    seen_mappables.add(mappable_id)
+                    unique_specs.append(spec)
 
                 for spec in unique_specs:
                     _draw_colorbar(spec, location_offsets)

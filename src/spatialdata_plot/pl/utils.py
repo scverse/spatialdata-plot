@@ -1985,7 +1985,7 @@ def _validate_show_parameters(
     legend_loc: str | None,
     legend_fontoutline: int | None,
     na_in_legend: bool,
-    colorbar: bool | None,
+    colorbar: bool,
     colorbar_params: dict[str, object] | None,
     wspace: float | None,
     hspace: float,
@@ -2044,8 +2044,8 @@ def _validate_show_parameters(
     if not isinstance(na_in_legend, bool):
         raise TypeError("Parameter 'na_in_legend' must be a boolean.")
 
-    if colorbar is not None and not isinstance(colorbar, bool):
-        raise TypeError("Parameter 'colorbar' must be a boolean or None.")
+    if not isinstance(colorbar, bool):
+        raise TypeError("Parameter 'colorbar' must be a boolean.")
 
     if colorbar_params is not None and not isinstance(colorbar_params, dict):
         raise TypeError("Parameter 'colorbar_params' must be a dictionary or None.")
