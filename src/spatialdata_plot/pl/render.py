@@ -82,10 +82,16 @@ def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, 
     return layout, cbar_kwargs, label_override
 
 
-def _resolve_colorbar_label(colorbar_params: dict[str, object] | None, fallback: str | None) -> str | None:
+def _resolve_colorbar_label(
+    colorbar_params: dict[str, object] | None, fallback: str | None, *, is_default_channel_name: bool = False
+) -> str | None:
     """Pick a colorbar label from params or fall back to provided value."""
     _, _, label = _split_colorbar_params(colorbar_params)
-    return label if label is not None else fallback
+    if label is not None:
+        return label
+    if is_default_channel_name:
+        return None
+    return fallback
 
 
 def _should_request_colorbar(
@@ -1082,7 +1088,11 @@ def _render_images(
                     ax=ax,
                     mappable=sm,
                     params=render_params.colorbar_params,
-                    label=_resolve_colorbar_label(render_params.colorbar_params, str(channels[0])),
+                    label=_resolve_colorbar_label(
+                        render_params.colorbar_params,
+                        str(channels[0]),
+                        is_default_channel_name=isinstance(channels[0], (int, np.integer)),
+                    ),
                 )
             )
 

@@ -100,3 +100,7 @@ class TestColorbarControls(PlotTester, metaclass=PlotTesterMeta):
         # adresses https://github.com/scverse/spatialdata-plot/issues/431
         sdata = self._make_multi_image_single_channel_sdata()
         sdata.pl.render_images(channel=0, cmap="Reds").pl.show(colorbar=False)
+
+    def test_plot_single_channel_default_channel_name_omits_label(self):
+        sdata = self._make_multi_image_single_channel_sdata()
+        sdata.pl.render_images(element="img1", channel=0, cmap="Reds").pl.show()

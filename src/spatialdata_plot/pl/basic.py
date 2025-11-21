@@ -33,6 +33,9 @@ from spatialdata_plot.pl.render import (
     _split_colorbar_params,
 )
 from spatialdata_plot.pl.render_params import (
+    CBAR_DEFAULT_FRACTION,
+    CBAR_DEFAULT_LOCATION,
+    CBAR_DEFAULT_PAD,
     CmapParams,
     ColorbarSpec,
     ImageRenderParams,
@@ -952,7 +955,11 @@ class PlotAccessor:
         )
 
         def _draw_colorbar(spec: ColorbarSpec, location_offsets: dict[str, float]) -> None:
-            base_layout = {"location": "right", "fraction": 0.08, "pad": 0.01}
+            base_layout = {
+                "location": CBAR_DEFAULT_LOCATION,
+                "fraction": CBAR_DEFAULT_FRACTION,
+                "pad": CBAR_DEFAULT_PAD,
+            }
             layer_layout, layer_kwargs, layer_label_override = _split_colorbar_params(spec.params)
             global_layout, global_kwargs, global_label_override = _split_colorbar_params(colorbar_params)
             layout = {**base_layout, **layer_layout, **global_layout}
