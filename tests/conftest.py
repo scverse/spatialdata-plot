@@ -77,8 +77,7 @@ def test_sdata_single_image():
             np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
         )
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -86,8 +85,7 @@ def test_sdata_single_image_with_label():
     """Creates a simple sdata object."""
     images = {"data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
     labels = {"label1": sd.models.Labels2DModel.parse(np.zeros((10, 10)), dims=("y", "x"))}
-    sdata = sd.SpatialData(images=images, labels=labels)
-    return sdata
+    return sd.SpatialData(images=images, labels=labels)
 
 
 @pytest.fixture
@@ -104,8 +102,7 @@ def test_sdata_multiple_images():
             np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
         ),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -141,8 +138,7 @@ def test_sdata_multiple_images_dims():
         "data2": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
         "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -153,8 +149,7 @@ def test_sdata_multiple_images_diverging_dims():
         "data2": sd.models.Image2DModel.parse(np.zeros((6, 10, 10)), dims=("c", "y", "x")),
         "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -226,27 +221,28 @@ def empty_table() -> SpatialData:
 )
 def sdata(request) -> SpatialData:
     if request.param == "full":
-        s = SpatialData(
+        return SpatialData(
             images=_get_images(),
             labels=_get_labels(),
             shapes=_get_shapes(),
             points=_get_points(),
             table=_get_table("sample1"),
         )
-    elif request.param == "empty":
-        s = SpatialData()
-    else:
-        s = request.getfixturevalue(request.param)
-    return s
+    if request.param == "empty":
+        return SpatialData()
+    return request.getfixturevalue(request.param)
 
 
 def _get_images() -> dict[str, DataArray | DataTree]:
-    out = {}
     dims_2d = ("c", "y", "x")
     dims_3d = ("z", "y", "x", "c")
-    out["image2d"] = Image2DModel.parse(
-        get_standard_RNG().normal(size=(3, 64, 64)), dims=dims_2d, c_coords=["r", "g", "b"]
-    )
+    out = {
+        "image2d": Image2DModel.parse(
+            get_standard_RNG().normal(size=(3, 64, 64)),
+            dims=dims_2d,
+            c_coords=["r", "g", "b"],
+        )
+    }
     out["image2d_multiscale"] = Image2DModel.parse(
         get_standard_RNG().normal(size=(3, 64, 64)), scale_factors=[2, 2], dims=dims_2d, c_coords=["r", "g", "b"]
     )
@@ -274,11 +270,10 @@ def _get_images() -> dict[str, DataArray | DataTree]:
 
 
 def _get_labels() -> dict[str, DataArray | DataTree]:
-    out = {}
     dims_2d = ("y", "x")
     dims_3d = ("z", "y", "x")
 
-    out["labels2d"] = Labels2DModel.parse(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d)
+    out = {"labels2d": Labels2DModel.parse(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d)}
     out["labels2d_multiscale"] = Labels2DModel.parse(
         get_standard_RNG().integers(0, 100, size=(64, 64)), scale_factors=[2, 4], dims=dims_2d
     )
@@ -347,8 +342,9 @@ def _get_polygons() -> dict[str, GeoDataFrame]:
 
 
 def _get_shapes() -> dict[str, AnnData]:
-    out = {}
     arr = get_standard_RNG().normal(size=(100, 2))
+
+    out = {}
     out["shapes_0"] = ShapesModel.parse(arr, shape_type="Square", shape_size=3)
     out["shapes_1"] = ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr)))
 
@@ -411,28 +407,34 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
-        width, height = 400, 300  # fixed dimensions so runners don't change
+        width, height = 400, 300  # base dimensions; actual PNG may grow/shrink
         fig = plt.gcf()
         fig.set_size_inches(width / DPI, height / DPI)
         fig.set_dpi(DPI)
 
-        # Ensure all elements (including colorbars) are visible
-        # Use constrained_layout first (better for colorbars), fallback to tight_layout with padding
-        # Check if constrained_layout is already enabled
+        # Try to get a reasonable layout first (helps with axes/labels)
         if not fig.get_constrained_layout():
             try:
                 fig.set_constrained_layout(True)
             except (ValueError, RuntimeError):
-                # If constrained_layout fails, use tight_layout with extra padding for colorbars
                 try:
                     fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
                 except (ValueError, RuntimeError):
-                    # Last resort: use subplots_adjust to add padding
                     fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
-        plt.figure(fig.number)  # Ensure this figure is current
 
-        plt.savefig(out_path, dpi=DPI)
-        plt.close()
+        plt.figure(fig.number)  # ensure this figure is current
+
+        # Force a draw so that tight bbox "sees" all artists (including colorbars)
+        fig.canvas.draw()
+
+        # Let matplotlib adjust the output size so that all artists are included
+        fig.savefig(
+            out_path,
+            dpi=DPI,
+            bbox_inches="tight",
+            pad_inches=0.02,  # small margin around everything
+        )
+        plt.close(fig)
 
         if tolerance is None:
             # see https://github.com/scverse/squidpy/pull/302
