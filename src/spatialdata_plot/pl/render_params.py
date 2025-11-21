@@ -6,6 +6,7 @@ from typing import Literal
 
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Colormap, ListedColormap, Normalize, rgb2hex, to_hex
 from matplotlib.figure import Figure
 
@@ -184,6 +185,17 @@ class LegendParams:
 
 
 @dataclass
+class ColorbarSpec:
+    """Data required to create a colorbar."""
+
+    ax: Axes
+    mappable: ScalarMappable
+    params: dict[str, object] | None = None
+    label: str | None = None
+    alpha: float | None = None
+
+
+@dataclass
 class ScalebarParams:
     """Scalebar params."""
 
@@ -213,6 +225,8 @@ class ShapesRenderParams:
     table_layer: str | None = None
     shape: Literal["circle", "hex", "visium_hex", "square"] | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
 
 
 @dataclass
@@ -233,6 +247,8 @@ class PointsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
 
 
 @dataclass
@@ -247,6 +263,8 @@ class ImageRenderParams:
     percentiles_for_norm: tuple[float | None, float | None] = (None, None)
     scale: str | None = None
     zorder: int = 0
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
 
 
 @dataclass
@@ -267,3 +285,5 @@ class LabelsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     zorder: int = 0
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
