@@ -197,7 +197,7 @@ class ColorbarSpec:
 
 CBAR_DEFAULT_LOCATION = "right"
 CBAR_DEFAULT_FRACTION = 0.05
-CBAR_DEFAULT_PAD = 0.01
+CBAR_DEFAULT_PAD = 0.015
 
 
 @dataclass

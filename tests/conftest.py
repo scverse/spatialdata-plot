@@ -1,4 +1,3 @@
-import contextlib
 import itertools
 from abc import ABC, ABCMeta
 from collections.abc import Callable
@@ -418,13 +417,18 @@ class PlotTester(ABC):  # noqa: B024
         fig.set_dpi(DPI)
 
         # Ensure all elements (including colorbars) are visible
-        # Use tight_layout to adjust spacing, then set as current figure
-        try:
-            fig.tight_layout()
-        except (ValueError, RuntimeError):
-            # If tight_layout fails (e.g., constrained_layout already enabled), try constrained_layout
-            with contextlib.suppress(ValueError, RuntimeError):
+        # Use constrained_layout first (better for colorbars), fallback to tight_layout with padding
+        # Check if constrained_layout is already enabled
+        if not fig.get_constrained_layout():
+            try:
                 fig.set_constrained_layout(True)
+            except (ValueError, RuntimeError):
+                # If constrained_layout fails, use tight_layout with extra padding for colorbars
+                try:
+                    fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
+                except (ValueError, RuntimeError):
+                    # Last resort: use subplots_adjust to add padding
+                    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         plt.figure(fig.number)  # Ensure this figure is current
 
         plt.savefig(out_path, dpi=DPI)
