@@ -961,6 +961,7 @@ class PlotAccessor:
             fig: Figure,
             renderer: RendererBase,
             axis_bbox: Bbox,
+            base_offsets: dict[str, float],
             trackers: dict[str, float],
         ) -> None:
             base_layout = {
@@ -982,29 +983,32 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
+            span_width = axis_bbox.width + base_offsets["left"] + base_offsets["right"]
+            span_height = axis_bbox.height + base_offsets["top"] + base_offsets["bottom"]
+
             if location in {"left", "right"}:
                 pad_fig = pad * axis_bbox.width
                 width_fig = fraction * axis_bbox.width
-                height_fig = axis_bbox.height
+                height_fig = span_height
                 if location == "left":
                     x0 = trackers["left"] - pad_fig - width_fig
-                    y0 = axis_bbox.y0
+                    y0 = axis_bbox.y0 - base_offsets["bottom"]
                     trackers["left"] = x0
                 else:
                     x0 = trackers["right"] + pad_fig
-                    y0 = axis_bbox.y0
+                    y0 = axis_bbox.y0 - base_offsets["bottom"]
                     trackers["right"] = x0 + width_fig
                 cax = fig.add_axes([x0, y0, width_fig, height_fig])
             else:
                 pad_fig = pad * axis_bbox.height
                 height_fig = fraction * axis_bbox.height
-                width_fig = axis_bbox.width
+                width_fig = span_width
                 if location == "bottom":
-                    x0 = axis_bbox.x0
+                    x0 = axis_bbox.x0 - base_offsets["left"]
                     y0 = trackers["bottom"] - pad_fig - height_fig
                     trackers["bottom"] = y0
                 else:
-                    x0 = axis_bbox.x0
+                    x0 = axis_bbox.x0 - base_offsets["left"]
                     y0 = trackers["top"] + pad_fig
                     trackers["top"] = y0 + height_fig
                 cax = fig.add_axes([x0, y0, width_fig, height_fig])
@@ -1221,7 +1225,7 @@ class PlotAccessor:
                     "top": axis_bbox.y1 + base_offsets["top"],
                 }
                 for spec in unique_specs:
-                    _draw_colorbar(spec, fig, renderer, axis_bbox, trackers)
+                    _draw_colorbar(spec, fig, renderer, axis_bbox, base_offsets, trackers)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
