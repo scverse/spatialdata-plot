@@ -18,8 +18,6 @@ from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.axes_grid1.axes_divider import AxesDivider
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
@@ -955,7 +953,7 @@ class PlotAccessor:
             colorbar=legend_colorbar,
         )
 
-        def _draw_colorbar(spec: ColorbarSpec, divider: AxesDivider) -> None:
+        def _draw_colorbar(spec: ColorbarSpec) -> None:
             base_layout = {
                 "location": CBAR_DEFAULT_LOCATION,
                 "fraction": CBAR_DEFAULT_FRACTION,
@@ -976,11 +974,14 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-            size_spec = f"{max(fraction, 0) * 100:.3f}%"
-            pad_spec = f"{max(pad, 0) * 100:.3f}%"
-            cax = divider.append_axes(location, size=size_spec, pad=pad_spec)
-
-            cb = fig_params.fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
+            cb = fig_params.fig.colorbar(
+                spec.mappable,
+                ax=spec.ax,
+                location=location,
+                fraction=fraction,
+                pad=pad,
+                **cbar_kwargs,
+            )
             if location == "left":
                 cb.ax.yaxis.set_ticks_position("left")
                 cb.ax.yaxis.set_label_position("left")
@@ -1163,9 +1164,8 @@ class PlotAccessor:
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
 
-                divider = make_axes_locatable(ax)
                 for spec in unique_specs:
-                    _draw_colorbar(spec, divider)
+                    _draw_colorbar(spec)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
