@@ -16,8 +16,11 @@ from anndata import AnnData
 from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
+from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1.axes_divider import AxesDivider
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
@@ -953,7 +956,12 @@ class PlotAccessor:
             colorbar=legend_colorbar,
         )
 
-        def _draw_colorbar(spec: ColorbarSpec) -> None:
+        def _draw_colorbar(
+            spec: ColorbarSpec,
+            divider: AxesDivider,
+            renderer: RendererBase,
+            location_offsets: dict[str, float],
+        ) -> None:
             base_layout = {
                 "location": CBAR_DEFAULT_LOCATION,
                 "fraction": CBAR_DEFAULT_FRACTION,
@@ -965,8 +973,7 @@ class PlotAccessor:
             cbar_kwargs = {**layer_kwargs, **global_kwargs}
 
             location = cast(str, layout.get("location", base_layout["location"]))
-            allowed_locations = {"left", "right", "top", "bottom"}
-            if location not in allowed_locations:
+            if location not in {"left", "right", "top", "bottom"}:
                 location = CBAR_DEFAULT_LOCATION
             default_orientation = "vertical" if location in {"right", "left"} else "horizontal"
             cbar_kwargs.setdefault("orientation", default_orientation)
@@ -974,14 +981,12 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-            cb = fig_params.fig.colorbar(
-                spec.mappable,
-                ax=spec.ax,
-                location=location,
-                fraction=fraction,
-                pad=pad,
-                **cbar_kwargs,
-            )
+            total_pad = location_offsets.get(location, 0.0) + pad
+            size_spec = f"{max(fraction, 0) * 100:.3f}%"
+            pad_spec = f"{max(total_pad, 0) * 100:.3f}%"
+            cax = divider.append_axes(location, size=size_spec, pad=pad_spec)
+
+            cb = fig_params.fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
             if location == "left":
                 cb.ax.yaxis.set_ticks_position("left")
                 cb.ax.yaxis.set_label_position("left")
@@ -1005,6 +1010,20 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
+            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
+            span = float(bbox_axes.width if location in {"left", "right"} else bbox_axes.height)
+            location_offsets[location] = total_pad + span
+
+        def _get_axes_exterior_offsets(ax: Axes, renderer: RendererBase) -> dict[str, float]:
+            axes_bbox = ax.get_window_extent(renderer)
+            tight_bbox = ax.get_tightbbox(renderer)
+            width = axes_bbox.width if axes_bbox.width != 0 else 1.0
+            height = axes_bbox.height if axes_bbox.height != 0 else 1.0
+            left = max(0.0, (axes_bbox.x0 - tight_bbox.x0) / width)
+            right = max(0.0, (tight_bbox.x1 - axes_bbox.x1) / width)
+            bottom = max(0.0, (axes_bbox.y0 - tight_bbox.y0) / height)
+            top = max(0.0, (tight_bbox.y1 - axes_bbox.y1) / height)
+            return {"left": left, "right": right, "top": top, "bottom": bottom}
 
         cs_contents = _get_cs_contents(sdata)
 
@@ -1164,8 +1183,11 @@ class PlotAccessor:
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
 
+                renderer = fig_params.fig.canvas.get_renderer()
+                divider = make_axes_locatable(ax)
+                location_offsets = _get_axes_exterior_offsets(ax, renderer)
                 for spec in unique_specs:
-                    _draw_colorbar(spec)
+                    _draw_colorbar(spec, divider, renderer, location_offsets)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
