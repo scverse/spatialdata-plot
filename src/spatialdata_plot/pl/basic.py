@@ -19,7 +19,7 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from matplotlib.transforms import Bbox
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
@@ -960,9 +960,8 @@ class PlotAccessor:
             spec: ColorbarSpec,
             fig: Figure,
             renderer: RendererBase,
-            axis_bbox: Bbox,
-            base_offsets: dict[str, float],
-            trackers: dict[str, float],
+            base_offsets_axes: dict[str, float],
+            trackers_axes: dict[str, float],
         ) -> None:
             base_layout = {
                 "location": CBAR_DEFAULT_LOCATION,
@@ -983,35 +982,23 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-            span_width = axis_bbox.width + base_offsets["left"] + base_offsets["right"]
-            span_height = axis_bbox.height + base_offsets["top"] + base_offsets["bottom"]
-
             if location in {"left", "right"}:
-                pad_fig = pad * axis_bbox.width
-                width_fig = fraction * axis_bbox.width
-                height_fig = span_height
-                if location == "left":
-                    x0 = trackers["left"] - pad_fig - width_fig
-                    y0 = axis_bbox.y0 - base_offsets["bottom"]
-                    trackers["left"] = x0
-                else:
-                    x0 = trackers["right"] + pad_fig
-                    y0 = axis_bbox.y0 - base_offsets["bottom"]
-                    trackers["right"] = x0 + width_fig
-                cax = fig.add_axes([x0, y0, width_fig, height_fig])
+                pad_axes = pad + trackers_axes[location]
+                x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
+                bbox = (float(x0), 0.0, float(fraction), 1.0)
             else:
-                pad_fig = pad * axis_bbox.height
-                height_fig = fraction * axis_bbox.height
-                width_fig = span_width
-                if location == "bottom":
-                    x0 = axis_bbox.x0 - base_offsets["left"]
-                    y0 = trackers["bottom"] - pad_fig - height_fig
-                    trackers["bottom"] = y0
-                else:
-                    x0 = axis_bbox.x0 - base_offsets["left"]
-                    y0 = trackers["top"] + pad_fig
-                    trackers["top"] = y0 + height_fig
-                cax = fig.add_axes([x0, y0, width_fig, height_fig])
+                pad_axes = pad + trackers_axes[location]
+                y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
+                bbox = (0.0, float(y0), 1.0, float(fraction))
+            cax = inset_axes(
+                spec.ax,
+                width="100%",
+                height="100%",
+                loc="center",
+                bbox_to_anchor=bbox,
+                bbox_transform=spec.ax.transAxes,
+                borderpad=0.0,
+            )
 
             cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
             if location == "left":
@@ -1037,15 +1024,15 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
-            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
             if location == "left":
-                trackers["left"] = bbox_axes.x0
+                trackers_axes["left"] = pad_axes + bbox_axes.width
             elif location == "right":
-                trackers["right"] = bbox_axes.x1
+                trackers_axes["right"] = pad_axes + bbox_axes.width
             elif location == "bottom":
-                trackers["bottom"] = bbox_axes.y0
+                trackers_axes["bottom"] = pad_axes + bbox_axes.height
             elif location == "top":
-                trackers["top"] = bbox_axes.y1
+                trackers_axes["top"] = pad_axes + bbox_axes.height
 
         cs_contents = _get_cs_contents(sdata)
 
@@ -1210,22 +1197,16 @@ class PlotAccessor:
                         continue
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
-                axis_bbox = axis.get_position()
-                tight_bbox = axis.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
-                base_offsets = {
-                    "left": axis_bbox.x0 - tight_bbox.x0,
-                    "right": tight_bbox.x1 - axis_bbox.x1,
-                    "bottom": axis_bbox.y0 - tight_bbox.y0,
-                    "top": tight_bbox.y1 - axis_bbox.y1,
+                tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
+                base_offsets_axes = {
+                    "left": max(0.0, -tight_bbox.x0),
+                    "right": max(0.0, tight_bbox.x1 - 1),
+                    "bottom": max(0.0, -tight_bbox.y0),
+                    "top": max(0.0, tight_bbox.y1 - 1),
                 }
-                trackers = {
-                    "left": axis_bbox.x0 - base_offsets["left"],
-                    "right": axis_bbox.x1 + base_offsets["right"],
-                    "bottom": axis_bbox.y0 - base_offsets["bottom"],
-                    "top": axis_bbox.y1 + base_offsets["top"],
-                }
+                trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
                 for spec in unique_specs:
-                    _draw_colorbar(spec, fig, renderer, axis_bbox, base_offsets, trackers)
+                    _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
