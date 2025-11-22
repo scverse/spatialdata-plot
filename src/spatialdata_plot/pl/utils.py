@@ -75,6 +75,7 @@ from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     Color,
+    ColorbarSpec,
     FigParams,
     ImageRenderParams,
     LabelsRenderParams,
@@ -1525,6 +1526,9 @@ def _decorate_axs(
     legend_fontoutline: int | None = None,
     na_in_legend: bool = True,
     colorbar: bool = True,
+    colorbar_params: dict[str, object] | None = None,
+    colorbar_requests: list[ColorbarSpec] | None = None,
+    colorbar_label: str | None = None,
     scalebar_dx: Sequence[float] | None = None,
     scalebar_units: Sequence[str] | None = None,
     scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
@@ -1563,10 +1567,16 @@ def _decorate_axs(
                 na_in_legend=na_in_legend,
                 multi_panel=fig_params.axs is not None,
             )
-        elif colorbar:
-            # TODO: na_in_legend should have some effect here
-            cb = plt.colorbar(cax, ax=ax, pad=0.01, fraction=0.08, aspect=30)
-            cb.solids.set_alpha(alpha)
+        elif colorbar and colorbar_requests is not None and cax is not None:
+            colorbar_requests.append(
+                ColorbarSpec(
+                    ax=ax,
+                    mappable=cax,
+                    params=colorbar_params,
+                    label=colorbar_label,
+                    alpha=alpha,
+                )
+            )
 
     if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
         scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
@@ -1976,6 +1986,7 @@ def _validate_show_parameters(
     legend_fontoutline: int | None,
     na_in_legend: bool,
     colorbar: bool,
+    colorbar_params: dict[str, object] | None,
     wspace: float | None,
     hspace: float,
     ncols: int,
@@ -2036,6 +2047,9 @@ def _validate_show_parameters(
     if not isinstance(colorbar, bool):
         raise TypeError("Parameter 'colorbar' must be a boolean.")
 
+    if colorbar_params is not None and not isinstance(colorbar_params, dict):
+        raise TypeError("Parameter 'colorbar_params' must be a dictionary or None.")
+
     if wspace is not None and not isinstance(wspace, float):
         raise TypeError("Parameter 'wspace' must be a float.")
 
@@ -2077,7 +2091,16 @@ def _validate_show_parameters(
 
 
 def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
-    if (element := param_dict.get("element")) is not None and not isinstance(element, str):
+    colorbar = param_dict.get("colorbar", "auto")
+    if colorbar not in {True, False, None, "auto"}:
+        raise TypeError("Parameter 'colorbar' must be one of True, False or 'auto'.")
+
+    colorbar_params = param_dict.get("colorbar_params")
+    if colorbar_params is not None and not isinstance(colorbar_params, dict):
+        raise TypeError("Parameter 'colorbar_params' must be a dictionary or None.")
+
+    element = param_dict.get("element")
+    if element is not None and not isinstance(element, str):
         raise ValueError(
             "Parameter 'element' must be a string. If you want to display more elements, pass `element` "
             "as `None` or chain pl.render(...).pl.render(...).pl.show()"
@@ -2091,7 +2114,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif element_type == "shapes":
         param_dict["element"] = [element] if element is not None else list(param_dict["sdata"].shapes.keys())
 
-    if (channel := param_dict.get("channel")) is not None and not isinstance(channel, list | str | int):
+    channel = param_dict.get("channel")
+    if channel is not None and not isinstance(channel, list | str | int):
         raise TypeError("Parameter 'channel' must be a string, an integer, or a list of strings or integers.")
     if isinstance(channel, list):
         if not all(isinstance(c, str | int) for c in channel):
@@ -2102,10 +2126,12 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif "channel" in param_dict:
         param_dict["channel"] = [channel] if channel is not None else None
 
-    if (contour_px := param_dict.get("contour_px")) and not isinstance(contour_px, int):
+    contour_px = param_dict.get("contour_px")
+    if contour_px and not isinstance(contour_px, int):
         raise TypeError("Parameter 'contour_px' must be an integer.")
 
-    if (color := param_dict.get("color")) and element_type in {
+    color = param_dict.get("color")
+    if color and element_type in {
         "shapes",
         "points",
         "labels",
@@ -2135,7 +2161,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif "color" in param_dict and element_type != "labels":
         param_dict["col_for_color"] = None
 
-    if outline_width := param_dict.get("outline_width"):
+    outline_width = param_dict.get("outline_width")
+    if outline_width:
         # outline_width only exists for shapes at the moment
         if isinstance(outline_width, tuple):
             for ow in outline_width:
@@ -2149,7 +2176,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if isinstance(outline_width, float | int) and outline_width < 0:
             raise ValueError("Parameter 'outline_width' cannot be negative.")
 
-    if outline_alpha := param_dict.get("outline_alpha"):
+    outline_alpha = param_dict.get("outline_alpha")
+    if outline_alpha:
         if isinstance(outline_alpha, tuple):
             if element_type != "shapes":
                 raise ValueError("Parameter 'outline_alpha' must be a single numeric.")
@@ -2176,7 +2204,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         elif not isinstance(outline_alpha, float | int) or not 0 <= outline_alpha <= 1:
             raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
 
-    if outline_color := param_dict.get("outline_color"):
+    outline_color = param_dict.get("outline_color")
+    if outline_color:
         if not isinstance(outline_color, str | tuple | list):
             raise TypeError("Parameter 'color' must be a string or a tuple/list of floats or colors.")
         if isinstance(outline_color, tuple | list):
@@ -2201,7 +2230,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if contour_px is not None and contour_px <= 0:
         raise ValueError("Parameter 'contour_px' must be a positive number.")
 
-    if (alpha := param_dict.get("alpha")) is not None:
+    alpha = param_dict.get("alpha")
+    if alpha is not None:
         if not isinstance(alpha, float | int):
             raise TypeError("Parameter 'alpha' must be numeric.")
         if not 0 <= alpha <= 1:
@@ -2210,7 +2240,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         # set default alpha for points if not given by user explicitly or implicitly (as part of color)
         param_dict["alpha"] = 1.0
 
-    if (fill_alpha := param_dict.get("fill_alpha")) is not None:
+    fill_alpha = param_dict.get("fill_alpha")
+    if fill_alpha is not None:
         if not isinstance(fill_alpha, float | int):
             raise TypeError("Parameter 'fill_alpha' must be numeric.")
         if fill_alpha < 0:
@@ -2219,11 +2250,14 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         # set default fill_alpha for shapes if not given by user explicitly or implicitly (as part of color)
         param_dict["fill_alpha"] = 1.0
 
-    if (cmap := param_dict.get("cmap")) is not None and (palette := param_dict.get("palette")) is not None:
+    cmap = param_dict.get("cmap")
+    palette = param_dict.get("palette")
+    if cmap is not None and palette is not None:
         raise ValueError("Both `palette` and `cmap` are specified. Please specify only one of them.")
     param_dict["cmap"] = cmap
 
-    if (groups := param_dict.get("groups")) is not None:
+    groups = param_dict.get("groups")
+    if groups is not None:
         if not isinstance(groups, list | str):
             raise TypeError("Parameter 'groups' must be a string or a list of strings.")
         if isinstance(groups, str):
@@ -2233,19 +2267,20 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if isinstance((palette := param_dict["palette"]), list):
+    if isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
     elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
-    if element_type in ["shapes", "points", "labels"] and (palette := param_dict.get("palette")) is not None:
+    palette_group = param_dict.get("palette")
+    if element_type in ["shapes", "points", "labels"] and palette_group is not None:
         groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-        if len(groups) != len(palette):
+        if len(groups) != len(palette_group):
             raise ValueError(
-                f"The length of 'palette' and 'groups' must be the same, length is {len(palette)} and"
+                f"The length of 'palette' and 'groups' must be the same, length is {len(palette_group)} and"
                 f"{len(groups)} respectively."
             )
 
@@ -2261,13 +2296,15 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     # validation happens within Color constructor
     param_dict["na_color"] = Color(param_dict.get("na_color"))
 
-    if (norm := param_dict.get("norm")) is not None:
+    norm = param_dict.get("norm")
+    if norm is not None:
         if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
         if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
-    if (scale := param_dict.get("scale")) is not None:
+    scale = param_dict.get("scale")
+    if scale is not None:
         if element_type in {"images", "labels"} and not isinstance(scale, str):
             raise TypeError("Parameter 'scale' must be a string if specified.")
         if element_type == "shapes":
@@ -2276,13 +2313,15 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             if scale < 0:
                 raise ValueError("Parameter 'scale' must be a positive number.")
 
-    if size := param_dict.get("size"):
+    size = param_dict.get("size")
+    if size:
         if not isinstance(size, float | int):
             raise TypeError("Parameter 'size' must be numeric.")
         if size < 0:
             raise ValueError("Parameter 'size' must be a positive number.")
 
-    if element_type == "shapes" and (shape := param_dict.get("shape")) is not None:
+    shape = param_dict.get("shape")
+    if element_type == "shapes" and shape is not None:
         valid_shapes = {"circle", "hex", "visium_hex", "square"}
         if not isinstance(shape, str):
             raise TypeError(f"Parameter 'shape' must be a String from {valid_shapes} if not None.")
@@ -2336,7 +2375,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     assert _ensure_table_and_layer_exist_in_sdata(param_dict.get("sdata"), table_name, table_layer)
 
-    if (method := param_dict.get("method")) not in ["matplotlib", "datashader", None]:
+    method = param_dict.get("method")
+    if method not in ["matplotlib", "datashader", None]:
         raise ValueError("If specified, parameter 'method' must be either 'matplotlib' or 'datashader'.")
 
     valid_ds_reduction_methods = [
@@ -2351,7 +2391,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         "max",
         "min",
     ]
-    if (ds_reduction := param_dict.get("ds_reduction")) and (ds_reduction not in valid_ds_reduction_methods):
+    ds_reduction = param_dict.get("ds_reduction")
+    if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
         raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
 
     if method == "datashader" and ds_reduction is None:
@@ -2375,6 +2416,8 @@ def _validate_label_render_params(
     scale: str | None,
     table_name: str | None,
     table_layer: str | None,
+    colorbar: bool | str | None,
+    colorbar_params: dict[str, object] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2391,6 +2434,8 @@ def _validate_label_render_params(
         "scale": scale,
         "table_name": table_name,
         "table_layer": table_layer,
+        "colorbar": colorbar,
+        "colorbar_params": colorbar_params,
     }
     param_dict = _type_check_params(param_dict, "labels")
 
@@ -2419,6 +2464,8 @@ def _validate_label_render_params(
 
         element_params[el]["palette"] = param_dict["palette"] if element_params[el]["table_name"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if element_params[el]["table_name"] is not None else None
+        element_params[el]["colorbar"] = param_dict["colorbar"]
+        element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
     return element_params
 
@@ -2437,6 +2484,8 @@ def _validate_points_render_params(
     table_name: str | None,
     table_layer: str | None,
     ds_reduction: str | None,
+    colorbar: bool | str | None,
+    colorbar_params: dict[str, object] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2452,6 +2501,8 @@ def _validate_points_render_params(
         "table_name": table_name,
         "table_layer": table_layer,
         "ds_reduction": ds_reduction,
+        "colorbar": colorbar,
+        "colorbar_params": colorbar_params,
     }
     param_dict = _type_check_params(param_dict, "points")
 
@@ -2471,7 +2522,8 @@ def _validate_points_render_params(
 
         element_params[el]["table_name"] = None
         element_params[el]["col_for_color"] = None
-        if (col_for_color := param_dict["col_for_color"]) is not None:
+        col_for_color = param_dict["col_for_color"]
+        if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
                 sdata, el, col_for_color, param_dict["table_name"]
             )
@@ -2481,6 +2533,8 @@ def _validate_points_render_params(
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
+        element_params[el]["colorbar"] = param_dict["colorbar"]
+        element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
     return element_params
 
@@ -2504,6 +2558,8 @@ def _validate_shape_render_params(
     shape: Literal["circle", "hex", "visium_hex", "square"] | None,
     method: str | None,
     ds_reduction: str | None,
+    colorbar: bool | str | None,
+    colorbar_params: dict[str, object] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2524,6 +2580,8 @@ def _validate_shape_render_params(
         "shape": shape,
         "method": method,
         "ds_reduction": ds_reduction,
+        "colorbar": colorbar,
+        "colorbar_params": colorbar_params,
     }
     param_dict = _type_check_params(param_dict, "shapes")
 
@@ -2548,7 +2606,8 @@ def _validate_shape_render_params(
 
         element_params[el]["table_name"] = None
         element_params[el]["col_for_color"] = None
-        if (col_for_color := param_dict["col_for_color"]) is not None:
+        col_for_color = param_dict["col_for_color"]
+        if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
                 sdata, el, col_for_color, param_dict["table_name"]
             )
@@ -2559,6 +2618,8 @@ def _validate_shape_render_params(
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["method"] = param_dict["method"]
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
+        element_params[el]["colorbar"] = param_dict["colorbar"]
+        element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
     return element_params
 
@@ -2616,6 +2677,8 @@ def _validate_image_render_params(
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
     scale: str | None,
+    colorbar: bool | str | None,
+    colorbar_params: dict[str, object] | None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2627,6 +2690,8 @@ def _validate_image_render_params(
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
+        "colorbar": colorbar,
+        "colorbar_params": colorbar_params,
     }
     param_dict = _type_check_params(param_dict, "images")
 
@@ -2681,7 +2746,8 @@ def _validate_image_render_params(
         element_params[el]["palette"] = palette
         element_params[el]["na_color"] = param_dict["na_color"]
 
-        if (cmap := param_dict["cmap"]) is not None:
+        cmap = param_dict["cmap"]
+        if cmap is not None:
             if len(cmap) == 1:
                 cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
                 cmap = cmap * cmap_length
@@ -2689,13 +2755,16 @@ def _validate_image_render_params(
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
-        if (scale := param_dict["scale"]) and isinstance(sdata[el], DataTree):
-            if scale not in list(sdata[el].keys()) and scale != "full":
+        scale = param_dict["scale"]
+        if scale and isinstance(param_dict["sdata"][el], DataTree):
+            if scale not in list(param_dict["sdata"][el].keys()) and scale != "full":
                 element_params[el]["scale"] = None
             else:
                 element_params[el]["scale"] = scale
         else:
             element_params[el]["scale"] = scale
+        element_params[el]["colorbar"] = param_dict["colorbar"]
+        element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
     return element_params
 

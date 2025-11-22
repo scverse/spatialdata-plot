@@ -14,6 +14,7 @@ import spatialdata as sd
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
+from PIL import Image
 from shapely.geometry import MultiPolygon, Polygon
 from spatialdata import SpatialData
 from spatialdata.datasets import blobs, raccoon
@@ -36,11 +37,31 @@ EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 TOL = 15
 DPI = 80
+CANVAS_WIDTH = 400
+CANVAS_HEIGHT = 300
+_RESAMPLE = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
 
 
 def get_standard_RNG():
     # we init from scratch each time to ensure same results in each test
     return np.random.default_rng(seed=42)
+
+
+def _resize_and_pad_image(path: Path, canvas_size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT)) -> None:
+    """Scale image to fit canvas while keeping aspect ratio, then pad."""
+    with Image.open(path) as img:
+        img = img.convert("RGBA")
+        target_w, target_h = canvas_size
+        if img.width == 0 or img.height == 0:
+            raise ValueError("Cannot resize image with zero dimension.")
+        scale = min(target_w / img.width, target_h / img.height)
+        new_w = max(1, int(round(img.width * scale)))
+        new_h = max(1, int(round(img.height * scale)))
+        resized = img.resize((new_w, new_h), resample=_RESAMPLE)
+        canvas = Image.new("RGBA", canvas_size, (255, 255, 255, 255))
+        offset = ((target_w - new_w) // 2, (target_h - new_h) // 2)
+        canvas.paste(resized, offset, resized)
+        canvas.convert("RGB").save(path)
 
 
 @pytest.fixture()
@@ -77,8 +98,7 @@ def test_sdata_single_image():
             np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
         )
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -86,8 +106,7 @@ def test_sdata_single_image_with_label():
     """Creates a simple sdata object."""
     images = {"data1": sd.models.Image2DModel.parse(np.zeros((1, 10, 10)), dims=("c", "y", "x"))}
     labels = {"label1": sd.models.Labels2DModel.parse(np.zeros((10, 10)), dims=("y", "x"))}
-    sdata = sd.SpatialData(images=images, labels=labels)
-    return sdata
+    return sd.SpatialData(images=images, labels=labels)
 
 
 @pytest.fixture
@@ -104,8 +123,7 @@ def test_sdata_multiple_images():
             np.zeros((1, 10, 10)), dims=("c", "y", "x"), transformations={"data1": sd.transformations.Identity()}
         ),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -141,8 +159,7 @@ def test_sdata_multiple_images_dims():
         "data2": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
         "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -153,8 +170,7 @@ def test_sdata_multiple_images_diverging_dims():
         "data2": sd.models.Image2DModel.parse(np.zeros((6, 10, 10)), dims=("c", "y", "x")),
         "data3": sd.models.Image2DModel.parse(np.zeros((3, 10, 10)), dims=("c", "y", "x")),
     }
-    sdata = sd.SpatialData(images=images)
-    return sdata
+    return sd.SpatialData(images=images)
 
 
 @pytest.fixture
@@ -226,27 +242,28 @@ def empty_table() -> SpatialData:
 )
 def sdata(request) -> SpatialData:
     if request.param == "full":
-        s = SpatialData(
+        return SpatialData(
             images=_get_images(),
             labels=_get_labels(),
             shapes=_get_shapes(),
             points=_get_points(),
             table=_get_table("sample1"),
         )
-    elif request.param == "empty":
-        s = SpatialData()
-    else:
-        s = request.getfixturevalue(request.param)
-    return s
+    if request.param == "empty":
+        return SpatialData()
+    return request.getfixturevalue(request.param)
 
 
 def _get_images() -> dict[str, DataArray | DataTree]:
-    out = {}
     dims_2d = ("c", "y", "x")
     dims_3d = ("z", "y", "x", "c")
-    out["image2d"] = Image2DModel.parse(
-        get_standard_RNG().normal(size=(3, 64, 64)), dims=dims_2d, c_coords=["r", "g", "b"]
-    )
+    out = {
+        "image2d": Image2DModel.parse(
+            get_standard_RNG().normal(size=(3, 64, 64)),
+            dims=dims_2d,
+            c_coords=["r", "g", "b"],
+        )
+    }
     out["image2d_multiscale"] = Image2DModel.parse(
         get_standard_RNG().normal(size=(3, 64, 64)), scale_factors=[2, 2], dims=dims_2d, c_coords=["r", "g", "b"]
     )
@@ -274,11 +291,10 @@ def _get_images() -> dict[str, DataArray | DataTree]:
 
 
 def _get_labels() -> dict[str, DataArray | DataTree]:
-    out = {}
     dims_2d = ("y", "x")
     dims_3d = ("z", "y", "x")
 
-    out["labels2d"] = Labels2DModel.parse(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d)
+    out = {"labels2d": Labels2DModel.parse(get_standard_RNG().integers(0, 100, size=(64, 64)), dims=dims_2d)}
     out["labels2d_multiscale"] = Labels2DModel.parse(
         get_standard_RNG().integers(0, 100, size=(64, 64)), scale_factors=[2, 4], dims=dims_2d
     )
@@ -307,7 +323,6 @@ def _get_labels() -> dict[str, DataArray | DataTree]:
 
 def _get_polygons() -> dict[str, GeoDataFrame]:
     # TODO: add polygons from geojson and from ragged arrays since now only the GeoDataFrame initializer is tested.
-    out = {}
     poly = GeoDataFrame(
         {
             "geometry": [
@@ -340,19 +355,19 @@ def _get_polygons() -> dict[str, GeoDataFrame]:
         }
     )
 
-    out["poly"] = ShapesModel.parse(poly, name="poly")
-    out["multipoly"] = ShapesModel.parse(multipoly, name="multipoly")
-
-    return out
+    return {
+        "poly": ShapesModel.parse(poly, name="poly"),
+        "multipoly": ShapesModel.parse(multipoly, name="multipoly"),
+    }
 
 
 def _get_shapes() -> dict[str, AnnData]:
-    out = {}
     arr = get_standard_RNG().normal(size=(100, 2))
-    out["shapes_0"] = ShapesModel.parse(arr, shape_type="Square", shape_size=3)
-    out["shapes_1"] = ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr)))
 
-    return out
+    return {
+        "shapes_0": ShapesModel.parse(arr, shape_type="Square", shape_size=3),
+        "shapes_1": ShapesModel.parse(arr, shape_type="Circle", shape_size=np.repeat(1, len(arr))),
+    }
 
 
 def _get_points() -> dict[str, pa.Table]:
@@ -386,15 +401,22 @@ def _get_table(
     )
     adata.obs[instance_key] = np.arange(adata.n_obs)
     if isinstance(region, str):
-        table = TableModel.parse(adata=adata, region=region, instance_key=instance_key)
-    elif isinstance(region, list):
+        return TableModel.parse(adata=adata, region=region, instance_key=instance_key)
+    if isinstance(region, list):
         adata.obs[region_key] = get_standard_RNG().choice(region, size=adata.n_obs)
         adata.obs[instance_key] = get_standard_RNG().integers(0, 10, size=(100,))
-        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
-    else:
-        table = TableModel.parse(adata=adata, region=region, region_key=region_key, instance_key=instance_key)
-
-    return table
+        return TableModel.parse(
+            adata=adata,
+            region=region,
+            region_key=region_key,
+            instance_key=instance_key,
+        )
+    return TableModel.parse(
+        adata=adata,
+        region=region,
+        region_key=region_key,
+        instance_key=instance_key,
+    )
 
 
 class PlotTesterMeta(ABCMeta):
@@ -411,15 +433,35 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
-        width, height = 400, 300  # fixed dimensions so runners don't change
+        width, height = CANVAS_WIDTH, CANVAS_HEIGHT  # base dimensions; actual PNG may grow/shrink
         fig = plt.gcf()
         fig.set_size_inches(width / DPI, height / DPI)
         fig.set_dpi(DPI)
 
-        # Apply constrained layout and save the plot
-        fig.set_constrained_layout(True)
-        plt.savefig(out_path, dpi=DPI)
-        plt.close()
+        # Try to get a reasonable layout first (helps with axes/labels)
+        if not fig.get_constrained_layout():
+            try:
+                fig.set_constrained_layout(True)
+            except (ValueError, RuntimeError):
+                try:
+                    fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
+                except (ValueError, RuntimeError):
+                    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+        plt.figure(fig.number)  # ensure this figure is current
+
+        # Force a draw so that tight bbox "sees" all artists (including colorbars)
+        fig.canvas.draw()
+
+        # Let matplotlib adjust the output size so that all artists are included
+        fig.savefig(
+            out_path,
+            dpi=DPI,
+            bbox_inches="tight",
+            pad_inches=0.02,  # small margin around everything
+        )
+        _resize_and_pad_image(out_path, (width, height))
+        plt.close(fig)
 
         if tolerance is None:
             # see https://github.com/scverse/squidpy/pull/302
@@ -433,7 +475,28 @@ class PlotTester(ABC):  # noqa: B024
 def _decorate(fn: Callable, clsname: str, name: str | None = None) -> Callable:
     @wraps(fn)
     def save_and_compare(self, *args, **kwargs):
+        # Get all figures before the test runs
+        figures_before = set(plt.get_fignums())
+
         fn(self, *args, **kwargs)
+
+        # Get all figures after the test runs
+        figures_after = set(plt.get_fignums())
+
+        # Find the figure(s) created during the test
+        new_figures = figures_after - figures_before
+
+        if new_figures:
+            # Use the most recently created figure (highest number)
+            fig_num = max(new_figures)
+            plt.figure(fig_num)
+        elif figures_after:
+            # If no new figures were created, use the current figure
+            # but ensure it's set as current
+            current_fig = plt.gcf()
+            plt.figure(current_fig.number)
+        # If no figures exist, plt.gcf() will create one, which is fine
+
         self.compare(fig_name)
 
     if not callable(fn):
