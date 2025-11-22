@@ -19,8 +19,7 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.axes_grid1.axes_divider import AxesDivider
+from matplotlib.transforms import Bbox
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
@@ -910,6 +909,7 @@ class PlotAccessor:
 
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
+        pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]] = []
 
         elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_contents, cs)
 
@@ -958,9 +958,10 @@ class PlotAccessor:
 
         def _draw_colorbar(
             spec: ColorbarSpec,
-            divider: AxesDivider,
+            fig: Figure,
             renderer: RendererBase,
-            location_offsets: dict[str, float],
+            axis_bbox: Bbox,
+            trackers: dict[str, float],
         ) -> None:
             base_layout = {
                 "location": CBAR_DEFAULT_LOCATION,
@@ -981,12 +982,34 @@ class PlotAccessor:
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-            total_pad = location_offsets.get(location, 0.0) + pad
-            size_spec = f"{max(fraction, 0) * 100:.3f}%"
-            pad_spec = f"{max(total_pad, 0) * 100:.3f}%"
-            cax = divider.append_axes(location, size=size_spec, pad=pad_spec)
+            if location in {"left", "right"}:
+                pad_fig = pad * axis_bbox.width
+                width_fig = fraction * axis_bbox.width
+                height_fig = axis_bbox.height
+                if location == "left":
+                    x0 = trackers["left"] - pad_fig - width_fig
+                    y0 = axis_bbox.y0
+                    trackers["left"] = x0
+                else:
+                    x0 = trackers["right"] + pad_fig
+                    y0 = axis_bbox.y0
+                    trackers["right"] = x0 + width_fig
+                cax = fig.add_axes([x0, y0, width_fig, height_fig])
+            else:
+                pad_fig = pad * axis_bbox.height
+                height_fig = fraction * axis_bbox.height
+                width_fig = axis_bbox.width
+                if location == "bottom":
+                    x0 = axis_bbox.x0
+                    y0 = trackers["bottom"] - pad_fig - height_fig
+                    trackers["bottom"] = y0
+                else:
+                    x0 = axis_bbox.x0
+                    y0 = trackers["top"] + pad_fig
+                    trackers["top"] = y0 + height_fig
+                cax = fig.add_axes([x0, y0, width_fig, height_fig])
 
-            cb = fig_params.fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
+            cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
             if location == "left":
                 cb.ax.yaxis.set_ticks_position("left")
                 cb.ax.yaxis.set_label_position("left")
@@ -1010,20 +1033,15 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
-            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
-            span = float(bbox_axes.width if location in {"left", "right"} else bbox_axes.height)
-            location_offsets[location] = total_pad + span
-
-        def _get_axes_exterior_offsets(ax: Axes, renderer: RendererBase) -> dict[str, float]:
-            axes_bbox = ax.get_window_extent(renderer)
-            tight_bbox = ax.get_tightbbox(renderer)
-            width = axes_bbox.width if axes_bbox.width != 0 else 1.0
-            height = axes_bbox.height if axes_bbox.height != 0 else 1.0
-            left = max(0.0, (axes_bbox.x0 - tight_bbox.x0) / width)
-            right = max(0.0, (tight_bbox.x1 - axes_bbox.x1) / width)
-            bottom = max(0.0, (axes_bbox.y0 - tight_bbox.y0) / height)
-            top = max(0.0, (tight_bbox.y1 - axes_bbox.y1) / height)
-            return {"left": left, "right": right, "top": top, "bottom": bottom}
+            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+            if location == "left":
+                trackers["left"] = bbox_axes.x0
+            elif location == "right":
+                trackers["right"] = bbox_axes.x1
+            elif location == "bottom":
+                trackers["bottom"] = bbox_axes.y0
+            elif location == "top":
+                trackers["top"] = bbox_axes.y1
 
         cs_contents = _get_cs_contents(sdata)
 
@@ -1173,21 +1191,37 @@ class PlotAccessor:
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
             if legend_params.colorbar and axis_colorbar_requests:
-                # keep only one bar per unique mappable on an axes; allow multiple bars even with identical params.
+                pending_colorbars.append((ax, axis_colorbar_requests))
+
+        if pending_colorbars and fig_params.fig is not None:
+            fig = fig_params.fig
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            for axis, requests in pending_colorbars:
                 unique_specs: list[ColorbarSpec] = []
                 seen_mappables: set[int] = set()
-                for spec in axis_colorbar_requests:
+                for spec in requests:
                     mappable_id = id(spec.mappable)
                     if mappable_id in seen_mappables:
                         continue
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
-
-                renderer = fig_params.fig.canvas.get_renderer()
-                divider = make_axes_locatable(ax)
-                location_offsets = _get_axes_exterior_offsets(ax, renderer)
+                axis_bbox = axis.get_position()
+                tight_bbox = axis.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+                base_offsets = {
+                    "left": axis_bbox.x0 - tight_bbox.x0,
+                    "right": tight_bbox.x1 - axis_bbox.x1,
+                    "bottom": axis_bbox.y0 - tight_bbox.y0,
+                    "top": tight_bbox.y1 - axis_bbox.y1,
+                }
+                trackers = {
+                    "left": axis_bbox.x0 - base_offsets["left"],
+                    "right": axis_bbox.x1 + base_offsets["right"],
+                    "bottom": axis_bbox.y0 - base_offsets["bottom"],
+                    "top": axis_bbox.y1 + base_offsets["top"],
+                }
                 for spec in unique_specs:
-                    _draw_colorbar(spec, divider, renderer, location_offsets)
+                    _draw_colorbar(spec, fig, renderer, axis_bbox, trackers)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
