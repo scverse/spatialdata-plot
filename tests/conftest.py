@@ -14,6 +14,7 @@ import spatialdata as sd
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from matplotlib.testing.compare import compare_images
+from PIL import Image
 from shapely.geometry import MultiPolygon, Polygon
 from spatialdata import SpatialData
 from spatialdata.datasets import blobs, raccoon
@@ -36,11 +37,31 @@ EXPECTED = HERE / "_images"
 ACTUAL = HERE / "figures"
 TOL = 15
 DPI = 80
+CANVAS_WIDTH = 400
+CANVAS_HEIGHT = 300
+_RESAMPLE = Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
 
 
 def get_standard_RNG():
     # we init from scratch each time to ensure same results in each test
     return np.random.default_rng(seed=42)
+
+
+def _resize_and_pad_image(path: Path, canvas_size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT)) -> None:
+    """Scale image to fit canvas while keeping aspect ratio, then pad."""
+    with Image.open(path) as img:
+        img = img.convert("RGBA")
+        target_w, target_h = canvas_size
+        if img.width == 0 or img.height == 0:
+            raise ValueError("Cannot resize image with zero dimension.")
+        scale = min(target_w / img.width, target_h / img.height)
+        new_w = max(1, int(round(img.width * scale)))
+        new_h = max(1, int(round(img.height * scale)))
+        resized = img.resize((new_w, new_h), resample=_RESAMPLE)
+        canvas = Image.new("RGBA", canvas_size, (255, 255, 255, 255))
+        offset = ((target_w - new_w) // 2, (target_h - new_h) // 2)
+        canvas.paste(resized, offset, resized)
+        canvas.convert("RGB").save(path)
 
 
 @pytest.fixture()
@@ -412,7 +433,7 @@ class PlotTester(ABC):  # noqa: B024
         ACTUAL.mkdir(parents=True, exist_ok=True)
         out_path = ACTUAL / f"{basename}.png"
 
-        width, height = 400, 300  # base dimensions; actual PNG may grow/shrink
+        width, height = CANVAS_WIDTH, CANVAS_HEIGHT  # base dimensions; actual PNG may grow/shrink
         fig = plt.gcf()
         fig.set_size_inches(width / DPI, height / DPI)
         fig.set_dpi(DPI)
@@ -439,6 +460,7 @@ class PlotTester(ABC):  # noqa: B024
             bbox_inches="tight",
             pad_inches=0.02,  # small margin around everything
         )
+        _resize_and_pad_image(out_path, (width, height))
         plt.close(fig)
 
         if tolerance is None:
