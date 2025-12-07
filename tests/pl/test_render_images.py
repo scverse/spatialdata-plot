@@ -1,9 +1,12 @@
 import dask.array as da
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import scanpy as sc
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
+from spatialdata.models import Image2DModel
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
@@ -130,3 +133,17 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_render_multiscale_image_with_custom_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_multiscale_image", channel=0, scale="scale2", cmap="Greys").pl.show()
+
+    def test_plot_correctly_normalizes_multichannel_images(self, sdata_raccoon: SpatialData):
+        sdata_raccoon["raccoon_int16"] = Image2DModel.parse(
+            sdata_raccoon["raccoon"].data.astype(np.uint16) * 257,  # 255 * 257 = 65535,
+            dims=("c", "y", "x"),
+        )
+
+        # show multi-channel vs single-channel
+        fig, axs = plt.subplots(nrows=1, ncols=2)
+        sdata_raccoon.pl.render_images("raccoon_int16", channel=[0]).pl.show(ax=axs[0], colorbar=False)
+        axs[0].set_title("single-channel uint16")
+        sdata_raccoon.pl.render_images("raccoon_int16", channel=[0, 1], palette=["yellow", "red"]).pl.show(ax=axs[1])
+        axs[1].set_title("two-channel uint16")
+        fig.tight_layout()
