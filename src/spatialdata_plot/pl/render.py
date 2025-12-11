@@ -733,8 +733,6 @@ def _render_points(
                 adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten().copy()
             else:
                 adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten().copy()
-        if groups is not None:
-            adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
         adata = AnnData(
             X=points[["x", "y"]].values,
             obs=adata_obs,
