@@ -52,6 +52,7 @@ from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
+from shapely.errors import GEOSException
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -350,7 +351,7 @@ def _get_collection_shape(
     **kwargs: Any,
 ) -> PatchCollection:
     """
-    Build a PatchCollection for shapes with correct handling of
+    Build a PatchCollection for shapes with correct handling of.
 
       - continuous numeric vectors with NaNs,
       - per-row RGBA arrays,
@@ -453,16 +454,94 @@ def _get_collection_shape(
     else:
         outline_c = [None] * fill_c.shape[0]
 
-    # Existing geometry → patches logic stays as-is, but use the computed fill_c / outline_c
     if isinstance(shapes, GeoDataFrame):
         shapes_df: GeoDataFrame | pd.DataFrame = shapes.copy()
     else:
         shapes_df = pd.DataFrame(shapes, copy=True)
 
-    # (your geometry normalization + filtering as above, omitted here for brevity)
-    # ...
-    # Keep all the _normalize_geom / _process_polygon / _process_point / _create_patches code exactly as in your
-    # current version, but make sure it does NOT recompute fill_c/outline_c; it should only *attach* them.
+    # Robustly normalise geometries to a canonical representation.
+    # This ensures consistent exterior/interior ring orientation so that
+    # matplotlib's fill rules handle holes correctly regardless of user input.
+    if "geometry" in shapes_df.columns:
+
+        def _normalize_geom(geom: Any) -> Any:
+            if geom is None or getattr(geom, "is_empty", False):
+                return geom
+            # shapely.normalize is available in shapely>=2; fall back to geom.normalize()
+            normalize_func = getattr(shapely, "normalize", None)
+            if callable(normalize_func):
+                try:
+                    return normalize_func(geom)
+                except (GEOSException, TypeError, ValueError):
+                    return geom
+            if hasattr(geom, "normalize"):
+                try:
+                    return geom.normalize()
+                except (GEOSException, TypeError, ValueError):
+                    return geom
+            return geom
+
+        shapes_df["geometry"] = shapes_df["geometry"].apply(_normalize_geom)
+
+    shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
+    shapes_df = shapes_df.reset_index(drop=True)
+
+    def _assign_fill_and_outline_to_row(
+        fill_colors: list[Any],
+        outline_colors: list[Any],
+        row: dict[str, Any],
+        idx: int,
+        is_multiple_shapes: bool,
+    ) -> None:
+        if is_multiple_shapes and len(fill_colors) == 1:
+            row["fill_c"] = fill_colors[0]
+            row["outline_c"] = outline_colors[0]
+        else:
+            row["fill_c"] = fill_colors[idx]
+            row["outline_c"] = outline_colors[idx]
+
+    def _process_polygon(row: pd.Series, scale: float) -> dict[str, Any]:
+        coords = np.array(row["geometry"].exterior.coords)
+        centroid = np.mean(coords, axis=0)
+        scale_value = _extract_scalar_value(scale, default=1.0)
+        scaled = (centroid + (coords - centroid) * scale_value).tolist()
+        return {**row.to_dict(), "geometry": mpatches.Polygon(scaled, closed=True)}
+
+    def _process_multipolygon(row: pd.Series, scale: float) -> list[dict[str, Any]]:
+        mp = _make_patch_from_multipolygon(row["geometry"])
+        row_dict = row.to_dict()
+        for m in mp:
+            _scale_pathpatch_around_centroid(m, scale)
+        return [{**row_dict, "geometry": m} for m in mp]
+
+    def _process_point(row: pd.Series, scale: float) -> dict[str, Any]:
+        radius_value = _extract_scalar_value(row["radius"], default=0.0)
+        scale_value = _extract_scalar_value(scale, default=1.0)
+        radius = radius_value * scale_value
+
+        return {
+            **row.to_dict(),
+            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=radius),
+        }
+
+    def _create_patches(
+        shapes_df_: GeoDataFrame, fill_colors: list[Any], outline_colors: list[Any], scale: float
+    ) -> pd.DataFrame:
+        rows: list[dict[str, Any]] = []
+        is_multiple = len(shapes_df_) > 1
+        for idx, row in shapes_df_.iterrows():
+            geom_type = row["geometry"].geom_type
+            processed: list[dict[str, Any]] = []
+            if geom_type == "Polygon":
+                processed.append(_process_polygon(row, scale))
+            elif geom_type == "MultiPolygon":
+                processed.extend(_process_multipolygon(row, scale))
+            elif geom_type == "Point":
+                processed.append(_process_point(row, scale))
+            for pr in processed:
+                _assign_fill_and_outline_to_row(fill_colors, outline_colors, pr, idx, is_multiple)
+                rows.append(pr)
+        return pd.DataFrame(rows)
 
     patches = _create_patches(shapes_df, fill_c.tolist(), outline_c, s)
 

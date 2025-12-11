@@ -305,7 +305,9 @@ def _render_shapes(
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 # add nan as a category so that shapes with nan value are colored in the nan color
-                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
+                transformed_element[col_for_color] = (
+                    transformed_element[col_for_color].cat.add_categories("nan").fillna("nan")
+                )
                 agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
@@ -404,23 +406,15 @@ def _render_shapes(
 
             if continuous_nan_shapes is not None:
                 # for coloring by continuous variable: render nan shapes separately
-                nan_color = render_params.cmap_params.na_color
-                if isinstance(nan_color, str) and nan_color.startswith("#") and len(nan_color) == 9:
-                    nan_color = nan_color[:7]
+                nan_color_hex = render_params.cmap_params.na_color.get_hex()
+                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
+                    nan_color_hex = nan_color_hex[:7]
                 continuous_nan_shapes = ds.tf.shade(
                     continuous_nan_shapes,
-                    cmap=nan_color,
+                    cmap=nan_color_hex,
                     how="linear",
                     min_alpha=np.min([254, render_params.fill_alpha * 255]),
                 )
-
-        # shade outlines if needed
-        outline_color = render_params.outline_params.outline_color
-        if isinstance(outline_color, str) and outline_color.startswith("#") and len(outline_color) == 9:
-            logger.info(
-                "alpha component of given RGBA value for outline color is discarded, because outline_alpha"
-                " takes precedent."
-            )
 
         # shade outlines if needed
         if render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
@@ -563,12 +557,25 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     if not values_are_categorical:
-        # If the user passed a Normalize object with vmin/vmax we'll use those,
-        # if not we'll use the min/max of the color_vector
-        _cax.set_clim(
-            vmin=render_params.cmap_params.norm.vmin or np.nanmin(color_vector),
-            vmax=render_params.cmap_params.norm.vmax or np.nanmax(color_vector),
-        )
+        # Respect explicit vmin/vmax; otherwise derive from finite numeric values, falling back to [0, 1] if unavailable
+        vmin = render_params.cmap_params.norm.vmin
+        vmax = render_params.cmap_params.norm.vmax
+        if vmin is None or vmax is None:
+            numeric_values = pd.to_numeric(np.asarray(color_vector), errors="coerce")
+            finite_mask = np.isfinite(numeric_values)
+            if finite_mask.any():
+                data_min = float(np.nanmin(numeric_values[finite_mask]))
+                data_max = float(np.nanmax(numeric_values[finite_mask]))
+                if vmin is None:
+                    vmin = data_min
+                if vmax is None:
+                    vmax = data_max
+            else:
+                if vmin is None:
+                    vmin = 0.0
+                if vmax is None:
+                    vmax = 1.0
+        _cax.set_clim(vmin=vmin, vmax=vmax)
 
     if (
         len(set(color_vector)) != 1
@@ -840,8 +847,9 @@ def _render_points(
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 # add nan as category so that nan points are shown in the nan color
-                transformed_element[col_for_color] = transformed_element[col_for_color].cat.as_known()
-                transformed_element[col_for_color] = transformed_element[col_for_color].cat.add_categories("nan")
+                transformed_element[col_for_color] = (
+                    transformed_element[col_for_color].cat.as_known().add_categories("nan").fillna("nan")
+                )
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -929,13 +937,13 @@ def _render_points(
 
             if continuous_nan_points is not None:
                 # for coloring by continuous variable: render nan points separately
-                nan_color = render_params.cmap_params.na_color
-                if isinstance(nan_color, str) and nan_color.startswith("#") and len(nan_color) == 9:
-                    nan_color = nan_color[:7]
+                nan_color_hex = render_params.cmap_params.na_color.get_hex()
+                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
+                    nan_color_hex = nan_color_hex[:7]
                 continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how="max")
                 continuous_nan_points = ds.tf.shade(
                     continuous_nan_points,
-                    cmap=nan_color,
+                    cmap=nan_color_hex,
                     how="linear",
                 )
 
