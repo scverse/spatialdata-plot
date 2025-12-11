@@ -181,10 +181,10 @@ def sdata_blobs_points_with_nans_in_table() -> SpatialData:
     adata = AnnData(get_standard_RNG().normal(size=(n_obs, 2)))
     adata.X[0:30, 0] = np.nan
     adata.var = pd.DataFrame({}, index=["col1", "col2"])
-    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["cola", "colb", "colc"])
-    adata.obs.iloc[0:30, adata.obs.columns.get_loc("cola")] = np.nan
+    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["col_a", "col_b", "col_c"])
+    adata.obs.iloc[0:30, adata.obs.columns.get_loc("col_a")] = np.nan
     adata.obs["instance_id"] = np.arange(adata.n_obs)
-    adata.obs["category"] = pd.Series(["a", "b", np.nan] * 50, dtype="category")
+    adata.obs["category"] = pd.Categorical(["a", "b", np.nan] * 50)[:n_obs]
     adata.obs["instance_id"] = list(range(adata.n_obs))
     adata.obs["region"] = "blobs_points"
     table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
@@ -200,10 +200,10 @@ def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
     adata = AnnData(get_standard_RNG().normal(size=(n_obs, 2)))
     adata.X[0, 0] = np.nan
     adata.var = pd.DataFrame({}, index=["col1", "col2"])
-    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["cola", "colb", "colc"])
-    adata.obs.iloc[0, adata.obs.columns.get_loc("cola")] = np.nan
+    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["col_a", "col_b", "col_c"])
+    adata.obs.iloc[0, adata.obs.columns.get_loc("col_a")] = np.nan
     adata.obs["instance_id"] = np.arange(adata.n_obs)
-    adata.obs["category"] = pd.Series(["a", "b", np.nan, "c", "a"], dtype="category")
+    adata.obs["category"] = pd.Categorical(["a", "b", np.nan, "c", "a"])[:n_obs]
     adata.obs["instance_id"] = list(range(adata.n_obs))
     adata.obs["region"] = "blobs_polygons"
     table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")

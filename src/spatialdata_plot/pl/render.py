@@ -18,6 +18,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
+from spatialdata._core.query.relational_query import match_table_to_element
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -652,7 +653,8 @@ def _render_points(
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=bool(table_name),
+        # keep tables intact; we pick the right rows ourselves via the table metadata
+        filter_tables=False,
     )
 
     points = sdata.points[element]
@@ -710,6 +712,9 @@ def _render_points(
 
     n_points = len(points)
     points_pd_with_color = points
+    # When we pull colors from a table, keep the raw points (with color) for later,
+    # but strip the color column from the model we register in sdata so color lookup
+    # keeps using the table instead of seeing duplicates on the points dataframe.
     points_for_model = (
         points_pd_with_color.drop(columns=[col_for_color], errors="ignore")
         if added_color_from_table and col_for_color is not None
@@ -724,20 +729,21 @@ def _render_points(
             dtype=points[["x", "y"]].values.dtype,
         )
     else:
-        adata_obs = sdata_filt[table_name].obs
+        matched_table = match_table_to_element(sdata=sdata, element_name=element, table_name=table_name)
+        adata_obs = matched_table.obs.copy()
         # if the points are colored by values in X (or a different layer), add the values to obs
-        if col_for_color in sdata_filt[table_name].var_names:
+        if col_for_color in matched_table.var_names:
             if table_layer is None:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
+                adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten().copy()
             else:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
+                adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten().copy()
         if groups is not None:
             adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
         adata = AnnData(
             X=points[["x", "y"]].values,
             obs=adata_obs,
             dtype=points[["x", "y"]].values.dtype,
-            uns=sdata_filt[table_name].uns,
+            uns=matched_table.uns,
         )
         sdata_filt[table_name] = adata
 
@@ -745,8 +751,8 @@ def _render_points(
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
-    points = dask.dataframe.from_pandas(points_for_model, npartitions=1)
-    sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
+    points_dd = dask.dataframe.from_pandas(points_for_model, npartitions=1)
+    sdata_filt.points[element] = PointsModel.parse(points_dd, coordinates={"x": "x", "y": "y"})
     # restore transformation in coordinate system of interest
     set_transformation(
         element=sdata_filt.points[element],
@@ -774,9 +780,14 @@ def _render_points(
     )
     assert isinstance(default_color, Color)  # shut up mypy
 
+    color_element = sdata_filt.points[element]
+    # Always pass the table through to color resolution; dropping the color column
+    # from the registered points (see above) avoids duplicate-origin ambiguities.
+    color_table_name = table_name
+
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
-        element=points,
+        element=color_element,
         element_name=element,
         value_to_plot=col_for_color,
         groups=groups,
@@ -784,7 +795,7 @@ def _render_points(
         na_color=default_color,
         cmap_params=render_params.cmap_params,
         alpha=render_params.alpha,
-        table_name=table_name,
+        table_name=color_table_name,
         render_type="points",
         coordinate_system=coordinate_system,
     )
@@ -797,7 +808,7 @@ def _render_points(
             transformation=transformation_in_cs,
             to_coordinate_system=coordinate_system,
         )
-        points = points_with_color_dd
+        points_dd = points_with_color_dd
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
@@ -812,7 +823,7 @@ def _render_points(
     if method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
-    if method != "matplotlib":
+    if method == "datashader":
         # we only notify the user when we switched away from matplotlib
         logger.info(
             f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
@@ -821,7 +832,6 @@ def _render_points(
             " this behaviour."
         )
 
-    if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
         px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
@@ -840,17 +850,31 @@ def _render_points(
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
-        # in case we are coloring by a column in table
+        # ensure color column exists on the transformed element with positional alignment
         if col_for_color is not None and col_for_color not in transformed_element.columns:
+            series_index = transformed_element.index
             if color_source_vector is not None:
-                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_source_vector))
+                source_series = (
+                    color_source_vector.reindex(series_index)
+                    if isinstance(color_source_vector, pd.Series)
+                    else pd.Series(color_source_vector, index=series_index)
+                )
+                transformed_element = transformed_element.assign(col_for_color=source_series)
             else:
-                transformed_element = transformed_element.assign(col_for_color=pd.Series(color_vector))
+                color_series = (
+                    color_vector.reindex(series_index)
+                    if isinstance(color_vector, pd.Series)
+                    else pd.Series(color_vector, index=series_index)
+                )
+                transformed_element = transformed_element.assign(col_for_color=color_series)
             transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
 
         color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
         color_by_categorical = col_for_color is not None and (
-            pd.api.types.is_categorical_dtype(color_dtype) or pd.api.types.is_object_dtype(color_dtype)
+            color_source_vector is not None
+            or pd.api.types.is_categorical_dtype(color_dtype)
+            or pd.api.types.is_object_dtype(color_dtype)
+            or pd.api.types.is_string_dtype(color_dtype)
         )
         if color_by_categorical and not pd.api.types.is_categorical_dtype(color_dtype):
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
@@ -863,7 +887,11 @@ def _render_points(
                 cat_series = transformed_element[col_for_color]
                 if not pd.api.types.is_categorical_dtype(cat_series):
                     cat_series = cat_series.astype("category")
-                transformed_element[col_for_color] = cat_series.cat.as_known().add_categories("nan").fillna("nan")
+                if hasattr(cat_series.cat, "as_known"):
+                    cat_series = cat_series.cat.as_known()
+                if "nan" not in cat_series.cat.categories:
+                    cat_series = cat_series.cat.add_categories("nan")
+                transformed_element[col_for_color] = cat_series.fillna("nan")
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -919,7 +947,13 @@ def _render_points(
                 if isinstance(key_color, str) and key_color.startswith("#"):
                     key_color = _hex_no_alpha(key_color)
                 color_key[str(cat)] = key_color
-        if isinstance(color_vector[0], str) and (color_vector is not None and color_vector[0][0] == "#"):
+
+        if (
+            color_vector is not None
+            and len(color_vector) > 0
+            and isinstance(color_vector[0], str)
+            and color_vector[0].startswith("#")
+        ):
             color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
 
         if color_by_categorical or col_for_color is None:
@@ -1025,10 +1059,27 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    if (
-        len(set(color_vector)) != 1
-        or list(set(color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
-    ):
+    # Decide whether there is any informative color variation.
+    # We skip legend/colorbar only if all colors are equal to the NA color.
+    want_decorations = True
+    if color_vector is None:
+        want_decorations = False
+    else:
+        cv = np.asarray(color_vector)
+        if cv.size == 0:
+            want_decorations = False
+        else:
+            unique_vals = set(cv.tolist())
+            if len(unique_vals) == 1:
+                only_val = next(iter(unique_vals))
+                na_hex = render_params.cmap_params.na_color.get_hex()
+                if isinstance(only_val, str) and only_val.startswith("#") and na_hex.startswith("#"):
+                    only_norm = _hex_no_alpha(only_val)
+                    na_norm = _hex_no_alpha(na_hex)
+                    if only_norm == na_norm:
+                        want_decorations = False
+
+    if want_decorations:
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:

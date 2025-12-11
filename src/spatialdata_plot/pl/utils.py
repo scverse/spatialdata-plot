@@ -1003,7 +1003,8 @@ def _set_color_source_vec(
 
     if len(origins) > 1:
         raise ValueError(
-            f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
+            f"Color key '{value_to_plot}' for element '{element_name}' was found in multiple locations: {origins}. "
+            "Please keep it in exactly one place (preferably on the points parquet for speed) to avoid ambiguity."
         )
 
     if len(origins) == 1 and value_to_plot is not None:
@@ -1025,6 +1026,64 @@ def _set_color_source_vec(
         color_series = (
             color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
         )
+
+        if color_series.isna().all():
+            element_label = _format_element_name(element_name)
+            location = f"table '{table_name}'" if table_name is not None else "the element"
+            # Provide dtype hints to help diagnose index alignment issues
+            dtype_hints: list[str] = []
+            color_index_dtype = getattr(color_series.index, "dtype", None)
+            element_index_dtype = (
+                getattr(getattr(element, "index", None), "dtype", None) if element is not None else None
+            )
+
+            table_instance_dtype = None
+            table_index_dtype = None
+            instance_key = None
+            if table_name is not None and sdata is not None and table_name in sdata.tables:
+                table = sdata.tables[table_name]
+                table_index_dtype = getattr(getattr(table, "obs", None), "index", None)
+                if table_index_dtype is not None:
+                    table_index_dtype = getattr(table_index_dtype, "dtype", None)
+                try:
+                    _, _, instance_key = get_table_keys(table)
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    instance_key = None
+                if instance_key is not None and hasattr(table, "obs") and instance_key in table.obs:
+                    table_instance_dtype = table.obs[instance_key].dtype
+
+            if (
+                element_index_dtype is not None
+                and table_instance_dtype is not None
+                and element_index_dtype != table_instance_dtype
+            ):
+                dtype_hints.append(
+                    f"element index dtype is {element_index_dtype}, '{instance_key}' dtype is {table_instance_dtype}"
+                )
+            if (
+                table_index_dtype is not None
+                and table_instance_dtype is not None
+                and table_index_dtype != table_instance_dtype
+            ):
+                dtype_hints.append(
+                    f"table index dtype is {table_index_dtype}, '{instance_key}' dtype is {table_instance_dtype}"
+                )
+            if (
+                color_index_dtype is not None
+                and element_index_dtype is not None
+                and color_index_dtype != element_index_dtype
+            ):
+                dtype_hints.append(
+                    f"color index dtype is {color_index_dtype}, element index dtype is {element_index_dtype}"
+                )
+
+            dtype_hint = f" (hint: {'; '.join(dtype_hints)})" if dtype_hints else ""
+            raise ValueError(
+                f"Column '{value_to_plot}' for element '{element_label}' contains only missing values after aligning "
+                f"with {location}. This usually means the instance ids/indices could not be aligned or converted, so "
+                "colors cannot be determined. Please ensure the table annotates the element with matching instance ids."
+                f"{dtype_hint}"
+            )
 
         kind, processed = _infer_color_data_kind(
             series=color_series,
@@ -2653,6 +2712,7 @@ def _validate_col_for_column_table(
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
         if table_name not in tables:
+            logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
         if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
             raise KeyError(
@@ -3046,7 +3106,7 @@ def _prepare_transformation(
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] | Mapping[str, str] = None,
+    color_key: list[str] | dict[str, str] | None = None,
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,

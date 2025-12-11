@@ -539,13 +539,13 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_annotate_points_with_nan_in_table_obs_continuous(
         self, sdata_blobs_points_with_nans_in_table: SpatialData
     ):
-        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="cola", size=30).pl.show()
+        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="col_a", size=30).pl.show()
 
     def test_plot_can_annotate_points_with_nan_in_table_obs_continuous_datashader(
         self, sdata_blobs_points_with_nans_in_table: SpatialData
     ):
         sdata_blobs_points_with_nans_in_table.pl.render_points(
-            "blobs_points", color="cola", size=40, method="datashader"
+            "blobs_points", color="color", size=40, method="datashader"
         ).pl.show()
 
     def test_plot_can_annotate_points_with_nan_in_table_X_continuous(
