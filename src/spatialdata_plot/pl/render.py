@@ -68,7 +68,7 @@ _Normalize = Normalize | abc.Sequence[Normalize]
 def _coerce_categorical_source(cat_source: Any) -> pd.Categorical:
     """Return a pandas Categorical from known, concrete sources only."""
     if isinstance(cat_source, dd.Series):
-        if dd.api.types.is_categorical_dtype(cat_source.dtype) and getattr(cat_source.cat, "known", True) is False:
+        if pd.api.types.is_categorical_dtype(cat_source.dtype) and getattr(cat_source.cat, "known", True) is False:
             cat_source = cat_source.cat.as_known()
         cat_source = cat_source.compute()
 

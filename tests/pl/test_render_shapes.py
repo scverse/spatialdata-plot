@@ -802,13 +802,13 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous(
         self, sdata_blobs_shapes_with_nans_in_table: SpatialData
     ):
-        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="cola").pl.show()
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="col_a").pl.show()
 
     def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous_datashader(
         self, sdata_blobs_shapes_with_nans_in_table: SpatialData
     ):
         sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
-            "blobs_polygons", color="cola", method="datashader"
+            "blobs_polygons", color="col_a", method="datashader"
         ).pl.show()
 
     def test_plot_can_annotate_shapes_with_nan_in_table_X_continuous(
