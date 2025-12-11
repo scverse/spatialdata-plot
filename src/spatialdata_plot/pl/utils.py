@@ -1109,6 +1109,9 @@ def _set_color_source_vec(
             return None, numeric_vector, False
 
         assert isinstance(processed, pd.Categorical)
+        if not processed.ordered:
+            # ensure deterministic category order when the source is unordered (e.g., from a Python set)
+            processed = processed.reorder_categories(sorted(processed.categories))
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
         # Use the provided table_name parameter, fall back to only one present
