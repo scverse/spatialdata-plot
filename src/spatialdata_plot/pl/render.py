@@ -299,6 +299,11 @@ def _render_shapes(
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
+        if color_by_categorical:
+            cat_series = transformed_element[col_for_color]
+            if not pd.api.types.is_categorical_dtype(cat_series):
+                cat_series = cat_series.astype("category")
+            transformed_element[col_for_color] = cat_series
 
         aggregate_with_reduction = None
         continuous_nan_shapes = None
@@ -835,11 +840,11 @@ def _render_points(
                 transformed_element = transformed_element.assign(col_for_color=pd.Series(color_vector))
             transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
 
-        color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
-            object,
-            "categorical",
+        color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
+        color_by_categorical = col_for_color is not None and (
+            pd.api.types.is_categorical_dtype(color_dtype) or pd.api.types.is_object_dtype(color_dtype)
         )
-        if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
+        if color_by_categorical and not pd.api.types.is_categorical_dtype(color_dtype):
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
 
         aggregate_with_reduction = None
@@ -847,9 +852,10 @@ def _render_points(
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 # add nan as category so that nan points are shown in the nan color
-                transformed_element[col_for_color] = (
-                    transformed_element[col_for_color].cat.as_known().add_categories("nan").fillna("nan")
-                )
+                cat_series = transformed_element[col_for_color]
+                if not pd.api.types.is_categorical_dtype(cat_series):
+                    cat_series = cat_series.astype("category")
+                transformed_element[col_for_color] = cat_series.cat.as_known().add_categories("nan").fillna("nan")
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"

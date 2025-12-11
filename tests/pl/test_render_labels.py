@@ -265,7 +265,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()
 
     def test_plot_can_annotate_labels_with_nan_in_table_obs_categorical(self, sdata_blobs: SpatialData):
-        sdata_blobs.table.obs["cat_color"] = pd.Categorical(["a", "b", "b", "a", "b"] * 5 + [np.nan])
+        sdata_blobs["table"].obs["cat_color"] = pd.Categorical(["a", "b", "b", "a", "b"] * 5 + [np.nan])
         sdata_blobs.pl.render_labels("blobs_labels", color="cat_color").pl.show()
 
     def test_plot_can_annotate_labels_with_nan_in_table_obs_continuous(self, sdata_blobs: SpatialData):
