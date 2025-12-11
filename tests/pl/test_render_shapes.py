@@ -838,6 +838,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_annotate_shapes_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
         sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
+
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
         shapes_name = "blobs_polygons"
         # Ensure that the table annotations point to the shapes element

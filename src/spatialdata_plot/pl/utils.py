@@ -52,7 +52,6 @@ from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
-from shapely.errors import GEOSException
 from skimage.color import label2rgb
 from skimage.morphology import erosion, square
 from skimage.segmentation import find_boundaries
@@ -337,6 +336,7 @@ def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor
     scaled_vertices = np.array([centroid + (vertex - centroid) * scale_value for vertex in vertices])
     pathpatch.get_path().vertices = scaled_vertices
 
+
 def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
@@ -430,9 +430,7 @@ def _get_collection_shape(
         # non-numeric, non-NaN entries as explicit colors
         non_numeric_color_mask = (~is_num) & c_series.notna().to_numpy()
         if non_numeric_color_mask.any():
-            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(
-                c_series[non_numeric_color_mask].tolist()
-            )
+            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_color_mask].tolist())
 
     # Case C: single color or list of color-like specs (strings or tuples)
     else:
@@ -466,9 +464,7 @@ def _get_collection_shape(
     # Keep all the _normalize_geom / _process_polygon / _process_point / _create_patches code exactly as in your
     # current version, but make sure it does NOT recompute fill_c/outline_c; it should only *attach* them.
 
-    patches = _create_patches(
-        shapes_df, fill_c.tolist(), outline_c, s
-    )
+    patches = _create_patches(shapes_df, fill_c.tolist(), outline_c, s)
 
     return PatchCollection(
         patches["geometry"].values.tolist(),
@@ -478,7 +474,6 @@ def _get_collection_shape(
         edgecolor=None if all(o is None for o in outline_c) else outline_c,
         **kwargs,
     )
-
 
 
 def _panel_grid(
