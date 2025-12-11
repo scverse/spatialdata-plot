@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections import abc
 from copy import copy
+from typing import Any
 
 import dask
+import dask.dataframe as dd
 import datashader as ds
 import geopandas as gpd
 import matplotlib
@@ -61,6 +63,21 @@ from spatialdata_plot.pl.utils import (
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
+
+
+def _coerce_categorical_source(cat_source: Any) -> pd.Categorical:
+    """Return a pandas Categorical from known, concrete sources only."""
+    if isinstance(cat_source, dd.Series):
+        if dd.api.types.is_categorical_dtype(cat_source.dtype) and getattr(cat_source.cat, "known", True) is False:
+            cat_source = cat_source.cat.as_known()
+        cat_source = cat_source.compute()
+
+    if isinstance(cat_source, pd.Series):
+        return pd.Categorical(cat_source)
+    if isinstance(cat_source, pd.Categorical):
+        return cat_source
+
+    return pd.Categorical(cat_source)
 
 
 def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
@@ -372,7 +389,7 @@ def _render_shapes(
 
         color_key: dict[str, str] | None = None
         if color_by_categorical and col_for_color is not None:
-            cat_series = pd.Categorical(transformed_element[col_for_color])
+            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
             colors_arr = np.asarray(color_vector, dtype=object)
             color_key = {}
             for cat in cat_series.categories:
@@ -935,7 +952,7 @@ def _render_points(
 
         color_key: dict[str, str] | None = None
         if color_by_categorical and col_for_color is not None:
-            cat_series = pd.Categorical(transformed_element[col_for_color])
+            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
             colors_arr = np.asarray(color_vector, dtype=object)
             color_key = {}
             for cat in cat_series.categories:
