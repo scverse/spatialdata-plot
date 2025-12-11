@@ -369,12 +369,20 @@ def _render_shapes(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key = (
-            [_hex_no_alpha(x) for x in color_vector.categories.values]
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
-            else None
-        )
+        color_key: dict[str, str] | None = None
+        if color_by_categorical and col_for_color is not None:
+            cat_series = pd.Categorical(transformed_element[col_for_color])
+            colors_arr = np.asarray(color_vector, dtype=object)
+            color_key = {}
+            for cat in cat_series.categories:
+                if cat == "nan":
+                    key_color = render_params.cmap_params.na_color.get_hex()
+                else:
+                    idx = np.flatnonzero(cat_series == cat)
+                    key_color = colors_arr[idx[0]] if idx.size else render_params.cmap_params.na_color.get_hex()
+                if isinstance(key_color, str) and key_color.startswith("#"):
+                    key_color = _hex_no_alpha(key_color)
+                color_key[str(cat)] = key_color
 
         if color_by_categorical or col_for_color is None:
             ds_cmap = None
@@ -897,16 +905,20 @@ def _render_points(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key: list[str] | None = (
-            list(color_vector.categories.values)
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
-            else None
-        )
-
-        # remove alpha from color if it's hex
-        if color_key is not None and color_key[0][0] == "#":
-            color_key = [_hex_no_alpha(x) for x in color_key]
+        color_key: dict[str, str] | None = None
+        if color_by_categorical and col_for_color is not None:
+            cat_series = pd.Categorical(transformed_element[col_for_color])
+            colors_arr = np.asarray(color_vector, dtype=object)
+            color_key = {}
+            for cat in cat_series.categories:
+                if cat == "nan":
+                    key_color = render_params.cmap_params.na_color.get_hex()
+                else:
+                    idx = np.flatnonzero(cat_series == cat)
+                    key_color = colors_arr[idx[0]] if idx.size else render_params.cmap_params.na_color.get_hex()
+                if isinstance(key_color, str) and key_color.startswith("#"):
+                    key_color = _hex_no_alpha(key_color)
+                color_key[str(cat)] = key_color
         if isinstance(color_vector[0], str) and (color_vector is not None and color_vector[0][0] == "#"):
             color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
 

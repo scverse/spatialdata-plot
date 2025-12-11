@@ -522,10 +522,12 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
 
-    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical(
+    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_matplotlib(
         self, sdata_blobs_points_with_nans_in_table: SpatialData
     ):
-        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="category", size=30).pl.show()
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="category", size=40, method="matplotlib"
+        ).pl.show()
 
     def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_datashader(
         self, sdata_blobs_points_with_nans_in_table: SpatialData

@@ -3046,7 +3046,7 @@ def _prepare_transformation(
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] = None,
+    color_key: None | list[str] | Mapping[str, str] = None,
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,
