@@ -193,14 +193,6 @@ def _render_shapes(
     if len(color_vector) == 0:
         color_vector = [render_params.cmap_params.na_color.get_hex_with_alpha()]
 
-    # filter by `groups`
-    if isinstance(groups, list) and color_source_vector is not None:
-        mask = color_source_vector.isin(groups)
-        shapes = shapes[mask]
-        shapes = shapes.reset_index(drop=True)
-        color_source_vector = color_source_vector[mask]
-        color_vector = color_vector[mask]
-
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_source_vector is None and not values_are_categorical:
         _series = color_vector if isinstance(color_vector, pd.Series) else pd.Series(color_vector)
@@ -713,24 +705,6 @@ def _render_points(
             right_index=True,
         )
         added_color_from_table = True
-
-    if groups is not None and col_for_color is not None:
-        if col_for_color in points.columns:
-            points_color_values = points[col_for_color]
-        else:
-            points_color_values = get_values(
-                value_key=col_for_color,
-                sdata=sdata_filt,
-                element_name=element,
-                table_name=table_name,
-                table_layer=table_layer,
-            )
-            points_color_values = points.merge(points_color_values, how="left", left_index=True, right_index=True)[
-                col_for_color
-            ]
-        points = points[points_color_values.isin(groups)]
-        if len(points) <= 0:
-            raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
 
     n_points = len(points)
     points_pd_with_color = points
