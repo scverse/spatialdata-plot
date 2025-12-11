@@ -444,7 +444,7 @@ def _render_shapes(
                     continuous_nan_shapes,
                     cmap=nan_color_hex,
                     how="linear",
-                    min_alpha=np.min([254, render_params.fill_alpha * 255]),
+                    min_alpha=_convert_alpha_to_datashader_range(render_params.fill_alpha),
                 )
 
         # shade outlines if needed
