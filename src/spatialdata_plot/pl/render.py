@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections import abc
 from copy import copy
+from typing import Any
 
 import dask
+import dask.dataframe as dd
 import datashader as ds
 import geopandas as gpd
 import matplotlib
@@ -18,6 +20,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
+from spatialdata._core.query.relational_query import match_table_to_element
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -60,6 +63,23 @@ from spatialdata_plot.pl.utils import (
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
+
+
+def _coerce_categorical_source(cat_source: Any) -> pd.Categorical:
+    """Return a pandas Categorical from known, concrete sources only."""
+    if isinstance(cat_source, dd.Series):
+        if pd.api.types.is_categorical_dtype(cat_source.dtype) and getattr(cat_source.cat, "known", True) is False:
+            cat_source = cat_source.cat.as_known()
+        cat_source = cat_source.compute()
+
+    if isinstance(cat_source, pd.Series):
+        if pd.api.types.is_categorical_dtype(cat_source.dtype):
+            return cat_source.array
+        return pd.Categorical(cat_source)
+    if isinstance(cat_source, pd.Categorical):
+        return cat_source
+
+    return pd.Categorical(pd.Series(cat_source))
 
 
 def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
@@ -172,14 +192,6 @@ def _render_shapes(
 
     if len(color_vector) == 0:
         color_vector = [render_params.cmap_params.na_color.get_hex_with_alpha()]
-
-    # filter by `groups`
-    if isinstance(groups, list) and color_source_vector is not None:
-        mask = color_source_vector.isin(groups)
-        shapes = shapes[mask]
-        shapes = shapes.reset_index(drop=True)
-        color_source_vector = color_source_vector[mask]
-        color_vector = color_vector[mask]
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_source_vector is None and not values_are_categorical:
@@ -299,14 +311,21 @@ def _render_shapes(
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
+        if color_by_categorical:
+            cat_series = transformed_element[col_for_color]
+            if not pd.api.types.is_categorical_dtype(cat_series):
+                cat_series = cat_series.astype("category")
+            transformed_element[col_for_color] = cat_series
+
         aggregate_with_reduction = None
+        continuous_nan_shapes = None
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
-                agg = cvs.polygons(
-                    transformed_element,
-                    geometry="geometry",
-                    agg=ds.by(col_for_color, ds.count()),
+                # add nan as a category so that shapes with nan value are colored in the nan color
+                transformed_element[col_for_color] = (
+                    transformed_element[col_for_color].cat.add_categories("nan").fillna("nan")
                 )
+                agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "mean"
                 logger.info(
@@ -322,6 +341,13 @@ def _render_shapes(
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
+
+                # nan shapes need to be rendered separately (else: invisible, bc nan is skipped by aggregation methods)
+                transformed_element_nan_color = transformed_element[transformed_element[col_for_color].isnull()]
+                if len(transformed_element_nan_color) > 0:
+                    continuous_nan_shapes = _datashader_aggregate_with_function(
+                        "any", cvs, transformed_element_nan_color, None, "shapes"
+                    )
         else:
             agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
 
@@ -355,12 +381,20 @@ def _render_shapes(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key = (
-            [_hex_no_alpha(x) for x in color_vector.categories.values]
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
-            else None
-        )
+        color_key: dict[str, str] | None = None
+        if color_by_categorical and col_for_color is not None:
+            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
+            colors_arr = np.asarray(color_vector, dtype=object)
+            color_key = {}
+            for cat in cat_series.categories:
+                if cat == "nan":
+                    key_color = render_params.cmap_params.na_color.get_hex()
+                else:
+                    idx = np.flatnonzero(cat_series == cat)
+                    key_color = colors_arr[idx[0]] if idx.size else render_params.cmap_params.na_color.get_hex()
+                if isinstance(key_color, str) and key_color.startswith("#"):
+                    key_color = _hex_no_alpha(key_color)
+                color_key[str(cat)] = key_color
 
         if color_by_categorical or col_for_color is None:
             ds_cmap = None
@@ -393,7 +427,19 @@ def _render_shapes(
                 min_alpha=_convert_alpha_to_datashader_range(render_params.fill_alpha),
                 span=ds_span,
                 clip=norm.clip,
-            )
+            )  # prevent min_alpha == 255, bc that led to fully colored test plots instead of just colored points/shapes
+
+            if continuous_nan_shapes is not None:
+                # for coloring by continuous variable: render nan shapes separately
+                nan_color_hex = render_params.cmap_params.na_color.get_hex()
+                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
+                    nan_color_hex = nan_color_hex[:7]
+                continuous_nan_shapes = ds.tf.shade(
+                    continuous_nan_shapes,
+                    cmap=nan_color_hex,
+                    how="linear",
+                    min_alpha=_convert_alpha_to_datashader_range(render_params.fill_alpha),
+                )
 
         # shade outlines if needed
         if render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
@@ -436,6 +482,17 @@ def _render_shapes(
                 extent=x_ext + y_ext,
             )
 
+        if continuous_nan_shapes is not None:
+            # for coloring by continuous variable: render nan points separately
+            rgba_image_nan, trans_data_nan = _create_image_from_datashader_result(continuous_nan_shapes, factor, ax)
+            _ax_show_and_transform(
+                rgba_image_nan,
+                trans_data_nan,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.fill_alpha,
+                extent=x_ext + y_ext,
+            )
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _cax = _ax_show_and_transform(
             rgba_image,
@@ -508,7 +565,7 @@ def _render_shapes(
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
-            c=color_vector,
+            c=color_vector.copy(),  # copy bc c is modified in _get_collection_shape
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
@@ -525,31 +582,20 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     if not values_are_categorical:
+        # Respect explicit vmin/vmax; otherwise derive from finite numeric values, falling back to [0, 1] if unavailable
         vmin = render_params.cmap_params.norm.vmin
         vmax = render_params.cmap_params.norm.vmax
         if vmin is None or vmax is None:
-            # Extract numeric values only (filter out strings and other non-numeric types)
-            if isinstance(color_vector, np.ndarray):
-                if np.issubdtype(color_vector.dtype, np.number):
-                    # Already numeric, can use directly
-                    numeric_values = color_vector
-                else:
-                    # Mixed types - extract only numeric values using pandas
-                    numeric_values = pd.to_numeric(color_vector, errors="coerce")
-                    numeric_values = numeric_values[np.isfinite(numeric_values)]
-                if len(numeric_values) > 0:
-                    if vmin is None:
-                        vmin = float(np.nanmin(numeric_values))
-                    if vmax is None:
-                        vmax = float(np.nanmax(numeric_values))
-                else:
-                    # No numeric values found, use defaults
-                    if vmin is None:
-                        vmin = 0.0
-                    if vmax is None:
-                        vmax = 1.0
+            numeric_values = pd.to_numeric(np.asarray(color_vector), errors="coerce")
+            finite_mask = np.isfinite(numeric_values)
+            if finite_mask.any():
+                data_min = float(np.nanmin(numeric_values[finite_mask]))
+                data_max = float(np.nanmax(numeric_values[finite_mask]))
+                if vmin is None:
+                    vmin = data_min
+                if vmax is None:
+                    vmax = data_max
             else:
-                # Not a numpy array, use defaults
                 if vmin is None:
                     vmin = 0.0
                 if vmax is None:
@@ -616,9 +662,13 @@ def _render_points(
     groups = render_params.groups
     palette = render_params.palette
 
+    if isinstance(groups, str):
+        groups = [groups]
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=bool(table_name),
+        # keep tables intact; we pick the right rows ourselves via the table metadata
+        filter_tables=False,
     )
 
     points = sdata.points[element]
@@ -656,26 +706,11 @@ def _render_points(
         )
         added_color_from_table = True
 
-    if groups is not None and col_for_color is not None:
-        if col_for_color in points.columns:
-            points_color_values = points[col_for_color]
-        else:
-            points_color_values = get_values(
-                value_key=col_for_color,
-                sdata=sdata_filt,
-                element_name=element,
-                table_name=table_name,
-                table_layer=table_layer,
-            )
-            points_color_values = points.merge(points_color_values, how="left", left_index=True, right_index=True)[
-                col_for_color
-            ]
-        points = points[points_color_values.isin(groups)]
-        if len(points) <= 0:
-            raise ValueError(f"None of the groups {groups} could be found in the column '{col_for_color}'.")
-
     n_points = len(points)
     points_pd_with_color = points
+    # When we pull colors from a table, keep the raw points (with color) for later,
+    # but strip the color column from the model we register in sdata so color lookup
+    # keeps using the table instead of seeing duplicates on the points dataframe.
     points_for_model = (
         points_pd_with_color.drop(columns=[col_for_color], errors="ignore")
         if added_color_from_table and col_for_color is not None
@@ -690,20 +725,19 @@ def _render_points(
             dtype=points[["x", "y"]].values.dtype,
         )
     else:
-        adata_obs = sdata_filt[table_name].obs
+        matched_table = match_table_to_element(sdata=sdata, element_name=element, table_name=table_name)
+        adata_obs = matched_table.obs.copy()
         # if the points are colored by values in X (or a different layer), add the values to obs
-        if col_for_color in sdata_filt[table_name].var_names:
+        if col_for_color in matched_table.var_names:
             if table_layer is None:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].X.flatten().copy()
+                adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten().copy()
             else:
-                adata_obs[col_for_color] = sdata_filt[table_name][:, col_for_color].layers[table_layer].flatten().copy()
-        if groups is not None:
-            adata_obs = adata_obs[adata_obs[col_for_color].isin(groups)]
+                adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten().copy()
         adata = AnnData(
             X=points[["x", "y"]].values,
             obs=adata_obs,
             dtype=points[["x", "y"]].values.dtype,
-            uns=sdata_filt[table_name].uns,
+            uns=matched_table.uns,
         )
         sdata_filt[table_name] = adata
 
@@ -711,8 +745,8 @@ def _render_points(
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
-    points = dask.dataframe.from_pandas(points_for_model, npartitions=1)
-    sdata_filt.points[element] = PointsModel.parse(points, coordinates={"x": "x", "y": "y"})
+    points_dd = dask.dataframe.from_pandas(points_for_model, npartitions=1)
+    sdata_filt.points[element] = PointsModel.parse(points_dd, coordinates={"x": "x", "y": "y"})
     # restore transformation in coordinate system of interest
     set_transformation(
         element=sdata_filt.points[element],
@@ -740,9 +774,14 @@ def _render_points(
     )
     assert isinstance(default_color, Color)  # shut up mypy
 
+    color_element = sdata_filt.points[element]
+    # Always pass the table through to color resolution; dropping the color column
+    # from the registered points (see above) avoids duplicate-origin ambiguities.
+    color_table_name = table_name
+
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
-        element=points,
+        element=color_element,
         element_name=element,
         value_to_plot=col_for_color,
         groups=groups,
@@ -750,7 +789,7 @@ def _render_points(
         na_color=default_color,
         cmap_params=render_params.cmap_params,
         alpha=render_params.alpha,
-        table_name=table_name,
+        table_name=color_table_name,
         render_type="points",
         coordinate_system=coordinate_system,
     )
@@ -763,7 +802,7 @@ def _render_points(
             transformation=transformation_in_cs,
             to_coordinate_system=coordinate_system,
         )
-        points = points_with_color_dd
+        points_dd = points_with_color_dd
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
@@ -778,7 +817,7 @@ def _render_points(
     if method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
-    if method != "matplotlib":
+    if method == "datashader":
         # we only notify the user when we switched away from matplotlib
         logger.info(
             f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
@@ -787,7 +826,6 @@ def _render_points(
             " this behaviour."
         )
 
-    if method == "datashader":
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
         px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
@@ -806,15 +844,52 @@ def _render_points(
         # use datashader for the visualization of points
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
-        color_by_categorical = col_for_color is not None and transformed_element[col_for_color].values.dtype in (
-            object,
-            "categorical",
+        # ensure color column exists on the transformed element with positional alignment
+        if col_for_color is not None and col_for_color not in transformed_element.columns:
+            series_index = transformed_element.index
+            if color_source_vector is not None:
+                if isinstance(color_source_vector, dd.Series):
+                    color_source_vector = color_source_vector.compute()
+                source_series = (
+                    color_source_vector.reindex(series_index)
+                    if isinstance(color_source_vector, pd.Series)
+                    else pd.Series(color_source_vector, index=series_index)
+                )
+                transformed_element = transformed_element.assign(col_for_color=source_series)
+            else:
+                if isinstance(color_vector, dd.Series):
+                    color_vector = color_vector.compute()
+                color_series = (
+                    color_vector.reindex(series_index)
+                    if isinstance(color_vector, pd.Series)
+                    else pd.Series(color_vector, index=series_index)
+                )
+                transformed_element = transformed_element.assign(col_for_color=color_series)
+            transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
+
+        color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
+        color_by_categorical = col_for_color is not None and (
+            color_source_vector is not None
+            or pd.api.types.is_categorical_dtype(color_dtype)
+            or pd.api.types.is_object_dtype(color_dtype)
+            or pd.api.types.is_string_dtype(color_dtype)
         )
-        if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
+        if color_by_categorical and not pd.api.types.is_categorical_dtype(color_dtype):
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
+
         aggregate_with_reduction = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+        continuous_nan_points = None
+        if col_for_color is not None:
             if color_by_categorical:
+                # add nan as category so that nan points are shown in the nan color
+                cat_series = transformed_element[col_for_color]
+                if not pd.api.types.is_categorical_dtype(cat_series):
+                    cat_series = cat_series.astype("category")
+                if hasattr(cat_series.cat, "as_known"):
+                    cat_series = cat_series.cat.as_known()
+                if "nan" not in cat_series.cat.categories:
+                    cat_series = cat_series.cat.add_categories("nan")
+                transformed_element[col_for_color] = cat_series.fillna("nan")
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -831,6 +906,12 @@ def _render_points(
                 )
                 # save min and max values for drawing the colorbar
                 aggregate_with_reduction = (agg.min(), agg.max())
+                # nan points need to be rendered separately (else: invisible, bc nan is skipped by aggregation methods)
+                transformed_element_nan_color = transformed_element[transformed_element[col_for_color].isnull()]
+                if len(transformed_element_nan_color) > 0:
+                    continuous_nan_points = _datashader_aggregate_with_function(
+                        "any", cvs, transformed_element_nan_color, None, "points"
+                    )
         else:
             agg = cvs.points(transformed_element, "x", "y", agg=ds.count())
 
@@ -850,20 +931,28 @@ def _render_points(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key: list[str] | None = (
-            list(color_vector.categories.values)
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
-            else None
-        )
+        color_key: dict[str, str] | None = None
+        if color_by_categorical and col_for_color is not None:
+            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
+            colors_arr = np.asarray(color_vector, dtype=object)
+            color_key = {}
+            for cat in cat_series.categories:
+                if cat == "nan":
+                    key_color = render_params.cmap_params.na_color.get_hex()
+                else:
+                    idx = np.flatnonzero(cat_series == cat)
+                    key_color = colors_arr[idx[0]] if idx.size else render_params.cmap_params.na_color.get_hex()
+                if isinstance(key_color, str) and key_color.startswith("#"):
+                    key_color = _hex_no_alpha(key_color)
+                color_key[str(cat)] = key_color
 
-        # remove alpha from color if it's hex
-        if color_key is not None and all(len(x) == 9 for x in color_key) and color_key[0][0] == "#":
-            color_key = [x[:-2] for x in color_key]
-        if isinstance(color_vector[0], str) and (
-            color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#"
+        if (
+            color_vector is not None
+            and len(color_vector) > 0
+            and isinstance(color_vector[0], str)
+            and color_vector[0].startswith("#")
         ):
-            color_vector = np.asarray([x[:-2] for x in color_vector])
+            color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
 
         if color_by_categorical or col_for_color is None:
             ds_result = _datashader_map_aggregate_to_color(
@@ -896,6 +985,29 @@ def _render_points(
                 min_alpha=_convert_alpha_to_datashader_range(render_params.alpha),
             )
 
+            if continuous_nan_points is not None:
+                # for coloring by continuous variable: render nan points separately
+                nan_color_hex = render_params.cmap_params.na_color.get_hex()
+                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
+                    nan_color_hex = nan_color_hex[:7]
+                continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how="max")
+                continuous_nan_points = ds.tf.shade(
+                    continuous_nan_points,
+                    cmap=nan_color_hex,
+                    how="linear",
+                )
+
+        if continuous_nan_points is not None:
+            # for coloring by continuous variable: render nan points separately
+            rgba_image_nan, trans_data_nan = _create_image_from_datashader_result(continuous_nan_points, factor, ax)
+            _ax_show_and_transform(
+                rgba_image_nan,
+                trans_data_nan,
+                ax,
+                zorder=render_params.zorder,
+                alpha=render_params.alpha,
+                extent=x_ext + y_ext,
+            )
         rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
         _ax_show_and_transform(
             rgba_image,
@@ -936,6 +1048,7 @@ def _render_points(
             alpha=render_params.alpha,
             transform=trans_data,
             zorder=render_params.zorder,
+            plotnonfinite=True,  # nan points should be rendered as well
         )
         cax = ax.add_collection(_cax)
         if update_parameters:
@@ -944,10 +1057,27 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    if (
-        len(set(color_vector)) != 1
-        or list(set(color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
-    ):
+    # Decide whether there is any informative color variation.
+    # We skip legend/colorbar only if all colors are equal to the NA color.
+    want_decorations = True
+    if color_vector is None:
+        want_decorations = False
+    else:
+        cv = np.asarray(color_vector)
+        if cv.size == 0:
+            want_decorations = False
+        else:
+            unique_vals = set(cv.tolist())
+            if len(unique_vals) == 1:
+                only_val = next(iter(unique_vals))
+                na_hex = render_params.cmap_params.na_color.get_hex()
+                if isinstance(only_val, str) and only_val.startswith("#") and na_hex.startswith("#"):
+                    only_norm = _hex_no_alpha(only_val)
+                    na_norm = _hex_no_alpha(na_hex)
+                    if only_norm == na_norm:
+                        want_decorations = False
+
+    if want_decorations:
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
