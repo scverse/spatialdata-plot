@@ -182,7 +182,7 @@ def sdata_blobs_points_with_nans_in_table() -> SpatialData:
     adata.X[0:30, 0] = np.nan
     adata.var = pd.DataFrame({}, index=["col1", "col2"])
     adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["cola", "colb", "colc"])
-    adata.obs.loc[0:30, "cola"] = np.nan
+    adata.obs.iloc[0:30, adata.obs.columns.get_loc("cola")] = np.nan
     adata.obs["instance_id"] = np.arange(adata.n_obs)
     adata.obs["category"] = pd.Series(["a", "b", np.nan] * 50, dtype="category")
     adata.obs["instance_id"] = list(range(adata.n_obs))
@@ -201,7 +201,7 @@ def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
     adata.X[0, 0] = np.nan
     adata.var = pd.DataFrame({}, index=["col1", "col2"])
     adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["cola", "colb", "colc"])
-    adata.obs.loc[0, "cola"] = np.nan
+    adata.obs.iloc[0, adata.obs.columns.get_loc("cola")] = np.nan
     adata.obs["instance_id"] = np.arange(adata.n_obs)
     adata.obs["category"] = pd.Series(["a", "b", np.nan, "c", "a"], dtype="category")
     adata.obs["instance_id"] = list(range(adata.n_obs))

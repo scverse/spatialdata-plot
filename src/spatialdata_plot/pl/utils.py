@@ -1126,9 +1126,12 @@ def _set_color_source_vec(
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
-        # nan handling
-        color_vector = color_vector.add_categories(na_color)
-        color_vector[pd.isna(color_vector)] = na_color
+        # nan handling: only add the NA category if needed, and store it as a hex string
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        if pd.isna(color_vector).any():
+            if na_color_hex not in color_vector.categories:
+                color_vector = color_vector.add_categories(na_color_hex)
+            color_vector[pd.isna(color_vector)] = na_color_hex
 
         return color_source_vector, color_vector, True
 
