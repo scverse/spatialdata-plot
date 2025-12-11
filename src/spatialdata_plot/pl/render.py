@@ -73,11 +73,13 @@ def _coerce_categorical_source(cat_source: Any) -> pd.Categorical:
         cat_source = cat_source.compute()
 
     if isinstance(cat_source, pd.Series):
+        if pd.api.types.is_categorical_dtype(cat_source.dtype):
+            return cat_source.array
         return pd.Categorical(cat_source)
     if isinstance(cat_source, pd.Categorical):
         return cat_source
 
-    return pd.Categorical(cat_source)
+    return pd.Categorical(pd.Series(cat_source))
 
 
 def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
@@ -668,6 +670,9 @@ def _render_points(
     groups = render_params.groups
     palette = render_params.palette
 
+    if isinstance(groups, str):
+        groups = [groups]
+
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         # keep tables intact; we pick the right rows ourselves via the table metadata
@@ -871,6 +876,8 @@ def _render_points(
         if col_for_color is not None and col_for_color not in transformed_element.columns:
             series_index = transformed_element.index
             if color_source_vector is not None:
+                if isinstance(color_source_vector, dd.Series):
+                    color_source_vector = color_source_vector.compute()
                 source_series = (
                     color_source_vector.reindex(series_index)
                     if isinstance(color_source_vector, pd.Series)
@@ -878,6 +885,8 @@ def _render_points(
                 )
                 transformed_element = transformed_element.assign(col_for_color=source_series)
             else:
+                if isinstance(color_vector, dd.Series):
+                    color_vector = color_vector.compute()
                 color_series = (
                     color_vector.reindex(series_index)
                     if isinstance(color_vector, pd.Series)
@@ -898,7 +907,7 @@ def _render_points(
 
         aggregate_with_reduction = None
         continuous_nan_points = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+        if col_for_color is not None:
             if color_by_categorical:
                 # add nan as category so that nan points are shown in the nan color
                 cat_series = transformed_element[col_for_color]
