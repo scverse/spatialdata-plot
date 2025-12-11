@@ -5,18 +5,25 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 from anndata import AnnData
 from matplotlib.colors import Normalize
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import PointsModel, TableModel
-from spatialdata.transformations import Affine, Identity, MapAxis, Scale, Sequence, Translation
+from spatialdata.transformations import (
+    Affine,
+    Identity,
+    MapAxis,
+    Scale,
+    Sequence,
+    Translation,
+)
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
+from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
-RNG = np.random.default_rng(seed=42)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -37,7 +44,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_filter_with_groups_default_palette(self, sdata_blobs: SpatialData):
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
 
         sdata_blobs.pl.render_points(color="genes", size=10).pl.show(ax=axs[0], legend_fontsize=6)
@@ -46,7 +53,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_filter_with_groups_custom_palette(self, sdata_blobs: SpatialData):
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
 
         sdata_blobs.pl.render_points(color="genes", size=10).pl.show(ax=axs[0], legend_fontsize=6)
@@ -55,19 +62,33 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         )
 
     def test_plot_coloring_with_palette(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         sdata_blobs.pl.render_points(
-            color="genes", groups=["gene_a", "gene_b"], palette=["lightgreen", "darkblue"]
+            color="genes",
+            groups=["gene_a", "gene_b"],
+            palette=["lightgreen", "darkblue"],
+        ).pl.show()
+
+    def test_plot_respects_custom_colors_from_uns_for_points(self, sdata_blobs: SpatialData):
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+
+        # set a custom palette in `.uns` for the categorical column
+        sdata_blobs["table"].uns["genes_colors"] = ["#800080", "#008000", "#FFFF00"]
+
+        sdata_blobs.pl.render_points(
+            element="blobs_points",
+            color="genes",
         ).pl.show()
 
     def test_plot_coloring_with_cmap(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         sdata_blobs.pl.render_points(color="genes", cmap="rainbow").pl.show()
 
     def test_plot_can_stack_render_points(self, sdata_blobs: SpatialData):
-        sdata_blobs["table"].obs["region"] = ["blobs_points"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
         (
             sdata_blobs.pl.render_points(element="blobs_points", na_color="red", size=30)
@@ -75,19 +96,40 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
-    def test_plot_color_recognises_actual_color_as_color(self, sdata_blobs: SpatialData):
+    def test_plot_can_color_by_color_name(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points", color="red").pl.show()
+
+    def test_plot_can_color_by_rgb_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0]).pl.show()
+
+    def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
+
+    def test_plot_can_color_by_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color="#88a136").pl.show()
+
+    def test_plot_can_color_by_hex_with_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color="#88a13688").pl.show()
+
+    def test_plot_alpha_overwrites_opacity_from_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(element="blobs_points", color=[0.5, 0.5, 1.0, 0.5], alpha=1.0).pl.show()
 
     def test_plot_points_coercable_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         adata = AnnData(
-            RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_points"
-        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_points",
+        )
         sdata_blobs["other_table"] = table
 
         sdata_blobs.pl.render_points("blobs_points", color="category").pl.show()
@@ -95,13 +137,19 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_points_categorical_color(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         adata = AnnData(
-            RNG.normal(size=(n_obs, 10)), obs=pd.DataFrame(RNG.normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+            get_standard_RNG().normal(size=(n_obs, 10)),
+            obs=pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"]),
         )
         adata.obs["instance_id"] = np.arange(adata.n_obs)
-        adata.obs["category"] = RNG.choice(["a", "b", "c"], size=adata.n_obs)
+        adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
         adata.obs["instance_id"] = list(range(adata.n_obs))
         adata.obs["region"] = "blobs_points"
-        table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
+        table = TableModel.parse(
+            adata=adata,
+            region_key="region",
+            instance_key="instance_id",
+            region="blobs_points",
+        )
         sdata_blobs["other_table"] = table
 
         sdata_blobs["other_table"].obs["category"] = sdata_blobs["other_table"].obs["category"].astype("category")
@@ -109,7 +157,11 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_datashader_continuous_color(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", alpha=0.6, method="datashader"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            alpha=0.6,
+            method="datashader",
         ).pl.show()
 
     def test_plot_points_categorical_color_column_matplotlib(self, sdata_blobs: SpatialData):
@@ -131,32 +183,100 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_datashader_can_color_by_category(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            color="genes", groups="gene_b", palette="lightgreen", size=20, method="datashader"
+            color="genes",
+            groups="gene_b",
+            palette="lightgreen",
+            size=20,
+            method="datashader",
+        ).pl.show()
+
+    def test_render_points_missing_color_column_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_points"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        with pytest.raises(KeyError, match="does_not_exist"):
+            sdata_blobs.pl.render_points(element="blobs_points", color="does_not_exist")
+
+    def test_render_points_missing_region_for_table_raises_key_error(self, sdata_blobs: SpatialData) -> None:
+        blob = deepcopy(sdata_blobs)
+        blob["table"].obs["region"] = pd.Categorical(["blobs_points"] * blob["table"].n_obs)
+        blob["table"].uns["spatialdata_attrs"]["region"] = "blobs_points"
+        blob["table"].obs["table_value"] = np.arange(blob["table"].n_obs)
+        other_table = blob["table"].copy()
+        other_table.obs["region"] = pd.Categorical(["other"] * other_table.n_obs)
+        other_table.uns["spatialdata_attrs"]["region"] = "other"
+        blob["other_table"] = other_table
+        with pytest.raises(KeyError, match="does not annotate element"):
+            blob.pl.render_points(element="blobs_points", color="table_value", table_name="other_table")
+
+    def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
+        n_obs = len(sdata_blobs["blobs_points"])
+        obs = pd.DataFrame(
+            {
+                "instance_id": np.arange(n_obs),
+                "region": pd.Categorical(["blobs_points"] * n_obs),
+                "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+            }
+        )
+
+        table = TableModel.parse(
+            adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
+        sdata_blobs["datashader_table"] = table
+
+        sdata_blobs.pl.render_points(
+            "blobs_points",
+            color="foo",
+            table_name="datashader_table",
+            method="datashader",
+            size=5,
         ).pl.show()
 
     def test_plot_datashader_can_use_sum_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="sum"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="sum",
         ).pl.show()
 
     def test_plot_datashader_can_use_mean_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="mean"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="mean",
         ).pl.show()
 
     def test_plot_datashader_can_use_any_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="any"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="any",
         ).pl.show()
 
     def test_plot_datashader_can_use_count_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="count"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="count",
         ).pl.show()
 
     def test_plot_datashader_can_use_std_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="std",
         ).pl.show()
 
     def test_plot_datashader_can_use_std_as_reduction_not_all_zero(self, sdata_blobs: SpatialData):
@@ -168,34 +288,59 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         temp.loc[195, "instance_id"] = 13
         blob["blobs_points"] = PointsModel.parse(dask.dataframe.from_pandas(temp, 1), coordinates={"x": "x", "y": "y"})
         blob.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="std"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="std",
         ).pl.show()
 
     def test_plot_datashader_can_use_var_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="var"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="var",
         ).pl.show()
 
     def test_plot_datashader_can_use_max_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="max"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="max",
         ).pl.show()
 
     def test_plot_datashader_can_use_min_as_reduction(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            element="blobs_points", size=40, color="instance_id", method="datashader", datashader_reduction="min"
+            element="blobs_points",
+            size=40,
+            color="instance_id",
+            method="datashader",
+            datashader_reduction="min",
         ).pl.show()
 
     def test_plot_mpl_and_datashader_point_sizes_agree_after_altered_dpi(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points", size=400, color="blue").pl.render_points(
-            element="blobs_points", size=400, color="yellow", method="datashader", alpha=0.8
+            element="blobs_points",
+            size=400,
+            color="yellow",
+            method="datashader",
+            alpha=0.8,
         ).pl.show(dpi=200)
 
     def test_plot_points_transformed_ds_agrees_with_mpl(self):
         sdata = SpatialData(
             points={
                 "points1": PointsModel.parse(
-                    pd.DataFrame({"y": [0, 0, 10, 10, 4, 6, 4, 6], "x": [0, 10, 10, 0, 4, 6, 6, 4]}),
+                    pd.DataFrame(
+                        {
+                            "y": [0, 0, 10, 10, 4, 6, 4, 6],
+                            "x": [0, 10, 10, 0, 4, 6, 6, 4],
+                        }
+                    ),
                     transformations={"global": Scale([2, 2], ("y", "x"))},
                 )
             },
@@ -228,12 +373,18 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            color="instance_id", size=40, norm=Normalize(3, 7, clip=True), cmap=_viridis_with_under_over()
+            color="instance_id",
+            size=40,
+            norm=Normalize(3, 7, clip=True),
+            cmap=_viridis_with_under_over(),
         ).pl.show()
 
     def test_plot_can_use_norm_without_clip(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(
-            color="instance_id", size=40, norm=Normalize(3, 7, clip=False), cmap=_viridis_with_under_over()
+            color="instance_id",
+            size=40,
+            norm=Normalize(3, 7, clip=False),
+            cmap=_viridis_with_under_over(),
         ).pl.show()
 
     def test_plot_datashader_can_use_norm_with_clip(self, sdata_blobs: SpatialData):
@@ -278,7 +429,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_can_annotate_points_with_table_obs(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -290,14 +441,19 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         obs["extra_feature"] = [1, 2] * 100
 
         table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
-        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        table = TableModel.parse(
+            table,
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
         sdata_blobs["points_table"] = table
 
         sdata_blobs.pl.render_points("blobs_points", color="extra_feature", size=10).pl.show()
 
     def test_plot_can_annotate_points_with_table_X(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -308,14 +464,19 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         obs["region"].astype("category")
 
         table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
-        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        table = TableModel.parse(
+            table,
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
         sdata_blobs["points_table"] = table
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10).pl.show()
 
     def test_plot_can_annotate_points_with_table_and_groups(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -327,14 +488,19 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         obs["extra_feature_cat"] = ["one", "two"] * 100
 
         table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
-        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        table = TableModel.parse(
+            table,
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
         sdata_blobs["points_table"] = table
 
         sdata_blobs.pl.render_points("blobs_points", color="extra_feature_cat", groups="two", size=10).pl.show()
 
     def test_plot_can_annotate_points_with_table_layer(self, sdata_blobs: SpatialData):
         nrows, ncols = 200, 3
-        feature_matrix = RNG.random((nrows, ncols))
+        feature_matrix = get_standard_RNG().random((nrows, ncols))
         var_names = [f"feature{i}" for i in range(ncols)]
 
         obs_indices = sdata_blobs["blobs_points"].index
@@ -345,9 +511,14 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         obs["region"].astype("category")
 
         table = AnnData(X=feature_matrix, var=pd.DataFrame(index=var_names), obs=obs)
-        table = TableModel.parse(table, region="blobs_points", region_key="region", instance_key="instance_id")
+        table = TableModel.parse(
+            table,
+            region="blobs_points",
+            region_key="region",
+            instance_key="instance_id",
+        )
         sdata_blobs["points_table"] = table
-        sdata_blobs["points_table"].layers["normalized"] = RNG.random((nrows, ncols))
+        sdata_blobs["points_table"].layers["normalized"] = get_standard_RNG().random((nrows, ncols))
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
 
@@ -402,3 +573,53 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_annotate_points_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
         sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
+
+def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
+    # Work on an independent copy since we mutate tables
+    sdata_blobs_local = deepcopy(sdata_blobs)
+
+    # Create a table that annotates a DIFFERENT element than the one we will render
+    other_table = sdata_blobs_local["table"].copy()
+    other_table.obs["region"] = pd.Categorical(["blobs_labels"] * other_table.n_obs)  # Different from blobs_points
+    other_table.uns["spatialdata_attrs"]["region"] = "blobs_labels"
+    sdata_blobs_local["other_table"] = other_table
+
+    # Rendering "blobs_points" with a table that annotates "blobs_labels"
+    # should now raise to alert the user about the mismatch.
+    with pytest.raises(
+        KeyError,
+        match="Table 'other_table' does not annotate element 'blobs_points'",
+    ):
+        sdata_blobs_local.pl.render_points(
+            "blobs_points",
+            color="channel_0_sum",
+            table_name="other_table",
+        ).pl.show()
+
+
+def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):
+    # Fast regression for https://github.com/scverse/spatialdata-plot/issues/479.
+    n_obs = len(sdata_blobs["blobs_points"])
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(n_obs),
+            "region": pd.Categorical(["blobs_points"] * n_obs),
+            "foo": pd.Categorical(np.where(np.arange(n_obs) % 2 == 0, "a", "b")),
+        }
+    )
+
+    table = TableModel.parse(
+        adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+        region="blobs_points",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata_blobs["datashader_table"] = table
+
+    sdata_blobs.pl.render_points(
+        "blobs_points",
+        color="foo",
+        table_name="datashader_table",
+        method="datashader",
+        size=5,
+    ).pl.show()

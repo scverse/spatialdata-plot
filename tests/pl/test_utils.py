@@ -1,16 +1,15 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 from spatialdata import SpatialData
 
 import spatialdata_plot
-from spatialdata_plot.pl.utils import _get_subplots, _sanitise_na_color
+from spatialdata_plot.pl.utils import _get_subplots
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
-SEED = 42
-RNG = np.random.default_rng(seed=SEED)
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
 matplotlib.use("agg")  # same as GitHub action runner
@@ -47,7 +46,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_colnames_that_are_valid_matplotlib_greyscale_colors_are_not_evaluated_as_colors(
         self, sdata_blobs: SpatialData, colname: str
     ):
-        sdata_blobs["table"].obs["region"] = ["blobs_polygons"] * sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"][colname] = [1, 2, 3, 5, 20]
         sdata_blobs.pl.render_shapes("blobs_polygons", color=colname).pl.show()
@@ -91,43 +90,35 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
 
 
-@pytest.mark.parametrize(
-    "input_output",
-    [
-        (None, ("#FFFFFF00", True)),
-        ("default", ("#d3d3d3ff", False)),
-        ("red", ("#ff0000ff", True)),
-        ((1, 0, 0), ("#ff0000ff", True)),
-        ((1, 0, 0, 0.5), ("#ff000080", True)),
-    ],
-)
-def test_utils_sanitise_na_color(input_output):
-    from spatialdata_plot.pl.utils import _sanitise_na_color
+def test_extract_scalar_value():
+    """Test the new _extract_scalar_value function for robust numeric conversion."""
 
-    func_input, expected_output = input_output
+    from spatialdata_plot.pl.utils import _extract_scalar_value
 
-    assert _sanitise_na_color(func_input) == expected_output
+    # Test basic functionality
+    assert _extract_scalar_value(3.14) == 3.14
+    assert _extract_scalar_value(42) == 42.0
 
+    # Test with collections
+    assert _extract_scalar_value(pd.Series([1.0, 2.0, 3.0])) == 1.0
+    assert _extract_scalar_value([1.0, 2.0, 3.0]) == 1.0
 
-@pytest.mark.parametrize(
-    "input_output",
-    [
-        (None, ("#FFFFFF00", True)),
-        ("default", ("#d3d3d3ff", False)),
-        ("red", ("#ff0000ff", True)),
-        ((1, 0, 0), ("#ff0000ff", True)),
-        ((1, 0, 0, 0.5), ("#ff000080", True)),
-    ],
-)
-def test_utils_sanitise_na_color_accepts_valid_inputs(input_output):
-    func_input, expected_output = input_output
-
-    assert _sanitise_na_color(func_input) == expected_output
+    # Test edge cases
+    assert _extract_scalar_value(np.nan) == 0.0
+    assert _extract_scalar_value("invalid") == 0.0
+    assert _extract_scalar_value([], default=1.0) == 1.0
 
 
-def test_utils_sanitise_na_color_fails_when_input_isnt_a_color():
-    with pytest.raises(ValueError):
-        _sanitise_na_color((1, 0))
+def test_plot_can_handle_rgba_color_specifications(sdata_blobs: SpatialData):
+    """Test handling of RGBA color specifications."""
+    # Test with RGBA tuple
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(1.0, 0.0, 0.0, 0.8)).pl.show()
+
+    # Test with RGB tuple (no alpha)
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color=(0.0, 1.0, 0.0)).pl.show()
+
+    # Test with string color
+    sdata_blobs.pl.render_shapes(element="blobs_circles", color="blue").pl.show()
 
 
 @pytest.mark.parametrize(

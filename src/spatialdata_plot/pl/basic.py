@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import sys
-import warnings
 from collections import OrderedDict
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,21 +16,29 @@ from anndata import AnnData
 from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
+from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, Normalize
 from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
+from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
     _render_points,
     _render_shapes,
+    _split_colorbar_params,
 )
 from spatialdata_plot.pl.render_params import (
+    CBAR_DEFAULT_FRACTION,
+    CBAR_DEFAULT_LOCATION,
+    CBAR_DEFAULT_PAD,
     CmapParams,
+    ColorbarSpec,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -61,7 +69,7 @@ from spatialdata_plot.pl.utils import (
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | str
+ColorLike = tuple[float, ...] | list[float] | str
 
 
 @register_spatial_data_accessor("pl")
@@ -156,20 +164,24 @@ class PlotAccessor:
     def render_shapes(
         self,
         element: str | None = None,
-        color: str | None = None,
-        fill_alpha: float | int = 1.0,
+        color: ColorLike | None = None,
+        *,
+        fill_alpha: float | int | None = None,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
-        outline_width: float | int = 1.5,
-        outline_color: str | list[float] = "#000000",
-        outline_alpha: float | int = 0.0,
+        outline_width: float | int | tuple[float | int, float | int] | None = None,
+        outline_color: ColorLike | tuple[ColorLike] | None = None,
+        outline_alpha: float | int | tuple[float | int, float | int] | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         scale: float | int = 1.0,
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
+        colorbar: bool | str | None = "auto",
+        colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -186,15 +198,18 @@ class PlotAccessor:
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
             used.
-        color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
-            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
-            broadcasted to all elements. For this, the table in which the color key is found must annotate the
-            respective element (region must be set to the specific element). If the color column is found in multiple
-            locations, please provide the table_name to be used for the elements.
-        fill_alpha : float | int, default 1.0
-            Alpha value for the fill of shapes. If the alpha channel is present in a cmap passed by the user, this value
-            will multiply the value present in the cmap.
+        color : ColorLike | None, optional
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
+            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
+            the color key is found must annotate the respective element (region must be set to the specific element). If
+            the color column is found in multiple locations, please provide the table_name to be used for the elements.
+        fill_alpha : float | int | None, optional
+            Alpha value for the fill of shapes. By default, it is set to 1.0 or, if a color is given that implies an
+            alpha, that value is used for `fill_alpha`. If an alpha channel is present in a cmap passed by the user,
+            `fill_alpha` will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
@@ -204,18 +219,25 @@ class PlotAccessor:
             match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
             all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
-        outline_width : float | int, default 1.5
-            Width of the border.
-        outline_color : str | list[float], default "#000000"
+        outline_width : float | int | tuple[float | int, float | int], optional
+            Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
+            If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
+            default outline widths 1.5 and 0.5 are used for outer/only and inner outline respectively.
+        outline_color : ColorLike | tuple[ColorLike], optional
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
-            "#000000ff", the last two positions are ignored, since the alpha of the outlines is solely controlled by
-            `outline_alpha`.
-        outline_alpha : float | int, default 0.0
-            Alpha value for the outline of shapes. Invisible by default.
+            "#000000ff", and `outline_alpha` is not given, this value controls the opacity of the outline. If 2 values
+            are given (tuple), 2 borders are shown with these colors (outer & inner). If `outline_width` and/or
+            `outline_alpha` are used to indicate that one/two outlines should be drawn, the default outline colors
+            "#000000" and "#ffffff are used for outer/only and inner outline respectively.
+        outline_alpha : float | int | tuple[float | int, float | int] | None, optional
+            Alpha value for the outline of shapes. Invisible by default, meaning outline_alpha=0.0 if both outline_color
+            and outline_width are not specified. Else, outlines are rendered with the alpha implied by outline_color, or
+            with outline_alpha=1.0 if outline_color does not imply an alpha. For two outlines, alpha values can be
+            passed in a tuple of length 2.
         cmap : Colormap | str | None, optional
             Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
         norm : bool | Normalize, default False
@@ -225,6 +247,11 @@ class PlotAccessor:
         method : str | None, optional
             Whether to use 'matplotlib' and 'datashader'. When None, the method is
             chosen based on the size of the data.
+        colorbar :
+            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
+        colorbar_params :
+            Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
+            and ``label``.
         table_name: str | None
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
@@ -232,6 +259,11 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        shape: Literal["circle", "hex", "visium_hex", "square"] | None
+            If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
+            specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
+            specified, the shapes are assumed to be Visium spots and the size of the hexagons is adjusted to be adjacent
+            to each other.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -255,11 +287,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
@@ -276,15 +304,22 @@ class PlotAccessor:
             scale=scale,
             table_name=table_name,
             table_layer=table_layer,
+            shape=shape,
             method=method,
             ds_reduction=kwargs.get("datashader_reduction"),
+            colorbar=colorbar,
+            colorbar_params=colorbar_params,
         )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
-        outline_params = _set_outline(outline_alpha > 0, outline_width, outline_color)
         for element, param_values in params_dict.items():
+            final_outline_alpha, outline_params = _set_outline(
+                params_dict[element]["outline_alpha"],
+                params_dict[element]["outline_width"],
+                params_dict[element]["outline_color"],
+            )
             cmap_params = _prepare_cmap_norm(
                 cmap=cmap,
                 norm=norm,
@@ -299,14 +334,17 @@ class PlotAccessor:
                 outline_params=outline_params,
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
-                outline_alpha=param_values["outline_alpha"],
+                outline_alpha=final_outline_alpha,
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc"),
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
+                shape=param_values["shape"],
                 zorder=n_steps,
                 method=param_values["method"],
                 ds_reduction=param_values["ds_reduction"],
+                colorbar=param_values["colorbar"],
+                colorbar_params=param_values["colorbar_params"],
             )
             n_steps += 1
 
@@ -316,8 +354,9 @@ class PlotAccessor:
     def render_points(
         self,
         element: str | None = None,
-        color: str | None = None,
-        alpha: float | int = 1.0,
+        color: ColorLike | None = None,
+        *,
+        alpha: float | int | None = None,
         groups: list[str] | str | None = None,
         palette: list[str] | str | None = None,
         na_color: ColorLike | None = "default",
@@ -327,6 +366,8 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        colorbar: bool | str | None = "auto",
+        colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -343,14 +384,17 @@ class PlotAccessor:
         element : str | None, optional
             The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
             used.
-        color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs`. The latter can be used to
-            color by categorical or continuous variables. If `element` is `None`, if possible the color will be
-            broadcasted to all elements. For this, the table in which the color key is found must annotate the
-            respective element (region must be set to the specific element). If the color column is found in multiple
-            locations, please provide the table_name to be used for the elements.
-        alpha : float | int, default 1.0
-            Alpha value for the points.
+        color : str | None, optional
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
+            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
+            `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
+            the color key is found must annotate the respective element (region must be set to the specific element). If
+            the color column is found in multiple locations, please provide the table_name to be used for the elements.
+        alpha : float | int | None, optional
+            Alpha value for the points. By default, it is set to 1.0 or, if a color is given that implies an alpha, that
+            value is used instead.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. If `element` is `None`, broadcasting behaviour is attempted (use the same
@@ -360,7 +404,7 @@ class PlotAccessor:
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
             for all elements). If groups is provided but not palette, palette is set to default "lightgray".
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
+            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
         cmap : Colormap | str | None, optional
@@ -373,6 +417,11 @@ class PlotAccessor:
         method : str | None, optional
             Whether to use 'matplotlib' and 'datashader'. When None, the method is
             chosen based on the size of the data.
+        colorbar :
+            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
+        colorbar_params :
+            Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
+            and ``label``.
         table_name: str | None
             Name of the table containing the color(s) columns. If one name is given than the table is used for each
             spatial element to be plotted if the table annotates it. If you want to use different tables for particular
@@ -396,11 +445,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -415,6 +460,8 @@ class PlotAccessor:
             table_name=table_name,
             table_layer=table_layer,
             ds_reduction=kwargs.get("datashader_reduction"),
+            colorbar=colorbar,
+            colorbar_params=colorbar_params,
         )
 
         if method is not None:
@@ -448,6 +495,8 @@ class PlotAccessor:
                 zorder=n_steps,
                 method=method,
                 ds_reduction=param_values["ds_reduction"],
+                colorbar=param_values["colorbar"],
+                colorbar_params=param_values["colorbar_params"],
             )
             n_steps += 1
 
@@ -457,6 +506,7 @@ class PlotAccessor:
     def render_images(
         self,
         element: str | None = None,
+        *,
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -464,6 +514,8 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
+        colorbar: bool | str | None = "auto",
+        colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -506,6 +558,11 @@ class PlotAccessor:
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
+        colorbar :
+            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
+        colorbar_params :
+            Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
+            and ``label``.
         kwargs
             Additional arguments to be passed to cmap, norm, and other rendering functions.
 
@@ -516,11 +573,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -531,6 +584,8 @@ class PlotAccessor:
             cmap=cmap,
             norm=norm,
             scale=scale,
+            colorbar=colorbar,
+            colorbar_params=colorbar_params,
         )
 
         sdata = self._copy()
@@ -564,6 +619,8 @@ class PlotAccessor:
                 alpha=param_values["alpha"],
                 scale=param_values["scale"],
                 zorder=n_steps,
+                colorbar=param_values["colorbar"],
+                colorbar_params=param_values["colorbar_params"],
             )
             n_steps += 1
 
@@ -574,6 +631,7 @@ class PlotAccessor:
         self,
         element: str | None = None,
         color: str | None = None,
+        *,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
         palette: list[str] | str | None = None,
@@ -583,6 +641,8 @@ class PlotAccessor:
         outline_alpha: float | int = 0.0,
         fill_alpha: float | int = 0.4,
         scale: str | None = None,
+        colorbar: bool | str | None = "auto",
+        colorbar_params: dict[str, object] | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
         **kwargs: Any,
@@ -601,7 +661,7 @@ class PlotAccessor:
         element : str | None
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
-        color : list[str] | str | None
+        color : str | None
             Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
             :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
             color column is found in multiple locations, please provide the table_name to be used for the element if you
@@ -626,7 +686,7 @@ class PlotAccessor:
             won't be shown.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
-        fill_alpha : float | int, default 0.3
+        fill_alpha : float | int, default 0.4
             Alpha value for the fill of the labels.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
@@ -636,6 +696,11 @@ class PlotAccessor:
                 (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
+        colorbar :
+            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
+        colorbar_params :
+            Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
+            and ``label``.
         table_name: str | None
             Name of the table containing the color columns.
         table_layer: str | None
@@ -650,11 +715,7 @@ class PlotAccessor:
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
-            warnings.warn(
-                "`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
@@ -668,6 +729,8 @@ class PlotAccessor:
             outline_alpha=outline_alpha,
             palette=palette,
             scale=scale,
+            colorbar=colorbar,
+            colorbar_params=colorbar_params,
             table_name=table_name,
             table_layer=table_layer,
         )
@@ -696,6 +759,8 @@ class PlotAccessor:
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
                 zorder=n_steps,
+                colorbar=param_values["colorbar"],
+                colorbar_params=param_values["colorbar_params"],
             )
             n_steps += 1
         return sdata
@@ -703,12 +768,14 @@ class PlotAccessor:
     def show(
         self,
         coordinate_systems: list[str] | str | None = None,
+        *,
         legend_fontsize: int | float | _FontSize | None = None,
         legend_fontweight: int | _FontWeight = "bold",
         legend_loc: str | None = "right margin",
         legend_fontoutline: int | None = None,
         na_in_legend: bool = True,
         colorbar: bool = True,
+        colorbar_params: dict[str, object] | None = None,
         wspace: float | None = None,
         hspace: float = 0.25,
         ncols: int = 4,
@@ -747,7 +814,10 @@ class PlotAccessor:
         return_ax :
             Whether to return the axes object created. False by default.
         colorbar :
-            Whether to plot the colorbar. True by default.
+            Global switch to enable/disable all colorbars. Per-layer settings are ignored when this is False.
+        colorbar_params :
+            Global overrides passed to colorbars for all axes. Accepts the same keys as per-layer ``colorbar_params``
+            (e.g., ``loc``, ``width``, ``pad``, ``label``).
         title :
             The title of the plot. If not provided the plot will have the name of the coordinate system as title.
 
@@ -772,6 +842,7 @@ class PlotAccessor:
             legend_fontoutline,
             na_in_legend,
             colorbar,
+            colorbar_params,
             wspace,
             hspace,
             ncols,
@@ -838,6 +909,7 @@ class PlotAccessor:
 
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
+        pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]] = []
 
         elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_contents, cs)
 
@@ -874,27 +946,106 @@ class PlotAccessor:
             ncols=ncols,
             frameon=frameon,
         )
+        legend_colorbar = colorbar
         legend_params = LegendParams(
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,
             legend_loc=legend_loc,
             legend_fontoutline=legend_fontoutline,
             na_in_legend=na_in_legend,
-            colorbar=colorbar,
+            colorbar=legend_colorbar,
         )
+
+        def _draw_colorbar(
+            spec: ColorbarSpec,
+            fig: Figure,
+            renderer: RendererBase,
+            base_offsets_axes: dict[str, float],
+            trackers_axes: dict[str, float],
+        ) -> None:
+            base_layout = {
+                "location": CBAR_DEFAULT_LOCATION,
+                "fraction": CBAR_DEFAULT_FRACTION,
+                "pad": CBAR_DEFAULT_PAD,
+            }
+            layer_layout, layer_kwargs, layer_label_override = _split_colorbar_params(spec.params)
+            global_layout, global_kwargs, global_label_override = _split_colorbar_params(colorbar_params)
+            layout = {**base_layout, **layer_layout, **global_layout}
+            cbar_kwargs = {**layer_kwargs, **global_kwargs}
+
+            location = cast(str, layout.get("location", base_layout["location"]))
+            if location not in {"left", "right", "top", "bottom"}:
+                location = CBAR_DEFAULT_LOCATION
+            default_orientation = "vertical" if location in {"right", "left"} else "horizontal"
+            cbar_kwargs.setdefault("orientation", default_orientation)
+
+            fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
+            pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
+
+            if location in {"left", "right"}:
+                pad_axes = pad + trackers_axes[location]
+                x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
+                bbox = (float(x0), 0.0, float(fraction), 1.0)
+            else:
+                pad_axes = pad + trackers_axes[location]
+                y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
+                bbox = (0.0, float(y0), 1.0, float(fraction))
+            cax = inset_axes(
+                spec.ax,
+                width="100%",
+                height="100%",
+                loc="center",
+                bbox_to_anchor=bbox,
+                bbox_transform=spec.ax.transAxes,
+                borderpad=0.0,
+            )
+
+            cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
+            if location == "left":
+                cb.ax.yaxis.set_ticks_position("left")
+                cb.ax.yaxis.set_label_position("left")
+                cb.ax.tick_params(labelleft=True, labelright=False)
+            elif location == "top":
+                cb.ax.xaxis.set_ticks_position("top")
+                cb.ax.xaxis.set_label_position("top")
+                cb.ax.tick_params(labeltop=True, labelbottom=False)
+            elif location == "right":
+                cb.ax.yaxis.set_ticks_position("right")
+                cb.ax.yaxis.set_label_position("right")
+                cb.ax.tick_params(labelright=True, labelleft=False)
+            elif location == "bottom":
+                cb.ax.xaxis.set_ticks_position("bottom")
+                cb.ax.xaxis.set_label_position("bottom")
+                cb.ax.tick_params(labelbottom=True, labeltop=False)
+
+            final_label = global_label_override or layer_label_override or spec.label
+            if final_label:
+                cb.set_label(final_label)
+            if spec.alpha is not None:
+                with contextlib.suppress(Exception):
+                    cb.solids.set_alpha(spec.alpha)
+            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
+            if location == "left":
+                trackers_axes["left"] = pad_axes + bbox_axes.width
+            elif location == "right":
+                trackers_axes["right"] = pad_axes + bbox_axes.width
+            elif location == "bottom":
+                trackers_axes["bottom"] = pad_axes + bbox_axes.height
+            elif location == "top":
+                trackers_axes["top"] = pad_axes + bbox_axes.height
 
         cs_contents = _get_cs_contents(sdata)
 
         # go through tree
 
         for i, cs in enumerate(coordinate_systems):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning)
-                sdata = self._copy()
+            sdata = self._copy()
             _, has_images, has_labels, has_points, has_shapes = (
                 cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
             )
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
+            assert isinstance(ax, Axes)
+            axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params.colorbar else None
 
             wants_images = False
             wants_labels = False
@@ -924,6 +1075,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
+                            colorbar_requests=axis_colorbar_requests,
                             rasterize=rasterize,
                         )
 
@@ -941,6 +1093,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
+                            colorbar_requests=axis_colorbar_requests,
                         )
 
                 elif cmd == "render_points" and has_points:
@@ -957,6 +1110,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
+                            colorbar_requests=axis_colorbar_requests,
                         )
 
                 elif cmd == "render_labels" and has_labels:
@@ -965,7 +1119,8 @@ class PlotAccessor:
                     )
 
                     if wanted_labels_on_this_cs:
-                        if (table := params_copy.table_name) is not None:
+                        table = params_copy.table_name
+                        if table is not None:
                             assert isinstance(params_copy.color, str)
                             colors = sc.get.obs_df(sdata[table], [params_copy.color])
                             if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
@@ -989,6 +1144,7 @@ class PlotAccessor:
                             fig_params=fig_params,
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
+                            colorbar_requests=axis_colorbar_requests,
                             rasterize=rasterize,
                         )
 
@@ -1024,6 +1180,33 @@ class PlotAccessor:
                 y_max = max(ax_y_max, cs_y_max) + pad_extent
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
+
+            if legend_params.colorbar and axis_colorbar_requests:
+                pending_colorbars.append((ax, axis_colorbar_requests))
+
+        if pending_colorbars and fig_params.fig is not None:
+            fig = fig_params.fig
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            for axis, requests in pending_colorbars:
+                unique_specs: list[ColorbarSpec] = []
+                seen_mappables: set[int] = set()
+                for spec in requests:
+                    mappable_id = id(spec.mappable)
+                    if mappable_id in seen_mappables:
+                        continue
+                    seen_mappables.add(mappable_id)
+                    unique_specs.append(spec)
+                tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
+                base_offsets_axes = {
+                    "left": max(0.0, -tight_bbox.x0),
+                    "right": max(0.0, tight_bbox.x1 - 1),
+                    "bottom": max(0.0, -tight_bbox.y0),
+                    "top": max(0.0, tight_bbox.y1 - 1),
+                }
+                trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
+                for spec in unique_specs:
+                    _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
