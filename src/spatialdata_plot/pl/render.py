@@ -1103,13 +1103,11 @@ def _render_images(
             layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
             if isinstance(render_params.cmap_params, list):
                 ch_norm = render_params.cmap_params[ch_idx].norm
-                ch_cmap_is_default = render_params.cmap_params[ch_idx].cmap_is_default
             else:
                 ch_norm = render_params.cmap_params.norm
-                ch_cmap_is_default = render_params.cmap_params.cmap_is_default
 
-            if not ch_cmap_is_default and ch_norm is not None:
-                layers[ch_idx] = ch_norm(layers[ch_idx])
+            if ch_norm is not None:
+                layers[ch] = ch_norm(layers[ch])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
