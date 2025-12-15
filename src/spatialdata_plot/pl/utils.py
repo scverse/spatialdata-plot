@@ -371,17 +371,19 @@ def _get_collection_shape(
     def _as_rgba_array(x: Any) -> np.ndarray:
         return np.asarray(ColorConverter().to_rgba_array(x))
 
+    n_shapes = len(shapes)
+
     # Case A: per-row numeric colors given as Nx3 or Nx4 float array
     if (
         c_arr.ndim == 2
-        and c_arr.shape[0] == len(shapes)
+        and c_arr.shape[0] == n_shapes
         and c_arr.shape[1] in (3, 4)
         and np.issubdtype(c_arr.dtype, np.number)
     ):
         fill_c = _as_rgba_array(c_arr)
 
     # Case B: continuous numeric vector len == n_shapes (possibly with NaNs)
-    elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and np.issubdtype(c_arr.dtype, np.number):
+    elif c_arr.ndim == 1 and len(c_arr) == n_shapes and np.issubdtype(c_arr.dtype, np.number):
         finite_mask = np.isfinite(c_arr)
 
         # Select or build a normalization that ignores NaNs for scaling
@@ -403,7 +405,8 @@ def _get_collection_shape(
         if finite_mask.any():
             fill_c[finite_mask] = cmap(used_norm(c_arr[finite_mask]))
 
-    elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and c_arr.dtype == object:
+    # Case B': 1D object/str column: may contain numeric-like and/or explicit color specs
+    elif c_arr.ndim == 1 and len(c_arr) == n_shapes and c_arr.dtype == object:
         # Split into numeric vs color-like
         c_series = pd.Series(c_arr, copy=False)
         num = pd.to_numeric(c_series, errors="coerce").to_numpy()
@@ -434,15 +437,19 @@ def _get_collection_shape(
     else:
         fill_c = _as_rgba_array(c)
 
-    # Apply optional fill alpha without destroying existing transparency
+    # Apply global fill alpha from render_params
+    if getattr(render_params, "fill_alpha", None) is not None:
+        fill_c[..., -1] *= float(render_params.fill_alpha)
+
+    # Override with explicit fill_alpha if provided
     if fill_alpha is not None:
         nonzero_alpha = fill_c[..., -1] > 0
-        fill_c[nonzero_alpha, -1] = fill_alpha
+        fill_c[nonzero_alpha, -1] = float(fill_alpha)
 
     # Outline handling
-    if outline_alpha and outline_alpha > 0.0:
+    if outline_alpha is not None and outline_alpha > 0.0:
         outline_c_array = _as_rgba_array(outline_color)
-        outline_c_array[..., -1] = outline_alpha
+        outline_c_array[..., -1] = float(outline_alpha)
         outline_c = outline_c_array.tolist()
     else:
         outline_c = [None] * fill_c.shape[0]
@@ -536,9 +543,7 @@ def _get_collection_shape(
                 rows.append(pr)
         return pd.DataFrame(rows)
 
-    patches = _create_patches(
-        shapes_df, fill_c.tolist(), outline_c.tolist() if hasattr(outline_c, "tolist") else outline_c, s
-    )
+    patches = _create_patches(shapes_df, fill_c.tolist(), outline_c, s)
 
     return PatchCollection(
         patches["geometry"].values.tolist(),
@@ -998,7 +1003,8 @@ def _set_color_source_vec(
 
     if len(origins) > 1:
         raise ValueError(
-            f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
+            f"Color key '{value_to_plot}' for element '{element_name}' was found in multiple locations: {origins}. "
+            "Please keep it in exactly one place (preferably on the points parquet for speed) to avoid ambiguity."
         )
 
     if len(origins) == 1 and value_to_plot is not None:
@@ -1020,6 +1026,64 @@ def _set_color_source_vec(
         color_series = (
             color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
         )
+
+        if color_series.isna().all():
+            element_label = _format_element_name(element_name)
+            location = f"table '{table_name}'" if table_name is not None else "the element"
+            # Provide dtype hints to help diagnose index alignment issues
+            dtype_hints: list[str] = []
+            color_index_dtype = getattr(color_series.index, "dtype", None)
+            element_index_dtype = (
+                getattr(getattr(element, "index", None), "dtype", None) if element is not None else None
+            )
+
+            table_instance_dtype = None
+            table_index_dtype = None
+            instance_key = None
+            if table_name is not None and sdata is not None and table_name in sdata.tables:
+                table = sdata.tables[table_name]
+                table_index_dtype = getattr(getattr(table, "obs", None), "index", None)
+                if table_index_dtype is not None:
+                    table_index_dtype = getattr(table_index_dtype, "dtype", None)
+                try:
+                    _, _, instance_key = get_table_keys(table)
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    instance_key = None
+                if instance_key is not None and hasattr(table, "obs") and instance_key in table.obs:
+                    table_instance_dtype = table.obs[instance_key].dtype
+
+            if (
+                element_index_dtype is not None
+                and table_instance_dtype is not None
+                and element_index_dtype != table_instance_dtype
+            ):
+                dtype_hints.append(
+                    f"element index dtype is {element_index_dtype}, '{instance_key}' dtype is {table_instance_dtype}"
+                )
+            if (
+                table_index_dtype is not None
+                and table_instance_dtype is not None
+                and table_index_dtype != table_instance_dtype
+            ):
+                dtype_hints.append(
+                    f"table index dtype is {table_index_dtype}, '{instance_key}' dtype is {table_instance_dtype}"
+                )
+            if (
+                color_index_dtype is not None
+                and element_index_dtype is not None
+                and color_index_dtype != element_index_dtype
+            ):
+                dtype_hints.append(
+                    f"color index dtype is {color_index_dtype}, element index dtype is {element_index_dtype}"
+                )
+
+            dtype_hint = f" (hint: {'; '.join(dtype_hints)})" if dtype_hints else ""
+            raise ValueError(
+                f"Column '{value_to_plot}' for element '{element_label}' contains only missing values after aligning "
+                f"with {location}. This usually means the instance ids/indices could not be aligned or converted, so "
+                "colors cannot be determined. Please ensure the table annotates the element with matching instance ids."
+                f"{dtype_hint}"
+            )
 
         kind, processed = _infer_color_data_kind(
             series=color_series,
@@ -1045,6 +1109,9 @@ def _set_color_source_vec(
             return None, numeric_vector, False
 
         assert isinstance(processed, pd.Categorical)
+        if not processed.ordered:
+            # ensure deterministic category order when the source is unordered (e.g., from a Python set)
+            processed = processed.reorder_categories(sorted(processed.categories))
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
         # Use the provided table_name parameter, fall back to only one present
@@ -1121,6 +1188,12 @@ def _set_color_source_vec(
 
         # do not rename categories, as colors need not be unique
         color_vector = color_source_vector.map(color_mapping)
+        # nan handling: only add the NA category if needed, and store it as a hex string
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        if pd.isna(color_vector).any():
+            if na_color_hex not in color_vector.categories:
+                color_vector = color_vector.add_categories(na_color_hex)
+            color_vector[pd.isna(color_vector)] = na_color_hex
 
         return color_source_vector, color_vector, True
 
@@ -1148,15 +1221,18 @@ def _map_color_seg(
 
     if pd.api.types.is_categorical_dtype(color_vector.dtype):
         # Case A: users wants to plot a categorical column
-        if np.any(color_source_vector.isna()):
-            cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        # normalize only the not nan values, else the whole array would contain only nan values
+        normed_color_vector = color_vector.copy().astype(float)
+        normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
+            normed_color_vector[~np.isnan(normed_color_vector)]
+        )
+        cols = cmap_params.cmap(normed_color_vector)
         val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors
@@ -2639,6 +2715,7 @@ def _validate_col_for_column_table(
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
         if table_name not in tables:
+            logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
         if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
             raise KeyError(
@@ -3032,7 +3109,7 @@ def _prepare_transformation(
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] = None,
+    color_key: list[str] | dict[str, str] | None = None,
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,

@@ -787,6 +787,58 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_shapes("blobs_circles", color="feature0", table_layer="normalized").pl.show()
 
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_categorical(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="category").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_categorical_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="category", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="col_a").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="col_a", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_X_continuous(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="col1").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_X_continuous_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="col1", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_categorical(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series([np.nan, "x", "x", "y", "y"], dtype="category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_categorical_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series([np.nan, "x", "x", "y", "y"], dtype="category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", method="datashader").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_continuous(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
+
     def test_plot_respects_custom_colors_from_uns(self, sdata_blobs: SpatialData):
         shapes_name = "blobs_polygons"
         # Ensure that the table annotations point to the shapes element
