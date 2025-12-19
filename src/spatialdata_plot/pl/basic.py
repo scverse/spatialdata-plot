@@ -640,6 +640,7 @@ class PlotAccessor:
         na_color: ColorLike | None = "default",
         outline_alpha: float | int = 0.0,
         fill_alpha: float | int = 0.4,
+        outline_color: ColorLike | tuple[ColorLike] | None = None,
         scale: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
@@ -688,6 +689,11 @@ class PlotAccessor:
             Alpha value for the outline of the labels. Invisible by default.
         fill_alpha : float | int, default 0.4
             Alpha value for the fill of the labels.
+        outline_color : ColorLike | tuple[ColorLike] | None
+            Color of the outline of the labels. Can either be a named color ("red"), a hex representation
+            ("#000000") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If a tuple of colors is
+            given, the first color is used for the outline and the second color for the fill. If None, the outline color
+            is set to "black".
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -727,6 +733,7 @@ class PlotAccessor:
             na_color=na_color,
             norm=norm,
             outline_alpha=outline_alpha,
+            outline_color=outline_color,
             palette=palette,
             scale=scale,
             colorbar=colorbar,
@@ -753,6 +760,7 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 outline_alpha=param_values["outline_alpha"],
+                outline_color=param_values["outline_color"],
                 fill_alpha=param_values["fill_alpha"],
                 transfunc=kwargs.get("transfunc"),
                 scale=param_values["scale"],
