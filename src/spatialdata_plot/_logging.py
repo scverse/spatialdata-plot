@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
+from ._settings import settings
 
 if TYPE_CHECKING:  # pragma: no cover
     from _pytest.logging import LogCaptureFixture
@@ -15,10 +16,14 @@ def _setup_logger() -> "logging.Logger":
     from rich.logging import RichHandler
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    
+    level = logging.INFO if settings.verbose else logging.WARNING
+    logger.setLevel(level)
+    
     console = Console(force_terminal=True)
     if console.is_jupyter is True:
         console.is_jupyter = False
+    
     ch = RichHandler(show_path=False, console=console, show_time=False)
     logger.addHandler(ch)
 
@@ -69,3 +74,8 @@ def logger_warns(
         if not any(pattern.search(r.getMessage()) for r in records):
             msgs = [r.getMessage() for r in records]
             raise AssertionError(f"Did not find log matching {match!r} in records: {msgs!r}")
+
+
+def set_verbosity(verbose: bool = True) -> None:
+    level = logging.INFO if verbose else logging.WARNING
+    logger.setLevel(level)
