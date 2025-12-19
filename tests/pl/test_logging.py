@@ -1,9 +1,9 @@
 import logging
-import pytest
+
 import spatialdata_plot
 
-class TestLogging(PlotTester, metaclass=PlotTesterMeta):
 
+class TestLogging(PlotTester, metaclass=PlotTesterMeta):
     def test_default_verbosity_hides_info(self, sdata_blobs: "SpatialData", caplog):
         """INFO logs should be hidden by default."""
         caplog.set_level(logging.INFO, logger=spatialdata_plot._logging.logger.name)
