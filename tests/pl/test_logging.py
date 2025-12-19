@@ -4,10 +4,12 @@ import spatialdata_plot
 from spatialdata import SpatialData
 from tests.conftest import PlotTester, PlotTesterMeta
 
+
 class TestLogging(PlotTester, metaclass=PlotTesterMeta):
     def test_default_verbosity_hides_info(self, sdata_blobs: SpatialData, caplog):
         """INFO logs should be hidden by default."""
-        caplog.set_level(logging.INFO, logger=spatialdata_plot._logging.logger.name)
+        # Capture all logs under the 'spatialdata_plot' hierarchy
+        caplog.set_level(logging.INFO, logger="spatialdata_plot")
 
         # default is verbose=False
         sdata_blobs.pl.render_shapes("blobs_circles", method="datashader").pl.show()
@@ -18,11 +20,11 @@ class TestLogging(PlotTester, metaclass=PlotTesterMeta):
     def test_verbose_verbosity_shows_info(self, sdata_blobs: SpatialData, caplog):
         """INFO logs should appear when verbose=True."""
         spatialdata_plot.set_verbosity(True)
-        caplog.set_level(logging.INFO, logger=spatialdata_plot._logging.logger.name)
+        caplog.set_level(logging.INFO, logger="spatialdata_plot")
 
         sdata_blobs.pl.render_shapes("blobs_circles", method="datashader").pl.show()
 
-        # at least one INFO record should exist
+        # at least one INFO record should exist anywhere under spatialdata_plot
         assert any(record.levelno == logging.INFO for record in caplog.records)
 
         # reset verbosity for other tests
