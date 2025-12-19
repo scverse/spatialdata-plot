@@ -13,10 +13,10 @@ from typing import Any, Literal
 import dask
 import datashader as ds
 import matplotlib
+import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import matplotlib.ticker
 import matplotlib.transforms as mtransforms
 import numpy as np
@@ -56,7 +56,6 @@ from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 from skimage.color import label2rgb
 from skimage.morphology import erosion, footprint_rectangle
-from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
@@ -1196,7 +1195,7 @@ def _map_color_seg(
     if seg_boundaries:
         if seg.shape[0] == 1:
             seg = np.squeeze(seg, axis=0)
-        
+
         # Binary boundary mask
         boundary_mask = seg.astype(bool)
 
@@ -1217,11 +1216,11 @@ def _map_color_seg(
         else:
             # assume it's your Color object
             outline_rgba = mcolors.to_rgba(outline_color.get_hex_with_alpha())
-            
+
         # Apply outline color to boundary pixels, but keep original alpha from val_im
-        seg_float[boundary_mask, :3] = outline_rgba[:3]      # RGB
+        seg_float[boundary_mask, :3] = outline_rgba[:3]  # RGB
         seg_float[boundary_mask, 3] = alpha_channel[boundary_mask] * outline_rgba[3]  # scale alpha
-        
+
         return seg_float  # H x W x 4, valid RGBA
 
     if len(val_im.shape) != len(seg_im.shape):
