@@ -1338,7 +1338,7 @@ def _render_labels(
             assert color_source_vector is None
 
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float, 
-                    outline_color: ColorLike | tuple[ColorLike] | None = None) -> matplotlib.image.AxesImage:
+                    outline_color = None) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,

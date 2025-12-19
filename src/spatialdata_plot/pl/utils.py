@@ -55,7 +55,7 @@ from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 from skimage.color import label2rgb
-from skimage.morphology import erosion, square
+from skimage.morphology import erosion, footprint_rectangle
 from skimage.segmentation import find_boundaries
 from skimage.util import map_array
 from spatialdata import (
@@ -1183,7 +1183,7 @@ def _map_color_seg(
                 cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
     if seg_erosionpx is not None:
-        val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
+        val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
@@ -1198,7 +1198,7 @@ def _map_color_seg(
             seg = np.squeeze(seg, axis=0)
         
         # Binary boundary mask
-        boundary_mask = find_boundaries(seg)  # True where boundaries are
+        boundary_mask = seg.astype(bool)
 
         # Ensure seg_im is float in 0-1 and has 3 channels
         seg_float = seg_im.astype(float)
@@ -1217,11 +1217,11 @@ def _map_color_seg(
         else:
             # assume it's your Color object
             outline_rgba = mcolors.to_rgba(outline_color.get_hex_with_alpha())
-
+            
         # Apply outline color to boundary pixels, but keep original alpha from val_im
         seg_float[boundary_mask, :3] = outline_rgba[:3]      # RGB
         seg_float[boundary_mask, 3] = alpha_channel[boundary_mask] * outline_rgba[3]  # scale alpha
-
+        
         return seg_float  # H x W x 4, valid RGBA
 
     if len(val_im.shape) != len(seg_im.shape):
