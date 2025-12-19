@@ -1,7 +1,8 @@
 import logging
 
-import spatialdata_plot
 from spatialdata import SpatialData
+
+import spatialdata_plot
 from tests.conftest import PlotTester, PlotTesterMeta
 
 
