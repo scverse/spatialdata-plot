@@ -1,8 +1,10 @@
 import logging
 
-import spatialdata_plot
 from spatialdata import SpatialData
+
+import spatialdata_plot
 from tests.conftest import PlotTester, PlotTesterMeta
+
 
 class TestLogging(PlotTester, metaclass=PlotTesterMeta):
     def test_default_verbosity_hides_info(self, sdata_blobs: SpatialData, caplog):
