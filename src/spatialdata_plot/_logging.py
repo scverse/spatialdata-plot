@@ -20,6 +20,7 @@ def _setup_logger() -> "logging.Logger":
     if console.is_jupyter is True:
         console.is_jupyter = False
     ch = RichHandler(show_path=False, console=console, show_time=False)
+    ch.setFormatter(logging.Formatter("%(funcName)s: %(message)s"))
     logger.addHandler(ch)
 
     # this prevents double outputs
