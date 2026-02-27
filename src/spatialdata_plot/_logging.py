@@ -4,10 +4,26 @@ import logging
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from _pytest.logging import LogCaptureFixture
+
+# Holds the public-facing function name (e.g. "render_shapes") for log messages.
+# Set at the top of each _render_* entry point so that all downstream helpers
+# report the user-visible origin rather than internal function names.
+_log_context: ContextVar[str] = ContextVar("_log_context", default="")
+
+
+class _ContextFilter(logging.Filter):
+    """Inject the public function name from ``_log_context`` into log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        ctx = _log_context.get()
+        if ctx:
+            record.funcName = ctx
+        return True
 
 
 def _setup_logger() -> "logging.Logger":
@@ -20,6 +36,8 @@ def _setup_logger() -> "logging.Logger":
     if console.is_jupyter is True:
         console.is_jupyter = False
     ch = RichHandler(show_path=False, console=console, show_time=False)
+    ch.setFormatter(logging.Formatter("%(funcName)s: %(message)s"))
+    ch.addFilter(_ContextFilter())
     logger.addHandler(ch)
 
     # this prevents double outputs
