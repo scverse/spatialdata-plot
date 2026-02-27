@@ -23,7 +23,7 @@ from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
-from spatialdata_plot._logging import logger
+from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
@@ -121,6 +121,7 @@ def _render_shapes(
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
+    _log_context.set("render_shapes")
     element = render_params.element
     col_for_color = render_params.col_for_color
     groups = render_params.groups
@@ -608,6 +609,7 @@ def _render_points(
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
+    _log_context.set("render_points")
     element = render_params.element
     col_for_color = render_params.col_for_color
     table_name = render_params.table_name
@@ -998,6 +1000,7 @@ def _render_images(
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
+    _log_context.set("render_images")
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
@@ -1254,6 +1257,7 @@ def _render_labels(
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
+    _log_context.set("render_labels")
     element = render_params.element
     table_name = render_params.table_name
     table_layer = render_params.table_layer
