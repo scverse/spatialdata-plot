@@ -789,6 +789,7 @@ class PlotAccessor:
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
+        show: bool | None = None,
     ) -> sd.SpatialData:
         """
         Plot the images in the SpatialData object.
@@ -813,6 +814,12 @@ class PlotAccessor:
             Number of columns in the figure. Default is 4.
         return_ax :
             Whether to return the axes object created. False by default.
+        show :
+            Whether to call ``plt.show()`` at the end. If ``None`` (default), the plot is shown
+            automatically when running in non-interactive mode (scripts) and suppressed in
+            interactive sessions (e.g. Jupyter). Set to ``False`` to prevent ``plt.show()``
+            from being called, which is useful when you want to save or further modify the
+            figure after calling this method.
         colorbar :
             Global switch to enable/disable all colorbars. Per-layer settings are ignored when this is False.
         colorbar_params :
@@ -856,6 +863,7 @@ class PlotAccessor:
             ax,
             return_ax,
             save,
+            show,
         )
 
         sdata = self._copy()
@@ -1211,8 +1219,11 @@ class PlotAccessor:
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
 
-        # Manually show plot if we're not in interactive mode
+        # Show the plot unless the caller opted out.
+        # Default (show=None): display in non-interactive mode (scripts), suppress in interactive sessions.
         # https://stackoverflow.com/a/64523765
-        if not hasattr(sys, "ps1"):
+        if show is None:
+            show = not hasattr(sys, "ps1")
+        if show:
             plt.show()
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
