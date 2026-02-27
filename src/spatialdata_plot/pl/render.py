@@ -1265,7 +1265,7 @@ def _render_labels(
     table_name = render_params.table_name
     table_layer = render_params.table_layer
     palette = render_params.palette
-    color = render_params.color
+    col_for_color = render_params.col_for_color
     groups = render_params.groups
     scale = render_params.scale
 
@@ -1314,23 +1314,25 @@ def _render_labels(
 
     _, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
+    na_color = render_params.color if render_params.color else render_params.cmap_params.na_color
     color_source_vector, color_vector, categorical = _set_color_source_vec(
         sdata=sdata_filt,
         element=label,
         element_name=element,
-        value_to_plot=color,
+        value_to_plot=col_for_color,
         groups=groups,
         palette=palette,
-        na_color=render_params.cmap_params.na_color,
+        na_color=na_color,
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
+        render_type="labels",
         coordinate_system=coordinate_system,
     )
 
     # rasterize could have removed labels from label
     # only problematic if color is specified
-    if rasterize and color is not None:
+    if rasterize and col_for_color is not None:
         labels_in_rasterized_image = np.unique(label.values)
         mask = np.isin(instance_id, labels_in_rasterized_image)
         instance_id = instance_id[mask]
@@ -1408,7 +1410,7 @@ def _render_labels(
     colorbar_requested = _should_request_colorbar(
         render_params.colorbar,
         has_mappable=cax is not None,
-        is_continuous=color is not None and color_source_vector is None and not categorical,
+        is_continuous=col_for_color is not None and color_source_vector is None and not categorical,
     )
 
     _ = _decorate_axs(
@@ -1416,7 +1418,7 @@ def _render_labels(
         cax=cax,
         fig_params=fig_params,
         adata=table,
-        value_to_plot=color,
+        value_to_plot=col_for_color,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
@@ -1432,7 +1434,7 @@ def _render_labels(
         colorbar_requests=colorbar_requests,
         colorbar_label=_resolve_colorbar_label(
             render_params.colorbar_params,
-            color if isinstance(color, str) else None,
+            col_for_color if isinstance(col_for_color, str) else None,
         ),
         scalebar_dx=scalebar_params.scalebar_dx,
         scalebar_units=scalebar_params.scalebar_units,
