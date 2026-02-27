@@ -25,7 +25,7 @@ from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._logging import logger
+from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl.render import (
     _render_images,
     _render_labels,
@@ -826,6 +826,7 @@ class PlotAccessor:
         sd.SpatialData
             A SpatialData object.
         """
+        _log_context.set("show")
         # copy the SpatialData object so we don't modify the original
         try:
             plotting_tree = self._sdata.plotting_tree
