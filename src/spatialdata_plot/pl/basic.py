@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1220,10 +1221,11 @@ class PlotAccessor:
             save_fig(fig_params.fig, path=save)
 
         # Show the plot unless the caller opted out.
-        # Default (show=None): display in non-interactive mode (scripts), suppress in interactive sessions.
-        # https://stackoverflow.com/a/64523765
+        # Default (show=None): display in non-interactive mode (scripts), suppress in interactive
+        # sessions. We check both sys.ps1 (standard REPL) and matplotlib.is_interactive()
+        # (covers IPython, Jupyter, plt.ion(), and IDE consoles like PyCharm).
         if show is None:
-            show = not hasattr(sys, "ps1")
+            show = not hasattr(sys, "ps1") and not matplotlib.is_interactive()
         if show:
             plt.show()
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
