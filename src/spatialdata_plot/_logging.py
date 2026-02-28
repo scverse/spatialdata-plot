@@ -1,30 +1,28 @@
 # from https://github.com/scverse/spatialdata/blob/main/src/spatialdata/_logging.py
 
+from __future__ import annotations
+
 import logging
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from ._settings import settings
+from ._settings import _VERBOSITY_TO_LOGLEVEL, Verbosity
 
 if TYPE_CHECKING:  # pragma: no cover
     from _pytest.logging import LogCaptureFixture
 
 
-def _setup_logger() -> "logging.Logger":
+def _setup_logger() -> logging.Logger:
     from rich.console import Console
     from rich.logging import RichHandler
 
     logger = logging.getLogger(__name__)
-
-    level = logging.INFO if settings.verbose else logging.WARNING
-    logger.setLevel(level)
-
+    logger.setLevel(logging.WARNING)
     console = Console(force_terminal=True)
     if console.is_jupyter is True:
         console.is_jupyter = False
-
     ch = RichHandler(show_path=False, console=console, show_time=False)
     logger.addHandler(ch)
 
@@ -36,9 +34,31 @@ def _setup_logger() -> "logging.Logger":
 logger = _setup_logger()
 
 
+def set_verbosity(verbosity: Verbosity | int | str) -> None:
+    """Set the verbosity level of the spatialdata-plot logger.
+
+    Mirrors scanpy's verbosity convention.
+
+    Parameters
+    ----------
+    verbosity
+        The verbosity level. Accepts a :class:`Verbosity` enum member,
+        an ``int`` (0–3), or a ``str`` (e.g. ``"warning"``, ``"info"``).
+    """
+    if isinstance(verbosity, str):
+        try:
+            verbosity = Verbosity[verbosity.lower()]
+        except KeyError:
+            msg = f"Cannot set verbosity to {verbosity!r}. Accepted string values are: {list(Verbosity.__members__)}"
+            raise ValueError(msg) from None
+    else:
+        verbosity = Verbosity(verbosity)
+    logger.setLevel(_VERBOSITY_TO_LOGLEVEL[verbosity])
+
+
 @contextmanager
 def logger_warns(
-    caplog: "LogCaptureFixture",
+    caplog: LogCaptureFixture,
     logger: logging.Logger,
     match: str | None = None,
     level: int = logging.WARNING,
@@ -75,8 +95,3 @@ def logger_warns(
         if not any(pattern.search(r.getMessage()) for r in records):
             msgs = [r.getMessage() for r in records]
             raise AssertionError(f"Did not find log matching {match!r} in records: {msgs!r}")
-
-
-def set_verbosity(verbose: bool = True) -> None:
-    level = logging.INFO if verbose else logging.WARNING
-    logger.setLevel(level)

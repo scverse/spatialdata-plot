@@ -1,57 +1,65 @@
-import io
 import logging
 
-from spatialdata import SpatialData
+import pytest
 
 import spatialdata_plot
-from tests.conftest import PlotTester, PlotTesterMeta
+from spatialdata_plot._logging import logger
+from spatialdata_plot._settings import Verbosity
 
 
-class TestLogging(PlotTester, metaclass=PlotTesterMeta):
-    def test_default_verbosity_hides_info(self, sdata_blobs: SpatialData):
-        """INFO logs should be hidden by default."""
-        spatialdata_plot.set_verbosity(False)  # ensure default verbosity
+class TestSetVerbosity:
+    @pytest.fixture(autouse=True)
+    def _restore_verbosity(self):
+        """Restore default verbosity after each test."""
+        yield
+        spatialdata_plot.set_verbosity(Verbosity.warning)
 
-        # Replace all handlers temporarily
-        logger = spatialdata_plot._logging.logger
-        original_handlers = logger.handlers[:]
-        logger.handlers = []
+    def test_default_level_is_warning(self):
+        assert logger.level == logging.WARNING
 
-        log_stream = io.StringIO()
-        handler = logging.StreamHandler(log_stream)
-        handler.setLevel(logging.INFO)
-        logger.addHandler(handler)
+    @pytest.mark.parametrize(
+        ("input_value", "expected_level"),
+        [
+            (Verbosity.error, logging.ERROR),
+            (Verbosity.warning, logging.WARNING),
+            (Verbosity.info, logging.INFO),
+            (Verbosity.debug, logging.DEBUG),
+        ],
+    )
+    def test_set_verbosity_with_enum(self, input_value, expected_level):
+        spatialdata_plot.set_verbosity(input_value)
+        assert logger.level == expected_level
 
-        # Run the function
-        sdata_blobs.pl.render_shapes("blobs_circles", method="datashader").pl.show()
+    @pytest.mark.parametrize(
+        ("input_value", "expected_level"),
+        [
+            (0, logging.ERROR),
+            (1, logging.WARNING),
+            (2, logging.INFO),
+            (3, logging.DEBUG),
+        ],
+    )
+    def test_set_verbosity_with_int(self, input_value, expected_level):
+        spatialdata_plot.set_verbosity(input_value)
+        assert logger.level == expected_level
 
-        # Check captured logs — should NOT contain the datashader info message
-        logs = log_stream.getvalue()
-        assert "Using 'datashader' backend" not in logs
+    @pytest.mark.parametrize(
+        ("input_value", "expected_level"),
+        [
+            ("error", logging.ERROR),
+            ("WARNING", logging.WARNING),
+            ("Info", logging.INFO),
+            ("debug", logging.DEBUG),
+        ],
+    )
+    def test_set_verbosity_with_string(self, input_value, expected_level):
+        spatialdata_plot.set_verbosity(input_value)
+        assert logger.level == expected_level
 
-        # Restore original handlers
-        logger.handlers = original_handlers
+    def test_set_verbosity_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="Cannot set verbosity"):
+            spatialdata_plot.set_verbosity("verbose")
 
-    def test_verbose_verbosity_shows_info(self, sdata_blobs):
-        spatialdata_plot.set_verbosity(True)
-
-        # Replace all handlers temporarily
-        logger = spatialdata_plot._logging.logger
-        original_handlers = logger.handlers[:]
-        logger.handlers = []
-
-        log_stream = io.StringIO()
-        handler = logging.StreamHandler(log_stream)
-        handler.setLevel(logging.INFO)
-        logger.addHandler(handler)
-
-        # Run the function
-        sdata_blobs.pl.render_shapes("blobs_circles", method="datashader").pl.show()
-
-        # Check captured logs
-        logs = log_stream.getvalue()
-        assert "Using 'datashader' backend" in logs
-
-        # Restore original handlers
-        logger.handlers = original_handlers
-        spatialdata_plot.set_verbosity(False)
+    def test_set_verbosity_invalid_int_raises(self):
+        with pytest.raises(ValueError):
+            spatialdata_plot.set_verbosity(99)
