@@ -301,7 +301,7 @@ def _render_shapes(
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
         aggregate_with_reduction = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) >= 1):
             if color_by_categorical:
                 agg = cvs.polygons(
                     transformed_element,
@@ -358,7 +358,7 @@ def _render_shapes(
 
         color_key = (
             [_hex_no_alpha(x) for x in color_vector.categories.values]
-            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 1)
+            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
             else None
         )
 
@@ -814,7 +814,7 @@ def _render_points(
         if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
         aggregate_with_reduction = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) >= 1):
             if color_by_categorical:
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
@@ -852,14 +852,10 @@ def _render_points(
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key: list[str] | None = (
-            list(color_vector.categories.values)
-            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 1)
+            [_hex_no_alpha(x) for x in color_vector.categories.values]
+            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
             else None
         )
-
-        # remove alpha from color if it's hex
-        if color_key is not None and all(len(x) == 9 for x in color_key) and color_key[0][0] == "#":
-            color_key = [x[:-2] for x in color_key]
         if isinstance(color_vector[0], str) and (
             color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#"
         ):
