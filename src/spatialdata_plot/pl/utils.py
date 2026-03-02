@@ -2000,6 +2000,7 @@ def _validate_show_parameters(
     ax: list[Axes] | Axes | None,
     return_ax: bool,
     save: str | Path | None,
+    show: bool | None,
 ) -> None:
     if coordinate_systems is not None and not isinstance(coordinate_systems, list | str):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
@@ -2088,6 +2089,9 @@ def _validate_show_parameters(
 
     if save is not None and not isinstance(save, str | Path):
         raise TypeError("Parameter 'save' must be a string or a pathlib.Path.")
+
+    if show is not None and not isinstance(show, bool):
+        raise TypeError("Parameter 'show' must be a boolean or None.")
 
 
 def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
