@@ -62,6 +62,21 @@ from spatialdata_plot.pl.utils import (
 _Normalize = Normalize | abc.Sequence[Normalize]
 
 
+def _build_color_key_from_categorical(color_vector: pd.Categorical | np.ndarray | object) -> list[str] | None:
+    """Build a datashader ``color_key`` list from a categorical color vector.
+
+    Returns ``None`` when *color_vector* is not a :class:`pd.Categorical` or
+    has no categories.  Hex colours are stripped of their alpha channel;
+    named colours (e.g. ``"red"``) are passed through unchanged.
+    """
+    if not isinstance(getattr(color_vector, "dtype", None), pd.CategoricalDtype):
+        return None
+    cat_values = color_vector.categories.values  # type: ignore[union-attr]
+    if len(cat_values) == 0:
+        return None
+    return [_hex_no_alpha(x) if isinstance(x, str) and x.startswith("#") else x for x in cat_values]
+
+
 def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
     """Split colorbar params into layout hints, Matplotlib kwargs, and label override."""
     layout: dict[str, object] = {}
@@ -356,14 +371,7 @@ def _render_shapes(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key = (
-            [
-                _hex_no_alpha(x) if isinstance(x, str) and x.startswith("#") else x
-                for x in color_vector.categories.values
-            ]
-            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
-            else None
-        )
+        color_key = _build_color_key_from_categorical(color_vector)
 
         if color_by_categorical or col_for_color is None:
             ds_cmap = None
@@ -854,14 +862,7 @@ def _render_points(
                     agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
-        color_key: list[str] | None = (
-            [
-                _hex_no_alpha(x) if isinstance(x, str) and x.startswith("#") else x
-                for x in color_vector.categories.values
-            ]
-            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
-            else None
-        )
+        color_key = _build_color_key_from_categorical(color_vector)
         if isinstance(color_vector[0], str) and (
             color_vector is not None and all(len(x) == 9 for x in color_vector) and color_vector[0][0] == "#"
         ):
