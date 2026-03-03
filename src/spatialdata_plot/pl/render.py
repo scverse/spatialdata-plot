@@ -357,7 +357,10 @@ def _render_shapes(
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key = (
-            [_hex_no_alpha(x) for x in color_vector.categories.values]
+            [
+                _hex_no_alpha(x) if isinstance(x, str) and x.startswith("#") else x
+                for x in color_vector.categories.values
+            ]
             if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
             else None
         )
@@ -852,7 +855,10 @@ def _render_points(
                     agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
 
         color_key: list[str] | None = (
-            [_hex_no_alpha(x) for x in color_vector.categories.values]
+            [
+                _hex_no_alpha(x) if isinstance(x, str) and x.startswith("#") else x
+                for x in color_vector.categories.values
+            ]
             if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 0)
             else None
         )
