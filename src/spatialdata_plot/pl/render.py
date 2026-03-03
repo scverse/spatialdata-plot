@@ -301,7 +301,7 @@ def _render_shapes(
         # Render shapes with datashader
         color_by_categorical = col_for_color is not None and color_source_vector is not None
         aggregate_with_reduction = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) >= 1):
+        if col_for_color is not None:
             if color_by_categorical:
                 agg = cvs.polygons(
                     transformed_element,
@@ -817,7 +817,7 @@ def _render_points(
         if color_by_categorical and transformed_element[col_for_color].values.dtype == object:
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
         aggregate_with_reduction = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) >= 1):
+        if col_for_color is not None:
             if color_by_categorical:
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
