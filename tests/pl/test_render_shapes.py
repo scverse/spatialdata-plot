@@ -973,3 +973,29 @@ def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
     # Mixed numeric / non-numeric values should raise a TypeError
     with pytest.raises(TypeError, match="contains both numeric and non-numeric values"):
         sdata_blobs.pl.render_shapes(element="blobs_circles", color="mixed_data", na_color="gray").pl.show()
+
+
+def test_plot_datashader_single_category(sdata_blobs: SpatialData):
+    """Datashader with a single-category Categorical must not raise.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/483.
+    Before the fix, color_key was None when there was only 1 category, but ds.by()
+    still produced a 3D DataArray, causing datashader to raise:
+        ValueError: Color key must be provided, with at least as many colors as
+        there are categorical fields
+    """
+    n_obs = len(sdata_blobs["blobs_polygons"])
+    adata = AnnData(get_standard_RNG().normal(size=(n_obs, 10)))
+    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["a", "b", "c"])
+    adata.obs["category"] = pd.Categorical(["only_cat"] * n_obs)
+    adata.obs["instance_id"] = list(range(n_obs))
+    adata.obs["region"] = "blobs_polygons"
+    table = TableModel.parse(
+        adata=adata,
+        region_key="region",
+        instance_key="instance_id",
+        region="blobs_polygons",
+    )
+    sdata_blobs["table"] = table
+
+    sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()

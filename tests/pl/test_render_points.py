@@ -572,3 +572,37 @@ def test_datashader_colors_points_from_table_obs(sdata_blobs: SpatialData):
         method="datashader",
         size=5,
     ).pl.show()
+
+
+def test_plot_datashader_single_category_points(sdata_blobs: SpatialData):
+    """Datashader with a single-category Categorical must not raise.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/483.
+    Before the fix, color_key was None when there was only 1 category, but ds.by()
+    still produced a 3D DataArray, causing datashader to raise:
+        ValueError: Color key must be provided, with at least as many colors as
+        there are categorical fields
+    """
+    n_obs = len(sdata_blobs["blobs_points"])
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(n_obs),
+            "region": pd.Categorical(["blobs_points"] * n_obs),
+            "foo": pd.Categorical(["only_cat"] * n_obs),
+        }
+    )
+    table = TableModel.parse(
+        adata=AnnData(get_standard_RNG().normal(size=(n_obs, 3)), obs=obs),
+        region="blobs_points",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata_blobs["single_cat_table"] = table
+
+    sdata_blobs.pl.render_points(
+        "blobs_points",
+        color="foo",
+        table_name="single_cat_table",
+        method="datashader",
+        size=5,
+    ).pl.show()
