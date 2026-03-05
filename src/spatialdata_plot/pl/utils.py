@@ -2895,13 +2895,16 @@ def _get_extent_and_range_for_datashader_canvas(
             ]
         )
 
-    # compute canvas size in pixels close to the actual image size to speed up computation
+    # Compute canvas size in pixels, capped at the figure's display resolution.
+    # Using np.max ensures the canvas never exceeds display pixels on either axis,
+    # preventing pixel-based operations (spread, line_width) from being downscaled
+    # to sub-pixel size when the data aspect ratio differs from the figure's.
     plot_width = x_ext[1] - x_ext[0]
     plot_height = y_ext[1] - y_ext[0]
     plot_width_px = int(round(fig_params.fig.get_size_inches()[0] * fig_params.fig.dpi))
     plot_height_px = int(round(fig_params.fig.get_size_inches()[1] * fig_params.fig.dpi))
     factor: float
-    factor = np.min([plot_width / plot_width_px, plot_height / plot_height_px])
+    factor = np.max([plot_width / plot_width_px, plot_height / plot_height_px])
     plot_width = int(np.round(plot_width / factor))
     plot_height = int(np.round(plot_height / factor))
 

@@ -606,3 +606,14 @@ def test_plot_datashader_single_category_points(sdata_blobs: SpatialData):
         method="datashader",
         size=5,
     ).pl.show()
+
+
+def test_datashader_points_visible_with_nonuniform_scale(sdata_blobs: SpatialData):
+    """Datashader points must remain visible when data has a non-square aspect ratio.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/445.
+    Before the fix, the datashader canvas was oversized on the longer axis, causing
+    spread(px) to be downscaled to sub-pixel size on display.
+    """
+    _set_transformations(sdata_blobs["blobs_points"], {"global": Scale([1, 5], axes=("x", "y"))})
+    sdata_blobs.pl.render_points("blobs_points", method="datashader", color="black").pl.show()
