@@ -1120,7 +1120,10 @@ def _set_color_source_vec(
             raise ValueError("Unable to create color palette.")
 
         # do not rename categories, as colors need not be unique
-        color_vector = color_source_vector.map(color_mapping)
+        # pd.Categorical.map() demotes to object dtype when mapped values aren't unique
+        # (e.g. two categories share a color). Wrapping back in pd.Categorical ensures
+        # downstream consumers always receive a Categorical for categorical data.
+        color_vector = pd.Categorical(color_source_vector.map(color_mapping, na_action="ignore"))
 
         return color_source_vector, color_vector, True
 
@@ -1146,7 +1149,7 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    if pd.api.types.is_categorical_dtype(color_vector.dtype):
+    if isinstance(color_vector.dtype, pd.CategoricalDtype):
         # Case A: users wants to plot a categorical column
         if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0

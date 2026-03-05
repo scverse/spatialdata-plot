@@ -358,8 +358,7 @@ def _render_shapes(
 
         color_key = (
             [_hex_no_alpha(x) for x in color_vector.categories.values]
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
+            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 1)
             else None
         )
 
@@ -854,8 +853,7 @@ def _render_points(
 
         color_key: list[str] | None = (
             list(color_vector.categories.values)
-            if (type(color_vector) is pd.core.arrays.categorical.Categorical)
-            and (len(color_vector.categories.values) > 1)
+            if isinstance(color_vector.dtype, pd.CategoricalDtype) and (len(color_vector.categories.values) > 1)
             else None
         )
 
