@@ -1149,7 +1149,7 @@ def _map_color_seg(
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
-    if pd.api.types.is_categorical_dtype(color_vector.dtype):
+    if isinstance(color_vector.dtype, pd.CategoricalDtype):
         # Case A: users wants to plot a categorical column
         if np.any(color_source_vector.isna()):
             cell_id[color_source_vector.isna()] = 0
