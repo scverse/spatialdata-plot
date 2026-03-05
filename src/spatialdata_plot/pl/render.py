@@ -342,18 +342,20 @@ def _render_shapes(
             agg = cvs.polygons(transformed_element, geometry="geometry", agg=ds.count())
 
         # render outlines if needed
+        # outline_linewidth is in points (1pt = 1/72 inch); datashader line_width is in canvas pixels
+        ds_lw_factor = fig_params.fig.dpi / 72
         assert len(render_params.outline_alpha) == 2  # shut up mypy
         if render_params.outline_alpha[0] > 0:
             agg_outlines = cvs.line(
                 transformed_element,
                 geometry="geometry",
-                line_width=render_params.outline_params.outer_outline_linewidth,
+                line_width=render_params.outline_params.outer_outline_linewidth * ds_lw_factor,
             )
         if render_params.outline_alpha[1] > 0:
             agg_inner_outlines = cvs.line(
                 transformed_element,
                 geometry="geometry",
-                line_width=render_params.outline_params.inner_outline_linewidth,
+                line_width=render_params.outline_params.inner_outline_linewidth * ds_lw_factor,
             )
 
         ds_span = None

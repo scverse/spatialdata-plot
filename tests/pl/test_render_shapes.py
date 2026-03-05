@@ -999,3 +999,17 @@ def test_plot_datashader_single_category(sdata_blobs: SpatialData):
     sdata_blobs["table"] = table
 
     sdata_blobs.pl.render_shapes(element="blobs_polygons", color="category", method="datashader").pl.show()
+
+
+def test_datashader_outline_width_uses_points_units(sdata_blobs: SpatialData):
+    """Datashader outlines should scale with DPI like matplotlib (points, not raw pixels).
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/493.
+    """
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons", method="datashader", outline_alpha=1.0, outline_width=10.0
+    ).pl.show()
+
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons", method="datashader", outline_alpha=1.0, outline_width=(8.0, 3.0)
+    ).pl.show()
