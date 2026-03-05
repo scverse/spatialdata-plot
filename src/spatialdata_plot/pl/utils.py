@@ -2473,6 +2473,8 @@ def _validate_label_render_params(
 
         has_col = element_params[el]["col_for_color"] is not None
         element_params[el]["palette"] = param_dict["palette"] if has_col else None
+        if not has_col and param_dict["groups"] is not None:
+            logger.warning("Parameter 'groups' is ignored when 'color' is a literal color, not a column name.")
         element_params[el]["groups"] = param_dict["groups"] if has_col else None
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
@@ -2541,6 +2543,8 @@ def _validate_points_render_params(
             element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
+        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
+            logger.warning("Parameter 'groups' is ignored when 'color' is a literal color, not a column name.")
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
         element_params[el]["colorbar"] = param_dict["colorbar"]
@@ -2625,6 +2629,8 @@ def _validate_shape_render_params(
             element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
+        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
+            logger.warning("Parameter 'groups' is ignored when 'color' is a literal color, not a column name.")
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["method"] = param_dict["method"]
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
