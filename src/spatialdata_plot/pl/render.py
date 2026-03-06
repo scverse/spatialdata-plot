@@ -1314,7 +1314,11 @@ def _render_labels(
 
     _, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
-    na_color = render_params.color if render_params.color is not None else render_params.cmap_params.na_color
+    na_color = (
+        render_params.color
+        if col_for_color is None and render_params.color is not None
+        else render_params.cmap_params.na_color
+    )
     color_source_vector, color_vector, categorical = _set_color_source_vec(
         sdata=sdata_filt,
         element=label,
