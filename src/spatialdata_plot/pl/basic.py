@@ -749,6 +749,7 @@ class PlotAccessor:
             sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
                 cmap_params=cmap_params,
@@ -1130,14 +1131,13 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         table = params_copy.table_name
-                        if table is not None:
-                            assert isinstance(params_copy.color, str)
-                            colors = sc.get.obs_df(sdata[table], [params_copy.color])
-                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
+                        if table is not None and params_copy.col_for_color is not None:
+                            colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
+                            if isinstance(colors[params_copy.col_for_color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],
-                                    key=params_copy.color,
+                                    key=params_copy.col_for_color,
                                     palette=params_copy.palette,
                                 )
 

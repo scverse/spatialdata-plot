@@ -94,6 +94,8 @@ to_hex = partial(colors.to_hex, keep_alpha=True)
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
 ColorLike = tuple[float, ...] | list[float] | str
 
+_GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
+
 
 def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
     """
@@ -981,7 +983,7 @@ def _set_color_source_vec(
     alpha: float = 1.0,
     table_name: str | None = None,
     table_layer: str | None = None,
-    render_type: Literal["points"] | None = None,
+    render_type: Literal["points", "labels"] | None = None,
     coordinate_system: str | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
@@ -1454,7 +1456,7 @@ def _get_categorical_color_mapping(
     alpha: float = 1,
     groups: list[str] | str | None = None,
     palette: list[str] | str | None = None,
-    render_type: Literal["points"] | None = None,
+    render_type: Literal["points", "labels"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
@@ -2145,7 +2147,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     }:
         if not isinstance(color, str | tuple | list):
             raise TypeError("Parameter 'color' must be a string or a tuple/list of floats.")
-        if element_type in {"shapes", "points"}:
+        if element_type in {"shapes", "points", "labels"}:
             if _is_color_like(color):
                 logger.info("Value for parameter 'color' appears to be a color, using it as such.")
                 param_dict["col_for_color"] = None
@@ -2153,7 +2155,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 if param_dict["color"].alpha_is_user_defined():
                     if element_type == "points" and param_dict.get("alpha") is None:
                         param_dict["alpha"] = param_dict["color"].get_alpha_as_float()
-                    elif element_type == "shapes" and param_dict.get("fill_alpha") is None:
+                    elif element_type in {"shapes", "labels"} and param_dict.get("fill_alpha") is None:
                         param_dict["fill_alpha"] = param_dict["color"].get_alpha_as_float()
                     else:
                         logger.info(
@@ -2165,7 +2167,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                 param_dict["color"] = None
             else:
                 raise ValueError(f"{color} is not a valid RGB(A) array and therefore can't be used as 'color' value.")
-    elif "color" in param_dict and element_type != "labels":
+    elif "color" in param_dict and element_type != "images":
         param_dict["col_for_color"] = None
 
     outline_width = param_dict.get("outline_width")
@@ -2462,15 +2464,20 @@ def _validate_label_render_params(
         element_params[el]["table_layer"] = param_dict["table_layer"]
 
         element_params[el]["table_name"] = None
-        element_params[el]["color"] = None
-        color = param_dict["color"]
-        if color is not None:
-            color, table_name = _validate_col_for_column_table(sdata, el, color, param_dict["table_name"], labels=True)
+        element_params[el]["color"] = param_dict["color"]  # literal Color or None
+        element_params[el]["col_for_color"] = None
+        if (col_for_color := param_dict["col_for_color"]) is not None:
+            col_for_color, table_name = _validate_col_for_column_table(
+                sdata, el, col_for_color, param_dict["table_name"], labels=True
+            )
             element_params[el]["table_name"] = table_name
-            element_params[el]["color"] = color
+            element_params[el]["col_for_color"] = col_for_color
 
-        element_params[el]["palette"] = param_dict["palette"] if element_params[el]["table_name"] is not None else None
-        element_params[el]["groups"] = param_dict["groups"] if element_params[el]["table_name"] is not None else None
+        has_col = element_params[el]["col_for_color"] is not None
+        element_params[el]["palette"] = param_dict["palette"] if has_col else None
+        if not has_col and param_dict["groups"] is not None:
+            logger.warning(_GROUPS_IGNORED_WARNING)
+        element_params[el]["groups"] = param_dict["groups"] if has_col else None
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
@@ -2538,6 +2545,8 @@ def _validate_points_render_params(
             element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
+        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
+            logger.warning(_GROUPS_IGNORED_WARNING)
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
         element_params[el]["colorbar"] = param_dict["colorbar"]
@@ -2622,6 +2631,8 @@ def _validate_shape_render_params(
             element_params[el]["col_for_color"] = col_for_color
 
         element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
+        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
+            logger.warning(_GROUPS_IGNORED_WARNING)
         element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
         element_params[el]["method"] = param_dict["method"]
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
