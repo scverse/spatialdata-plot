@@ -284,6 +284,7 @@ class LabelsRenderParams:
     outline: bool = False
     palette: ListedColormap | list[str] | None = None
     outline_alpha: float = 1.0
+    outline_color: ColorLike | tuple[ColorLike] | None = None
     fill_alpha: float = 0.4
     transfunc: Callable[[float], float] | None = None
     scale: str | None = None
