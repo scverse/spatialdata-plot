@@ -1213,10 +1213,24 @@ def _generate_base_categorial_color_mapping(
     cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns and f"{cluster_key}_colors" in adata.uns:
-        colors = adata.uns[f"{cluster_key}_colors"]
-        categories = color_source_vector.categories.tolist() + ["NaN"]
+        all_colors = adata.uns[f"{cluster_key}_colors"]
 
-        colors = [to_hex(to_rgba(color)[:3]) for color in colors]
+        # When plotting per-coordinate-system, the color_source_vector may carry
+        # categories from other coordinate systems that aren't present in the
+        # current subset.  Drop them so that categories and colors stay aligned.
+        color_source_vector = color_source_vector.remove_unused_categories()
+
+        # The stored colors in .uns correspond 1-to-1 to the *full* set of
+        # categories in adata.obs[cluster_key].  Subset to the categories that
+        # are still present after removing unused ones.
+        if cluster_key in adata.obs and hasattr(adata.obs[cluster_key], "cat"):
+            all_cats = adata.obs[cluster_key].cat.categories.tolist()
+            keep_idx = [i for i, c in enumerate(all_cats) if c in color_source_vector.categories]
+            colors = [to_hex(to_rgba(all_colors[i])[:3]) for i in keep_idx]
+        else:
+            colors = [to_hex(to_rgba(c)[:3]) for c in all_colors]
+
+        categories = color_source_vector.categories.tolist() + ["NaN"]
 
         if len(categories) > len(colors):
             return dict(zip(categories, colors + [na_color.get_hex_with_alpha()], strict=True))
@@ -1331,6 +1345,9 @@ def _extract_colors_from_table_uns(
 
     # Extract colors and categories
     stored_colors = adata.uns[color_key]
+    # Drop categories not present in the current subset (e.g. when plotting
+    # per-coordinate-system) so that positional color lookups stay aligned.
+    color_source_vector = color_source_vector.remove_unused_categories()
     categories = color_source_vector.categories.tolist()
 
     # Validate na_color format and convert to hex string
@@ -1378,9 +1395,18 @@ def _extract_colors_from_table_uns(
             logger.warning(f"Unsupported color storage for '{color_key}'. Expected sequence or mapping.")
             return None
 
-        for i, category in enumerate(categories):
-            if i < len(hex_colors) and hex_colors[i] is not None:
-                hex_color = hex_colors[i]
+        # Map by the category's position in the *full* table, not in the
+        # (possibly subset) color_source_vector, so colors stay consistent
+        # across coordinate systems.
+        all_cats = (
+            adata.obs[col_to_colorby].cat.categories.tolist()
+            if col_to_colorby in adata.obs and hasattr(adata.obs[col_to_colorby], "cat")
+            else categories
+        )
+        for category in categories:
+            idx = all_cats.index(category) if category in all_cats else None
+            if idx is not None and idx < len(hex_colors) and hex_colors[idx] is not None:
+                hex_color = hex_colors[idx]
                 assert hex_color is not None  # type narrowing for mypy
                 color_mapping[category] = hex_color
             else:
