@@ -84,6 +84,18 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             .pl.show()
         )
 
+    def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
+
+    def test_plot_can_color_by_hex(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="#88a136").pl.show()
+
+    def test_plot_can_color_by_hex_with_alpha(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="#88a13688").pl.show()
+
+    def test_plot_alpha_overwrites_opacity_from_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5], fill_alpha=1.0).pl.show()
+
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 

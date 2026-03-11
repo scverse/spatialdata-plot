@@ -631,7 +631,7 @@ class PlotAccessor:
     def render_labels(
         self,
         element: str | None = None,
-        color: str | None = None,
+        color: ColorLike | None = None,
         *,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
@@ -640,7 +640,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
         outline_alpha: float | int = 0.0,
-        fill_alpha: float | int = 0.4,
+        fill_alpha: float | int | None = None,
         scale: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
@@ -662,11 +662,13 @@ class PlotAccessor:
         element : str | None
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
-        color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
-            :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
-            color column is found in multiple locations, please provide the table_name to be used for the element if you
-            would like a specific table to be used. By default one table will automatically be choosen.
+        color : ColorLike | None
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value
+            is indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs` or in the index of :attr:`sdata.table.var`. The latter can be used to color by
+            categorical or continuous variables. If the color column is found in multiple locations, please provide the
+            table_name to be used for the element if you would like a specific table to be used.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. The list can contain multiple discrete labels to be visualized.
@@ -687,8 +689,9 @@ class PlotAccessor:
             won't be shown.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
-        fill_alpha : float | int, default 0.4
-            Alpha value for the fill of the labels.
+        fill_alpha : float | int | None, optional
+            Alpha value for the fill of the labels. By default, it is set to 0.4 or, if a color is given that implies
+            an alpha, that value is used for `fill_alpha`.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -749,6 +752,7 @@ class PlotAccessor:
             sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
                 element=element,
                 color=param_values["color"],
+                col_for_color=param_values["col_for_color"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
                 cmap_params=cmap_params,
@@ -1130,14 +1134,13 @@ class PlotAccessor:
 
                     if wanted_labels_on_this_cs:
                         table = params_copy.table_name
-                        if table is not None:
-                            assert isinstance(params_copy.color, str)
-                            colors = sc.get.obs_df(sdata[table], [params_copy.color])
-                            if isinstance(colors[params_copy.color].dtype, pd.CategoricalDtype):
+                        if table is not None and params_copy.col_for_color is not None:
+                            colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
+                            if isinstance(colors[params_copy.col_for_color].dtype, pd.CategoricalDtype):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],
-                                    key=params_copy.color,
+                                    key=params_copy.col_for_color,
                                     palette=params_copy.palette,
                                 )
 
