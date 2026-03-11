@@ -631,7 +631,7 @@ class PlotAccessor:
     def render_labels(
         self,
         element: str | None = None,
-        color: str | None = None,
+        color: ColorLike | None = None,
         *,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
@@ -662,11 +662,13 @@ class PlotAccessor:
         element : str | None
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
-        color : str | None
-            Can either be string representing a color-like or key in :attr:`sdata.table.obs` or in the index of
-            :attr:`sdata.table.var`. The latter can be used to color by categorical or continuous variables. If the
-            color column is found in multiple locations, please provide the table_name to be used for the element if you
-            would like a specific table to be used. By default one table will automatically be choosen.
+        color : ColorLike | None
+            Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
+            "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value
+            is indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            :attr:`sdata.table.obs` or in the index of :attr:`sdata.table.var`. The latter can be used to color by
+            categorical or continuous variables. If the color column is found in multiple locations, please provide the
+            table_name to be used for the element if you would like a specific table to be used.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. Other values are set to NA. The list can contain multiple discrete labels to be visualized.

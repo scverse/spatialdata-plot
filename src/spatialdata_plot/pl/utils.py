@@ -2414,7 +2414,7 @@ def _validate_label_render_params(
     sdata: sd.SpatialData,
     element: str | None,
     cmap: list[Colormap | str] | Colormap | str | None,
-    color: str | None,
+    color: ColorLike | None,
     fill_alpha: float | int,
     contour_px: int | None,
     groups: list[str] | str | None,
