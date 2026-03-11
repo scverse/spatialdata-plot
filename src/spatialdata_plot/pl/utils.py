@@ -13,7 +13,6 @@ from typing import Any, Literal
 import dask
 import datashader as ds
 import matplotlib
-import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
@@ -1210,35 +1209,14 @@ def _map_color_seg(
     )
 
     if seg_boundaries:
-        if seg.shape[0] == 1:
-            seg = np.squeeze(seg, axis=0)
+        outline_rgba = colors.to_rgba(outline_color.get_hex_with_alpha() if outline_color is not None else "black")
 
-        # Binary boundary mask
-        boundary_mask = seg.astype(bool)
-
-        # Ensure seg_im is float in 0-1 and has 3 channels
-        seg_float = seg_im.astype(float)
-        if seg_float.ndim == 2:
-            seg_float = np.stack([seg_float] * 3, axis=-1)  # H x W x 3
-
-        # Add alpha channel from val_im (preserve original mask)
-        alpha_channel = (val_im > 0).astype(float)
-        seg_float = np.dstack((seg_float, alpha_channel))  # H x W x 4
-
-        # Convert outline_color to RGBA
-        if outline_color is None:
-            outline_rgba = (0, 0, 0, 1.0)  # default black
-        elif isinstance(outline_color, str):
-            outline_rgba = mcolors.to_rgba(outline_color)  # named color or hex string
-        else:
-            # assume it's your Color object
-            outline_rgba = mcolors.to_rgba(outline_color.get_hex_with_alpha())
-
-        # Apply outline color to boundary pixels, but keep original alpha from val_im
-        seg_float[boundary_mask, :3] = outline_rgba[:3]  # RGB
-        seg_float[boundary_mask, 3] = alpha_channel[boundary_mask] * outline_rgba[3]  # scale alpha
-
-        return seg_float  # H x W x 4, valid RGBA
+        # Build RGBA image: outline_color on the eroded ring, transparent elsewhere
+        outline_mask = val_im > 0
+        rgba = np.zeros((*val_im.shape, 4), dtype=float)
+        rgba[outline_mask, :3] = outline_rgba[:3]
+        rgba[outline_mask, 3] = outline_rgba[3]
+        return rgba
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
@@ -2463,7 +2441,7 @@ def _validate_label_render_params(
     na_color: ColorLike | None,
     norm: Normalize | None,
     outline_alpha: float | int,
-    outline_color: ColorLike | tuple[ColorLike] | None,
+    outline_color: ColorLike | None,
     scale: str | None,
     table_name: str | None,
     table_layer: str | None,
