@@ -640,7 +640,7 @@ class PlotAccessor:
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
         outline_alpha: float | int = 0.0,
-        fill_alpha: float | int = 0.4,
+        fill_alpha: float | int | None = None,
         scale: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
@@ -689,8 +689,9 @@ class PlotAccessor:
             won't be shown.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
-        fill_alpha : float | int, default 0.4
-            Alpha value for the fill of the labels.
+        fill_alpha : float | int | None, optional
+            Alpha value for the fill of the labels. By default, it is set to 0.4 or, if a color is given that implies
+            an alpha, that value is used for `fill_alpha`.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale

@@ -2270,6 +2270,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif element_type == "shapes":
         # set default fill_alpha for shapes if not given by user explicitly or implicitly (as part of color)
         param_dict["fill_alpha"] = 1.0
+    elif element_type == "labels":
+        # set default fill_alpha for labels if not given by user explicitly or implicitly (as part of color)
+        param_dict["fill_alpha"] = 0.4
 
     cmap = param_dict.get("cmap")
     palette = param_dict.get("palette")
@@ -2427,7 +2430,7 @@ def _validate_label_render_params(
     element: str | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     color: ColorLike | None,
-    fill_alpha: float | int,
+    fill_alpha: float | int | None,
     contour_px: int | None,
     groups: list[str] | str | None,
     palette: list[str] | str | None,
