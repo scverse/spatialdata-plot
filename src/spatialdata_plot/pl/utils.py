@@ -97,6 +97,18 @@ ColorLike = tuple[float, ...] | list[float] | str
 _GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
 
 
+def _gate_palette_and_groups(
+    element_params: dict[str, Any],
+    param_dict: dict[str, Any],
+) -> None:
+    """Set palette/groups on element_params only when col_for_color is present, else warn."""
+    has_col = element_params.get("col_for_color") is not None
+    element_params["palette"] = param_dict["palette"] if has_col else None
+    if not has_col and param_dict["groups"] is not None:
+        logger.warning(_GROUPS_IGNORED_WARNING)
+    element_params["groups"] = param_dict["groups"] if has_col else None
+
+
 def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
     """
     Extract a scalar float value from various data types.
@@ -2473,11 +2485,7 @@ def _validate_label_render_params(
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
 
-        has_col = element_params[el]["col_for_color"] is not None
-        element_params[el]["palette"] = param_dict["palette"] if has_col else None
-        if not has_col and param_dict["groups"] is not None:
-            logger.warning(_GROUPS_IGNORED_WARNING)
-        element_params[el]["groups"] = param_dict["groups"] if has_col else None
+        _gate_palette_and_groups(element_params[el], param_dict)
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
@@ -2544,10 +2552,7 @@ def _validate_points_render_params(
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
 
-        element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
-        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
-            logger.warning(_GROUPS_IGNORED_WARNING)
-        element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        _gate_palette_and_groups(element_params[el], param_dict)
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
@@ -2630,10 +2635,7 @@ def _validate_shape_render_params(
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
 
-        element_params[el]["palette"] = param_dict["palette"] if param_dict["col_for_color"] is not None else None
-        if param_dict["col_for_color"] is None and param_dict["groups"] is not None:
-            logger.warning(_GROUPS_IGNORED_WARNING)
-        element_params[el]["groups"] = param_dict["groups"] if param_dict["col_for_color"] is not None else None
+        _gate_palette_and_groups(element_params[el], param_dict)
         element_params[el]["method"] = param_dict["method"]
         element_params[el]["ds_reduction"] = param_dict["ds_reduction"]
         element_params[el]["colorbar"] = param_dict["colorbar"]
