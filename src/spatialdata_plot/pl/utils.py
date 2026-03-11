@@ -1200,14 +1200,6 @@ def _map_color_seg(
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
 
-    seg_im: ArrayLike = label2rgb(
-        label=val_im,
-        colors=cols,
-        bg_label=0,
-        bg_color=(1, 1, 1),  # transparency doesn't really work
-        image_alpha=0,
-    )
-
     if seg_boundaries:
         outline_rgba = colors.to_rgba(outline_color.get_hex_with_alpha() if outline_color is not None else "black")
 
@@ -1217,6 +1209,14 @@ def _map_color_seg(
         rgba[outline_mask, :3] = outline_rgba[:3]
         rgba[outline_mask, 3] = outline_rgba[3]
         return rgba
+
+    seg_im: ArrayLike = label2rgb(
+        label=val_im,
+        colors=cols,
+        bg_label=0,
+        bg_color=(1, 1, 1),  # transparency doesn't really work
+        image_alpha=0,
+    )
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
