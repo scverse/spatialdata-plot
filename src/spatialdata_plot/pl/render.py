@@ -1379,6 +1379,14 @@ def _render_labels(
         cax = ax.add_image(_cax)
         return cax  # noqa: RET504
 
+    # When color is a literal (col_for_color is None) and no explicit outline_color,
+    # use the literal color for outlines so they are visible (e.g., color='white' on
+    # a dark background). When color is data-driven, outlines inherit the per-label
+    # colors from label2rgb (outline_color stays None).
+    effective_outline_color = render_params.outline_color
+    if effective_outline_color is None and col_for_color is None and render_params.color is not None:
+        effective_outline_color = render_params.color
+
     # default case: no contour, just fill
     # since contour_px is passed to skimage.morphology.erosion to create the contour,
     # any border thickness is only within the label, not outside. Therefore, the case
@@ -1395,7 +1403,7 @@ def _render_labels(
             seg_erosionpx=render_params.contour_px,
             seg_boundaries=True,
             alpha=render_params.outline_alpha,
-            outline_color=render_params.outline_color,
+            outline_color=effective_outline_color,
         )
         alpha_to_decorate_ax = render_params.outline_alpha
 
@@ -1409,7 +1417,7 @@ def _render_labels(
             seg_erosionpx=render_params.contour_px,
             seg_boundaries=True,
             alpha=render_params.outline_alpha,
-            outline_color=render_params.outline_color,
+            outline_color=effective_outline_color,
         )
 
         # pass the less-transparent _cax for the legend
