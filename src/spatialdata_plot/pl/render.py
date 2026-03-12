@@ -245,6 +245,8 @@ def _render_shapes(
         )
         shapes = shapes[keep].reset_index(drop=True)
         sdata_filt[element] = shapes
+        if len(shapes) == 0:
+            return
 
     # color_source_vector is None when the values aren't categorical
     if values_are_categorical and render_params.transfunc is not None:
@@ -871,6 +873,9 @@ def _render_points(
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
+        n_points = int(keep.sum())
+        if n_points == 0:
+            return
         # filter the materialized points, adata, and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
         adata = adata[keep].copy()
@@ -881,7 +886,6 @@ def _render_points(
             transformation=transformation_in_cs,
             to_coordinate_system=coordinate_system,
         )
-        n_points = int(keep.sum())
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
