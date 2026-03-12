@@ -12,7 +12,7 @@
       "github_user": "scverse",
       "github_repo": "spatialdata-plot",
       "license": "BSD 3-Clause License",
-      "ide_integration": true,
+      "ide_integration": false,
       "_copy_without_render": [
         ".github/workflows/build.yaml",
         ".github/workflows/test.yaml",

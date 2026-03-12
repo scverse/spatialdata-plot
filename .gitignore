@@ -25,6 +25,7 @@ __pycache__/
 
 # IDEs
 /.idea/
+/.vscode/
 
 format.sh
 

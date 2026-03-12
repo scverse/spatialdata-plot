@@ -244,7 +244,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         adata.obs["instance_id"] = instances.values
         adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
-        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs.loc[adata.obs.index[:3], "category"] = ["a", "b", "c"]
         adata.obs["region"] = labels_name
         table = TableModel.parse(
             adata=adata,
@@ -320,7 +320,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         adata.obs["instance_id"] = instances.values
         adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
-        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs.loc[adata.obs.index[:3], "category"] = ["a", "b", "c"]
         adata.obs["region"] = labels_name
         table = TableModel.parse(
             adata=adata,
@@ -347,7 +347,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         )
         adata.obs["instance_id"] = instances.values
         adata.obs["category"] = get_standard_RNG().choice(["a", "b", "c"], size=adata.n_obs)
-        adata.obs["category"][:3] = ["a", "b", "c"]
+        adata.obs.loc[adata.obs.index[:3], "category"] = ["a", "b", "c"]
         adata.obs["region"] = labels_name
         table = TableModel.parse(
             adata=adata,
