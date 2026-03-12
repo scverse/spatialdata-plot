@@ -244,9 +244,9 @@ def _render_shapes(
             groups, color_source_vector, color_vector
         )
         shapes = shapes[keep].reset_index(drop=True)
-        sdata_filt[element] = shapes
         if len(shapes) == 0:
             return
+        sdata_filt[element] = shapes
 
     # color_source_vector is None when the values aren't categorical
     if values_are_categorical and render_params.transfunc is not None:
