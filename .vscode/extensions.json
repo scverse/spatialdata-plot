@@ -13,6 +13,6 @@
         // Linting and formatting
         "editorconfig.editorconfig",
         "charliermarsh.ruff",
-        "biomejs.biome"
-    ]
+        "biomejs.biome",
+    ],
 }
