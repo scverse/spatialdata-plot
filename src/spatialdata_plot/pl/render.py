@@ -874,8 +874,8 @@ def _render_points(
         # filter the materialized points, adata, and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
         adata = adata[keep].copy()
-        points_dd = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[element] = PointsModel.parse(points_dd, coordinates={"x": "x", "y": "y"})
+        filtered_dd = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[element] = PointsModel.parse(filtered_dd, coordinates={"x": "x", "y": "y"})
         set_transformation(
             element=sdata_filt.points[element],
             transformation=transformation_in_cs,

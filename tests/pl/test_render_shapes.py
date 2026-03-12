@@ -988,6 +988,19 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color=None).pl.show()
 
+    def test_plot_groups_na_color_none_filters_shapes_datashader(self, sdata_blobs: SpatialData):
+        """Groups filtering with na_color=None via datashader backend."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cat_color", groups=["a"], na_color=None, method="datashader"
+        ).pl.show()
+
+
+def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
+    """When no elements match the groups, the plot should render without error."""
+    sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["nonexistent"], na_color=None).pl.show()
+
 
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
     """Test that NaN values in color data are handled gracefully and logged."""
