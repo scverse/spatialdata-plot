@@ -190,6 +190,46 @@ def _viridis_with_under_over() -> matplotlib.colors.ListedColormap:
     return cmap
 
 
+@pytest.fixture
+def sdata_blobs_points_with_nans_in_table() -> SpatialData:
+    """Get blobs sdata where the table annotates the points and includes nan values"""
+    blob = blobs()
+    n_obs = len(blob["blobs_points"])
+    adata = AnnData(get_standard_RNG().normal(size=(n_obs, 2)))
+    adata.X[0:30, 0] = np.nan
+    adata.var = pd.DataFrame({}, index=["col1", "col2"])
+    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["col_a", "col_b", "col_c"])
+    adata.obs.iloc[0:30, adata.obs.columns.get_loc("col_a")] = np.nan
+    cat_pattern = ["a", "b", np.nan]
+    repeats = (n_obs + len(cat_pattern) - 1) // len(cat_pattern)
+    adata.obs["category"] = pd.Categorical((cat_pattern * repeats)[:n_obs])
+    adata.obs["instance_id"] = list(range(adata.n_obs))
+    adata.obs["region"] = "blobs_points"
+    table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_points")
+    blob["table"] = table
+    return blob
+
+
+@pytest.fixture
+def sdata_blobs_shapes_with_nans_in_table() -> SpatialData:
+    """Get blobs sdata where the table annotates the shapes and includes nan values"""
+    blob = blobs()
+    n_obs = len(blob["blobs_polygons"])
+    adata = AnnData(get_standard_RNG().normal(size=(n_obs, 2)))
+    adata.X[0, 0] = np.nan
+    adata.var = pd.DataFrame({}, index=["col1", "col2"])
+    adata.obs = pd.DataFrame(get_standard_RNG().normal(size=(n_obs, 3)), columns=["col_a", "col_b", "col_c"])
+    adata.obs.iloc[0, adata.obs.columns.get_loc("col_a")] = np.nan
+    cat_pattern = ["a", "b", np.nan, "c", "a"]
+    repeats = (n_obs + len(cat_pattern) - 1) // len(cat_pattern)
+    adata.obs["category"] = pd.Categorical((cat_pattern * repeats)[:n_obs])
+    adata.obs["instance_id"] = list(range(adata.n_obs))
+    adata.obs["region"] = "blobs_polygons"
+    table = TableModel.parse(adata=adata, region_key="region", instance_key="instance_id", region="blobs_polygons")
+    blob["table"] = table
+    return blob
+
+
 # Code below taken from spatialdata main repo
 
 
