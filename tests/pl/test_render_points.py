@@ -576,6 +576,11 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
 
+    def test_plot_groups_na_color_none_filters_points(self, sdata_blobs: SpatialData):
+        """When groups is set and na_color=None, non-matching points are filtered out entirely."""
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], na_color=None, size=30).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables

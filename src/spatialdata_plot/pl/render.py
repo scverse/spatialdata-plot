@@ -118,6 +118,22 @@ def _build_datashader_color_key(
     return color_key
 
 
+def _filter_groups_transparent_na(
+    groups: str | list[str],
+    color_source_vector: pd.Categorical,
+    color_vector: pd.Series | np.ndarray | list[str],
+) -> tuple[np.ndarray, pd.Categorical, np.ndarray]:
+    """Return a boolean mask and filtered color vectors for groups filtering.
+
+    Used when ``na_color=None`` (fully transparent) so that non-matching
+    elements are removed entirely instead of rendered invisibly.
+    """
+    keep = color_source_vector.isin(groups)
+    filtered_csv = color_source_vector[keep]
+    filtered_cv = np.asarray(color_vector)[keep]
+    return keep, filtered_csv, filtered_cv
+
+
 def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
     """Split colorbar params into layout hints, Matplotlib kwargs, and label override."""
     layout: dict[str, object] = {}
@@ -220,6 +236,15 @@ def _render_shapes(
     )
 
     values_are_categorical = color_source_vector is not None
+
+    # When groups are specified and na_color is fully transparent (na_color=None),
+    # filter out non-matching elements instead of showing them as invisible geometry.
+    if groups is not None and values_are_categorical and render_params.cmap_params.na_color.alpha == "00":
+        keep, color_source_vector, color_vector = _filter_groups_transparent_na(
+            groups, color_source_vector, color_vector
+        )
+        shapes = shapes[keep].reset_index(drop=True)
+        sdata_filt[element] = shapes
 
     # color_source_vector is None when the values aren't categorical
     if values_are_categorical and render_params.transfunc is not None:
@@ -839,6 +864,24 @@ def _render_points(
             to_coordinate_system=coordinate_system,
         )
         points_dd = points_with_color_dd
+
+    # When groups are specified and na_color is fully transparent (na_color=None),
+    # filter out non-matching points instead of rendering invisible geometry.
+    if groups is not None and color_source_vector is not None and render_params.cmap_params.na_color.alpha == "00":
+        keep, color_source_vector, color_vector = _filter_groups_transparent_na(
+            groups, color_source_vector, color_vector
+        )
+        # filter the materialized points, adata, and re-register in sdata_filt
+        points = points[keep].reset_index(drop=True)
+        adata = adata[keep].copy()
+        points_dd = dask.dataframe.from_pandas(points, npartitions=1)
+        sdata_filt.points[element] = PointsModel.parse(points_dd, coordinates={"x": "x", "y": "y"})
+        set_transformation(
+            element=sdata_filt.points[element],
+            transformation=transformation_in_cs,
+            to_coordinate_system=coordinate_system,
+        )
+        n_points = int(keep.sum())
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:

@@ -983,6 +983,11 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
 
+    def test_plot_groups_na_color_none_filters_shapes(self, sdata_blobs: SpatialData):
+        """When groups is set and na_color=None, non-matching shapes are filtered out entirely."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color=None).pl.show()
+
 
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
     """Test that NaN values in color data are handled gracefully and logged."""
