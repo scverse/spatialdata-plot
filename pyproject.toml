@@ -1,89 +1,69 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling", "hatch-vcs"]
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
 name = "spatialdata-plot"
 description = "Static plotting for spatial data."
-authors = [
-    {name = "scverse"},
-]
-maintainers = [
-    {name = "Tim Treis", email = "tim.treis@helmholtz-munich.de"},
-]
-urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
-urls.Source = "https://github.com/scverse/spatialdata-plot.git"
-urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
-requires-python = ">=3.11"
-dynamic= [
-    "version" # allow version to be set by git tags
-]
-license = {file = "LICENSE"}
 readme = "README.md"
+license = { file = "LICENSE" }
+maintainers = [
+  { name = "Tim Treis", email = "tim.treis@helmholtz-munich.de" },
+]
+authors = [
+  { name = "scverse" },
+]
+requires-python = ">=3.11"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dynamic = [
+  "version", # allow version to be set by git tags
+]
 dependencies = [
-    "spatialdata>=0.3.0",
-    "matplotlib",
-    "scikit-learn",
-    "scanpy",
-    "matplotlib_scalebar",
+  "matplotlib",
+  "matplotlib-scalebar",
+  "scanpy",
+  "scikit-learn",
+  "spatialdata>=0.3",
 ]
 
-[project.optional-dependencies]
+urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
+urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
+urls.Source = "https://github.com/scverse/spatialdata-plot.git"
+
+[dependency-groups]
 dev = [
-    "jupyterlab",
-    "notebook",
-    "ipykernel",
-    "ipywidgets",
-    "jupytext",
-    "pytest",
-    "pytest-cov",
-    "pooch",
-    "ruff",
-    "pre-commit",
-]
-docs = [
-    "sphinx>=4.5",
-    "sphinx-book-theme>=1.0.0",
-    "sphinx_rtd_theme",
-    "myst-nb",
-    "sphinxcontrib-bibtex>=1.0.0",
-    "sphinx-autodoc-typehints",
-    "sphinx-design",
-    # For notebooks
-    "ipython>=8.6.0",
-    "sphinx-copybutton",
+  "pre-commit",
+  "twine>=4.0.2",
 ]
 test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-xdist",
-    "pooch", # for scipy.datasets module
+  "coverage[toml]>=7.4",
+  "pooch",
+  "pytest",
+  "pytest-cov",
+  "pytest-xdist[psutil]",
 ]
-
-[tool.coverage.run]
-source = ["spatialdata_plot"]
-omit = [
-    "**/test_*.py",
+doc = [
+  "ipykernel",
+  "ipython>=8.6",
+  "myst-nb>=1.1",
+  "sphinx>=8.1",
+  "sphinx-autodoc-typehints",
+  "sphinx-book-theme>=1",
+  "sphinx-copybutton",
+  "sphinx-tabs",
+  "sphinxcontrib-bibtex>=1",
+  "sphinxcontrib-katex",
+  "sphinxext-opengraph",
 ]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-xfail_strict = true
-addopts = [
-#    "-Werror",  # if 3rd party libs raise DeprecationWarnings, just use filterwarnings below
-    "--import-mode=importlib",  # allow using test files with same name
-    "-s"  # print output from tests
-]
-# info on how to use this https://stackoverflow.com/questions/57925071/how-do-i-avoid-getting-deprecationwarning-from-inside-dependencies-with-pytest
-filterwarnings = [
-    #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
-]
-
-[tool.jupytext]
-formats = "ipynb,md"
 
 [tool.hatch.build.targets.wheel]
-packages = ['src/spatialdata_plot']
+packages = [ 'src/spatialdata_plot' ]
 
 [tool.hatch.version]
 source = "vcs"
@@ -94,70 +74,144 @@ version-file = "_version.py"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.envs.default]
+installer = "uv"
+dependency-groups = [ "dev" ]
+
+[tool.hatch.envs.docs]
+dependency-groups = [ "doc" ]
+
+[tool.hatch.envs.docs.scripts]
+build = "sphinx-build -M html docs docs/_build -W {args}"
+open = "python -m webbrowser -t docs/_build/html/index.html"
+clean = "git clean -fdX -- {args:docs}"
+
+[tool.hatch.envs.hatch-test]
+dependency-groups = [ "test" ]
+
+[tool.hatch.envs.hatch-test.scripts]
+run = "pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
+run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
+cov-combine = "coverage combine"
+cov-report = [ "coverage report", "coverage xml -o coverage.xml" ]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+deps = [ "stable" ]
+python = [ "3.11", "3.14" ]
+
+[[tool.hatch.envs.hatch-test.matrix]]
+deps = [ "pre" ]
+python = [ "3.14" ]
+
+[tool.hatch.envs.hatch-test.overrides]
+matrix.deps.env-vars = [
+  { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
+]
+
 [tool.ruff]
 line-length = 120
 exclude = [
-    ".git",
-    ".tox",
-    "__pycache__",
-    "build",
-    "docs/_build",
-    "dist",
-    "setup.py",
+  ".git",
+  ".tox",
+  "__pycache__",
+  "build",
+  "dist",
+  "docs/_build",
+  "setup.py",
 ]
-[tool.ruff.lint]
-ignore = [
-    # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
-    "E731",
-    # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
-    "E741",
-    # Missing docstring in public package
-    "D104",
-    # Missing docstring in public module
-    "D100",
-    # Missing docstring in __init__
-    "D107",
-    # Missing docstring in magic method
-    "D105",
-    # Do not perform function calls in argument defaults.
-    "B008",
-    # Missing docstring in magic method
-    "D105",
+lint.select = [
+  "B",   # flake8-bugbear
+  "BLE", # flake8-blind-except
+  "C4",  # flake8-comprehensions
+  "D",   # flake8-docstrings
+  "E",   # pycodestyle
+  "F",   # pyflakes
+  "I",   # isort
+  "NPY", # NumPy-specific rules
+  "PGH", # pygrep-hooks
+  "PT",  # flake8-pytest-style
+  "Q",   # flake8-quotes
+  "RET", # flake8-raise
+  "SIM", # flake8-simplify
+  "T20", # flake8-print
+  "TID", # flake-8-tidy-imports
+  "UP",  # pyupgrade
+  "W",   # pycodestyle
 ]
-select = [
-    "D", # flake8-docstrings
-    "I", # isort
-    "E", # pycodestyle
-    "F", # pyflakes
-    "W", # pycodestyle
-    "Q", # flake8-quotes
-    "SIM", # flake8-simplify
-    "TID",  # flake-8-tidy-imports
-    "NPY",  # NumPy-specific rules
-    "PT",  # flake8-pytest-style
-    "B", # flake8-bugbear
-    "UP", # pyupgrade
-    "C4", # flake8-comprehensions
-    "BLE", # flake8-blind-except
-    "T20",  # flake8-print
-    "RET", # flake8-raise
-    "PGH", # pygrep-hooks
+lint.ignore = [
+  # Do not perform function calls in argument defaults.
+  "B008",
+  # Missing docstring in public module
+  "D100",
+  # Missing docstring in public package
+  "D104",
+  # Missing docstring in magic method
+  "D105",
+  # Missing docstring in __init__
+  "D107",
+  # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
+  "E731",
+  # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
+  "E741",
 ]
-unfixable = ["B", "UP", "C4", "BLE", "T20", "RET"]
 
-[tool.ruff.lint.per-file-ignores]
-    "tests/*" = ["D", "PT", "B024"]
-    "*/__init__.py" = ["F401", "D104", "D107", "E402"]
-    "docs/*" = ["D","B","E","A"]
-    "tests/conftest.py"= ["E402", "RET504"]
-    "src/spatialdata_plot/pl/utils.py"= ["PGH003"]
+lint.per-file-ignores."*/__init__.py" = [ "D104", "D107", "E402", "F401" ]
 
-[tool.ruff.lint.pydocstyle]
-convention = "numpy"
+lint.per-file-ignores."docs/*" = [ "A", "B", "D", "E" ]
+
+lint.per-file-ignores."src/spatialdata_plot/pl/utils.py" = [ "PGH003" ]
+
+lint.per-file-ignores."tests/*" = [ "B024", "D", "PT" ]
+
+lint.per-file-ignores."tests/conftest.py" = [ "E402", "RET504" ]
+lint.unfixable = [ "B", "BLE", "C4", "RET", "T20", "UP" ]
+lint.pydocstyle.convention = "numpy"
+
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+xfail_strict = true
+addopts = [
+  #    "-Werror",  # if 3rd party libs raise DeprecationWarnings, just use filterwarnings below
+  "--import-mode=importlib", # allow using test files with same name
+  "-s",                      # print output from tests
+]
+# info on how to use this https://stackoverflow.com/questions/57925071/how-do-i-avoid-getting-deprecationwarning-from-inside-dependencies-with-pytest
+filterwarnings = [
+  #     "ignore:.*U.*mode is deprecated:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = [ "spatialdata_plot" ]
+branch = true
+parallel = true
+omit = [
+  "**/test_*.py",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/spatialdata_plot",
+  "*/site-packages/spatialdata_plot",
+]
+
+[tool.jupytext]
+formats = "ipynb,md"
+
+[tool.cruft]
+skip = [
+  "tests",
+  "src/**/__init__.py",
+  "src/**/basic.py",
+  "docs/api.md",
+  "docs/changelog.md",
+  "docs/references.bib",
+  "docs/references.md",
+  "docs/notebooks/example.ipynb",
+]
 
 [tool.pixi.workspace]
-channels = ["conda-forge"]
-platforms = ["osx-arm64", "linux-64"]
+channels = [ "conda-forge" ]
+platforms = [ "osx-arm64", "linux-64" ]
 
 [tool.pixi.dependencies]
 python = ">=3.11"
@@ -174,14 +228,14 @@ python = "3.13.*"
 
 [tool.pixi.environments]
 # 3.11 lane (for gh-actions)
-dev-py311  = { features = ["dev", "test", "py311"], solve-group = "py311" }
-docs-py311 = { features = ["docs", "py311"],        solve-group = "py311" }
+dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
+docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
 
 # 3.13 lane
-default    = { features = ["py313"],                 solve-group = "py313" }
-dev-py313  = { features = ["dev", "test", "py313"],  solve-group = "py313" }
-docs-py313 = { features = ["docs", "py313"],         solve-group = "py313" }
-test-py313 = { features = ["test", "py313"],         solve-group = "py313" }
+default = { features = [ "py313" ], solve-group = "py313" }
+dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
+docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
+test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
 
 [tool.pixi.tasks]
 lab = "jupyter lab"

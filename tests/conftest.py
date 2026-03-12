@@ -441,7 +441,7 @@ class PlotTester(ABC):  # noqa: B024
         # Try to get a reasonable layout first (helps with axes/labels)
         if not fig.get_constrained_layout():
             try:
-                fig.set_constrained_layout(True)
+                fig.set_layout_engine("constrained")
             except (ValueError, RuntimeError):
                 try:
                     fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
