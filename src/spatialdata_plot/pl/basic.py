@@ -213,7 +213,7 @@ class PlotAccessor:
             `fill_alpha` will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. Other values are set to NA. If elment is None, broadcasting behaviour is attempted (use the same
+            them. Other values are set to NA. If element is None, broadcasting behaviour is attempted (use the same
             values for all elements).
         palette :  list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must

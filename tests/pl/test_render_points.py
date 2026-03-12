@@ -522,6 +522,60 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
 
+    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_matplotlib(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="category", size=40, method="matplotlib"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="category", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_continuous(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="col_a", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_continuous_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="col_a", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_X_continuous(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="col1", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_X_continuous_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="col1", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_categorical(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series([np.nan, "a", "b", "c"] * 50, dtype="category")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_categorical_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series([np.nan, "a", "b", "c"] * 50, dtype="category")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", size=40, method="datashader").pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_continuous(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
+        sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
+        sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
