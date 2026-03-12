@@ -97,11 +97,11 @@ cov-report = [ "coverage report", "coverage xml -o coverage.xml" ]
 
 [[tool.hatch.envs.hatch-test.matrix]]
 deps = [ "stable" ]
-python = [ "3.11", "3.13" ]
+python = [ "3.11", "3.14" ]
 
 [[tool.hatch.envs.hatch-test.matrix]]
 deps = [ "pre" ]
-python = [ "3.13" ]
+python = [ "3.14" ]
 
 [tool.hatch.envs.hatch-test.overrides]
 matrix.deps.env-vars = [
