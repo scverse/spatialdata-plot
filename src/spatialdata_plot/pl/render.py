@@ -416,7 +416,7 @@ def _render_shapes(
 
         aggregate_with_reduction = None
         continuous_nan_shapes = None
-        if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
+        if col_for_color is not None:
             if color_by_categorical:
                 # add a sentinel category so that shapes with NaN value are colored in the na_color
                 transformed_element[col_for_color] = _inject_ds_nan_sentinel(transformed_element[col_for_color])
