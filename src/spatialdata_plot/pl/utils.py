@@ -1119,7 +1119,9 @@ def _set_color_source_vec(
             table_to_use = None
         else:
             table_keys = list(sdata.tables.keys())
-            if table_keys:
+            if len(table_keys) == 1:
+                table_to_use = table_keys[0]
+            elif len(table_keys) > 1:
                 table_to_use = table_keys[0]
                 logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
             else:
