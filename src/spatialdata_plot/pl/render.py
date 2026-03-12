@@ -69,8 +69,12 @@ _Normalize = Normalize | abc.Sequence[Normalize]
 _DS_NAN_CATEGORY = "ds_nan"
 
 
-def _coerce_categorical_source(series: pd.Series) -> pd.Categorical:
-    """Return a ``pd.Categorical`` from a pandas Series."""
+def _coerce_categorical_source(series: pd.Series | dd.Series) -> pd.Categorical:
+    """Return a ``pd.Categorical`` from a pandas or dask Series."""
+    if isinstance(series, dd.Series):
+        if isinstance(series.dtype, pd.CategoricalDtype) and getattr(series.cat, "known", True) is False:
+            series = series.cat.as_known()
+        series = series.compute()
     if isinstance(series.dtype, pd.CategoricalDtype):
         return series.array
     return pd.Categorical(series)
