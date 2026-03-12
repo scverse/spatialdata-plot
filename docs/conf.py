@@ -142,6 +142,13 @@ html_theme_options = {
 pygments_style = "default"
 katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
 
+suppress_warnings = [
+    # matplotlib.figure.Figure references ColorType which isn't importable in the docs env
+    "sphinx_autodoc_typehints.forward_reference",
+    # xarray (iris) and geopandas (folium) have guarded TYPE_CHECKING imports for optional deps
+    "sphinx_autodoc_typehints.guarded_import",
+]
+
 # Ignore warnings.
 nitpicky = False  # TODO: solve upstream.
 

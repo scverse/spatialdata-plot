@@ -82,7 +82,7 @@ dependency-groups = [ "dev" ]
 dependency-groups = [ "doc" ]
 
 [tool.hatch.envs.docs.scripts]
-build = "sphinx-build -M html docs docs/_build {args}"
+build = "sphinx-build -M html docs docs/_build -W {args}"
 open = "python -m webbrowser -t docs/_build/html/index.html"
 clean = "git clean -fdX -- {args:docs}"
 
