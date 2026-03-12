@@ -75,8 +75,14 @@ jobs:
       - name: Run tests
         env:
           DISPLAY: ":42"
-        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+        run: >-
+          uvx hatch run ${{ matrix.env.name }}:${{
+            matrix.env.name == 'hatch-test.py3.14-stable' && 'run-cov' || 'run'
+          }} -v --color=yes ${{
+            matrix.env.name == 'hatch-test.py3.14-stable' && ' ' || '-n auto'
+          }}
       - name: Generate coverage report
+        if: matrix.env.name == 'hatch-test.py3.14-stable'
         run: |
           test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
           uvx hatch run ${{ matrix.env.name }}:cov-report
@@ -87,6 +93,7 @@ jobs:
           name: visual_test_results_${{ matrix.env.name }}
           path: tests/figures/*
       - name: Upload coverage
+        if: matrix.env.name == 'hatch-test.py3.14-stable'
         uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: true
