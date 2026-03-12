@@ -97,10 +97,14 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5], fill_alpha=1.0).pl.show()
 
     def test_plot_can_render_outline_color(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", outline_alpha=1, fill_alpha=0, outline_color="red").pl.show()
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", outline_alpha=1, fill_alpha=0, outline_color="red", contour_px=10
+        ).pl.show()
 
     def test_plot_can_render_outline_with_fill(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", outline_alpha=1, fill_alpha=0.3, outline_color="white").pl.show()
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", outline_alpha=1, fill_alpha=0.3, outline_color="blue", contour_px=10
+        ).pl.show()
 
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
