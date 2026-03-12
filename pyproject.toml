@@ -182,8 +182,16 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = [ "spatialdata_plot" ]
+branch = true
+parallel = true
 omit = [
   "**/test_*.py",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/spatialdata_plot",
+  "*/site-packages/spatialdata_plot",
 ]
 
 [tool.jupytext]
