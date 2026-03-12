@@ -118,6 +118,60 @@ def _build_datashader_color_key(
     return color_key
 
 
+def _inject_ds_nan_sentinel(series: pd.Series, sentinel: str = _DS_NAN_CATEGORY) -> pd.Series:
+    """Add a sentinel category for NaN values in a categorical series.
+
+    Safely handles series that are not yet categorical, dask-backed
+    categoricals that need ``as_known()``, and series that already
+    contain the sentinel.
+    """
+    if not isinstance(series.dtype, pd.CategoricalDtype):
+        series = series.astype("category")
+    if hasattr(series.cat, "as_known"):
+        series = series.cat.as_known()
+    if sentinel not in series.cat.categories:
+        series = series.cat.add_categories(sentinel)
+    return series.fillna(sentinel)
+
+
+def _want_decorations(color_vector: Any, na_color: Color) -> bool:
+    """Return whether legend/colorbar decorations should be shown.
+
+    Decorations are suppressed when all colors equal the NA color
+    (i.e., nothing informative to display).
+    """
+    if color_vector is None:
+        return False
+    cv = np.asarray(color_vector)
+    if cv.size == 0:
+        return False
+    unique_vals = set(cv.tolist())
+    if len(unique_vals) != 1:
+        return True
+    only_val = next(iter(unique_vals))
+    na_hex = na_color.get_hex()
+    if isinstance(only_val, str) and only_val.startswith("#") and na_hex.startswith("#"):
+        return _hex_no_alpha(only_val) != _hex_no_alpha(na_hex)
+    return bool(only_val != na_hex)
+
+
+def _reparse_points(
+    sdata_filt: sd.SpatialData,
+    element: str,
+    df: pd.DataFrame,
+    transformation: Any,
+    coordinate_system: str,
+) -> None:
+    """Re-register a points DataFrame in *sdata_filt* with its transformation."""
+    dd_frame = dask.dataframe.from_pandas(df, npartitions=1)
+    sdata_filt.points[element] = PointsModel.parse(dd_frame, coordinates={"x": "x", "y": "y"})
+    set_transformation(
+        element=sdata_filt.points[element],
+        transformation=transformation,
+        to_coordinate_system=coordinate_system,
+    )
+
+
 def _filter_groups_transparent_na(
     groups: str | list[str],
     color_source_vector: pd.Categorical,
@@ -364,11 +418,13 @@ def _render_shapes(
                     # If single color, broadcast to all shapes
                     color_vector = [color_vector[0]] * len(transformed_element)
                 else:
-                    # If lengths don't match, pad or truncate to match
+                    logger.warning(
+                        f"Color vector length ({len(color_vector)}) does not match element count "
+                        f"({len(transformed_element)}). This may indicate a bug."
+                    )
                     if len(color_vector) > len(transformed_element):
                         color_vector = color_vector[: len(transformed_element)]
                     else:
-                        # Pad with the last color or na_color
                         na_color = render_params.cmap_params.na_color.get_hex_with_alpha()
                         color_vector = list(color_vector) + [na_color] * (len(transformed_element) - len(color_vector))
 
@@ -386,9 +442,7 @@ def _render_shapes(
         if col_for_color is not None and (render_params.groups is None or len(render_params.groups) > 1):
             if color_by_categorical:
                 # add a sentinel category so that shapes with NaN value are colored in the na_color
-                transformed_element[col_for_color] = (
-                    transformed_element[col_for_color].cat.add_categories(_DS_NAN_CATEGORY).fillna(_DS_NAN_CATEGORY)
-                )
+                transformed_element[col_for_color] = _inject_ds_nan_sentinel(transformed_element[col_for_color])
                 agg = cvs.polygons(
                     transformed_element,
                     geometry="geometry",
@@ -493,9 +547,7 @@ def _render_shapes(
 
             if continuous_nan_shapes is not None:
                 # for coloring by continuous variable: render nan shapes separately
-                nan_color_hex = render_params.cmap_params.na_color.get_hex()
-                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
-                    nan_color_hex = nan_color_hex[:7]
+                nan_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
                 continuous_nan_shapes = ds.tf.shade(
                     continuous_nan_shapes,
                     cmap=nan_color_hex,
@@ -664,10 +716,7 @@ def _render_shapes(
                     vmax = 1.0
         _cax.set_clim(vmin=vmin, vmax=vmax)
 
-    if (
-        len(set(color_vector)) != 1
-        or list(set(color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
-    ):
+    if _want_decorations(color_vector, render_params.cmap_params.na_color):
         # necessary in case different shapes elements are annotated with one table
         if color_source_vector is not None and render_params.col_for_color is not None:
             color_source_vector = color_source_vector.remove_unused_categories()
@@ -808,14 +857,7 @@ def _render_points(
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
-    points_dd = dask.dataframe.from_pandas(points_for_model, npartitions=1)
-    sdata_filt.points[element] = PointsModel.parse(points_dd, coordinates={"x": "x", "y": "y"})
-    # restore transformation in coordinate system of interest
-    set_transformation(
-        element=sdata_filt.points[element],
-        transformation=transformation_in_cs,
-        to_coordinate_system=coordinate_system,
-    )
+    _reparse_points(sdata_filt, element, points_for_model, transformation_in_cs, coordinate_system)
 
     if col_for_color is not None:
         assert isinstance(col_for_color, str)
@@ -858,14 +900,7 @@ def _render_points(
     )
 
     if added_color_from_table and col_for_color is not None:
-        points_with_color_dd = dask.dataframe.from_pandas(points_pd_with_color, npartitions=1)
-        sdata_filt.points[element] = PointsModel.parse(points_with_color_dd, coordinates={"x": "x", "y": "y"})
-        set_transformation(
-            element=sdata_filt.points[element],
-            transformation=transformation_in_cs,
-            to_coordinate_system=coordinate_system,
-        )
-        points_dd = points_with_color_dd
+        _reparse_points(sdata_filt, element, points_pd_with_color, transformation_in_cs, coordinate_system)
 
     # When groups are specified and na_color is fully transparent (na_color=None),
     # filter out non-matching points instead of rendering invisible geometry.
@@ -878,14 +913,8 @@ def _render_points(
             return
         # filter the materialized points, adata, and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
-        adata = adata[keep].copy()
-        filtered_dd = dask.dataframe.from_pandas(points, npartitions=1)
-        sdata_filt.points[element] = PointsModel.parse(filtered_dd, coordinates={"x": "x", "y": "y"})
-        set_transformation(
-            element=sdata_filt.points[element],
-            transformation=transformation_in_cs,
-            to_coordinate_system=coordinate_system,
-        )
+        adata = adata[keep]
+        _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system)
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
@@ -965,14 +994,7 @@ def _render_points(
         if col_for_color is not None:
             if color_by_categorical:
                 # add nan as category so that nan points are shown in the nan color
-                cat_series = transformed_element[col_for_color]
-                if not isinstance(cat_series.dtype, pd.CategoricalDtype):
-                    cat_series = cat_series.astype("category")
-                if hasattr(cat_series.cat, "as_known"):
-                    cat_series = cat_series.cat.as_known()
-                if _DS_NAN_CATEGORY not in cat_series.cat.categories:
-                    cat_series = cat_series.cat.add_categories(_DS_NAN_CATEGORY)
-                transformed_element[col_for_color] = cat_series.fillna(_DS_NAN_CATEGORY)
+                transformed_element[col_for_color] = _inject_ds_nan_sentinel(transformed_element[col_for_color])
                 agg = cvs.points(transformed_element, "x", "y", agg=ds.by(col_for_color, ds.count()))
             else:
                 reduction_name = render_params.ds_reduction if render_params.ds_reduction is not None else "sum"
@@ -1062,9 +1084,7 @@ def _render_points(
 
             if continuous_nan_points is not None:
                 # for coloring by continuous variable: render nan points separately
-                nan_color_hex = render_params.cmap_params.na_color.get_hex()
-                if nan_color_hex.startswith("#") and len(nan_color_hex) == 9:
-                    nan_color_hex = nan_color_hex[:7]
+                nan_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
                 continuous_nan_points = ds.tf.spread(continuous_nan_points, px=px, how="max")
                 continuous_nan_points = ds.tf.shade(
                     continuous_nan_points,
@@ -1132,27 +1152,7 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    # Decide whether there is any informative color variation.
-    # We skip legend/colorbar only if all colors are equal to the NA color.
-    want_decorations = True
-    if color_vector is None:
-        want_decorations = False
-    else:
-        cv = np.asarray(color_vector)
-        if cv.size == 0:
-            want_decorations = False
-        else:
-            unique_vals = set(cv.tolist())
-            if len(unique_vals) == 1:
-                only_val = next(iter(unique_vals))
-                na_hex = render_params.cmap_params.na_color.get_hex()
-                if isinstance(only_val, str) and only_val.startswith("#") and na_hex.startswith("#"):
-                    only_norm = _hex_no_alpha(only_val)
-                    na_norm = _hex_no_alpha(na_hex)
-                    if only_norm == na_norm:
-                        want_decorations = False
-
-    if want_decorations:
+    if _want_decorations(color_vector, render_params.cmap_params.na_color):
         if color_source_vector is None:
             palette = ListedColormap(dict.fromkeys(color_vector))
         else:
