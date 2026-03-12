@@ -984,26 +984,26 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
 
     def test_plot_groups_na_color_none_filters_shapes(self, sdata_blobs: SpatialData):
-        """When groups is set and na_color=None, non-matching shapes are filtered out entirely."""
+        """With groups, non-matching shapes are filtered by default; na_color='red' keeps them visible."""
         sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"]).pl.show(
-            ax=axs[0], title="default"
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color="red").pl.show(
+            ax=axs[0], title="na_color='red'"
         )
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color=None).pl.show(
-            ax=axs[1], title="na_color=None"
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"]).pl.show(
+            ax=axs[1], title="default (filtered)"
         )
 
     def test_plot_groups_na_color_none_filters_shapes_datashader(self, sdata_blobs: SpatialData):
-        """Groups filtering with na_color=None via datashader backend."""
+        """With groups + datashader, non-matching shapes are filtered by default."""
         sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
-        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], method="datashader").pl.show(
-            ax=axs[0], title="default"
-        )
         sdata_blobs.pl.render_shapes(
-            "blobs_polygons", color="cat_color", groups=["a"], na_color=None, method="datashader"
-        ).pl.show(ax=axs[1], title="na_color=None")
+            "blobs_polygons", color="cat_color", groups=["a"], na_color="red", method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], method="datashader").pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
 
 
 def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):

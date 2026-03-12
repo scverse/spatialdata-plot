@@ -577,26 +577,26 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
 
     def test_plot_groups_na_color_none_filters_points(self, sdata_blobs: SpatialData):
-        """When groups is set and na_color=None, non-matching points are filtered out entirely."""
+        """With groups, non-matching points are filtered by default; na_color='red' keeps them visible."""
         sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
-        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], size=30).pl.show(
-            ax=axs[0], title="default"
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], na_color="red", size=30).pl.show(
+            ax=axs[0], title="na_color='red'"
         )
-        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], na_color=None, size=30).pl.show(
-            ax=axs[1], title="na_color=None"
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], size=30).pl.show(
+            ax=axs[1], title="default (filtered)"
         )
 
     def test_plot_groups_na_color_none_filters_points_datashader(self, sdata_blobs: SpatialData):
-        """Groups filtering with na_color=None via datashader backend."""
+        """With groups + datashader, non-matching points are filtered by default."""
         sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
         sdata_blobs.pl.render_points(
-            "blobs_points", color="cat_color", groups=["a"], size=30, method="datashader"
-        ).pl.show(ax=axs[0], title="default")
+            "blobs_points", color="cat_color", groups=["a"], na_color="red", size=30, method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
         sdata_blobs.pl.render_points(
-            "blobs_points", color="cat_color", groups=["a"], na_color=None, size=30, method="datashader"
-        ).pl.show(ax=axs[1], title="na_color=None")
+            "blobs_points", color="cat_color", groups=["a"], size=30, method="datashader"
+        ).pl.show(ax=axs[1], title="default (filtered)")
 
 
 def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):

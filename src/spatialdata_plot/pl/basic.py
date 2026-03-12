@@ -213,8 +213,8 @@ class PlotAccessor:
             `fill_alpha` will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. Other values are set to NA. When ``na_color=None``, non-matching elements are filtered out entirely
-            instead of rendered invisibly (shapes and points only; labels are raster-based and cannot be filtered).
+            them. By default, non-matching elements are filtered out entirely (shapes and points only; labels are
+            raster-based and cannot be filtered). To show non-matching elements, set ``na_color`` explicitly.
             If element is None, broadcasting behaviour is attempted (use the same values for all elements).
         palette :  list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must

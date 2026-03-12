@@ -272,9 +272,10 @@ def _render_shapes(
 
     values_are_categorical = color_source_vector is not None
 
-    # When groups are specified and na_color is fully transparent (na_color=None),
-    # filter out non-matching elements instead of showing them as invisible geometry.
-    if groups is not None and values_are_categorical and render_params.cmap_params.na_color.alpha == "00":
+    # When groups are specified, filter out non-matching elements by default.
+    # Only show non-matching elements if the user explicitly sets na_color.
+    _na = render_params.cmap_params.na_color
+    if groups is not None and values_are_categorical and (_na.default_color_set or _na.alpha == "00"):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -883,9 +884,10 @@ def _render_points(
     if added_color_from_table and col_for_color is not None:
         _reparse_points(sdata_filt, element, points_pd_with_color, transformation_in_cs, coordinate_system)
 
-    # When groups are specified and na_color is fully transparent (na_color=None),
-    # filter out non-matching points instead of rendering invisible geometry.
-    if groups is not None and color_source_vector is not None and render_params.cmap_params.na_color.alpha == "00":
+    # When groups are specified, filter out non-matching elements by default.
+    # Only show non-matching elements if the user explicitly sets na_color.
+    _na = render_params.cmap_params.na_color
+    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
