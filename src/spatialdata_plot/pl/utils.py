@@ -1200,10 +1200,9 @@ def _map_color_seg(
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
 
-    if seg_boundaries:
-        outline_rgba = colors.to_rgba(outline_color.get_hex_with_alpha() if outline_color is not None else "black")
-
-        # Build RGBA image: outline_color on the eroded ring, transparent elsewhere
+    if seg_boundaries and outline_color is not None:
+        # Uniform outline color requested: skip label2rgb, build RGBA directly
+        outline_rgba = colors.to_rgba(outline_color.get_hex_with_alpha())
         outline_mask = val_im > 0
         rgba = np.zeros((*val_im.shape, 4), dtype=float)
         rgba[outline_mask, :3] = outline_rgba[:3]
@@ -1217,6 +1216,12 @@ def _map_color_seg(
         bg_color=(1, 1, 1),  # transparency doesn't really work
         image_alpha=0,
     )
+
+    if seg_boundaries:
+        # Data-driven outline: use seg_im colors on the eroded ring, transparent elsewhere
+        outline_mask = val_im > 0
+        alpha_channel = outline_mask.astype(float)
+        return np.dstack((seg_im, alpha_channel))
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
