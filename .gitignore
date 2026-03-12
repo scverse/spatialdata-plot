@@ -6,8 +6,7 @@ buck-out/
 # Compiled files
 .venv/
 __pycache__/
-.mypy_cache/
-.ruff_cache/
+.*cache/
 /node_modules
 
 # Distribution / packaging
@@ -16,7 +15,6 @@ __pycache__/
 /*.egg-info/
 
 # Tests and coverage
-/.pytest_cache/
 /.cache/
 /data/
 *failed-diff.png
@@ -27,10 +25,8 @@ __pycache__/
 
 # IDEs
 /.idea/
-/.vscode/
 
 format.sh
-
 
 # test
 tests/figures/
