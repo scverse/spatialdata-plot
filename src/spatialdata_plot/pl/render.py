@@ -69,33 +69,11 @@ _Normalize = Normalize | abc.Sequence[Normalize]
 _DS_NAN_CATEGORY = "ds_nan"
 
 
-def _coerce_categorical_source(cat_source: Any) -> pd.Categorical:
-    """Return a pandas Categorical from known, concrete sources only.
-
-    Raises
-    ------
-    TypeError
-        If *cat_source* is not a ``dd.Series``, ``pd.Series``,
-        ``pd.Categorical``, or ``np.ndarray``.
-    """
-    if isinstance(cat_source, dd.Series):
-        if isinstance(cat_source.dtype, pd.CategoricalDtype) and getattr(cat_source.cat, "known", True) is False:
-            cat_source = cat_source.cat.as_known()
-        cat_source = cat_source.compute()
-
-    if isinstance(cat_source, pd.Series):
-        if isinstance(cat_source.dtype, pd.CategoricalDtype):
-            return cat_source.array
-        return pd.Categorical(cat_source)
-    if isinstance(cat_source, pd.Categorical):
-        return cat_source
-    if isinstance(cat_source, np.ndarray):
-        return pd.Categorical(cat_source)
-
-    raise TypeError(
-        f"Cannot coerce {type(cat_source).__name__} to pd.Categorical. "
-        "Expected dd.Series, pd.Series, pd.Categorical, or np.ndarray."
-    )
+def _coerce_categorical_source(series: pd.Series) -> pd.Categorical:
+    """Return a ``pd.Categorical`` from a pandas Series."""
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return series.array
+    return pd.Categorical(series)
 
 
 def _build_datashader_color_key(
@@ -104,18 +82,17 @@ def _build_datashader_color_key(
     na_color_hex: str,
 ) -> dict[str, str]:
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
+    na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
+    # Map each category to its first-occurrence color via codes
     colors_arr = np.asarray(color_vector, dtype=object)
-    color_key: dict[str, str] = {}
-    for cat in cat_series.categories:
-        if cat == _DS_NAN_CATEGORY:
-            key_color = na_color_hex
-        else:
-            idx = np.flatnonzero(cat_series == cat)
-            key_color = colors_arr[idx[0]] if idx.size else na_color_hex
-        if isinstance(key_color, str) and key_color.startswith("#"):
-            key_color = _hex_no_alpha(key_color)
-        color_key[str(cat)] = key_color
-    return color_key
+    first_color: dict[str, str] = {}
+    for code, color in zip(cat_series.codes, colors_arr, strict=False):
+        if code < 0:
+            continue
+        cat_name = str(cat_series.categories[code])
+        if cat_name not in first_color:
+            first_color[cat_name] = _hex_no_alpha(color) if isinstance(color, str) and color.startswith("#") else color
+    return {str(c): first_color.get(str(c), na_hex) for c in cat_series.categories}
 
 
 def _inject_ds_nan_sentinel(series: pd.Series, sentinel: str = _DS_NAN_CATEGORY) -> pd.Series:

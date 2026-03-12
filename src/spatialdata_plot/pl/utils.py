@@ -990,31 +990,17 @@ def _build_alignment_dtype_hint(
     table_name: str | None,
 ) -> str:
     """Build a diagnostic hint string for dtype mismatches between element and table indices."""
-    hints: list[str] = []
-    color_index_dtype = getattr(color_series.index, "dtype", None)
-    element_index_dtype = getattr(getattr(element, "index", None), "dtype", None) if element is not None else None
-
-    table_instance_dtype = None
-    instance_key = None
-    if table_name is not None and sdata is not None and table_name in sdata.tables:
-        table = sdata.tables[table_name]
-        try:
-            _, _, instance_key = get_table_keys(table)
-        except (KeyError, ValueError, TypeError, AttributeError):
-            instance_key = None
-        if instance_key is not None and hasattr(table, "obs") and instance_key in table.obs:
-            table_instance_dtype = table.obs[instance_key].dtype
-
-    if (
-        element_index_dtype is not None
-        and table_instance_dtype is not None
-        and element_index_dtype != table_instance_dtype
-    ):
-        hints.append(f"element index dtype is {element_index_dtype}, '{instance_key}' dtype is {table_instance_dtype}")
-    if color_index_dtype is not None and element_index_dtype is not None and color_index_dtype != element_index_dtype:
-        hints.append(f"color index dtype is {color_index_dtype}, element index dtype is {element_index_dtype}")
-
-    return f" (hint: {'; '.join(hints)})" if hints else ""
+    el_dtype = getattr(getattr(element, "index", None), "dtype", None)
+    if el_dtype is None or table_name is None or sdata is None or table_name not in sdata.tables:
+        return ""
+    try:
+        _, _, instance_key = get_table_keys(sdata.tables[table_name])
+    except (KeyError, ValueError):
+        return ""
+    tbl_dtype = sdata.tables[table_name].obs[instance_key].dtype
+    if el_dtype != tbl_dtype:
+        return f" (hint: element index dtype is {el_dtype}, '{instance_key}' dtype is {tbl_dtype})"
+    return ""
 
 
 def _set_color_source_vec(
