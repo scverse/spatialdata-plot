@@ -54,8 +54,7 @@ from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 from skimage.color import label2rgb
-from skimage.morphology import erosion, square
-from skimage.segmentation import find_boundaries
+from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
@@ -1215,6 +1214,7 @@ def _map_color_seg(
     na_color: Color,
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
+    outline_color: Color | None = None,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
@@ -1256,7 +1256,16 @@ def _map_color_seg(
                 cols = cmap_params.cmap(cmap_params.norm(color_vector))
 
     if seg_erosionpx is not None:
-        val_im[val_im == erosion(val_im, square(seg_erosionpx))] = 0
+        val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
+
+    if seg_boundaries and outline_color is not None:
+        # Uniform outline color requested: skip label2rgb, build RGBA directly
+        outline_rgba = colors.to_rgba(outline_color.get_hex_with_alpha())
+        outline_mask = val_im > 0
+        rgba = np.zeros((*val_im.shape, 4), dtype=float)
+        rgba[outline_mask, :3] = outline_rgba[:3]
+        rgba[outline_mask, 3] = outline_rgba[3]
+        return rgba
 
     seg_im: ArrayLike = label2rgb(
         label=val_im,
@@ -1267,10 +1276,10 @@ def _map_color_seg(
     )
 
     if seg_boundaries:
-        if seg.shape[0] == 1:
-            seg = np.squeeze(seg, axis=0)
-        seg_bound: ArrayLike = np.clip(seg_im - find_boundaries(seg)[:, :, None], 0, 1)
-        return np.dstack((seg_bound, np.where(val_im > 0, 1, 0)))  # add transparency here
+        # Data-driven outline: use seg_im colors on the eroded ring, transparent elsewhere
+        outline_mask = val_im > 0
+        alpha_channel = outline_mask.astype(float)
+        return np.dstack((seg_im, alpha_channel))
 
     if len(val_im.shape) != len(seg_im.shape):
         val_im = np.expand_dims((val_im > 0).astype(int), axis=-1)
@@ -2521,6 +2530,7 @@ def _validate_label_render_params(
     na_color: ColorLike | None,
     norm: Normalize | None,
     outline_alpha: float | int,
+    outline_color: ColorLike | None,
     scale: str | None,
     table_name: str | None,
     table_layer: str | None,
@@ -2537,6 +2547,7 @@ def _validate_label_render_params(
         "color": color,
         "na_color": na_color,
         "outline_alpha": outline_alpha,
+        "outline_color": outline_color,
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
@@ -2559,6 +2570,7 @@ def _validate_label_render_params(
         element_params[el]["fill_alpha"] = param_dict["fill_alpha"]
         element_params[el]["scale"] = param_dict["scale"]
         element_params[el]["outline_alpha"] = param_dict["outline_alpha"]
+        element_params[el]["outline_color"] = param_dict["outline_color"]
         element_params[el]["contour_px"] = param_dict["contour_px"]
         element_params[el]["table_layer"] = param_dict["table_layer"]
 
