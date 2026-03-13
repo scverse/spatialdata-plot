@@ -213,8 +213,8 @@ class PlotAccessor:
             `fill_alpha` will overwrite the value present in the cmap.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. By default, non-matching elements are filtered out entirely (shapes and points only; labels are
-            raster-based and cannot be filtered). To show non-matching elements, set ``na_color`` explicitly.
+            them. By default, non-matching elements are hidden. To show non-matching elements, set ``na_color``
+            explicitly.
             If element is None, broadcasting behaviour is attempted (use the same values for all elements).
         palette :  list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
@@ -399,8 +399,9 @@ class PlotAccessor:
             value is used instead.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. Other values are set to NA. If `element` is `None`, broadcasting behaviour is attempted (use the same
-            values for all elements).
+            them. By default, non-matching points are filtered out entirely. To show non-matching points, set
+            ``na_color`` explicitly.
+            If element is None, broadcasting behaviour is attempted (use the same values for all elements).
         palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
@@ -672,7 +673,7 @@ class PlotAccessor:
             table_name to be used for the element if you would like a specific table to be used.
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
-            them. Other values are set to NA. The list can contain multiple discrete labels to be visualized.
+            them. By default, non-matching labels are hidden. To show non-matching labels, set ``na_color`` explicitly.
         palette : list[str] | str | None
             Palette for discrete annotations. List of valid color names that should be used for the categories. Must
             match the number of groups. The list can contain multiple palettes (one per group) to be visualized. If

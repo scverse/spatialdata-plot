@@ -1531,6 +1531,26 @@ def _render_labels(
         else:
             assert color_source_vector is None
 
+    # When groups are specified, zero out non-matching label IDs so they render as background.
+    # Only show non-matching labels if the user explicitly sets na_color.
+    _na = render_params.cmap_params.na_color
+    if (
+        groups is not None
+        and categorical
+        and color_source_vector is not None
+        and (_na.default_color_set or _na.alpha == "00")
+    ):
+        keep_vec = color_source_vector.isin(groups)
+        matching_ids = instance_id[keep_vec]
+        keep_mask = np.isin(label.values, matching_ids)
+        label = label.copy()
+        label.values[~keep_mask] = 0
+        instance_id = instance_id[keep_vec]
+        color_source_vector = color_source_vector[keep_vec]
+        color_vector = color_vector[keep_vec]
+        if isinstance(color_vector.dtype, pd.CategoricalDtype):
+            color_vector = color_vector.remove_unused_categories()
+
     def _draw_labels(seg_erosionpx: int | None, seg_boundaries: bool, alpha: float) -> matplotlib.image.AxesImage:
         labels = _map_color_seg(
             seg=label.values,
