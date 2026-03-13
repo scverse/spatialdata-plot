@@ -576,6 +576,36 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
         sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
 
+    def test_plot_groups_na_color_none_filters_points(self, sdata_blobs: SpatialData):
+        """With groups, non-matching points are filtered by default; na_color='red' keeps them visible."""
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], na_color="red", size=30).pl.show(
+            ax=axs[0], title="na_color='red'"
+        )
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], size=30).pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+    def test_plot_groups_na_color_none_filters_points_datashader(self, sdata_blobs: SpatialData):
+        """With groups + datashader, non-matching points are filtered by default."""
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["a"], na_color="red", size=30, method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["a"], size=30, method="datashader"
+        ).pl.show(ax=axs[1], title="default (filtered)")
+
+
+def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
+    """When no elements match the groups, the plot should render without error."""
+    sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+    sdata_blobs.pl.render_points(
+        "blobs_points", color="cat_color", groups=["nonexistent"], na_color=None, size=30
+    ).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables

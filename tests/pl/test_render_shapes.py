@@ -983,6 +983,34 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
         sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
 
+    def test_plot_groups_na_color_none_filters_shapes(self, sdata_blobs: SpatialData):
+        """With groups, non-matching shapes are filtered by default; na_color='red' keeps them visible."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color="red").pl.show(
+            ax=axs[0], title="na_color='red'"
+        )
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"]).pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+    def test_plot_groups_na_color_none_filters_shapes_datashader(self, sdata_blobs: SpatialData):
+        """With groups + datashader, non-matching shapes are filtered by default."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cat_color", groups=["a"], na_color="red", method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], method="datashader").pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+
+def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
+    """When no elements match the groups, the plot should render without error."""
+    sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["nonexistent"], na_color=None).pl.show()
+
 
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
     """Test that NaN values in color data are handled gracefully and logged."""
