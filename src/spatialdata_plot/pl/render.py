@@ -275,7 +275,7 @@ def _render_shapes(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and values_are_categorical and (_na.default_color_set or _na.alpha == "00"):
+    if groups is not None and values_are_categorical and (_na.default_color_set or _na.get_alpha_as_float() == 0.0):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -887,7 +887,8 @@ def _render_points(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
+    na_is_transparent = _na.default_color_set or _na.get_alpha_as_float() == 0.0
+    if groups is not None and color_source_vector is not None and na_is_transparent:
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -1525,7 +1526,7 @@ def _render_labels(
         groups is not None
         and categorical
         and color_source_vector is not None
-        and (_na.default_color_set or _na.alpha == "00")
+        and (_na.default_color_set or _na.get_alpha_as_float() == 0.0)
     ):
         keep_vec = color_source_vector.isin(groups)
         matching_ids = instance_id[keep_vec]
