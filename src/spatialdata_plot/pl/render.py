@@ -1203,10 +1203,9 @@ def _additive_blend(
     zero_colors = np.array([cm(0.0)[:3] for cm in channel_cmaps])
     canvas = np.mean(zero_colors, axis=0)
     composite = np.full((height, width, 3), canvas, dtype=float)
-    for ch, cmap in zip(channels, channel_cmaps, strict=True):
-        zero_rgb = np.array(cmap(0.0)[:3])
+    for idx, (ch, cmap) in enumerate(zip(channels, channel_cmaps, strict=True)):
         rgba = cmap(np.asarray(layers[ch]))
-        composite += rgba[..., :3] - zero_rgb
+        composite += rgba[..., :3] - zero_colors[idx]
     return np.clip(composite, 0, 1, out=composite)
 
 
@@ -1260,10 +1259,6 @@ def _render_images(
 
     # True if user gave n cmaps for n channels
     got_multiple_cmaps = isinstance(render_params.cmap_params, list)
-    if got_multiple_cmaps:
-        logger.warning(
-            "You're blending multiple cmaps. Consider using 'palette' for black-to-color compositing instead."
-        )
 
     # not using got_multiple_cmaps here because of ruff :(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:

@@ -2,6 +2,7 @@ import dask.array as da
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import scanpy as sc
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
@@ -170,6 +171,25 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             norm=[Normalize(vmin=0.1, vmax=0.5)],
             cmap="Greys",
         ).pl.show()
+
+    # --- Validation errors ---
+
+    def test_norm_list_length_mismatch_raises(self, sdata_blobs: SpatialData):
+        """norm list length must match number of channels."""
+        with pytest.raises(ValueError, match="must match the number of channels"):
+            sdata_blobs.pl.render_images(
+                element="blobs_image",
+                channel=[0, 1, 2],
+                norm=[Normalize(), Normalize()],  # 2 norms for 3 channels
+            ).pl.show()
+
+    def test_norm_list_empty_raises(self, sdata_blobs: SpatialData):
+        """Empty norm list is rejected at validation time."""
+        with pytest.raises(ValueError, match="must not be empty"):
+            sdata_blobs.pl.render_images(
+                element="blobs_image",
+                norm=[],
+            ).pl.show()
 
     def test_plot_correctly_normalizes_multichannel_images(self, sdata_raccoon: SpatialData):
         sdata_raccoon["raccoon_int16"] = Image2DModel.parse(
