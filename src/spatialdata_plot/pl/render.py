@@ -17,7 +17,7 @@ import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import ListedColormap, Normalize
+from matplotlib.colors import Colormap, ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata._core.query.relational_query import match_table_to_element
@@ -1175,6 +1175,24 @@ def _render_points(
         )
 
 
+def _additive_blend(
+    layers: dict[str | int, np.ndarray],
+    channels: list[Any],
+    channel_cmaps: list[Colormap],
+) -> np.ndarray:
+    """Additive blend of colormapped channels, matching Napari's additive mode.
+
+    Each channel is mapped through its colormap (which must return RGBA),
+    the RGB components are summed, and the result is clamped to [0, 1].
+    """
+    height, width = next(iter(layers.values())).shape
+    composite = np.zeros((height, width, 3), dtype=float)
+    for ch, cmap in zip(channels, channel_cmaps, strict=True):
+        rgba = cmap(np.asarray(layers[ch]))
+        composite += rgba[..., :3]
+    return np.clip(composite, 0, 1, out=composite)
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -1238,6 +1256,11 @@ def _render_images(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
+    if render_params.norms is not None and len(render_params.norms) != n_channels:
+        raise ValueError(
+            f"Length of 'norm' list ({len(render_params.norms)}) must match the number of channels ({n_channels})."
+        )
+
     _, trans_data = _prepare_transformation(img, coordinate_system, ax)
 
     # 1) Image has only 1 channel
@@ -1255,13 +1278,14 @@ def _render_images(
         cmap._lut[:, -1] = render_params.alpha
 
         # norm needs to be passed directly to ax.imshow(). If we normalize before, that method would always clip.
+        single_norm = render_params.norms[0] if render_params.norms else render_params.cmap_params.norm
         _ax_show_and_transform(
             layer,
             trans_data,
             ax,
             cmap=cmap,
             zorder=render_params.zorder,
-            norm=render_params.cmap_params.norm,
+            norm=single_norm,
         )
 
         wants_colorbar = _should_request_colorbar(
@@ -1271,7 +1295,7 @@ def _render_images(
             auto_condition=n_channels == 1,
         )
         if wants_colorbar and legend_params.colorbar and colorbar_requests is not None:
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=single_norm)
             colorbar_requests.append(
                 ColorbarSpec(
                     ax=ax,
@@ -1290,7 +1314,9 @@ def _render_images(
         layers = {}
         for ch_idx, ch in enumerate(channels):
             layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
-            if isinstance(render_params.cmap_params, list):
+            if render_params.norms is not None:
+                ch_norm = render_params.norms[ch_idx]
+            elif isinstance(render_params.cmap_params, list):
                 ch_norm = render_params.cmap_params[ch_idx].norm
             else:
                 ch_norm = render_params.cmap_params.norm
@@ -1304,14 +1330,7 @@ def _render_images(
                 stacked = np.stack([layers[ch] for ch in layers], axis=-1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
-                stacked = (
-                    np.stack(
-                        [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                        0,
-                    ).sum(0)
-                    / n_channels
-                )
-                stacked = stacked[:, :, :3]
+                stacked = _additive_blend(layers, channels, channel_cmaps)
                 logger.warning(
                     "One cmap was given for multiple channels and is now used for each channel. "
                     "You're blending multiple cmaps. "
@@ -1332,22 +1351,9 @@ def _render_images(
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
             # overwrite if n_channels == 2 for intuitive result
+            # Pick seed colors based on channel count
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
-                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-                colored = np.stack(
-                    [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                colored = colored[:, :, :3]
-            elif n_channels == 3:
-                seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
-                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-                colored = np.stack(
-                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                colored = colored[:, :, :3]
             else:
                 if isinstance(render_params.cmap_params, list):
                     cmap_is_default = render_params.cmap_params[0].cmap_is_default
@@ -1364,24 +1370,9 @@ def _render_images(
                         ]
                     else:
                         seed_colors = [render_params.cmap_params.cmap(i / (n_channels - 1)) for i in range(n_channels)]
-                channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
 
-                # Stack (n_channels, height, width) → (height*width, n_channels)
-                H, W = next(iter(layers.values())).shape
-                comp_rgb = np.zeros((H, W, 3), dtype=float)
-
-                # For each channel: map to RGBA, apply constant alpha, then add
-                for ch_idx, ch in enumerate(channels):
-                    layer_arr = layers[ch]
-                    rgba = channel_cmaps[ch_idx](layer_arr)
-                    rgba[..., 3] = render_params.alpha
-                    comp_rgb += rgba[..., :3] * rgba[..., 3][..., None]
-
-                colored = np.clip(comp_rgb, 0, 1)
-                logger.info(
-                    f"Your image has {n_channels} channels. Sampling categorical colors and using "
-                    f"multichannel strategy 'stack' to render."
-                )  # TODO: update when pca is added as strategy
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
+            colored = _additive_blend(layers, channels, channel_cmaps)
 
             _ax_show_and_transform(
                 colored,
@@ -1396,9 +1387,8 @@ def _render_images(
             if len(palette) != n_channels:
                 raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
-            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
-            colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette]
+            colored = _additive_blend(layers, channels, channel_cmaps)
 
             _ax_show_and_transform(
                 colored,
@@ -1410,14 +1400,7 @@ def _render_images(
 
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
-            colored = (
-                np.stack(
-                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                / n_channels
-            )
-            colored = colored[:, :, :3]
+            colored = _additive_blend(layers, channels, channel_cmaps)
 
             _ax_show_and_transform(
                 colored,

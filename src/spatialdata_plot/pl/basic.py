@@ -512,7 +512,7 @@ class PlotAccessor:
         *,
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
-        norm: Normalize | None = None,
+        norm: list[Normalize] | Normalize | None = None,
         na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
@@ -541,9 +541,10 @@ class PlotAccessor:
         cmap : list[Colormap | str] | Colormap | str | None
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
-        norm : Normalize | None, optional
+        norm : list[Normalize] | Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-            Applies to all channels if set.
+            Can be a single :class:`~matplotlib.colors.Normalize` (applied to all channels) or a list
+            of :class:`~matplotlib.colors.Normalize` objects (one per channel) for per-channel control.
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -596,12 +597,15 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
 
         for element, param_values in params_dict.items():
+            # When norm is a list, per-channel norms are stored separately in ImageRenderParams.norms
+            # and _prepare_cmap_norm receives None so it creates a default (unused) norm.
+            scalar_norm = None if isinstance(norm, list) else norm
             cmap_params: list[CmapParams] | CmapParams
             if isinstance(cmap, list):
                 cmap_params = [
                     _prepare_cmap_norm(
                         cmap=c,
-                        norm=norm,
+                        norm=scalar_norm,
                         na_color=param_values["na_color"],
                     )
                     for c in cmap
@@ -610,7 +614,7 @@ class PlotAccessor:
             else:
                 cmap_params = _prepare_cmap_norm(
                     cmap=cmap,
-                    norm=norm,
+                    norm=scalar_norm,
                     na_color=param_values["na_color"],
                     **kwargs,
                 )
@@ -619,6 +623,7 @@ class PlotAccessor:
                 channel=param_values["channel"],
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
+                norms=norm if isinstance(norm, list) else None,
                 alpha=param_values["alpha"],
                 scale=param_values["scale"],
                 zorder=n_steps,
