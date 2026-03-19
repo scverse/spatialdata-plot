@@ -1180,16 +1180,33 @@ def _additive_blend(
     channels: list[Any],
     channel_cmaps: list[Colormap],
 ) -> np.ndarray:
-    """Additive blend of colormapped channels, matching Napari's additive mode.
+    """Composite colormapped channels via signal-based additive blending.
 
-    Each channel is mapped through its colormap (which must return RGBA),
-    the RGB components are summed, and the result is clamped to [0, 1].
+    For each channel, the "signal" is the deviation of the mapped color from
+    that colormap's zero-value color (``cmap(0)``).  Signals are summed and
+    placed on a canvas whose color is the mean zero-value across all cmaps.
+
+    This generalises two established compositing strategies:
+
+    * **Black-to-color LUTs** (Napari/ImageJ additive): ``cmap(0) == black``,
+      so ``signal == cmap(val)`` and the canvas is black — identical to a
+      naive RGB sum.
+    * **White-to-color LUTs** (ImageJ Composite Invert): ``cmap(0) ≈ white``,
+      so ``signal == cmap(val) - white`` (negative deviations) and the canvas
+      is white — equivalent to *invert → add → invert*.
+
+    For arbitrary colormaps (e.g. diverging) the same formula produces a
+    reasonable result by extracting each cmap's contribution above its own
+    background.
     """
     height, width = next(iter(layers.values())).shape
-    composite = np.zeros((height, width, 3), dtype=float)
+    zero_colors = np.array([cm(0.0)[:3] for cm in channel_cmaps])
+    canvas = np.mean(zero_colors, axis=0)
+    composite = np.full((height, width, 3), canvas, dtype=float)
     for ch, cmap in zip(channels, channel_cmaps, strict=True):
+        zero_rgb = np.array(cmap(0.0)[:3])
         rgba = cmap(np.asarray(layers[ch]))
-        composite += rgba[..., :3]
+        composite += rgba[..., :3] - zero_rgb
     return np.clip(composite, 0, 1, out=composite)
 
 
@@ -1245,11 +1262,7 @@ def _render_images(
     got_multiple_cmaps = isinstance(render_params.cmap_params, list)
     if got_multiple_cmaps:
         logger.warning(
-            "You're blending multiple cmaps. "
-            "If the plot doesn't look like you expect, it might be because your "
-            "cmaps go from a given color to 'white', and not to 'transparent'. "
-            "Therefore, the 'white' of higher layers will overlay the lower layers. "
-            "Consider using 'palette' instead."
+            "You're blending multiple cmaps. Consider using 'palette' for black-to-color compositing instead."
         )
 
     # not using got_multiple_cmaps here because of ruff :(
@@ -1333,11 +1346,7 @@ def _render_images(
                 stacked = _additive_blend(layers, channels, channel_cmaps)
                 logger.warning(
                     "One cmap was given for multiple channels and is now used for each channel. "
-                    "You're blending multiple cmaps. "
-                    "If the plot doesn't look like you expect, it might be because your "
-                    "cmaps go from a given color to 'white', and not to 'transparent'. "
-                    "Therefore, the 'white' of higher layers will overlay the lower layers. "
-                    "Consider using 'palette' instead."
+                    "Consider using 'palette' for black-to-color compositing instead."
                 )
 
             _ax_show_and_transform(
