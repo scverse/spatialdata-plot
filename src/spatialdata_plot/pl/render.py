@@ -1201,6 +1201,8 @@ def _additive_blend(
     reasonable result by extracting each cmap's contribution relative to its
     own background.
     """
+    if not layers:
+        raise ValueError("Cannot blend an empty set of layers.")
     height, width = next(iter(layers.values())).shape
     zero_colors = np.array([cm(0.0)[:3] for cm in channel_cmaps])
     canvas = np.mean(zero_colors, axis=0)

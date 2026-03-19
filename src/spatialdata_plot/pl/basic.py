@@ -597,8 +597,9 @@ class PlotAccessor:
         n_steps = len(sdata.plotting_tree.keys())
 
         for element, param_values in params_dict.items():
-            # When norm is a list, per-channel norms are stored separately in ImageRenderParams.norms
-            # and _prepare_cmap_norm receives None so it creates a default (unused) norm.
+            # Per-channel norms are stored in ImageRenderParams.norms. In that case
+            # _prepare_cmap_norm gets None and creates a default norm used as fallback
+            # for the single-channel rendering path.
             scalar_norm = None if isinstance(norm, list) else norm
             cmap_params: list[CmapParams] | CmapParams
             if isinstance(cmap, list):
