@@ -5,10 +5,13 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
+import shutil
 import sys
 from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
+
+from sphinxcontrib import katex
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "extensions"))
@@ -19,13 +22,12 @@ sys.path.insert(0, str(HERE / "extensions"))
 # NOTE: If you installed your project in editable mode, this might be stale.
 #       If this is the case, reinstall it to refresh the metadata
 info = metadata("spatialdata-plot")
-project_name = info["Name"]
+project = info["Name"]
 author = info["Author"]
-copyright = f"{datetime.now():%Y}, {author}"
+copyright = f"{datetime.now():%Y}, {author}."
 version = info["Version"]
-
-# repository_url = f"https://github.com/scverse/{project_name}"
-
+urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
+repository_url = urls["Source"]
 
 # The full version, including alpha/beta/rc tags
 release = info["Version"]
@@ -38,7 +40,7 @@ needs_sphinx = "4.0"
 html_context = {
     "display_github": True,  # Integrate GitHub
     "github_user": "scverse",
-    "github_repo": "https://github.com/scverse/spatialdata-plot",
+    "github_repo": project,
     "github_version": "main",
     "conf_py_path": "/docs/",
 }
@@ -55,15 +57,15 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinxcontrib.bibtex",
+    "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
-    "sphinx.ext.mathjax",
+    "sphinx_tabs.tabs",
     "IPython.sphinxext.ipython_console_highlighting",
-    "sphinx_design",
+    "sphinxext.opengraph",
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
 autosummary_generate = True
-autodoc_process_signature = True
 autodoc_member_order = "groupwise"
 default_role = "literal"
 napoleon_google_docstring = False
@@ -71,7 +73,7 @@ napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
 napoleon_use_param = True
-myst_heading_anchors = 3  # create anchors for h1-h3
+myst_heading_anchors = 6  # create anchors for h1-h6
 myst_enable_extensions = [
     "amsmath",
     "colon_fence",
@@ -93,7 +95,9 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
+    "python": ("https://docs.python.org/3.13", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "geopandas": ("https://geopandas.org/en/stable/", None),
     "xarray": ("https://docs.xarray.dev/en/stable/", None),
@@ -108,18 +112,13 @@ intersphinx_mapping = {
 exclude_patterns = [
     "_build",
     "Thumbs.db",
+    ".DS_Store",
     "**.ipynb_checkpoints",
     "tutorials/notebooks/index.md",
     "tutorials/notebooks/README.md",
     "tutorials/notebooks/references.md",
     "tutorials/notebooks/notebooks/paper_reproducibility/*",
 ]
-# Ignore warnings.
-nitpicky = False  # TODO: solve upstream.
-# nitpick_ignore = [
-#     ("py:class", "spatial_image.SpatialImage"),
-#     ("py:class", "multiscale_spatial_image.multiscale_spatial_image.MultiscaleSpatialImage"),
-# ]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -128,36 +127,33 @@ nitpicky = False  # TODO: solve upstream.
 # a list of builtin themes.
 #
 html_theme = "sphinx_book_theme"
-# html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
-html_title = project_name
+html_css_files = ["css/custom.css"]
+html_title = project
 html_logo = "_static/img/spatialdata_horizontal.png"
 
-# html_theme_options = {
-# "repository_url": repository_url,
-# "use_repository_button": True,
-# }
+html_theme_options = {
+    "repository_url": repository_url,
+    "use_repository_button": True,
+    "path_to_docs": "docs/",
+    "navigation_with_keys": False,
+}
 
 pygments_style = "default"
+katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
+
+suppress_warnings = [
+    # matplotlib.figure.Figure references ColorType which isn't importable in the docs env
+    "sphinx_autodoc_typehints.forward_reference",
+    # xarray (iris) and geopandas (folium) have guarded TYPE_CHECKING imports for optional deps
+    "sphinx_autodoc_typehints.guarded_import",
+]
+
+# Ignore warnings.
+nitpicky = False  # TODO: solve upstream.
 
 nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
     ("py:class", "igraph.Graph"),
 ]
-
-
-def setup(app):
-    """App setup hook."""
-    app.add_config_value(
-        "recommonmark_config",
-        {
-            "auto_toc_tree_section": "Contents",
-            "enable_auto_toc_tree": True,
-            "enable_math": True,
-            "enable_inline_math": False,
-            "enable_eval_rst": True,
-        },
-        True,
-    )
-    app.add_css_file("css/custom.css")

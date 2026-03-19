@@ -1,0 +1,41 @@
+name: Bug report
+description: Report something that is broken or incorrect
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Note**: Please read [this guide](https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports)
+        detailing how to provide the necessary information for us to reproduce your bug. In brief:
+          * Please provide exact steps how to reproduce the bug in a clean Python environment.
+          * In case it's not clear what's causing this bug, please provide the data or the data generation procedure.
+          * Replicate problems on public datasets or share data subsets when full sharing isn't possible.
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: |
+        Which version of packages.
+
+        Please install `session-info2`, run the following command in a notebook,
+        click the "Copy as Markdown" button, then paste the results into the text box below.
+
+        ```python
+        In[1]: import session_info2; session_info2.session_info(dependencies=True)
+        ```
+
+        Alternatively, run this in a console:
+
+        ```python
+        >>> import session_info2; print(session_info2.session_info(dependencies=True)._repr_mimebundle_()["text/markdown"])
+        ```
+      render: python

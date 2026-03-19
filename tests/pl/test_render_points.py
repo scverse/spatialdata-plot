@@ -522,6 +522,90 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
 
         sdata_blobs.pl.render_points("blobs_points", color="feature0", size=10, table_layer="normalized").pl.show()
 
+    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_matplotlib(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="category", size=40, method="matplotlib"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_categorical_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="category", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_continuous(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="col_a", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_obs_continuous_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="col_a", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_X_continuous(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points("blobs_points", color="col1", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_table_X_continuous_datashader(
+        self, sdata_blobs_points_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_points_with_nans_in_table.pl.render_points(
+            "blobs_points", color="col1", size=40, method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_categorical(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series([np.nan, "a", "b", "c"] * 50, dtype="category")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_categorical_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series([np.nan, "a", "b", "c"] * 50, dtype="category")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", size=40, method="datashader").pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_continuous(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
+        sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=30).pl.show()
+
+    def test_plot_can_annotate_points_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_points"]["cont_color"] = pd.Series([np.nan, 2, 9, 13] * 50)
+        sdata_blobs.pl.render_points("blobs_points", color="cont_color", size=40, method="datashader").pl.show()
+
+    def test_plot_groups_na_color_none_filters_points(self, sdata_blobs: SpatialData):
+        """With groups, non-matching points are filtered by default; na_color='red' keeps them visible."""
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], na_color="red", size=30).pl.show(
+            ax=axs[0], title="na_color='red'"
+        )
+        sdata_blobs.pl.render_points("blobs_points", color="cat_color", groups=["a"], size=30).pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+    def test_plot_groups_na_color_none_filters_points_datashader(self, sdata_blobs: SpatialData):
+        """With groups + datashader, non-matching points are filtered by default."""
+        sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["a"], na_color="red", size=30, method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["a"], size=30, method="datashader"
+        ).pl.show(ax=axs[1], title="default (filtered)")
+
+
+def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
+    """When no elements match the groups, the plot should render without error."""
+    sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+    sdata_blobs.pl.render_points(
+        "blobs_points", color="cat_color", groups=["nonexistent"], na_color=None, size=30
+    ).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables

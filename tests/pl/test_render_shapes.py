@@ -931,6 +931,86 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
                 color="channel_0_sum",
             ).pl.show()
 
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_categorical(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="category").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_categorical_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="category", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="col_a").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_obs_continuous_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="col_a", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_X_continuous(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes("blobs_polygons", color="col1").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_table_X_continuous_datashader(
+        self, sdata_blobs_shapes_with_nans_in_table: SpatialData
+    ):
+        sdata_blobs_shapes_with_nans_in_table.pl.render_shapes(
+            "blobs_polygons", color="col1", method="datashader"
+        ).pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_categorical(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series([np.nan, "x", "x", "y", "y"], dtype="category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_categorical_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series([np.nan, "x", "x", "y", "y"], dtype="category")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", method="datashader").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_continuous(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color").pl.show()
+
+    def test_plot_can_annotate_shapes_with_nan_in_df_continuous_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs["blobs_polygons"]["cont_color"] = [np.nan, 2, 3, 4, 5]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cont_color", method="datashader").pl.show()
+
+    def test_plot_groups_na_color_none_filters_shapes(self, sdata_blobs: SpatialData):
+        """With groups, non-matching shapes are filtered by default; na_color='red' keeps them visible."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], na_color="red").pl.show(
+            ax=axs[0], title="na_color='red'"
+        )
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"]).pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+    def test_plot_groups_na_color_none_filters_shapes_datashader(self, sdata_blobs: SpatialData):
+        """With groups + datashader, non-matching shapes are filtered by default."""
+        sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cat_color", groups=["a"], na_color="red", method="datashader"
+        ).pl.show(ax=axs[0], title="na_color='red'")
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["a"], method="datashader").pl.show(
+            ax=axs[1], title="default (filtered)"
+        )
+
+
+def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
+    """When no elements match the groups, the plot should render without error."""
+    sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["nonexistent"], na_color=None).pl.show()
+
 
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
     """Test that NaN values in color data are handled gracefully and logged."""

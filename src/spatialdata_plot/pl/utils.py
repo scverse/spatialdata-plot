@@ -982,6 +982,26 @@ def _infer_color_data_kind(
     return "numeric", pd.to_numeric(series, errors="coerce")
 
 
+def _build_alignment_dtype_hint(
+    sdata: sd.SpatialData | None,
+    element: object,
+    color_series: pd.Series,
+    table_name: str | None,
+) -> str:
+    """Build a diagnostic hint string for dtype mismatches between element and table indices."""
+    el_dtype = getattr(getattr(element, "index", None), "dtype", None)
+    if el_dtype is None or table_name is None or sdata is None or table_name not in sdata.tables:
+        return ""
+    try:
+        _, _, instance_key = get_table_keys(sdata.tables[table_name])
+    except (KeyError, ValueError):
+        return ""
+    tbl_dtype = sdata.tables[table_name].obs[instance_key].dtype
+    if el_dtype != tbl_dtype:
+        return f" (hint: element index dtype is {el_dtype}, '{instance_key}' dtype is {tbl_dtype})"
+    return ""
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -1011,7 +1031,8 @@ def _set_color_source_vec(
 
     if len(origins) > 1:
         raise ValueError(
-            f"Color key '{value_to_plot}' for element '{element_name}' been found in multiple locations: {origins}."
+            f"Color key '{value_to_plot}' for element '{element_name}' was found in multiple locations: {origins}. "
+            "Please keep it in exactly one place (preferably on the points parquet for speed) to avoid ambiguity."
         )
 
     if len(origins) == 1 and value_to_plot is not None:
@@ -1033,6 +1054,17 @@ def _set_color_source_vec(
         color_series = (
             color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
         )
+
+        if color_series.isna().all():
+            element_label = _format_element_name(element_name)
+            location = f"table '{table_name}'" if table_name is not None else "the element"
+            dtype_hint = _build_alignment_dtype_hint(sdata, element, color_series, table_name)
+            raise ValueError(
+                f"Column '{value_to_plot}' for element '{element_label}' contains only missing values after aligning "
+                f"with {location}. This usually means the instance ids/indices could not be aligned or converted, so "
+                "colors cannot be determined. Please ensure the table annotates the element with matching instance ids."
+                f"{dtype_hint}"
+            )
 
         kind, processed = _infer_color_data_kind(
             series=color_series,
@@ -1058,6 +1090,9 @@ def _set_color_source_vec(
             return None, numeric_vector, False
 
         assert isinstance(processed, pd.Categorical)
+        if not processed.ordered:
+            # ensure deterministic category order when the source is unordered (e.g., from a Python set)
+            processed = processed.reorder_categories(sorted(processed.categories))
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
         # Use the provided table_name parameter, fall back to only one present
@@ -1069,7 +1104,9 @@ def _set_color_source_vec(
             table_to_use = None
         else:
             table_keys = list(sdata.tables.keys())
-            if table_keys:
+            if len(table_keys) == 1:
+                table_to_use = table_keys[0]
+            elif len(table_keys) > 1:
                 table_to_use = table_keys[0]
                 logger.warning(f"No table name provided, using '{table_to_use}' as fallback for color mapping.")
             else:
@@ -1137,6 +1174,12 @@ def _set_color_source_vec(
         # (e.g. two categories share a color). Wrapping back in pd.Categorical ensures
         # downstream consumers always receive a Categorical for categorical data.
         color_vector = pd.Categorical(color_source_vector.map(color_mapping, na_action="ignore"))
+        # nan handling: only add the NA category if needed, and store it as a hex string
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        if color_vector.isna().any():
+            if na_color_hex not in color_vector.categories:
+                color_vector = color_vector.add_categories(na_color_hex)
+            color_vector[pd.isna(color_vector)] = na_color_hex
 
         return color_source_vector, color_vector, True
 
@@ -1165,15 +1208,18 @@ def _map_color_seg(
 
     if isinstance(color_vector.dtype, pd.CategoricalDtype):
         # Case A: users wants to plot a categorical column
-        if np.any(color_source_vector.isna()):
-            cell_id[color_source_vector.isna()] = 0
         val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
         if isinstance(color_vector, pd.Series):
             color_vector = color_vector.to_numpy()
-        cols = cmap_params.cmap(cmap_params.norm(color_vector))
+        # normalize only the not nan values, else the whole array would contain only nan values
+        normed_color_vector = color_vector.copy().astype(float)
+        normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
+            normed_color_vector[~np.isnan(normed_color_vector)]
+        )
+        cols = cmap_params.cmap(normed_color_vector)
         val_im = map_array(seg.copy(), cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors
@@ -1236,10 +1282,24 @@ def _generate_base_categorial_color_mapping(
     cmap_params: CmapParams | None = None,
 ) -> Mapping[str, str]:
     if adata is not None and cluster_key in adata.uns and f"{cluster_key}_colors" in adata.uns:
-        colors = adata.uns[f"{cluster_key}_colors"]
-        categories = color_source_vector.categories.tolist() + ["NaN"]
+        all_colors = adata.uns[f"{cluster_key}_colors"]
 
-        colors = [to_hex(to_rgba(color)[:3]) for color in colors]
+        # When plotting per-coordinate-system, the color_source_vector may carry
+        # categories from other coordinate systems that aren't present in the
+        # current subset.  Drop them so that categories and colors stay aligned.
+        color_source_vector = color_source_vector.remove_unused_categories()
+
+        # The stored colors in .uns correspond 1-to-1 to the *full* set of
+        # categories in adata.obs[cluster_key].  Subset to the categories that
+        # are still present after removing unused ones.
+        if cluster_key in adata.obs and hasattr(adata.obs[cluster_key], "cat"):
+            all_cats = adata.obs[cluster_key].cat.categories.tolist()
+            keep_idx = [i for i, c in enumerate(all_cats) if c in color_source_vector.categories]
+            colors = [to_hex(to_rgba(all_colors[i])[:3]) for i in keep_idx]
+        else:
+            colors = [to_hex(to_rgba(c)[:3]) for c in all_colors]
+
+        categories = color_source_vector.categories.tolist() + ["NaN"]
 
         if len(categories) > len(colors):
             return dict(zip(categories, colors + [na_color.get_hex_with_alpha()], strict=True))
@@ -1354,6 +1414,9 @@ def _extract_colors_from_table_uns(
 
     # Extract colors and categories
     stored_colors = adata.uns[color_key]
+    # Drop categories not present in the current subset (e.g. when plotting
+    # per-coordinate-system) so that positional color lookups stay aligned.
+    color_source_vector = color_source_vector.remove_unused_categories()
     categories = color_source_vector.categories.tolist()
 
     # Validate na_color format and convert to hex string
@@ -1401,9 +1464,18 @@ def _extract_colors_from_table_uns(
             logger.warning(f"Unsupported color storage for '{color_key}'. Expected sequence or mapping.")
             return None
 
-        for i, category in enumerate(categories):
-            if i < len(hex_colors) and hex_colors[i] is not None:
-                hex_color = hex_colors[i]
+        # Map by the category's position in the *full* table, not in the
+        # (possibly subset) color_source_vector, so colors stay consistent
+        # across coordinate systems.
+        all_cats = (
+            adata.obs[col_to_colorby].cat.categories.tolist()
+            if col_to_colorby in adata.obs and hasattr(adata.obs[col_to_colorby], "cat")
+            else categories
+        )
+        for category in categories:
+            idx = all_cats.index(category) if category in all_cats else None
+            if idx is not None and idx < len(hex_colors) and hex_colors[idx] is not None:
+                hex_color = hex_colors[idx]
                 assert hex_color is not None  # type narrowing for mypy
                 color_mapping[category] = hex_color
             else:
@@ -2674,6 +2746,7 @@ def _validate_col_for_column_table(
     elif table_name is not None:
         tables = get_element_annotators(sdata, element_name)
         if table_name not in tables:
+            logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
         if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
             raise KeyError(
@@ -3070,7 +3143,7 @@ def _prepare_transformation(
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
-    color_key: None | list[str] = None,
+    color_key: list[str] | dict[str, str] | None = None,
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,
