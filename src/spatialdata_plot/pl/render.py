@@ -369,6 +369,23 @@ def _datashader_shade_continuous(
     return ds_result, continuous_nan_shaded, aggregate_with_reduction
 
 
+def _build_color_key(
+    transformed_element: Any,
+    col_for_color: str | None,
+    color_by_categorical: bool,
+    color_vector: Any,
+    na_color_hex: str,
+) -> dict[str, str] | None:
+    """Build a datashader color key mapping categories to hex colors.
+
+    Returns None when not coloring by a categorical column.
+    """
+    if not color_by_categorical or col_for_color is None:
+        return None
+    cat_series = _coerce_categorical_source(transformed_element[col_for_color])
+    return _build_datashader_color_key(cat_series, color_vector, na_color_hex)
+
+
 def _datashader_shade_categorical(
     agg: Any,
     color_key: dict[str, str] | None,
@@ -390,6 +407,44 @@ def _datashader_shade_categorical(
         color_key=color_key,
         min_alpha=_convert_alpha_to_datashader_range(alpha),
     )
+
+
+def _render_ds_outlines(
+    cvs: Any,
+    transformed_element: Any,
+    render_params: ShapesRenderParams,
+    fig_params: FigParams,
+    ax: matplotlib.axes.SubplotBase,
+    factor: float,
+    extent: list[float],
+) -> None:
+    """Aggregate, shade, and render shape outlines (outer and inner) with datashader."""
+    ds_lw_factor = fig_params.fig.dpi / 72
+    assert len(render_params.outline_alpha) == 2  # noqa: S101
+
+    for idx, (outline_color_obj, linewidth) in enumerate(
+        [
+            (render_params.outline_params.outer_outline_color, render_params.outline_params.outer_outline_linewidth),
+            (render_params.outline_params.inner_outline_color, render_params.outline_params.inner_outline_linewidth),
+        ]
+    ):
+        alpha = render_params.outline_alpha[idx]
+        if alpha <= 0:
+            continue
+        agg_outline = cvs.line(
+            transformed_element,
+            geometry="geometry",
+            line_width=linewidth * ds_lw_factor,
+        )
+        if isinstance(outline_color_obj, Color):
+            shaded = ds.tf.shade(
+                agg_outline,
+                cmap=outline_color_obj.get_hex(),
+                min_alpha=_convert_alpha_to_datashader_range(alpha),
+                how="linear",
+            )
+            rgba, trans = _create_image_from_datashader_result(shaded, factor, ax)
+            _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, alpha=alpha, extent=extent)
 
 
 def _render_datashader_result(
@@ -685,31 +740,15 @@ def _render_shapes(
             "shapes",
         )
 
-        # render outlines if needed
-        # outline_linewidth is in points (1pt = 1/72 inch); datashader line_width is in canvas pixels
-        ds_lw_factor = fig_params.fig.dpi / 72
-        assert len(render_params.outline_alpha) == 2  # shut up mypy
-        if render_params.outline_alpha[0] > 0:
-            agg_outlines = cvs.line(
-                transformed_element,
-                geometry="geometry",
-                line_width=render_params.outline_params.outer_outline_linewidth * ds_lw_factor,
-            )
-        if render_params.outline_alpha[1] > 0:
-            agg_inner_outlines = cvs.line(
-                transformed_element,
-                geometry="geometry",
-                line_width=render_params.outline_params.inner_outline_linewidth * ds_lw_factor,
-            )
-
         agg, ds_span = _apply_datashader_norm(agg, norm)
-
-        color_key: dict[str, str] | None = None
-        if color_by_categorical and col_for_color is not None:
-            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
-            color_key = _build_datashader_color_key(
-                cat_series, color_vector, render_params.cmap_params.na_color.get_hex()
-            )
+        na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        color_key = _build_color_key(
+            transformed_element,
+            col_for_color,
+            color_by_categorical,
+            color_vector,
+            na_color_hex,
+        )
 
         continuous_nan_shaded = None
         if color_by_categorical or col_for_color is None:
@@ -720,7 +759,6 @@ def _render_shapes(
                 render_params.fill_alpha,
             )
         else:
-            na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
             ds_result, continuous_nan_shaded, aggregate_with_reduction = _datashader_shade_continuous(
                 agg,
                 ds_span,
@@ -732,46 +770,7 @@ def _render_shapes(
                 na_color_hex,
             )
 
-        # shade outlines if needed
-        if render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
-            outline_color = render_params.outline_params.outer_outline_color.get_hex()
-            ds_outlines = ds.tf.shade(
-                agg_outlines,
-                cmap=outline_color,
-                min_alpha=_convert_alpha_to_datashader_range(render_params.outline_alpha[0]),
-                how="linear",
-            )
-        # inner outlines
-        if render_params.outline_alpha[1] > 0 and isinstance(render_params.outline_params.inner_outline_color, Color):
-            outline_color = render_params.outline_params.inner_outline_color.get_hex()
-            ds_inner_outlines = ds.tf.shade(
-                agg_inner_outlines,
-                cmap=outline_color,
-                min_alpha=_convert_alpha_to_datashader_range(render_params.outline_alpha[1]),
-                how="linear",
-            )
-
-        # render outline image(s)
-        if render_params.outline_alpha[0] > 0:
-            rgba_image, trans_data = _create_image_from_datashader_result(ds_outlines, factor, ax)
-            _ax_show_and_transform(
-                rgba_image,
-                trans_data,
-                ax,
-                zorder=render_params.zorder,
-                alpha=render_params.outline_alpha[0],
-                extent=x_ext + y_ext,
-            )
-        if render_params.outline_alpha[1] > 0:
-            rgba_image, trans_data = _create_image_from_datashader_result(ds_inner_outlines, factor, ax)
-            _ax_show_and_transform(
-                rgba_image,
-                trans_data,
-                ax,
-                zorder=render_params.zorder,
-                alpha=render_params.outline_alpha[1],
-                extent=x_ext + y_ext,
-            )
+        _render_ds_outlines(cvs, transformed_element, render_params, fig_params, ax, factor, x_ext + y_ext)
 
         _cax = _render_datashader_result(
             ax,
@@ -1133,13 +1132,14 @@ def _render_points(
         )
 
         agg, ds_span = _apply_datashader_norm(agg, norm)
-
-        color_key: dict[str, str] | None = None
-        if color_by_categorical and col_for_color is not None:
-            cat_series = _coerce_categorical_source(transformed_element[col_for_color])
-            color_key = _build_datashader_color_key(
-                cat_series, color_vector, render_params.cmap_params.na_color.get_hex()
-            )
+        na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        color_key = _build_color_key(
+            transformed_element,
+            col_for_color,
+            color_by_categorical,
+            color_vector,
+            na_color_hex,
+        )
 
         if (
             color_vector is not None
@@ -1159,7 +1159,6 @@ def _render_points(
                 spread_px=px,
             )
         else:
-            na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
             ds_result, continuous_nan_shaded, aggregate_with_reduction = _datashader_shade_continuous(
                 agg,
                 ds_span,
