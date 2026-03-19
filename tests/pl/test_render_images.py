@@ -191,6 +191,15 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
                 norm=[],
             ).pl.show()
 
+    def test_norm_tuple_raises(self, sdata_blobs: SpatialData):
+        """Tuple of norms is rejected — only list is accepted."""
+        with pytest.raises(TypeError, match="not a tuple"):
+            sdata_blobs.pl.render_images(
+                element="blobs_image",
+                channel=[0, 1, 2],
+                norm=(Normalize(), Normalize(), Normalize()),
+            ).pl.show()
+
     def test_plot_correctly_normalizes_multichannel_images(self, sdata_raccoon: SpatialData):
         sdata_raccoon["raccoon_int16"] = Image2DModel.parse(
             sdata_raccoon["raccoon"].data.astype(np.uint16) * 257,  # 255 * 257 = 65535,

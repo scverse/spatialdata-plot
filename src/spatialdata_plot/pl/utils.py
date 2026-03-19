@@ -2394,6 +2394,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     norm = param_dict.get("norm")
     if norm is not None:
+        if element_type == "images" and isinstance(norm, Sequence) and not isinstance(norm, list):
+            raise TypeError("'norm' must be a list of Normalize objects, not a tuple or other sequence.")
         if element_type == "images" and isinstance(norm, list):
             if len(norm) == 0:
                 raise ValueError("'norm' list must not be empty.")
