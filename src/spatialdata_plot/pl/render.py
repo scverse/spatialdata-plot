@@ -220,33 +220,33 @@ def _should_request_colorbar(
     return bool(auto_condition)
 
 
-def _apply_datashader_norm(
+def _apply_ds_norm(
     agg: Any,
     norm: Normalize,
 ) -> tuple[Any, list[float] | None]:
     """Apply norm vmin/vmax to a datashader aggregate.
 
     When vmin == vmax, maps the value to 0.5 using an artificial [0, 1] span.
-    Returns (agg, ds_span) where ds_span is None if no norm was set.
+    Returns (agg, color_span) where color_span is None if no norm was set.
     """
     if norm.vmin is None and norm.vmax is None:
         return agg, None
     norm.vmin = np.min(agg) if norm.vmin is None else norm.vmin
     norm.vmax = np.max(agg) if norm.vmax is None else norm.vmax
-    ds_span: list[float] = [norm.vmin, norm.vmax]
+    color_span: list[float] = [norm.vmin, norm.vmax]
     if norm.vmin == norm.vmax:
-        ds_span = [0, 1]
+        color_span = [0, 1]
         if norm.clip:
             agg = (agg - agg) + 0.5
         else:
             agg = agg.where((agg >= norm.vmin) | (np.isnan(agg)), other=-1)
             agg = agg.where((agg <= norm.vmin) | (np.isnan(agg)), other=2)
             agg = agg.where((agg != norm.vmin) | (np.isnan(agg)), other=0.5)
-    return agg, ds_span
+    return agg, color_span
 
 
-def _build_datashader_colorbar_mappable(
-    aggregate_with_reduction: tuple[Any, Any] | None,
+def _build_ds_colorbar(
+    reduction_bounds: tuple[Any, Any] | None,
     norm: Normalize,
     cmap: Any,
 ) -> ScalarMappable | None:
@@ -254,10 +254,10 @@ def _build_datashader_colorbar_mappable(
 
     Returns None if there is no continuous reduction.
     """
-    if aggregate_with_reduction is None:
+    if reduction_bounds is None:
         return None
-    vmin = aggregate_with_reduction[0].values if norm.vmin is None else norm.vmin
-    vmax = aggregate_with_reduction[1].values if norm.vmax is None else norm.vmax
+    vmin = reduction_bounds[0].values if norm.vmin is None else norm.vmin
+    vmax = reduction_bounds[1].values if norm.vmax is None else norm.vmax
     if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
         assert norm.vmin is not None
         assert norm.vmax is not None
@@ -269,7 +269,7 @@ def _build_datashader_colorbar_mappable(
     )
 
 
-def _datashader_aggregate(
+def _ds_aggregate(
     cvs: Any,
     transformed_element: Any,
     col_for_color: str | None,
@@ -283,10 +283,10 @@ def _datashader_aggregate(
     Dispatches between categorical (ds.by), continuous (reduction function),
     and no-color (ds.count) aggregation modes.
 
-    Returns (agg, aggregate_with_reduction, continuous_nan_agg).
+    Returns (agg, reduction_bounds, nan_agg).
     """
-    aggregate_with_reduction = None
-    continuous_nan_agg = None
+    reduction_bounds = None
+    nan_agg = None
 
     def _agg_call(element: Any, agg_func: Any) -> Any:
         if geom_type == "shapes":
@@ -304,69 +304,69 @@ def _datashader_aggregate(
                 "very close to the matplotlib result."
             )
             agg = _datashader_aggregate_with_function(ds_reduction, cvs, transformed_element, col_for_color, geom_type)
-            aggregate_with_reduction = (agg.min(), agg.max())
+            reduction_bounds = (agg.min(), agg.max())
 
             nan_elements = transformed_element[transformed_element[col_for_color].isnull()]
             if len(nan_elements) > 0:
-                continuous_nan_agg = _datashader_aggregate_with_function("any", cvs, nan_elements, None, geom_type)
+                nan_agg = _datashader_aggregate_with_function("any", cvs, nan_elements, None, geom_type)
     else:
         agg = _agg_call(transformed_element, ds.count())
 
-    return agg, aggregate_with_reduction, continuous_nan_agg
+    return agg, reduction_bounds, nan_agg
 
 
-def _datashader_shade_continuous(
+def _ds_shade_continuous(
     agg: Any,
-    ds_span: list[float] | None,
+    color_span: list[float] | None,
     norm: Normalize,
     cmap: Any,
     alpha: float,
-    aggregate_with_reduction: tuple[Any, Any] | None,
-    continuous_nan_agg: Any | None,
+    reduction_bounds: tuple[Any, Any] | None,
+    nan_agg: Any | None,
     na_color_hex: str,
     spread_px: int | None = None,
     ds_reduction: _DsReduction | None = None,
 ) -> tuple[Any, Any | None, tuple[Any, Any] | None]:
     """Shade a continuous datashader aggregate, optionally applying spread and NaN coloring.
 
-    Returns (ds_result, continuous_nan_shaded, aggregate_with_reduction).
+    Returns (shaded, nan_shaded, reduction_bounds).
     """
     if spread_px is not None:
         spread_how = _datshader_get_how_kw_for_spread(ds_reduction)
         agg = ds.tf.spread(agg, px=spread_px, how=spread_how)
-        aggregate_with_reduction = (agg.min(), agg.max())
+        reduction_bounds = (agg.min(), agg.max())
 
     ds_cmap = cmap
     if (
-        aggregate_with_reduction is not None
-        and aggregate_with_reduction[0] == aggregate_with_reduction[1]
-        and (ds_span is None or ds_span != [0, 1])
+        reduction_bounds is not None
+        and reduction_bounds[0] == reduction_bounds[1]
+        and (color_span is None or color_span != [0, 1])
     ):
         ds_cmap = matplotlib.colors.to_hex(cmap(0.0), keep_alpha=False)
-        aggregate_with_reduction = (
-            aggregate_with_reduction[0],
-            aggregate_with_reduction[0] + 1,
+        reduction_bounds = (
+            reduction_bounds[0],
+            reduction_bounds[0] + 1,
         )
 
-    ds_result = _datashader_map_aggregate_to_color(
+    shaded = _datashader_map_aggregate_to_color(
         agg,
         cmap=ds_cmap,
         min_alpha=_convert_alpha_to_datashader_range(alpha),
-        span=ds_span,
+        span=color_span,
         clip=norm.clip,
     )
 
-    continuous_nan_shaded = None
-    if continuous_nan_agg is not None:
+    nan_shaded = None
+    if nan_agg is not None:
         shade_kwargs: dict[str, Any] = {"cmap": na_color_hex, "how": "linear"}
         if spread_px is not None:
-            continuous_nan_agg = ds.tf.spread(continuous_nan_agg, px=spread_px, how="max")
+            nan_agg = ds.tf.spread(nan_agg, px=spread_px, how="max")
         else:
             # only shapes (no spread) pass min_alpha for NaN shading
             shade_kwargs["min_alpha"] = _convert_alpha_to_datashader_range(alpha)
-        continuous_nan_shaded = ds.tf.shade(continuous_nan_agg, **shade_kwargs)
+        nan_shaded = ds.tf.shade(nan_agg, **shade_kwargs)
 
-    return ds_result, continuous_nan_shaded, aggregate_with_reduction
+    return shaded, nan_shaded, reduction_bounds
 
 
 def _build_color_key(
@@ -386,7 +386,7 @@ def _build_color_key(
     return _build_datashader_color_key(cat_series, color_vector, na_color_hex)
 
 
-def _datashader_shade_categorical(
+def _ds_shade_categorical(
     agg: Any,
     color_key: dict[str, str] | None,
     color_vector: Any,
@@ -447,20 +447,20 @@ def _render_ds_outlines(
             _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, alpha=alpha, extent=extent)
 
 
-def _render_datashader_result(
+def _render_ds_image(
     ax: matplotlib.axes.SubplotBase,
-    ds_result: Any,
+    shaded: Any,
     factor: float,
     zorder: int,
     alpha: float,
     extent: list[float] | None,
-    continuous_nan_result: Any | None = None,
+    nan_result: Any | None = None,
 ) -> Any:
-    """Render a shaded datashader result onto matplotlib axes, with optional NaN overlay."""
-    if continuous_nan_result is not None:
-        rgba_nan, trans_nan = _create_image_from_datashader_result(continuous_nan_result, factor, ax)
+    """Render a shaded datashader image onto matplotlib axes, with optional NaN overlay."""
+    if nan_result is not None:
+        rgba_nan, trans_nan = _create_image_from_datashader_result(nan_result, factor, ax)
         _ax_show_and_transform(rgba_nan, trans_nan, ax, zorder=zorder, alpha=alpha, extent=extent)
-    rgba_image, trans_data = _create_image_from_datashader_result(ds_result, factor, ax)
+    rgba_image, trans_data = _create_image_from_datashader_result(shaded, factor, ax)
     return _ax_show_and_transform(rgba_image, trans_data, ax, zorder=zorder, alpha=alpha, extent=extent)
 
 
@@ -474,7 +474,7 @@ def _make_palette(
     return ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
 
 
-def _decorate_render(
+def _add_legend_and_colorbar(
     ax: matplotlib.axes.SubplotBase,
     cax: ScalarMappable | None,
     fig_params: FigParams,
@@ -730,7 +730,7 @@ def _render_shapes(
                 cat_series = cat_series.astype("category")
             transformed_element[col_for_color] = cat_series
 
-        agg, aggregate_with_reduction, continuous_nan_agg = _datashader_aggregate(
+        agg, reduction_bounds, nan_agg = _ds_aggregate(
             cvs,
             transformed_element,
             col_for_color,
@@ -740,7 +740,7 @@ def _render_shapes(
             "shapes",
         )
 
-        agg, ds_span = _apply_datashader_norm(agg, norm)
+        agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
         color_key = _build_color_key(
             transformed_element,
@@ -750,39 +750,39 @@ def _render_shapes(
             na_color_hex,
         )
 
-        continuous_nan_shaded = None
+        nan_shaded = None
         if color_by_categorical or col_for_color is None:
-            ds_result = _datashader_shade_categorical(
+            shaded = _ds_shade_categorical(
                 agg,
                 color_key,
                 color_vector,
                 render_params.fill_alpha,
             )
         else:
-            ds_result, continuous_nan_shaded, aggregate_with_reduction = _datashader_shade_continuous(
+            shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
                 agg,
-                ds_span,
+                color_span,
                 norm,
                 render_params.cmap_params.cmap,
                 render_params.fill_alpha,
-                aggregate_with_reduction,
-                continuous_nan_agg,
+                reduction_bounds,
+                nan_agg,
                 na_color_hex,
             )
 
         _render_ds_outlines(cvs, transformed_element, render_params, fig_params, ax, factor, x_ext + y_ext)
 
-        _cax = _render_datashader_result(
+        _cax = _render_ds_image(
             ax,
-            ds_result,
+            shaded,
             factor,
             render_params.zorder,
             render_params.fill_alpha,
             x_ext + y_ext,
-            continuous_nan_result=continuous_nan_shaded,
+            nan_result=nan_shaded,
         )
 
-        cax = _build_datashader_colorbar_mappable(aggregate_with_reduction, norm, render_params.cmap_params.cmap)
+        cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
         # render outlines separately to ensure they are always underneath the shape
@@ -867,7 +867,7 @@ def _render_shapes(
                     vmax = 1.0
         _cax.set_clim(vmin=vmin, vmax=vmax)
 
-    _decorate_render(
+    _add_legend_and_colorbar(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
@@ -1121,7 +1121,7 @@ def _render_points(
         if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
             transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
 
-        agg, aggregate_with_reduction, continuous_nan_agg = _datashader_aggregate(
+        agg, reduction_bounds, nan_agg = _ds_aggregate(
             cvs,
             transformed_element,
             col_for_color,
@@ -1131,7 +1131,7 @@ def _render_points(
             "points",
         )
 
-        agg, ds_span = _apply_datashader_norm(agg, norm)
+        agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
         color_key = _build_color_key(
             transformed_element,
@@ -1149,9 +1149,9 @@ def _render_points(
         ):
             color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
 
-        continuous_nan_shaded = None
+        nan_shaded = None
         if color_by_categorical or col_for_color is None:
-            ds_result = _datashader_shade_categorical(
+            shaded = _ds_shade_categorical(
                 agg,
                 color_key,
                 color_vector,
@@ -1159,30 +1159,30 @@ def _render_points(
                 spread_px=px,
             )
         else:
-            ds_result, continuous_nan_shaded, aggregate_with_reduction = _datashader_shade_continuous(
+            shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
                 agg,
-                ds_span,
+                color_span,
                 norm,
                 render_params.cmap_params.cmap,
                 render_params.alpha,
-                aggregate_with_reduction,
-                continuous_nan_agg,
+                reduction_bounds,
+                nan_agg,
                 na_color_hex,
                 spread_px=px,
                 ds_reduction=render_params.ds_reduction,
             )
 
-        _render_datashader_result(
+        _render_ds_image(
             ax,
-            ds_result,
+            shaded,
             factor,
             render_params.zorder,
             render_params.alpha,
             x_ext + y_ext,
-            continuous_nan_result=continuous_nan_shaded,
+            nan_result=nan_shaded,
         )
 
-        cax = _build_datashader_colorbar_mappable(aggregate_with_reduction, norm, render_params.cmap_params.cmap)
+        cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
@@ -1207,7 +1207,7 @@ def _render_points(
             ax.set_xbound(extent["x"])
             ax.set_ybound(extent["y"])
 
-    _decorate_render(
+    _add_legend_and_colorbar(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
