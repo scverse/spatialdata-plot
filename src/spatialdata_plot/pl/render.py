@@ -1184,22 +1184,22 @@ def _additive_blend(
 ) -> np.ndarray:
     """Composite colormapped channels via signal-based additive blending.
 
-    For each channel, the "signal" is the deviation of the mapped color from
-    that colormap's zero-value color (``cmap(0)``).  Signals are summed and
-    placed on a canvas whose color is the mean zero-value across all cmaps.
+    For each channel the "signal" is the deviation of the mapped color from
+    that colormap's zero-value color (cmap(0)). Signals are summed and placed
+    on a canvas whose color is the mean zero-value across all cmaps.
 
-    This generalises two established compositing strategies:
+    This handles two common compositing strategies:
 
-    * **Black-to-color LUTs** (Napari/ImageJ additive): ``cmap(0) == black``,
-      so ``signal == cmap(val)`` and the canvas is black — identical to a
-      naive RGB sum.
-    * **White-to-color LUTs** (ImageJ Composite Invert): ``cmap(0) ≈ white``,
-      so ``signal == cmap(val) - white`` (negative deviations) and the canvas
-      is white — equivalent to *invert → add → invert*.
+    * Black-to-color LUTs (Napari/ImageJ additive): cmap(0) is black, so
+      the signal equals cmap(val) and the canvas is black. This is identical
+      to a naive RGB sum.
+    * White-to-color LUTs (ImageJ Composite Invert): cmap(0) is white, so
+      the signal is cmap(val) minus white and the canvas is white. This is
+      equivalent to inverting, adding, then inverting again.
 
     For arbitrary colormaps (e.g. diverging) the same formula produces a
-    reasonable result by extracting each cmap's contribution above its own
-    background.
+    reasonable result by extracting each cmap's contribution relative to its
+    own background.
     """
     height, width = next(iter(layers.values())).shape
     zero_colors = np.array([cm(0.0)[:3] for cm in channel_cmaps])
@@ -1262,7 +1262,7 @@ def _render_images(
     # True if user gave n cmaps for n channels
     got_multiple_cmaps = isinstance(render_params.cmap_params, list)
 
-    # not using got_multiple_cmaps here because of ruff :(
+    # ruff needs the isinstance check here for type narrowing
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
@@ -1273,7 +1273,7 @@ def _render_images(
 
     _, trans_data = _prepare_transformation(img, coordinate_system, ax)
 
-    # 1) Image has only 1 channel
+    # Single channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
 
@@ -1319,7 +1319,7 @@ def _render_images(
                 )
             )
 
-    # 2) Image has any number of channels but 1
+    # Multiple channels
     else:
         layers = {}
         for ch_idx, ch in enumerate(channels):
@@ -1334,11 +1334,11 @@ def _render_images(
             if ch_norm is not None:
                 layers[ch] = ch_norm(layers[ch])
 
-        # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
+        # Image has 3 channels, no palette, and at most one cmap
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
-            if render_params.cmap_params.cmap_is_default:  # -> use RGB
+            if render_params.cmap_params.cmap_is_default:  # treat as RGB
                 stacked = np.stack([layers[ch] for ch in layers], axis=-1)
-            else:  # -> use given cmap for each channel
+            else:  # apply the given cmap to each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = _additive_blend(layers, channels, channel_cmaps)
                 logger.warning(
@@ -1354,10 +1354,9 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
-        # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
+        # n channels, no palette/cmap: sample n categorical colors
         elif palette is None and not got_multiple_cmaps:
-            # overwrite if n_channels == 2 for intuitive result
-            # Pick seed colors based on channel count
+            # For 2 channels default to red/green for an intuitive result
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
             else:
@@ -1369,7 +1368,7 @@ def _render_images(
                 if cmap_is_default:
                     seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
                 else:
-                    # Sample n_channels colors evenly from the colormap
+                    # Sample n_channels evenly spaced colors from the colormap
                     if isinstance(render_params.cmap_params, list):
                         seed_colors = [
                             render_params.cmap_params[i].cmap(i / (n_channels - 1)) for i in range(n_channels)
@@ -1388,7 +1387,7 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
-        # 2C) Image has n channels and palette info
+        # n channels with palette: build black-to-color LUT per channel
         elif palette is not None and not got_multiple_cmaps:
             if len(palette) != n_channels:
                 raise ValueError("If 'palette' is provided, its length must match the number of channels.")
@@ -1416,7 +1415,7 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
-        # 2D) Image has n channels, no palette but cmap info
+        # n channels with both palette and cmap is not allowed
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 

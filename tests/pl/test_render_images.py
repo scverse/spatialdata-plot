@@ -135,24 +135,24 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_multiscale_image_with_custom_cmap(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images("blobs_multiscale_image", channel=0, scale="scale2", cmap="Greys").pl.show()
 
-    # --- Multichannel compositing (path 2B for 4+ channels) ---
-    # Uses sdata_blobs_str which has 5 named channels, simulating e.g. a
+    # Multichannel compositing with 4+ channels.
+    # Uses sdata_blobs_str which has 5 named channels, similar to a
     # multiplexed immunofluorescence panel (DAPI + 4 markers).
 
     def test_plot_can_composite_five_channels(self, sdata_blobs_str: SpatialData):
-        """5-channel additive blend with auto-assigned colors (path 2B, n>3)."""
+        """5-channel additive blend with auto-assigned colors."""
         sdata_blobs_str.pl.render_images(element="blobs_image").pl.show()
 
     def test_plot_can_composite_five_channels_with_palette(self, sdata_blobs_str: SpatialData):
-        """5-channel fluorescence-style overlay: DAPI + 4 markers (path 2C)."""
+        """5-channel fluorescence-style overlay with explicit palette."""
         sdata_blobs_str.pl.render_images(
             element="blobs_image",
             palette=["blue", "green", "red", "magenta", "cyan"],
         ).pl.show()
 
-    # --- Per-channel normalization ---
+    # Per-channel normalization.
     # Common in multiplexed imaging where markers have very different intensity
-    # ranges (e.g. bright DAPI vs dim cytokine stain).
+    # ranges, e.g. bright DAPI vs dim cytokine stain.
 
     def test_plot_can_normalize_channels_independently(self, sdata_blobs: SpatialData):
         """Per-channel norm: each channel gets its own contrast window."""
@@ -172,7 +172,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             cmap="Greys",
         ).pl.show()
 
-    # --- Validation errors ---
+    # Validation errors
 
     def test_norm_list_length_mismatch_raises(self, sdata_blobs: SpatialData):
         """norm list length must match number of channels."""
@@ -192,7 +192,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
             ).pl.show()
 
     def test_norm_tuple_raises(self, sdata_blobs: SpatialData):
-        """Tuple of norms is rejected — only list is accepted."""
+        """Tuple of norms is rejected, only list is accepted."""
         with pytest.raises(TypeError, match="not a tuple"):
             sdata_blobs.pl.render_images(
                 element="blobs_image",

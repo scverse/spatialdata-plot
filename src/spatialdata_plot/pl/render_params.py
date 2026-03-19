@@ -264,7 +264,7 @@ class ImageRenderParams:
     element: str
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | list[str] | None = None
-    norms: list[Normalize] | None = None  # plural to distinguish from the scalar norm in CmapParams
+    norms: list[Normalize] | None = None  # per-channel norms, separate from the scalar norm in CmapParams
     alpha: float = 1.0
     scale: str | None = None
     zorder: int = 0
