@@ -486,7 +486,6 @@ def _render_shapes(
             shaded,
             factor,
             render_params.zorder,
-            render_params.fill_alpha,
             x_ext + y_ext,
             nan_result=nan_shaded,
         )
@@ -886,7 +885,6 @@ def _render_points(
             shaded,
             factor,
             render_params.zorder,
-            render_params.alpha,
             x_ext + y_ext,
             nan_result=nan_shaded,
         )
