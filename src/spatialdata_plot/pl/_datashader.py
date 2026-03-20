@@ -268,16 +268,20 @@ def _render_ds_image(
     shaded: Any,
     factor: float,
     zorder: int,
-    alpha: float,
     extent: list[float] | None,
     nan_result: Any | None = None,
 ) -> Any:
-    """Render a shaded datashader image onto matplotlib axes, with optional NaN overlay."""
+    """Render a shaded datashader image onto matplotlib axes, with optional NaN overlay.
+
+    Alpha is NOT passed to ``ax.imshow`` because it is already encoded in
+    the RGBA channels produced by ``ds.tf.shade(min_alpha=...)``.  Passing
+    it again would apply transparency twice (see #367).
+    """
     if nan_result is not None:
         rgba_nan, trans_nan = _create_image_from_datashader_result(nan_result, factor, ax)
-        _ax_show_and_transform(rgba_nan, trans_nan, ax, zorder=zorder, alpha=alpha, extent=extent)
+        _ax_show_and_transform(rgba_nan, trans_nan, ax, zorder=zorder, extent=extent)
     rgba_image, trans_data = _create_image_from_datashader_result(shaded, factor, ax)
-    return _ax_show_and_transform(rgba_image, trans_data, ax, zorder=zorder, alpha=alpha, extent=extent)
+    return _ax_show_and_transform(rgba_image, trans_data, ax, zorder=zorder, extent=extent)
 
 
 def _render_ds_outlines(
@@ -315,7 +319,7 @@ def _render_ds_outlines(
                 how="linear",
             )
             rgba, trans = _create_image_from_datashader_result(shaded, factor, ax)
-            _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, alpha=alpha, extent=extent)
+            _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, extent=extent)
 
 
 def _build_ds_colorbar(
