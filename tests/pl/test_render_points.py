@@ -701,3 +701,22 @@ def test_datashader_points_visible_with_nonuniform_scale(sdata_blobs: SpatialDat
     """
     _set_transformations(sdata_blobs["blobs_points"], {"global": Scale([1, 5], axes=("x", "y"))})
     sdata_blobs.pl.render_points("blobs_points", method="datashader", color="black").pl.show()
+
+
+def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
+    """Datashader alpha must not be applied twice (once in shade, once in imshow).
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/367.
+    Before the fix, alpha was passed both to ds.tf.shade(min_alpha=...) and to
+    ax.imshow(alpha=...), resulting in effective transparency of alpha**2.
+    """
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_points(method="datashader", alpha=0.5, color="red").pl.show(ax=ax)
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    for img in axes_images:
+        assert img.get_alpha() is None, (
+            f"Datashader AxesImage has alpha={img.get_alpha()}, which would be applied "
+            "on top of the alpha already in the RGBA channels — causing double transparency."
+        )
+    plt.close(fig)
