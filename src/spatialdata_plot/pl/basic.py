@@ -697,8 +697,9 @@ class PlotAccessor:
             an alpha, that value is used for `fill_alpha`.
         outline_color : ColorLike | None
             Color of the outline of the labels. Can either be a named color ("red"), a hex representation
-            ("#000000") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If None, the outline
-            color defaults to "black".
+            ("#000000") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If ``None``,
+            the outline inherits from the ``color`` parameter when it is a literal color, or uses data-driven
+            per-label colors when ``color`` refers to a column.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
