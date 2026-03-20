@@ -275,7 +275,7 @@ def _render_ds_image(
 
     Alpha is NOT passed to ``ax.imshow`` because it is already encoded in
     the RGBA channels produced by ``ds.tf.shade(min_alpha=...)``.  Passing
-    it again would apply transparency twice (see :issue:`367`).
+    it again would apply transparency twice (see #367).
     """
     if nan_result is not None:
         rgba_nan, trans_nan = _create_image_from_datashader_result(nan_result, factor, ax)

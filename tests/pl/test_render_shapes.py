@@ -1105,8 +1105,24 @@ def test_datashader_fill_alpha_not_applied_twice(sdata_blobs: SpatialData):
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_shapes(method="datashader", fill_alpha=0.5, color="red").pl.show(ax=ax)
 
-    # The AxesImage produced by datashader should NOT have a separate alpha param,
-    # because alpha is already encoded in the RGBA channels from ds.tf.shade().
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    for img in axes_images:
+        assert img.get_alpha() is None, (
+            f"Datashader AxesImage has alpha={img.get_alpha()}, which would be applied "
+            "on top of the alpha already in the RGBA channels — causing double transparency."
+        )
+    plt.close(fig)
+
+
+def test_datashader_outline_alpha_not_applied_twice(sdata_blobs: SpatialData):
+    """Datashader outline_alpha must not be applied twice.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/367.
+    The same double-alpha bug affected outline rendering in _render_ds_outlines().
+    """
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(method="datashader", outline_alpha=0.5, outline_color="blue").pl.show(ax=ax)
+
     axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
     for img in axes_images:
         assert img.get_alpha() is None, (

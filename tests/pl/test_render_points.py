@@ -707,6 +707,8 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
     """Datashader alpha must not be applied twice (once in shade, once in imshow).
 
     Regression test for https://github.com/scverse/spatialdata-plot/issues/367.
+    Before the fix, alpha was passed both to ds.tf.shade(min_alpha=...) and to
+    ax.imshow(alpha=...), resulting in effective transparency of alpha**2.
     """
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_points(method="datashader", alpha=0.5, color="red").pl.show(ax=ax)
