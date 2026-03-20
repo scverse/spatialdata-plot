@@ -97,6 +97,28 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_alpha_overwrites_opacity_from_color(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5], fill_alpha=1.0).pl.show()
 
+    def test_plot_can_render_outline_color(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", outline_alpha=1, fill_alpha=0, outline_color="red", contour_px=10
+        ).pl.show()
+
+    def test_plot_can_render_outline_with_fill(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", outline_alpha=1, fill_alpha=0.3, outline_color="blue", contour_px=10
+        ).pl.show()
+
+    def test_plot_outline_inherits_literal_color(self, sdata_blobs: SpatialData):
+        """Literal color= should be used for outlines when outline_color is not set (#462)."""
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="white", outline_alpha=1, fill_alpha=0, contour_px=10
+        ).pl.show()
+
+    def test_plot_outline_uses_data_driven_colors(self, sdata_blobs: SpatialData):
+        """Data-driven color should produce per-label outline colors when outline_color is None."""
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="channel_0_sum", outline_alpha=1, fill_alpha=0, contour_px=10
+        ).pl.show()
+
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
