@@ -1095,33 +1095,21 @@ def test_datashader_outline_width_uses_points_units(sdata_blobs: SpatialData):
     ).pl.show()
 
 
-def test_datashader_fill_alpha_not_applied_twice(sdata_blobs: SpatialData):
-    """Datashader fill_alpha must not be applied twice (once in shade, once in imshow).
+def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
+    """Datashader fill_alpha and outline_alpha must not be applied twice.
 
     Regression test for https://github.com/scverse/spatialdata-plot/issues/367.
     Before the fix, alpha was passed both to ds.tf.shade(min_alpha=...) and to
-    ax.imshow(alpha=...), resulting in effective transparency of fill_alpha**2.
+    ax.imshow(alpha=...), resulting in effective transparency of alpha**2.
     """
     fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes(method="datashader", fill_alpha=0.5, color="red").pl.show(ax=ax)
-
-    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
-    for img in axes_images:
-        assert img.get_alpha() is None, (
-            f"Datashader AxesImage has alpha={img.get_alpha()}, which would be applied "
-            "on top of the alpha already in the RGBA channels — causing double transparency."
-        )
-    plt.close(fig)
-
-
-def test_datashader_outline_alpha_not_applied_twice(sdata_blobs: SpatialData):
-    """Datashader outline_alpha must not be applied twice.
-
-    Regression test for https://github.com/scverse/spatialdata-plot/issues/367.
-    The same double-alpha bug affected outline rendering in _render_ds_outlines().
-    """
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes(method="datashader", outline_alpha=0.5, outline_color="blue").pl.show(ax=ax)
+    sdata_blobs.pl.render_shapes(
+        method="datashader",
+        fill_alpha=0.5,
+        color="red",
+        outline_alpha=0.5,
+        outline_color="blue",
+    ).pl.show(ax=ax)
 
     axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
     for img in axes_images:
