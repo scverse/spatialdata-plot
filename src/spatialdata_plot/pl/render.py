@@ -302,6 +302,14 @@ def _render_shapes(
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
     if groups is not None and values_are_categorical and (_na.default_color_set or _na.alpha == "00"):
+        assert color_source_vector is not None  # guaranteed by values_are_categorical
+        _groups_list = [groups] if isinstance(groups, str) else groups
+        _missing = set(_groups_list) - set(color_source_vector.categories)
+        if _missing:
+            logger.warning(
+                f"Groups {sorted(_missing)} not found in the values of '{col_for_color}'. "
+                "The `groups` parameter filters values of the `color` column."
+            )
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -754,6 +762,13 @@ def _render_points(
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
     if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
+        _groups_list = [groups] if isinstance(groups, str) else groups
+        _missing = set(_groups_list) - set(color_source_vector.categories)
+        if _missing:
+            logger.warning(
+                f"Groups {sorted(_missing)} not found in the values of '{col_for_color}'. "
+                "The `groups` parameter filters values of the `color` column."
+            )
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
