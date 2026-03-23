@@ -608,21 +608,23 @@ def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
     ).pl.show()
 
 
-def test_groups_warns_when_no_groups_match_points(sdata_blobs: SpatialData, caplog):
-    """When none of the groups match color categories, a warning should be emitted."""
+@pytest.mark.parametrize("na_color", [None, "red"])
+def test_groups_warns_when_no_groups_match_points(sdata_blobs: SpatialData, caplog, na_color):
+    """Warning fires regardless of na_color when no groups match."""
     sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
     with logger_warns(caplog, logger, match="None of the requested groups"):
         sdata_blobs.pl.render_points(
-            "blobs_points", color="cat_color", groups=["nonexistent"], na_color=None, size=30
+            "blobs_points", color="cat_color", groups=["nonexistent"], na_color=na_color, size=30
         ).pl.show()
 
 
-def test_groups_warns_when_some_groups_missing_points(sdata_blobs: SpatialData, caplog):
-    """When some groups match but others don't, a warning should list the missing ones."""
+@pytest.mark.parametrize("na_color", [None, "red"])
+def test_groups_warns_when_some_groups_missing_points(sdata_blobs: SpatialData, caplog, na_color):
+    """Warning fires regardless of na_color when some groups are missing."""
     sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
-    with logger_warns(caplog, logger, match="were not found in column"):
+    with logger_warns(caplog, logger, match="were not found in"):
         sdata_blobs.pl.render_points(
-            "blobs_points", color="cat_color", groups=["a", "nonexistent"], na_color=None, size=30
+            "blobs_points", color="cat_color", groups=["a", "nonexistent"], na_color=na_color, size=30
         ).pl.show()
 
 
