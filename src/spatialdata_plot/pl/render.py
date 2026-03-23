@@ -394,6 +394,15 @@ def _render_shapes(
             scale = radius_numeric * render_params.scale
             shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
 
+        # Handle polygon/multipolygon scaling
+        is_polygon = _geometry.type.isin(["Polygon", "MultiPolygon"])
+        if is_polygon.any() and render_params.scale != 1.0:
+            from shapely import affinity
+
+            shapes.loc[is_polygon, "geometry"] = _geometry[is_polygon].apply(
+                lambda geom: affinity.scale(geom, xfact=render_params.scale, yfact=render_params.scale)
+            )
+
         # apply transformations to the individual points
         tm = trans.get_matrix()
         transformed_geometry = shapes["geometry"].transform(
