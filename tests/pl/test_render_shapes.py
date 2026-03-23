@@ -242,6 +242,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", scale=0.5).pl.show()
 
+    def test_plot_can_scale_polygons_datashader(self, sdata_blobs: SpatialData):
+        # Regression test for #473: scale parameter had no effect on polygons with datashader
+        sdata_blobs.pl.render_shapes(element="blobs_polygons", method="datashader", scale=2.0).pl.show()
+
     def test_plot_can_filter_with_groups(self, sdata_blobs: SpatialData):
         _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
 
