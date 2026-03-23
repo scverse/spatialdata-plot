@@ -1016,6 +1016,26 @@ def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
     sdata_blobs.pl.render_shapes("blobs_polygons", color="cat_color", groups=["nonexistent"], na_color=None).pl.show()
 
 
+@pytest.mark.parametrize("na_color", [None, "red"])
+def test_groups_warns_when_no_groups_match(sdata_blobs: SpatialData, caplog, na_color):
+    """Warning fires regardless of na_color when no groups match."""
+    sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+    with logger_warns(caplog, logger, match="None of the requested groups"):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cat_color", groups=["nonexistent"], na_color=na_color
+        ).pl.show()
+
+
+@pytest.mark.parametrize("na_color", [None, "red"])
+def test_groups_warns_when_some_groups_missing(sdata_blobs: SpatialData, caplog, na_color):
+    """Warning fires regardless of na_color when some groups are missing."""
+    sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
+    with logger_warns(caplog, logger, match="were not found in"):
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cat_color", groups=["a", "nonexistent"], na_color=na_color
+        ).pl.show()
+
+
 def test_plot_can_handle_nan_values_in_color_data(sdata_blobs: SpatialData, caplog):
     """Test that NaN values in color data are handled gracefully and logged."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)

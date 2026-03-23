@@ -553,6 +553,9 @@ def _get_collection_shape(
         shapes_df, fill_c.tolist(), outline_c.tolist() if hasattr(outline_c, "tolist") else outline_c, s
     )
 
+    if patches.empty:
+        return PatchCollection([])
+
     return PatchCollection(
         patches["geometry"].values.tolist(),
         snap=False,

@@ -12,6 +12,7 @@ from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import Labels2DModel, TableModel
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
@@ -427,4 +428,22 @@ def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
             "blobs_labels",
             color="channel_0_sum",
             table_name="other_table",
+        ).pl.show()
+
+
+def test_groups_warns_when_no_groups_match_labels(sdata_blobs: SpatialData, caplog):
+    """Warning fires when no groups match label color categories."""
+    labels_name = "blobs_labels"
+    instances = get_element_instances(sdata_blobs[labels_name])
+    n_obs = len(instances)
+    adata = AnnData(np.zeros((n_obs, 1)))
+    adata.obs["instance_id"] = instances.values
+    adata.obs["cat"] = pd.Categorical(["a", "b"] * (n_obs // 2) + ["a"] * (n_obs % 2))
+    adata.obs["region"] = labels_name
+    sdata_blobs["label_table"] = TableModel.parse(
+        adata=adata, region_key="region", instance_key="instance_id", region=labels_name
+    )
+    with logger_warns(caplog, logger, match="None of the requested groups"):
+        sdata_blobs.pl.render_labels(
+            labels_name, color="cat", groups=["nonexistent"], table_name="label_table", na_color=None
         ).pl.show()
