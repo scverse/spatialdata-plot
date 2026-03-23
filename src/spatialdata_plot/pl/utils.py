@@ -554,7 +554,7 @@ def _get_collection_shape(
     )
 
     if patches.empty:
-        return PatchCollection([], **kwargs)
+        return PatchCollection([])
 
     return PatchCollection(
         patches["geometry"].values.tolist(),

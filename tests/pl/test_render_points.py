@@ -22,6 +22,7 @@ from spatialdata.transformations import (
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
@@ -605,6 +606,24 @@ def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
     sdata_blobs.pl.render_points(
         "blobs_points", color="cat_color", groups=["nonexistent"], na_color=None, size=30
     ).pl.show()
+
+
+def test_groups_warns_when_no_groups_match_points(sdata_blobs: SpatialData, caplog):
+    """When none of the groups match color categories, a warning should be emitted."""
+    sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+    with logger_warns(caplog, logger, match="None of the requested groups"):
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["nonexistent"], na_color=None, size=30
+        ).pl.show()
+
+
+def test_groups_warns_when_some_groups_missing_points(sdata_blobs: SpatialData, caplog):
+    """When some groups match but others don't, a warning should list the missing ones."""
+    sdata_blobs["blobs_points"]["cat_color"] = pd.Series(["a", "b", "c", "a"] * 50, dtype="category")
+    with logger_warns(caplog, logger, match="were not found in column"):
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="cat_color", groups=["a", "nonexistent"], na_color=None, size=30
+        ).pl.show()
 
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):

@@ -108,16 +108,42 @@ def _reparse_points(
     )
 
 
+def _warn_missing_groups(
+    groups: str | list[str],
+    color_source_vector: pd.Categorical,
+    col_for_color: str | None = None,
+) -> None:
+    """Warn when ``groups`` contains values absent from the color column's categories."""
+    groups_list = [groups] if isinstance(groups, str) else list(groups)
+    missing = set(groups_list) - set(color_source_vector.categories)
+    if not missing:
+        return
+    col_label = f" '{col_for_color}'" if col_for_color else ""
+    if missing == set(groups_list):
+        logger.warning(
+            f"None of the requested groups {sorted(missing)} were found in column{col_label}. "
+            "This usually means `groups` refers to values from a different column than `color`. "
+            "The `groups` parameter selects categories of the column specified via `color`."
+        )
+    else:
+        logger.warning(
+            f"Groups {sorted(missing)} were not found in column{col_label} and will be ignored. "
+            f"Available categories: {sorted(color_source_vector.categories)}."
+        )
+
+
 def _filter_groups_transparent_na(
     groups: str | list[str],
     color_source_vector: pd.Categorical,
     color_vector: pd.Series | np.ndarray | list[str],
+    col_for_color: str | None = None,
 ) -> tuple[np.ndarray, pd.Categorical, np.ndarray]:
     """Return a boolean mask and filtered color vectors for groups filtering.
 
     Used when ``na_color=None`` (fully transparent) so that non-matching
     elements are removed entirely instead of rendered invisibly.
     """
+    _warn_missing_groups(groups, color_source_vector, col_for_color)
     keep = color_source_vector.isin(groups)
     filtered_csv = color_source_vector[keep]
     filtered_cv = np.asarray(color_vector)[keep]
@@ -301,17 +327,9 @@ def _render_shapes(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and values_are_categorical and (_na.default_color_set or _na.alpha == "00"):
-        assert color_source_vector is not None  # guaranteed by values_are_categorical
-        _groups_list = [groups] if isinstance(groups, str) else groups
-        _missing = set(_groups_list) - set(color_source_vector.categories)
-        if _missing:
-            logger.warning(
-                f"Groups {sorted(_missing)} not found in the values of '{col_for_color}'. "
-                "The `groups` parameter filters values of the `color` column."
-            )
+    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
-            groups, color_source_vector, color_vector
+            groups, color_source_vector, color_vector, col_for_color=col_for_color
         )
         shapes = shapes[keep].reset_index(drop=True)
         if len(shapes) == 0:
@@ -762,15 +780,8 @@ def _render_points(
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
     if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
-        _groups_list = [groups] if isinstance(groups, str) else groups
-        _missing = set(_groups_list) - set(color_source_vector.categories)
-        if _missing:
-            logger.warning(
-                f"Groups {sorted(_missing)} not found in the values of '{col_for_color}'. "
-                "The `groups` parameter filters values of the `color` column."
-            )
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
-            groups, color_source_vector, color_vector
+            groups, color_source_vector, color_vector, col_for_color=col_for_color
         )
         n_points = int(keep.sum())
         if n_points == 0:
@@ -1322,6 +1333,7 @@ def _render_labels(
         and color_source_vector is not None
         and (_na.default_color_set or _na.alpha == "00")
     ):
+        _warn_missing_groups(groups, color_source_vector, col_for_color)
         keep_vec = color_source_vector.isin(groups)
         matching_ids = instance_id[keep_vec]
         keep_mask = np.isin(label.values, matching_ids)
