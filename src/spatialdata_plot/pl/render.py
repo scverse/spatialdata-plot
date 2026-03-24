@@ -51,6 +51,7 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _convert_shapes,
+    _datashader_canvas_from_dataframe,
     _decorate_axs,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
@@ -81,14 +82,15 @@ def _want_decorations(color_vector: Any, na_color: Color) -> bool:
     cv = np.asarray(color_vector)
     if cv.size == 0:
         return False
-    unique_vals = set(cv.tolist())
-    if len(unique_vals) != 1:
+    # Fast check: if any value differs from the first, there is variety → show decorations.
+    first = cv.flat[0]
+    if not (cv == first).all():
         return True
-    only_val = next(iter(unique_vals))
+    # All values are the same — suppress decorations when that value is the NA color.
     na_hex = na_color.get_hex()
-    if isinstance(only_val, str) and only_val.startswith("#") and na_hex.startswith("#"):
-        return _hex_no_alpha(only_val) != _hex_no_alpha(na_hex)
-    return bool(only_val != na_hex)
+    if isinstance(first, str) and first.startswith("#") and na_hex.startswith("#"):
+        return _hex_no_alpha(first) != _hex_no_alpha(na_hex)
+    return bool(first != na_hex)
 
 
 def _reparse_points(
@@ -846,15 +848,16 @@ def _render_points(
         # use dpi/100 as a factor for cases where dpi!=100
         px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
 
-        # apply transformations
+        # Apply transformations and materialize to pandas immediately so
+        # datashader aggregates without dask scheduler overhead.  See #379.
         transformed_element = PointsModel.parse(
             trans.transform(sdata_filt.points[element][["x", "y"]]),
             annotation=sdata_filt.points[element][sdata_filt.points[element].columns.drop(["x", "y"])],
             transformations={coordinate_system: Identity()},
-        )
+        ).compute()
 
-        plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            transformed_element, coordinate_system, ax, fig_params
+        plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(
+            transformed_element, ax, fig_params
         )
 
         # use datashader for the visualization of points
@@ -919,7 +922,7 @@ def _render_points(
             and isinstance(color_vector[0], str)
             and color_vector[0].startswith("#")
         ):
-            color_vector = np.asarray([_hex_no_alpha(x) for x in color_vector])
+            color_vector = np.asarray([c[:7] if len(c) == 9 else c for c in color_vector])
 
         nan_shaded = None
         if color_by_categorical or col_for_color is None:

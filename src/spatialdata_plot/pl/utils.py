@@ -2973,15 +2973,16 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
     return ListedColormap(colors)
 
 
-def _get_extent_and_range_for_datashader_canvas(
-    spatial_element: SpatialElement,
-    coordinate_system: str,
+def _compute_datashader_canvas_params(
+    x_ext: list[Any],
+    y_ext: list[Any],
     ax: Axes,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
-    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
-    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
-    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+    """Compute datashader canvas dimensions from spatial extents.
+
+    Shared logic used by both the dask-based and pandas-based entry points.
+    """
     previous_xlim = ax.get_xlim()
     previous_ylim = ax.get_ylim()
     # increase range if sth larger was rendered on the axis before
@@ -3013,6 +3014,33 @@ def _get_extent_and_range_for_datashader_canvas(
     plot_height = int(np.round(plot_height / factor))
 
     return plot_width, plot_height, x_ext, y_ext, factor
+
+
+def _get_extent_and_range_for_datashader_canvas(
+    spatial_element: SpatialElement,
+    coordinate_system: str,
+    ax: Axes,
+    fig_params: FigParams,
+) -> tuple[Any, Any, list[Any], list[Any], Any]:
+    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
+    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
+    return _compute_datashader_canvas_params(x_ext, y_ext, ax, fig_params)
+
+
+def _datashader_canvas_from_dataframe(
+    df: pd.DataFrame,
+    ax: Axes,
+    fig_params: FigParams,
+) -> tuple[Any, Any, list[Any], list[Any], Any]:
+    """Compute datashader canvas params directly from a pandas DataFrame.
+
+    Avoids the overhead of ``get_extent()`` (which requires a dask-backed
+    SpatialElement) by reading min/max from the already-materialised data.
+    """
+    x_ext = [min(0, float(df["x"].min())), float(df["x"].max())]
+    y_ext = [min(0, float(df["y"].min())), float(df["y"].max())]
+    return _compute_datashader_canvas_params(x_ext, y_ext, ax, fig_params)
 
 
 def _create_image_from_datashader_result(

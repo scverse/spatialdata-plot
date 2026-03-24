@@ -751,11 +751,6 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# Tests for datashader pipeline fixes (parameter forwarding, warnings)
-# ---------------------------------------------------------------------------
-
-
 def _make_ds_canvas_and_df(n=500, seed=42):
     """Small datashader Canvas + DataFrame with x, y, cat, val columns."""
     rng = np.random.default_rng(seed)
@@ -769,6 +764,29 @@ def _make_ds_canvas_and_df(n=500, seed=42):
     )
     cvs = ds.Canvas(plot_width=50, plot_height=50, x_range=(-10, 10), y_range=(-10, 10))
     return cvs, df
+
+
+def test_datashader_points_categorical_with_nan(sdata_blobs: SpatialData):
+    """Datashader must handle categorical coloring with NaN values.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/379.
+    Exercises the optimised aggregation and color-key paths (pandas DataFrame
+    instead of dask, early-exit in _build_datashader_color_key).
+    """
+    n = 200
+    rng = get_standard_RNG()
+    cats = pd.Categorical(rng.choice(["A", "B", None], n))
+    points = sdata_blobs["blobs_points"].compute().head(n).copy()
+    points["cat"] = cats.astype("object")  # force object so PointsModel accepts it
+
+    sdata_blobs.points["test_pts"] = PointsModel.parse(points)
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_points("test_pts", method="datashader", color="cat").pl.show(ax=ax)
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    assert len(axes_images) > 0, "Datashader should produce at least one AxesImage"
+    plt.close(fig)
 
 
 def test_ds_aggregate_default_reduction_is_forwarded():

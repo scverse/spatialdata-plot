@@ -61,20 +61,27 @@ def _build_datashader_color_key(
 ) -> dict[str, str]:
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
-    colors_arr = np.asarray(color_vector, dtype=object)
-    if len(colors_arr) != len(cat_series.codes):
+    categories = np.asarray(cat_series.categories, dtype=str)
+    codes = np.asarray(cat_series.codes)
+
+    if len(color_vector) != len(codes):
         logger.warning(
-            f"color_vector length ({len(colors_arr)}) does not match categorical series length "
-            f"({len(cat_series.codes)}); some categories may receive the na_color fallback."
+            f"color_vector length ({len(color_vector)}) does not match categorical series length "
+            f"({len(codes)}); some categories may receive the na_color fallback."
         )
+
+    # Use np.unique to find the first occurrence of each category in one pass,
+    # avoiding a Python loop over all points.  See #379.
+    unique_codes, first_indices = np.unique(codes, return_index=True)
+
     first_color: dict[str, str] = {}
-    for code, color in zip(cat_series.codes, colors_arr, strict=False):
+    for code, idx in zip(unique_codes, first_indices, strict=True):
         if code < 0:
             continue
-        cat_name = str(cat_series.categories[code])
-        if cat_name not in first_color:
-            first_color[cat_name] = _hex_no_alpha(color) if isinstance(color, str) and color.startswith("#") else color
-    return {str(c): first_color.get(str(c), na_hex) for c in cat_series.categories}
+        c = color_vector[idx]
+        first_color[categories[code]] = _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
+
+    return {cat: first_color.get(cat, na_hex) for cat in categories}
 
 
 def _inject_ds_nan_sentinel(series: pd.Series, sentinel: str = _DS_NAN_CATEGORY) -> pd.Series:
