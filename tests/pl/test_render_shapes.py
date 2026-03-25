@@ -1142,3 +1142,36 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
             "on top of the alpha already in the RGBA channels — causing double transparency."
         )
     plt.close(fig)
+
+
+def test_render_shapes_color_with_conflicting_index_name():
+    """render_shapes(color=...) must not crash when obs.index.name matches an existing column.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/441.
+    In Merfish data, the table's instance_key (e.g. 'EntityID') can appear as both
+    the obs index name and an obs column.  Upstream spatialdata's join_spatialelement_table
+    calls reset_index() which raises ValueError when the index name collides with a column.
+    """
+    n = 10
+    rng = get_standard_RNG()
+    circles = [Point(i, i) for i in range(n)]
+    shapes_df = gpd.GeoDataFrame({"geometry": circles, "radius": np.ones(n)})
+    shapes_df = ShapesModel.parse(shapes_df)
+
+    obs = pd.DataFrame(
+        {
+            "region": pd.Categorical(["shapes"] * n),
+            "EntityID": np.arange(n),
+            "cell_type": pd.Categorical(rng.choice(["A", "B", "C"], n)),
+        }
+    )
+    table = AnnData(obs=obs)
+    table = TableModel.parse(table, region="shapes", region_key="region", instance_key="EntityID")
+
+    sdata = SpatialData(shapes={"shapes": shapes_df}, tables={"table": table})
+
+    # Introduce the conflicting state: index name == existing column name
+    sdata["table"].obs.index = pd.Index(np.arange(n), name="EntityID")
+
+    # Should not raise ValueError: cannot insert EntityID, already exists
+    sdata.pl.render_shapes("shapes", color="cell_type", table_name="table").pl.show()
