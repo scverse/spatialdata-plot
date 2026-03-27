@@ -246,6 +246,14 @@ class TestRGBARendering:
         sdata.pl.render_images("img", alpha=0.3).pl.show(ax=ax)
         plt.close("all")
 
+    def test_norm_applied_to_rgba(self):
+        """User-provided norm should be applied per channel on RGB(A) images."""
+        sdata = self._make_rgba_sdata(["r", "g", "b", "a"])
+        fig, ax = plt.subplots()
+        norm = Normalize(vmin=0.0, vmax=0.5, clip=True)
+        sdata.pl.render_images("img", norm=norm).pl.show(ax=ax)
+        plt.close("all")
+
     def test_uint8_rgb_renders(self):
         """uint8 RGB image should be normalized to [0, 1] and render correctly."""
         data = np.zeros((3, 50, 50), dtype=np.uint8)

@@ -1129,22 +1129,26 @@ def _render_images(
         isinstance(render_params.cmap_params, CmapParams) and not render_params.cmap_params.cmap_is_default
     )
     if is_rgb and palette is None and not got_multiple_cmaps and not has_explicit_cmap:
-        # Warn if user passed norm= that will be ignored in the RGB(A) path
-        if isinstance(render_params.cmap_params, CmapParams):
-            _norm = render_params.cmap_params.norm
-            if isinstance(_norm, Normalize) and (_norm.vmin is not None or _norm.vmax is not None):
-                logger.warning(
-                    "Image detected as RGB(A) and will be rendered directly. "
-                    "The 'norm' parameter is ignored for RGB images. "
-                    "To apply normalization, specify a 'cmap' to use the multi-channel path."
-                )
-
         coord_map = {str(c).lower(): c for c in channels}
         ordered = [coord_map[ch] for ch in ("r", "g", "b")]
-        stacked = np.moveaxis(img.sel(c=ordered).values, 0, -1)
 
-        # Normalize to [0, 1] for matplotlib
-        stacked = _normalize_dtype_to_float(stacked)
+        # Apply norm per channel if user provided one, otherwise normalize by dtype
+        user_norm = (
+            render_params.cmap_params.norm
+            if isinstance(render_params.cmap_params, CmapParams)
+            and isinstance(render_params.cmap_params.norm, Normalize)
+            and (render_params.cmap_params.norm.vmin is not None or render_params.cmap_params.norm.vmax is not None)
+            else None
+        )
+
+        if user_norm is not None:
+            rgb_layers = []
+            for ch in ordered:
+                ch_norm = copy(user_norm)
+                rgb_layers.append(np.clip(ch_norm(img.sel(c=ch).values).astype(np.float64), 0, 1))
+            stacked = np.stack(rgb_layers, axis=-1)
+        else:
+            stacked = _normalize_dtype_to_float(np.moveaxis(img.sel(c=ordered).values, 0, -1))
 
         show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
 
