@@ -108,6 +108,20 @@ def _reparse_points(
     )
 
 
+def _warn_groups_ignored_continuous(
+    groups: str | list[str] | None,
+    color_source_vector: pd.Categorical | None,
+    col_for_color: str | None,
+) -> None:
+    """Warn when ``groups`` is set but coloring is continuous (no categorical source)."""
+    if groups is not None and color_source_vector is None and col_for_color is not None:
+        logger.warning(
+            f"`groups` is ignored when coloring by continuous column '{col_for_color}'. "
+            "`groups` filters categories of the column specified via `color`; "
+            "it has no effect on continuous data."
+        )
+
+
 def _warn_missing_groups(
     groups: str | list[str],
     color_source_vector: pd.Categorical,
@@ -328,6 +342,8 @@ def _render_shapes(
     )
 
     values_are_categorical = color_source_vector is not None
+
+    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
     if groups is not None and color_source_vector is not None:
         _warn_missing_groups(groups, color_source_vector, col_for_color)
@@ -783,6 +799,8 @@ def _render_points(
 
     if added_color_from_table and col_for_color is not None:
         _reparse_points(sdata_filt, element, points_pd_with_color, transformation_in_cs, coordinate_system)
+
+    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
     if groups is not None and color_source_vector is not None:
         _warn_missing_groups(groups, color_source_vector, col_for_color)
@@ -1334,6 +1352,8 @@ def _render_labels(
             color_source_vector = color_source_vector[mask]
         else:
             assert color_source_vector is None
+
+    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
     if groups is not None and color_source_vector is not None:
         _warn_missing_groups(groups, color_source_vector, col_for_color)
