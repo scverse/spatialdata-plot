@@ -1018,6 +1018,23 @@ def _render_points(
     )
 
 
+def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
+    """Normalize an integer or float array to float64 in [0, 1] for matplotlib.
+
+    - uint8 → divide by 255
+    - other int/uint dtypes → divide by dtype max
+    - float → clip to [0, 1]
+    """
+    if arr.dtype == np.uint8:
+        return arr.astype(np.float64) / 255.0
+    if arr.dtype.kind == "u":
+        return arr.astype(np.float64) / np.iinfo(arr.dtype).max
+    if arr.dtype.kind == "i":
+        return np.clip(arr.astype(np.float64) / np.iinfo(arr.dtype).max, 0, 1)
+    result: np.ndarray = np.clip(arr, 0, 1).astype(np.float64)
+    return result
+
+
 def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
     """Check if channel coordinates indicate an RGB(A) image.
 
@@ -1112,28 +1129,27 @@ def _render_images(
         isinstance(render_params.cmap_params, CmapParams) and not render_params.cmap_params.cmap_is_default
     )
     if is_rgb and palette is None and not got_multiple_cmaps and not has_explicit_cmap:
+        # Warn if user passed norm= that will be ignored in the RGB(A) path
+        if isinstance(render_params.cmap_params, CmapParams):
+            _norm = render_params.cmap_params.norm
+            if isinstance(_norm, Normalize) and (_norm.vmin is not None or _norm.vmax is not None):
+                logger.warning(
+                    "Image detected as RGB(A) and will be rendered directly. "
+                    "The 'norm' parameter is ignored for RGB images. "
+                    "To apply normalization, specify a 'cmap' to use the multi-channel path."
+                )
+
         coord_map = {str(c).lower(): c for c in channels}
         ordered = [coord_map[ch] for ch in ("r", "g", "b")]
         stacked = np.moveaxis(img.sel(c=ordered).values, 0, -1)
 
-        # Normalize to [0, 1] for matplotlib: uint8 → /255, other int dtypes → /max, float → clip
-        if stacked.dtype == np.uint8:
-            stacked = stacked.astype(np.float64) / 255.0
-        elif stacked.dtype.kind in ("u", "i"):
-            stacked = stacked.astype(np.float64) / np.iinfo(stacked.dtype).max
-        else:
-            stacked = np.clip(stacked, 0, 1)
+        # Normalize to [0, 1] for matplotlib
+        stacked = _normalize_dtype_to_float(stacked)
 
         show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
 
         if has_alpha and render_params.alpha == 1.0:
-            alpha_raw = img.sel(c=coord_map["a"]).values
-            if alpha_raw.dtype == np.uint8:
-                alpha_layer = alpha_raw.astype(np.float64) / 255.0
-            elif alpha_raw.dtype.kind in ("u", "i"):
-                alpha_layer = alpha_raw.astype(np.float64) / np.iinfo(alpha_raw.dtype).max
-            else:
-                alpha_layer = np.clip(alpha_raw.astype(np.float64), 0, 1)
+            alpha_layer = _normalize_dtype_to_float(img.sel(c=coord_map["a"]).values)
             stacked = np.concatenate([stacked, alpha_layer[..., np.newaxis]], axis=-1)
         else:
             show_kwargs["alpha"] = render_params.alpha
