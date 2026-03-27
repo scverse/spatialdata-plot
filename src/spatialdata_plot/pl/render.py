@@ -1201,6 +1201,10 @@ def _render_images(
                 ch_norm = render_params.cmap_params[ch_idx].norm
             else:
                 ch_norm = render_params.cmap_params.norm
+                # When a single auto-ranging norm is shared across channels, copy it so
+                # each channel normalizes independently based on its own value range.
+                if isinstance(ch_norm, Normalize) and (ch_norm.vmin is None or ch_norm.vmax is None):
+                    ch_norm = copy(ch_norm)
 
             if ch_norm is not None:
                 layers[ch] = ch_norm(layers[ch])
@@ -1229,7 +1233,7 @@ def _render_images(
                 )
 
             _ax_show_and_transform(
-                np.clip(stacked, 0, 1),
+                stacked,
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1246,7 +1250,7 @@ def _render_images(
                     [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
-                colored = colored[:, :, :3]
+                colored = np.clip(colored[:, :, :3], 0, 1)
             elif n_channels == 3:
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
@@ -1254,7 +1258,7 @@ def _render_images(
                     [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
-                colored = colored[:, :, :3]
+                colored = np.clip(colored[:, :, :3], 0, 1)
             else:
                 if isinstance(render_params.cmap_params, list):
                     cmap_is_default = render_params.cmap_params[0].cmap_is_default
@@ -1291,7 +1295,7 @@ def _render_images(
                 )  # TODO: update when pca is added as strategy
 
             _ax_show_and_transform(
-                np.clip(colored, 0, 1),
+                colored,
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1305,10 +1309,10 @@ def _render_images(
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            colored = np.clip(colored[:, :, :3], 0, 1)
 
             _ax_show_and_transform(
-                np.clip(colored, 0, 1),
+                colored,
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1327,7 +1331,7 @@ def _render_images(
             colored = colored[:, :, :3]
 
             _ax_show_and_transform(
-                np.clip(colored, 0, 1),
+                colored,
                 trans_data,
                 ax,
                 render_params.alpha,
