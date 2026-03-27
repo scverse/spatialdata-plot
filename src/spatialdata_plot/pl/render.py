@@ -317,9 +317,21 @@ def _render_shapes(
         table = None
         shapes = sdata_filt[element]
     else:
-        element_dict, joined_table = join_spatialelement_table(
-            sdata, spatial_element_names=element, table_name=table_name, how="inner"
-        )
+        # Workaround for upstream spatialdata bug (scverse/spatialdata#1099):
+        # join_spatialelement_table calls table.obs.reset_index() which fails when
+        # the obs index name matches an existing column (e.g. "EntityID" in Merfish data).
+        # Temporarily drop the conflicting index name for the join, then restore it.
+        _obs = sdata[table_name].obs
+        _saved_index_name = _obs.index.name
+        if _saved_index_name is not None and _saved_index_name in _obs.columns:
+            _obs.index.name = None
+
+        try:
+            element_dict, joined_table = join_spatialelement_table(
+                sdata, spatial_element_names=element, table_name=table_name, how="inner"
+            )
+        finally:
+            _obs.index.name = _saved_index_name
         sdata_filt[element] = shapes = element_dict[element]
         joined_table.uns["spatialdata_attrs"]["region"] = (
             joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
