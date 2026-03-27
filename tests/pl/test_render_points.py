@@ -771,9 +771,6 @@ def _make_ds_canvas_and_df(n=500, seed=42):
     return cvs, df
 
 
-# -- Fix: default_reduction parameter forwarding --
-
-
 def test_ds_aggregate_default_reduction_is_forwarded():
     """default_reduction must affect the actual aggregation, not just the log message."""
     cvs, df = _make_ds_canvas_and_df()
@@ -807,9 +804,6 @@ def test_ds_aggregate_explicit_overrides_default():
     )
 
 
-# -- Fix: warn when ds_reduction is ignored for categorical data --
-
-
 def test_ds_reduction_ignored_for_categorical(caplog):
     """Categorical aggregation always uses ds.count(); a warning is emitted when ds_reduction is set."""
     cvs, df = _make_ds_canvas_and_df()
@@ -829,16 +823,13 @@ def test_ds_reduction_no_warning_when_none(caplog):
     assert not any("ignored" in r.message.lower() for r in caplog.records)
 
 
-def test_ds_reduction_categorical_always_uses_count():
-    """All ds_reduction values produce the same aggregate for categorical data (by design)."""
+@pytest.mark.parametrize("reduction", ["mean", "max", "min", "count", "std", "var"])
+def test_ds_reduction_categorical_always_uses_count(reduction):
+    """Categorical aggregation always uses ds.count(), regardless of ds_reduction (by design)."""
     cvs, df = _make_ds_canvas_and_df()
     base, _, _ = _ds_aggregate(cvs, df.copy(), "cat", True, "sum", "sum", "points")
-    for red in ["mean", "max", "min", "count", "std", "var"]:
-        agg, _, _ = _ds_aggregate(cvs, df.copy(), "cat", True, red, red, "points")
-        np.testing.assert_array_equal(agg.values, base.values)
-
-
-# -- Fix: warn when groups is used with continuous data --
+    agg, _, _ = _ds_aggregate(cvs, df.copy(), "cat", True, reduction, reduction, "points")
+    np.testing.assert_array_equal(agg.values, base.values)
 
 
 def test_groups_warns_when_continuous_points(sdata_blobs: SpatialData, caplog):
@@ -864,9 +855,6 @@ def test_warn_groups_ignored_continuous_silent_for_categorical(caplog):
         finally:
             logger.removeHandler(caplog.handler)
     assert not any("ignored" in r.message for r in caplog.records)
-
-
-# -- Fix: warn on color_vector length mismatch in _build_datashader_color_key --
 
 
 def test_color_key_warns_on_short_color_vector(caplog):
@@ -904,9 +892,6 @@ def test_color_key_unseen_category_gets_na_color(caplog):
     assert result["D"] == "#cccccc"
 
 
-# -- Fix: _ds_shade_categorical only sets cmap when no color_key --
-
-
 def test_shade_categorical_color_key_overrides_cmap():
     """When color_key is provided, different color_vector[0] values must produce identical output."""
     cvs, df = _make_ds_canvas_and_df(n=100)
@@ -919,8 +904,10 @@ def test_shade_categorical_color_key_overrides_cmap():
 
 
 def test_shade_categorical_cmap_used_when_no_color_key():
-    """When color_key is None (no color column), cmap is set from color_vector[0]."""
+    """When color_key is None (no color column), cmap from color_vector[0] affects output."""
     cvs, df = _make_ds_canvas_and_df(n=100)
     agg = cvs.points(df, "x", "y", agg=ds.count())
-    shaded = _ds_shade_categorical(agg, None, np.array(["#ff0000"] * 100), alpha=1.0)
-    assert shaded is not None
+    shaded_red = _ds_shade_categorical(agg, None, np.array(["#ff0000"] * 100), alpha=1.0)
+    shaded_blue = _ds_shade_categorical(agg, None, np.array(["#0000ff"] * 100), alpha=1.0)
+    # Different color_vector[0] values should produce different shaded output
+    assert not np.array_equal(np.asarray(shaded_red), np.asarray(shaded_blue))
