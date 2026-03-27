@@ -9,6 +9,7 @@ from spatialdata import SpatialData
 from spatialdata.models import Image2DModel
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot.pl.render import _is_rgb_image
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 sc.pl.set_rcParams_defaults()
@@ -147,3 +148,97 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_raccoon.pl.render_images("raccoon_int16", channel=[0, 1], palette=["yellow", "red"]).pl.show(ax=axs[1])
         axs[1].set_title("two-channel uint16")
         fig.tight_layout()
+
+
+# Regression tests for #406: RGBA image support
+class TestRGBDetection:
+    """Unit tests for _is_rgb_image helper."""
+
+    def test_rgb_lowercase(self):
+        assert _is_rgb_image(["r", "g", "b"]) == (True, False)
+
+    def test_rgba_lowercase(self):
+        assert _is_rgb_image(["r", "g", "b", "a"]) == (True, True)
+
+    def test_rgb_uppercase(self):
+        assert _is_rgb_image(["R", "G", "B"]) == (True, False)
+
+    def test_rgba_mixed_case(self):
+        assert _is_rgb_image(["R", "g", "B", "a"]) == (True, True)
+
+    def test_integer_channels_not_rgb(self):
+        assert _is_rgb_image([0, 1, 2]) == (False, False)
+
+    def test_arbitrary_names_not_rgb(self):
+        assert _is_rgb_image(["DAPI", "GFP", "mCherry"]) == (False, False)
+
+    def test_four_arbitrary_channels_not_rgb(self):
+        assert _is_rgb_image(["c1", "c2", "c3", "c4"]) == (False, False)
+
+    def test_partial_rgb_not_detected(self):
+        assert _is_rgb_image(["r", "g"]) == (False, False)
+
+    def test_rgb_with_extra_channel_not_detected(self):
+        assert _is_rgb_image(["r", "g", "b", "x"]) == (False, False)
+
+
+class TestRGBARendering:
+    """Regression tests for #406: RGBA images rendered correctly."""
+
+    @staticmethod
+    def _make_rgba_sdata(c_coords: list, alpha_val: float = 1.0) -> SpatialData:
+        data = np.zeros((4, 50, 50), dtype=np.float64)
+        data[0] = 0.8
+        data[1] = 0.2
+        data[2] = 0.1
+        data[3] = alpha_val
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=c_coords)
+        return SpatialData(images={"img": img})
+
+    def test_rgba_named_channels_renders(self):
+        """RGBA image with r,g,b,a channel names should render without error."""
+        sdata = self._make_rgba_sdata(["r", "g", "b", "a"])
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_rgba_uppercase_channels_renders(self):
+        """Case-insensitive detection."""
+        sdata = self._make_rgba_sdata(["R", "G", "B", "A"])
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_rgb_named_channels_renders(self):
+        """RGB image (no alpha) with r,g,b channel names should render without error."""
+        data = np.zeros((3, 50, 50), dtype=np.float64)
+        data[0] = 0.8
+        data[1] = 0.2
+        data[2] = 0.1
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_integer_channels_not_treated_as_rgba(self):
+        """4-channel image with integer names should use multi-channel path, not RGBA."""
+        sdata = self._make_rgba_sdata([0, 1, 2, 3])
+        fig, ax = plt.subplots()
+        # Should not raise, but goes through multi-channel path
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_palette_overrides_rgba_detection(self):
+        """Explicit palette should skip RGBA path."""
+        sdata = self._make_rgba_sdata(["r", "g", "b", "a"])
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", palette=["#ff0000", "#00ff00", "#0000ff", "#ffffff"]).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_explicit_alpha_overrides_per_pixel(self):
+        """User-specified alpha should override the image's alpha channel."""
+        sdata = self._make_rgba_sdata(["r", "g", "b", "a"], alpha_val=0.5)
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", alpha=0.3).pl.show(ax=ax)
+        plt.close("all")

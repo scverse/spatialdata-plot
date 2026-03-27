@@ -39,6 +39,7 @@ from spatialdata_plot.pl._datashader import (
     _render_ds_outlines,
 )
 from spatialdata_plot.pl.render_params import (
+    CmapParams,
     Color,
     ColorbarSpec,
     FigParams,
@@ -1017,6 +1018,29 @@ def _render_points(
     )
 
 
+def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
+    """Check if channel coordinates indicate an RGB(A) image.
+
+    Checks case-insensitively whether channel names are {r, g, b} or {r, g, b, a}.
+
+    Parameters
+    ----------
+    channel_coords
+        The channel coordinate values from the image.
+
+    Returns
+    -------
+    tuple[bool, bool]
+        (is_rgb, has_alpha) — whether the image is RGB and whether it includes an alpha channel.
+    """
+    names = {str(c).lower() for c in channel_coords}
+    if names == {"r", "g", "b", "a"}:
+        return True, True
+    if names == {"r", "g", "b"}:
+        return True, False
+    return False, False
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -1081,6 +1105,33 @@ def _render_images(
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
     _, trans_data = _prepare_transformation(img, coordinate_system, ax)
+
+    # Detect RGB(A) images by channel names — skip when user overrides with palette/cmap
+    is_rgb, has_alpha = _is_rgb_image(channels)
+    has_explicit_cmap = (
+        isinstance(render_params.cmap_params, CmapParams) and not render_params.cmap_params.cmap_is_default
+    )
+    if is_rgb and palette is None and not got_multiple_cmaps and not has_explicit_cmap:
+        coord_map = {str(c).lower(): c for c in channels}
+        ordered = [coord_map[ch] for ch in ("r", "g", "b")]
+        stacked = np.moveaxis(img.sel(c=ordered).squeeze().values, 0, -1)
+
+        show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
+
+        if has_alpha and render_params.alpha == 1.0:
+            alpha_layer = np.clip(img.sel(c=coord_map["a"]).squeeze().values, 0, 1)
+            stacked = np.concatenate([stacked, alpha_layer[..., np.newaxis]], axis=-1)
+        else:
+            show_kwargs["alpha"] = render_params.alpha
+            if has_alpha:
+                logger.info(
+                    "Image has an alpha channel, but an explicit 'alpha' value was provided. "
+                    "Using the user-specified alpha=%.2f instead of the per-pixel alpha from the data.",
+                    render_params.alpha,
+                )
+
+        _ax_show_and_transform(stacked, trans_data, ax, **show_kwargs)
+        return
 
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
