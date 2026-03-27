@@ -1229,7 +1229,7 @@ def _render_images(
                 )
 
             _ax_show_and_transform(
-                stacked,
+                np.clip(stacked, 0, 1),
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1291,7 +1291,7 @@ def _render_images(
                 )  # TODO: update when pca is added as strategy
 
             _ax_show_and_transform(
-                colored,
+                np.clip(colored, 0, 1),
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1308,7 +1308,7 @@ def _render_images(
             colored = colored[:, :, :3]
 
             _ax_show_and_transform(
-                colored,
+                np.clip(colored, 0, 1),
                 trans_data,
                 ax,
                 render_params.alpha,
@@ -1327,7 +1327,7 @@ def _render_images(
             colored = colored[:, :, :3]
 
             _ax_show_and_transform(
-                colored,
+                np.clip(colored, 0, 1),
                 trans_data,
                 ax,
                 render_params.alpha,

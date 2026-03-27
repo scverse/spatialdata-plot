@@ -270,3 +270,47 @@ class TestRGBARendering:
         fig, ax = plt.subplots()
         sdata.pl.render_images("img").pl.show(ax=ax)
         plt.close("all")
+
+
+class TestMultiChannelClipping:
+    """Regression tests: multi-channel compositing should not produce clipping warnings."""
+
+    def test_no_clipping_warning_3channel_different_ranges(self):
+        """3-channel image with different value ranges per channel should not clip."""
+        import warnings
+
+        rng = np.random.default_rng(42)
+        data = np.zeros((3, 50, 50), dtype=np.float32)
+        data[0] = rng.uniform(0.0, 0.5, (50, 50))
+        data[1] = rng.uniform(0.0, 1.0, (50, 50))
+        data[2] = rng.uniform(0.0, 1.5, (50, 50))
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=[0, 1, 2])
+        sdata = SpatialData(images={"img": img})
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fig, ax = plt.subplots()
+            sdata.pl.render_images("img").pl.show(ax=ax)
+            plt.close("all")
+            clip_warns = [x for x in w if "Clipping input data" in str(x.message)]
+            assert len(clip_warns) == 0, f"Got unexpected clipping warning: {clip_warns[0].message}"
+
+    def test_no_clipping_warning_palette_compositing(self):
+        """Palette compositing should not produce clipping warnings."""
+        import warnings
+
+        rng = np.random.default_rng(42)
+        data = np.zeros((3, 50, 50), dtype=np.float32)
+        data[0] = rng.uniform(0.0, 0.5, (50, 50))
+        data[1] = rng.uniform(0.0, 1.0, (50, 50))
+        data[2] = rng.uniform(0.0, 1.5, (50, 50))
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=[0, 1, 2])
+        sdata = SpatialData(images={"img": img})
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fig, ax = plt.subplots()
+            sdata.pl.render_images("img", palette=["red", "green", "blue"]).pl.show(ax=ax)
+            plt.close("all")
+            clip_warns = [x for x in w if "Clipping input data" in str(x.message)]
+            assert len(clip_warns) == 0, f"Got unexpected clipping warning: {clip_warns[0].message}"
