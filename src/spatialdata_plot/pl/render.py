@@ -796,8 +796,7 @@ def _render_points(
     # from the registered points (see above) avoids duplicate-origin ambiguities.
     color_table_name = table_name
 
-    # When color was already loaded from a table (line 690), pass it directly
-    # to avoid a redundant get_values() call inside _set_color_source_vec.
+    # Reuse color data already loaded from the table to avoid a redundant get_values() call.
     _preloaded = points_pd_with_color[col_for_color] if added_color_from_table and col_for_color is not None else None
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
