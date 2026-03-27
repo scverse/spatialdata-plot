@@ -113,3 +113,40 @@ def logger_warns(
         if not any(pattern.search(r.getMessage()) for r in records):
             msgs = [r.getMessage() for r in records]
             raise AssertionError(f"Did not find log matching {match!r} in records: {msgs!r}")
+
+
+@contextmanager
+def logger_no_warns(
+    caplog: LogCaptureFixture,
+    logger: logging.Logger,
+    match: str | None = None,
+    level: int = logging.WARNING,
+) -> Iterator[None]:
+    """Assert that no log record matching *match* is emitted.
+
+    Counterpart to :func:`logger_warns`.
+    """
+    initial_record_count = len(caplog.records)
+
+    handler = caplog.handler
+    logger.addHandler(handler)
+    original_level = logger.level
+    logger.setLevel(level)
+
+    with caplog.at_level(level, logger=logger.name):
+        try:
+            yield
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+
+    records = [r for r in caplog.records[initial_record_count:] if r.levelno >= level]
+
+    if match is not None:
+        pattern = re.compile(match)
+        matching = [r.getMessage() for r in records if pattern.search(r.getMessage())]
+        if matching:
+            raise AssertionError(f"Found unexpected log matching {match!r}: {matching!r}")
+    elif records:
+        msgs = [r.getMessage() for r in records]
+        raise AssertionError(f"Expected no log records at level>={level}, but got: {msgs!r}")

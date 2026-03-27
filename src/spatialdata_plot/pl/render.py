@@ -34,6 +34,7 @@ from spatialdata_plot.pl._datashader import (
     _ds_aggregate,
     _ds_shade_categorical,
     _ds_shade_continuous,
+    _DsReduction,
     _render_ds_image,
     _render_ds_outlines,
 )
@@ -82,15 +83,24 @@ def _want_decorations(color_vector: Any, na_color: Color) -> bool:
     cv = np.asarray(color_vector)
     if cv.size == 0:
         return False
-    # Fast check: if any value differs from the first, there is variety → show decorations.
     first = cv.flat[0]
     if not (cv == first).all():
         return True
-    # All values are the same — suppress decorations when that value is the NA color.
     na_hex = na_color.get_hex()
     if isinstance(first, str) and first.startswith("#") and na_hex.startswith("#"):
         return _hex_no_alpha(first) != _hex_no_alpha(na_hex)
     return bool(first != na_hex)
+
+
+def _log_datashader_method(method: str, ds_reduction: _DsReduction | None, default: _DsReduction) -> None:
+    """Log the datashader backend and effective reduction being used."""
+    effective = ds_reduction if ds_reduction is not None else default
+    logger.info(
+        f"Using '{method}' backend with '{effective}' as reduction"
+        " method to speed up plotting. Depending on the reduction method, the value"
+        " range of the plot might change. Set method to 'matplotlib' to disable"
+        " this behaviour."
+    )
 
 
 def _reparse_points(
@@ -437,14 +447,10 @@ def _render_shapes(
     if method is None:
         method = "datashader" if len(shapes) > 10000 else "matplotlib"
 
+    _default_reduction: _DsReduction = "max"
+
     if method != "matplotlib":
-        # we only notify the user when we switched away from matplotlib
-        logger.info(
-            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
-            " method to speed up plotting. Depending on the reduction method, the value"
-            " range of the plot might change. Set method to 'matplotlib' to disable"
-            " this behaviour."
-        )
+        _log_datashader_method(method, render_params.ds_reduction, _default_reduction)
 
     if method == "datashader":
         _geometry = shapes["geometry"]
@@ -518,7 +524,7 @@ def _render_shapes(
             col_for_color,
             color_by_categorical,
             render_params.ds_reduction,
-            "mean",
+            _default_reduction,
             "shapes",
         )
 
@@ -851,14 +857,10 @@ def _render_points(
     if method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
+    _default_reduction: _DsReduction = "sum"
+
     if method == "datashader":
-        # we only notify the user when we switched away from matplotlib
-        logger.info(
-            f"Using '{method}' backend with '{render_params.ds_reduction}' as reduction"
-            " method to speed up plotting. Depending on the reduction method, the value"
-            " range of the plot might change. Set method to 'matplotlib' do disable"
-            " this behaviour."
-        )
+        _log_datashader_method(method, render_params.ds_reduction, _default_reduction)
 
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
@@ -917,7 +919,7 @@ def _render_points(
             col_for_color,
             color_by_categorical,
             render_params.ds_reduction,
-            "sum",
+            _default_reduction,
             "points",
         )
 

@@ -272,8 +272,8 @@ class PlotAccessor:
 
             datashader_reduction : Literal[
                 "sum", "mean", "any", "count", "std", "var", "max", "min"
-            ], default: "sum"
-                Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
+            ], default: "max"
+                Reduction method for datashader when coloring by continuous values. Defaults to 'max'.
 
 
         Notes

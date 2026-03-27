@@ -2507,9 +2507,6 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
         raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
 
-    if method == "datashader" and ds_reduction is None:
-        param_dict["ds_reduction"] = "sum"
-
     return param_dict
 
 
