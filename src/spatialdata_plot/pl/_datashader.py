@@ -61,10 +61,11 @@ def _build_datashader_color_key(
 ) -> dict[str, str]:
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
+    colors_arr = np.asarray(color_vector, dtype=object)
     categories = np.asarray(cat_series.categories, dtype=str)
     codes = np.asarray(cat_series.codes)
 
-    if len(color_vector) != len(codes):
+    if len(colors_arr) != len(codes):
         logger.warning(
             f"color_vector length ({len(color_vector)}) does not match categorical series length "
             f"({len(codes)}); some categories may receive the na_color fallback."
@@ -76,9 +77,9 @@ def _build_datashader_color_key(
 
     first_color: dict[str, str] = {}
     for code, idx in zip(unique_codes, first_indices, strict=True):
-        if code < 0:
+        if code < 0 or idx >= len(colors_arr):
             continue
-        c = color_vector[idx]
+        c = colors_arr[idx]
         first_color[categories[code]] = _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
 
     return {cat: first_color.get(cat, na_hex) for cat in categories}

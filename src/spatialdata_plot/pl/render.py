@@ -786,7 +786,7 @@ def _render_points(
 
     # When color was already loaded from a table (line 690), pass it directly
     # to avoid a redundant get_values() call inside _set_color_source_vec.
-    _preloaded = points_pd_with_color[col_for_color] if added_color_from_table and col_for_color else None
+    _preloaded = points_pd_with_color[col_for_color] if added_color_from_table and col_for_color is not None else None
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
@@ -926,7 +926,7 @@ def _render_points(
             and isinstance(color_vector[0], str)
             and color_vector[0].startswith("#")
         ):
-            color_vector = np.asarray([c[:7] if len(c) == 9 else c for c in color_vector])
+            color_vector = np.asarray([_hex_no_alpha(c) for c in color_vector])
 
         nan_shaded = None
         if color_by_categorical or col_for_color is None:
