@@ -628,8 +628,7 @@ def _prepare_cmap_norm(
 
     assert isinstance(cmap, Colormap), f"Invalid type of `cmap`: {type(cmap)}, expected `Colormap`."
 
-    if norm is None:
-        norm = Normalize(vmin=None, vmax=None, clip=False)
+    norm = Normalize(vmin=None, vmax=None, clip=False) if norm is None else copy(norm)
 
     cmap.set_bad(na_color.get_hex_with_alpha())
 

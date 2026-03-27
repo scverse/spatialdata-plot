@@ -1019,11 +1019,13 @@ def _render_points(
 
 
 def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
-    """Normalize an integer or float array to float64 in [0, 1] for matplotlib.
+    """Normalize an array to float64 in [0, 1] for matplotlib.
 
     - uint8 → divide by 255
-    - other int/uint dtypes → divide by dtype max
-    - float → clip to [0, 1]
+    - other unsigned int → divide by dtype max
+    - signed int → divide by dtype max, clip negatives to 0
+    - float already in [0, 1] → pass through
+    - float outside [0, 1] → global auto-range (preserves relative balance across channels)
     """
     if arr.dtype == np.uint8:
         return arr.astype(np.float64) / 255.0
@@ -1031,7 +1033,14 @@ def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
         return arr.astype(np.float64) / np.iinfo(arr.dtype).max
     if arr.dtype.kind == "i":
         return np.clip(arr.astype(np.float64) / np.iinfo(arr.dtype).max, 0, 1)
-    result: np.ndarray = np.clip(arr, 0, 1).astype(np.float64)
+    # Float: if already in [0, 1], keep as-is; otherwise auto-range globally
+    arr_f: np.ndarray = arr.astype(np.float64)
+    vmin, vmax = arr_f.min(), arr_f.max()
+    if vmin >= 0.0 and vmax <= 1.0:
+        return arr_f
+    if vmin == vmax:
+        return np.zeros_like(arr_f)
+    result: np.ndarray = (arr_f - vmin) / (vmax - vmin)
     return result
 
 
@@ -1221,18 +1230,17 @@ def _render_images(
                 ch_norm = render_params.cmap_params[ch_idx].norm
             else:
                 ch_norm = render_params.cmap_params.norm
-                # When a single auto-ranging norm is shared across channels, copy it so
-                # each channel normalizes independently based on its own value range.
-                if isinstance(ch_norm, Normalize) and (ch_norm.vmin is None or ch_norm.vmax is None):
-                    ch_norm = copy(ch_norm)
 
-            if ch_norm is not None:
-                layers[ch] = ch_norm(layers[ch])
+            # Auto-ranging norms are stateful — copy so each channel normalizes independently
+            if isinstance(ch_norm, Normalize) and (ch_norm.vmin is None or ch_norm.vmax is None):
+                ch_norm = copy(ch_norm)
+
+            layers[ch] = ch_norm(layers[ch])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
-                stacked = np.stack([layers[ch] for ch in layers], axis=-1)
+                stacked = np.clip(np.stack([layers[ch] for ch in layers], axis=-1), 0, 1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
