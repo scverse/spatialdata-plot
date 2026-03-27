@@ -1,6 +1,8 @@
+import logging
 import math
 
 import dask.dataframe
+import datashader as ds
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,6 +25,12 @@ from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot._logging import logger, logger_warns
+from spatialdata_plot.pl._datashader import (
+    _build_datashader_color_key,
+    _ds_aggregate,
+    _ds_shade_categorical,
+)
+from spatialdata_plot.pl.render import _warn_groups_ignored_continuous
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
 
 sc.pl.set_rcParams_defaults()
@@ -741,3 +749,178 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
             "on top of the alpha already in the RGBA channels — causing double transparency."
         )
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Tests for datashader pipeline fixes (parameter forwarding, warnings)
+# ---------------------------------------------------------------------------
+
+
+def _make_ds_canvas_and_df(n=500, seed=42):
+    """Small datashader Canvas + DataFrame with x, y, cat, val columns."""
+    rng = np.random.default_rng(seed)
+    df = pd.DataFrame(
+        {
+            "x": rng.uniform(-10, 10, n),
+            "y": rng.uniform(-10, 10, n),
+            "cat": pd.Categorical(rng.choice(["A", "B", "C"], n)),
+            "val": rng.normal(0, 1, n),
+        }
+    )
+    cvs = ds.Canvas(plot_width=50, plot_height=50, x_range=(-10, 10), y_range=(-10, 10))
+    return cvs, df
+
+
+# -- Fix: default_reduction parameter forwarding --
+
+
+def test_ds_aggregate_default_reduction_is_forwarded():
+    """default_reduction must affect the actual aggregation, not just the log message."""
+    cvs, df = _make_ds_canvas_and_df()
+    agg_sum, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, None, "sum", "points")
+    agg_max, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, None, "max", "points")
+    assert not np.allclose(
+        np.nan_to_num(agg_sum.values, nan=0),
+        np.nan_to_num(agg_max.values, nan=0),
+    )
+
+
+def test_ds_aggregate_default_reduction_equals_explicit():
+    """default_reduction='max' with ds_reduction=None must equal explicit ds_reduction='max'."""
+    cvs, df = _make_ds_canvas_and_df()
+    agg_default, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, None, "max", "points")
+    agg_explicit, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, "max", "max", "points")
+    np.testing.assert_array_equal(
+        np.nan_to_num(agg_default.values, nan=0),
+        np.nan_to_num(agg_explicit.values, nan=0),
+    )
+
+
+def test_ds_aggregate_explicit_overrides_default():
+    """Explicit ds_reduction takes precedence over default_reduction."""
+    cvs, df = _make_ds_canvas_and_df()
+    agg, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, "max", "sum", "points")
+    agg_max, _, _ = _ds_aggregate(cvs, df.copy(), "val", False, "max", "max", "points")
+    np.testing.assert_array_equal(
+        np.nan_to_num(agg.values, nan=0),
+        np.nan_to_num(agg_max.values, nan=0),
+    )
+
+
+# -- Fix: warn when ds_reduction is ignored for categorical data --
+
+
+def test_ds_reduction_ignored_for_categorical(caplog):
+    """Categorical aggregation always uses ds.count(); a warning is emitted when ds_reduction is set."""
+    cvs, df = _make_ds_canvas_and_df()
+    with logger_warns(caplog, logger, match="ignored.*categorical"):
+        _ds_aggregate(cvs, df.copy(), "cat", True, "mean", "mean", "points")
+
+
+def test_ds_reduction_no_warning_when_none(caplog):
+    """No spurious warning when ds_reduction is None (the default)."""
+    cvs, df = _make_ds_canvas_and_df()
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        logger.addHandler(caplog.handler)
+        try:
+            _ds_aggregate(cvs, df.copy(), "cat", True, None, "sum", "points")
+        finally:
+            logger.removeHandler(caplog.handler)
+    assert not any("ignored" in r.message.lower() for r in caplog.records)
+
+
+def test_ds_reduction_categorical_always_uses_count():
+    """All ds_reduction values produce the same aggregate for categorical data (by design)."""
+    cvs, df = _make_ds_canvas_and_df()
+    base, _, _ = _ds_aggregate(cvs, df.copy(), "cat", True, "sum", "sum", "points")
+    for red in ["mean", "max", "min", "count", "std", "var"]:
+        agg, _, _ = _ds_aggregate(cvs, df.copy(), "cat", True, red, red, "points")
+        np.testing.assert_array_equal(agg.values, base.values)
+
+
+# -- Fix: warn when groups is used with continuous data --
+
+
+def test_groups_warns_when_continuous_points(sdata_blobs: SpatialData, caplog):
+    """Using groups with a continuous color column should warn."""
+    n = len(sdata_blobs["blobs_points"])
+    sdata_blobs["blobs_points"]["cont_val"] = pd.Series(list(range(n)), dtype=float)
+    with logger_warns(caplog, logger, match="groups.*ignored.*continuous"):
+        sdata_blobs.pl.render_points("blobs_points", color="cont_val", groups=["nonexistent"]).pl.show()
+
+
+def test_warn_groups_ignored_continuous_emits(caplog):
+    """_warn_groups_ignored_continuous emits when groups is set but data is continuous."""
+    with logger_warns(caplog, logger, match="ignored.*continuous"):
+        _warn_groups_ignored_continuous(["A"], None, "my_col")
+
+
+def test_warn_groups_ignored_continuous_silent_for_categorical(caplog):
+    """No warning when color_source_vector is present (categorical)."""
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        logger.addHandler(caplog.handler)
+        try:
+            _warn_groups_ignored_continuous(["A"], pd.Categorical(["A", "B"]), "cat_col")
+        finally:
+            logger.removeHandler(caplog.handler)
+    assert not any("ignored" in r.message for r in caplog.records)
+
+
+# -- Fix: warn on color_vector length mismatch in _build_datashader_color_key --
+
+
+def test_color_key_warns_on_short_color_vector(caplog):
+    """Warning when color_vector is shorter than categorical series."""
+    cat = pd.Categorical(["A", "B", "C", "A", "B", "C", "A"])
+    with logger_warns(caplog, logger, match="color_vector length"):
+        result = _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#0000ff", "#ff0000", "#00ff00"], "#cccccc")
+    assert "A" in result and "B" in result and "C" in result
+
+
+def test_color_key_warns_on_long_color_vector(caplog):
+    """Warning when color_vector is longer than categorical series."""
+    cat = pd.Categorical(["A", "B"])
+    with logger_warns(caplog, logger, match="color_vector length"):
+        _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#0000ff", "#ffff00"], "#cccccc")
+
+
+def test_color_key_no_warning_when_lengths_match(caplog):
+    """No warning when lengths match."""
+    cat = pd.Categorical(["A", "B", "C"])
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        logger.addHandler(caplog.handler)
+        try:
+            _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#0000ff"], "#cccccc")
+        finally:
+            logger.removeHandler(caplog.handler)
+    assert not any("color_vector length" in r.message for r in caplog.records)
+
+
+def test_color_key_unseen_category_gets_na_color(caplog):
+    """Categories only appearing after the truncation point get na_color."""
+    cat = pd.Categorical(["A", "B", "A", "B", "A", "D"])
+    with logger_warns(caplog, logger, match="color_vector length"):
+        result = _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#ff0000", "#00ff00"], "#cccccc")
+    assert result["D"] == "#cccccc"
+
+
+# -- Fix: _ds_shade_categorical only sets cmap when no color_key --
+
+
+def test_shade_categorical_color_key_overrides_cmap():
+    """When color_key is provided, different color_vector[0] values must produce identical output."""
+    cvs, df = _make_ds_canvas_and_df(n=100)
+    agg = cvs.points(df, "x", "y", agg=ds.by("cat", ds.count()))
+    color_key = {"A": "#ff0000", "B": "#00ff00", "C": "#0000ff"}
+
+    shaded1 = _ds_shade_categorical(agg, color_key, np.array(["#ff0000"] * 100), alpha=1.0)
+    shaded2 = _ds_shade_categorical(agg, color_key, np.array(["#0000ff"] * 100), alpha=1.0)
+    np.testing.assert_array_equal(np.asarray(shaded1), np.asarray(shaded2))
+
+
+def test_shade_categorical_cmap_used_when_no_color_key():
+    """When color_key is None (no color column), cmap is set from color_vector[0]."""
+    cvs, df = _make_ds_canvas_and_df(n=100)
+    agg = cvs.points(df, "x", "y", agg=ds.count())
+    shaded = _ds_shade_categorical(agg, None, np.array(["#ff0000"] * 100), alpha=1.0)
+    assert shaded is not None
