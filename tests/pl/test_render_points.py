@@ -1,4 +1,3 @@
-import logging
 import math
 
 import dask.dataframe
@@ -24,7 +23,7 @@ from spatialdata.transformations import (
 from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
-from spatialdata_plot._logging import logger, logger_warns
+from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
 from spatialdata_plot.pl._datashader import (
     _build_datashader_color_key,
     _ds_aggregate,
@@ -832,13 +831,8 @@ def test_ds_reduction_ignored_for_categorical(caplog):
 def test_ds_reduction_no_warning_when_none(caplog):
     """No spurious warning when ds_reduction is None (the default)."""
     cvs, df = _make_ds_canvas_and_df()
-    with caplog.at_level(logging.WARNING, logger=logger.name):
-        logger.addHandler(caplog.handler)
-        try:
-            _ds_aggregate(cvs, df.copy(), "cat", True, None, "sum", "points")
-        finally:
-            logger.removeHandler(caplog.handler)
-    assert not any("ignored" in r.message.lower() for r in caplog.records)
+    with logger_no_warns(caplog, logger, match="ignored"):
+        _ds_aggregate(cvs, df.copy(), "cat", True, None, "sum", "points")
 
 
 @pytest.mark.parametrize("reduction", ["mean", "max", "min", "count", "std", "var"])
@@ -866,13 +860,8 @@ def test_warn_groups_ignored_continuous_emits(caplog):
 
 def test_warn_groups_ignored_continuous_silent_for_categorical(caplog):
     """No warning when color_source_vector is present (categorical)."""
-    with caplog.at_level(logging.WARNING, logger=logger.name):
-        logger.addHandler(caplog.handler)
-        try:
-            _warn_groups_ignored_continuous(["A"], pd.Categorical(["A", "B"]), "cat_col")
-        finally:
-            logger.removeHandler(caplog.handler)
-    assert not any("ignored" in r.message for r in caplog.records)
+    with logger_no_warns(caplog, logger, match="ignored"):
+        _warn_groups_ignored_continuous(["A"], pd.Categorical(["A", "B"]), "cat_col")
 
 
 def test_color_key_warns_on_short_color_vector(caplog):
@@ -893,13 +882,8 @@ def test_color_key_warns_on_long_color_vector(caplog):
 def test_color_key_no_warning_when_lengths_match(caplog):
     """No warning when lengths match."""
     cat = pd.Categorical(["A", "B", "C"])
-    with caplog.at_level(logging.WARNING, logger=logger.name):
-        logger.addHandler(caplog.handler)
-        try:
-            _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#0000ff"], "#cccccc")
-        finally:
-            logger.removeHandler(caplog.handler)
-    assert not any("color_vector length" in r.message for r in caplog.records)
+    with logger_no_warns(caplog, logger, match="color_vector length"):
+        _build_datashader_color_key(cat, ["#ff0000", "#00ff00", "#0000ff"], "#cccccc")
 
 
 def test_color_key_unseen_category_gets_na_color(caplog):

@@ -1175,3 +1175,38 @@ def test_render_shapes_color_with_conflicting_index_name():
 
     # Should not raise ValueError: cannot insert EntityID, already exists
     sdata.pl.render_shapes("shapes", color="cell_type", table_name="table").pl.show()
+
+
+def test_datashader_colorbar_range_matches_data(sdata_blobs: SpatialData):
+    """Datashader colorbar range must not exceed the actual data range for shapes.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/559.
+    Before the fix, shapes defaulted to 'sum' aggregation, causing overlapping
+    shapes to inflate the colorbar beyond the true data maximum.
+    """
+    n = len(sdata_blobs.shapes["blobs_circles"])
+    rng = np.random.default_rng(0)
+    values = rng.uniform(0, 100, size=n)
+    sdata_blobs.shapes["blobs_circles"]["continuous_val"] = values
+    data_max = float(values.max())
+    data_min = float(values.min())
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", color="continuous_val", method="datashader").pl.show(ax=ax)
+
+    # Find the colorbar axis — it's a child axes with a ScalarMappable
+    cbar_vmax = None
+    cbar_vmin = None
+    for child in fig.get_children():
+        if isinstance(child, matplotlib.axes.Axes) and child is not ax:
+            ylim = child.get_ylim()
+            if ylim != (0.0, 1.0):  # colorbar axes have non-default limits
+                cbar_vmin, cbar_vmax = ylim
+
+    assert cbar_vmax is not None, "Could not find colorbar in figure"
+    assert cbar_vmax <= data_max * 1.01, (
+        f"Colorbar max ({cbar_vmax:.2f}) exceeds data max ({data_max:.2f}); "
+        "datashader aggregation is likely using 'sum' instead of 'max'"
+    )
+    assert cbar_vmin >= data_min * 0.99 - 0.01, f"Colorbar min ({cbar_vmin:.2f}) is below data min ({data_min:.2f})"
+    plt.close(fig)
