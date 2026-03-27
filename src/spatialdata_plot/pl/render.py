@@ -784,6 +784,10 @@ def _render_points(
     # from the registered points (see above) avoids duplicate-origin ambiguities.
     color_table_name = table_name
 
+    # When color was already loaded from a table (line 690), pass it directly
+    # to avoid a redundant get_values() call inside _set_color_source_vec.
+    _preloaded = points_pd_with_color[col_for_color] if added_color_from_table and col_for_color else None
+
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
         element=color_element,
@@ -797,6 +801,7 @@ def _render_points(
         table_name=color_table_name,
         render_type="points",
         coordinate_system=coordinate_system,
+        preloaded_color_data=_preloaded,
     )
 
     if added_color_from_table and col_for_color is not None:
@@ -874,7 +879,7 @@ def _render_points(
                     if isinstance(color_source_vector, pd.Series)
                     else pd.Series(color_source_vector, index=series_index)
                 )
-                transformed_element = transformed_element.assign(col_for_color=source_series)
+                transformed_element[col_for_color] = source_series
             else:
                 if isinstance(color_vector, dd.Series):
                     color_vector = color_vector.compute()
@@ -883,8 +888,7 @@ def _render_points(
                     if isinstance(color_vector, pd.Series)
                     else pd.Series(color_vector, index=series_index)
                 )
-                transformed_element = transformed_element.assign(col_for_color=color_series)
-            transformed_element = transformed_element.rename(columns={"col_for_color": col_for_color})
+                transformed_element[col_for_color] = color_series
 
         color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
         color_by_categorical = col_for_color is not None and (

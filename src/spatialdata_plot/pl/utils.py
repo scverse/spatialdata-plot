@@ -1019,6 +1019,7 @@ def _set_color_source_vec(
     table_layer: str | None = None,
     render_type: Literal["points", "labels"] | None = None,
     coordinate_system: str | None = None,
+    preloaded_color_data: pd.Series | None = None,
 ) -> tuple[ArrayLike | pd.Series | None, ArrayLike, bool]:
     if value_to_plot is None and element is not None:
         color = np.full(len(element), na_color.get_hex_with_alpha())
@@ -1046,13 +1047,16 @@ def _set_color_source_vec(
                 element_name=element_name,
                 table_name=table_name,
             )
-        color_source_vector = get_values(
-            value_key=value_to_plot,
-            sdata=sdata,
-            element_name=element_name,
-            table_name=table_name,
-            table_layer=table_layer,
-        )[value_to_plot]
+        if preloaded_color_data is not None:
+            color_source_vector = preloaded_color_data
+        else:
+            color_source_vector = get_values(
+                value_key=value_to_plot,
+                sdata=sdata,
+                element_name=element_name,
+                table_name=table_name,
+                table_layer=table_layer,
+            )[value_to_plot]
 
         color_series = (
             color_source_vector if isinstance(color_source_vector, pd.Series) else pd.Series(color_source_vector)
