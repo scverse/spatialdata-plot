@@ -279,6 +279,25 @@ class TestRGBARendering:
         sdata.pl.render_images("img").pl.show(ax=ax)
         plt.close("all")
 
+    def test_float_rgb_outside_01_auto_ranges(self):
+        """Float RGB image with values outside [0, 1] should auto-range globally."""
+        data = np.zeros((3, 50, 50), dtype=np.float32)
+        data[0] = 2000.0  # all channels have different magnitudes
+        data[1] = 1000.0
+        data[2] = 500.0
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_cmap_overrides_rgba_detection(self):
+        """Explicit single cmap should skip RGBA path and use multi-channel rendering."""
+        sdata = self._make_rgba_sdata(["r", "g", "b", "a"])
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", cmap="Reds").pl.show(ax=ax)
+        plt.close("all")
+
 
 class TestMultiChannelClipping:
     """Regression tests: multi-channel compositing should not produce clipping warnings."""

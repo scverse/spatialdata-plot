@@ -1019,7 +1019,9 @@ def _render_points(
 
 
 def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
-    """Normalize an array to float64 in [0, 1] for matplotlib.
+    """Normalize an array to float64 in [0, 1] for display with matplotlib.
+
+    Intended for RGB/RGBA image data where negative values are not meaningful.
 
     - uint8 → divide by 255
     - other unsigned int → divide by dtype max
@@ -1040,6 +1042,12 @@ def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
         return arr_f
     if vmin == vmax:
         return np.zeros_like(arr_f)
+    logger.info(
+        "Float RGB image has values outside [0, 1] (range [%.3f, %.3f]); "
+        "auto-ranging globally. Pass an explicit 'norm' to control contrast.",
+        vmin,
+        vmax,
+    )
     result: np.ndarray = (arr_f - vmin) / (vmax - vmin)
     return result
 
