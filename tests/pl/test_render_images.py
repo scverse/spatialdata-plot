@@ -181,6 +181,9 @@ class TestRGBDetection:
     def test_rgb_with_extra_channel_not_detected(self):
         assert _is_rgb_image(["r", "g", "b", "x"]) == (False, False)
 
+    def test_duplicate_channel_names_not_detected(self):
+        assert _is_rgb_image(["r", "g", "b", "b"]) == (False, False)
+
 
 class TestRGBARendering:
     """Regression tests for #406: RGBA images rendered correctly."""
@@ -241,4 +244,29 @@ class TestRGBARendering:
         sdata = self._make_rgba_sdata(["r", "g", "b", "a"], alpha_val=0.5)
         fig, ax = plt.subplots()
         sdata.pl.render_images("img", alpha=0.3).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_uint8_rgb_renders(self):
+        """uint8 RGB image should be normalized to [0, 1] and render correctly."""
+        data = np.zeros((3, 50, 50), dtype=np.uint8)
+        data[0] = 200
+        data[1] = 100
+        data[2] = 50
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
+        plt.close("all")
+
+    def test_uint16_rgba_renders(self):
+        """uint16 RGBA image should be normalized and render correctly."""
+        data = np.zeros((4, 50, 50), dtype=np.uint16)
+        data[0] = 50000
+        data[1] = 30000
+        data[2] = 10000
+        data[3] = 65535  # fully opaque
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b", "a"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img").pl.show(ax=ax)
         plt.close("all")

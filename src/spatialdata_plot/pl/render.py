@@ -1034,9 +1034,9 @@ def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
         (is_rgb, has_alpha) — whether the image is RGB and whether it includes an alpha channel.
     """
     names = {str(c).lower() for c in channel_coords}
-    if names == {"r", "g", "b", "a"}:
+    if names == {"r", "g", "b", "a"} and len(channel_coords) == 4:
         return True, True
-    if names == {"r", "g", "b"}:
+    if names == {"r", "g", "b"} and len(channel_coords) == 3:
         return True, False
     return False, False
 
@@ -1114,12 +1114,26 @@ def _render_images(
     if is_rgb and palette is None and not got_multiple_cmaps and not has_explicit_cmap:
         coord_map = {str(c).lower(): c for c in channels}
         ordered = [coord_map[ch] for ch in ("r", "g", "b")]
-        stacked = np.moveaxis(img.sel(c=ordered).squeeze().values, 0, -1)
+        stacked = np.moveaxis(img.sel(c=ordered).values, 0, -1)
+
+        # Normalize to [0, 1] for matplotlib: uint8 → /255, other int dtypes → /max, float → clip
+        if stacked.dtype == np.uint8:
+            stacked = stacked.astype(np.float64) / 255.0
+        elif stacked.dtype.kind in ("u", "i"):
+            stacked = stacked.astype(np.float64) / np.iinfo(stacked.dtype).max
+        else:
+            stacked = np.clip(stacked, 0, 1)
 
         show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
 
         if has_alpha and render_params.alpha == 1.0:
-            alpha_layer = np.clip(img.sel(c=coord_map["a"]).squeeze().values, 0, 1)
+            alpha_raw = img.sel(c=coord_map["a"]).values
+            if alpha_raw.dtype == np.uint8:
+                alpha_layer = alpha_raw.astype(np.float64) / 255.0
+            elif alpha_raw.dtype.kind in ("u", "i"):
+                alpha_layer = alpha_raw.astype(np.float64) / np.iinfo(alpha_raw.dtype).max
+            else:
+                alpha_layer = np.clip(alpha_raw.astype(np.float64), 0, 1)
             stacked = np.concatenate([stacked, alpha_layer[..., np.newaxis]], axis=-1)
         else:
             show_kwargs["alpha"] = render_params.alpha
