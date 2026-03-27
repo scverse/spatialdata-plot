@@ -62,6 +62,11 @@ def _build_datashader_color_key(
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
     colors_arr = np.asarray(color_vector, dtype=object)
+    if len(colors_arr) != len(cat_series.codes):
+        logger.warning(
+            f"color_vector length ({len(colors_arr)}) does not match categorical series length "
+            f"({len(cat_series.codes)}); some categories may receive the na_color fallback."
+        )
     first_color: dict[str, str] = {}
     for code, color in zip(cat_series.codes, colors_arr, strict=False):
         if code < 0:
@@ -119,6 +124,11 @@ def _ds_aggregate(
 
     if col_for_color is not None:
         if color_by_categorical:
+            if ds_reduction is not None:
+                logger.warning(
+                    f'ds_reduction="{ds_reduction}" is ignored for categorical data; '
+                    "categorical aggregation always uses count."
+                )
             transformed_element[col_for_color] = _inject_ds_nan_sentinel(transformed_element[col_for_color])
             agg = _agg_call(transformed_element, ds.by(col_for_color, ds.count()))
         else:
@@ -127,7 +137,9 @@ def _ds_aggregate(
                 f'Using the datashader reduction "{reduction_name}". "max" will give an output '
                 "very close to the matplotlib result."
             )
-            agg = _datashader_aggregate_with_function(ds_reduction, cvs, transformed_element, col_for_color, geom_type)
+            agg = _datashader_aggregate_with_function(
+                reduction_name, cvs, transformed_element, col_for_color, geom_type
+            )
             reduction_bounds = (agg.min(), agg.max())
 
             nan_elements = transformed_element[transformed_element[col_for_color].isnull()]
@@ -244,7 +256,7 @@ def _ds_shade_categorical(
 ) -> Any:
     """Shade a categorical or no-color datashader aggregate."""
     ds_cmap = None
-    if color_vector is not None:
+    if color_key is None and color_vector is not None:
         ds_cmap = color_vector[0]
         if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
             ds_cmap = _hex_no_alpha(ds_cmap)
