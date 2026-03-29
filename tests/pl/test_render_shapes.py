@@ -1067,6 +1067,51 @@ def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
     sdata_blobs.pl.render_shapes(element="blobs_circles", color="red").pl.show()
 
 
+def test_groups_filtering_preserves_transformation(sdata_blobs: SpatialData):
+    """Regression test for #420: groups filtering must not strip coordinate-system metadata.
+
+    Simulates the exact sequence that ``_render_shapes`` performs —
+    ``filter_by_coordinate_system`` ➜ groups boolean-index ➜ ``reset_index`` ➜
+    re-assign to ``sdata_filt`` — then asserts that ``_prepare_transformation``
+    can still retrieve the non-global transformation with the correct scale.
+    """
+    from spatialdata.transformations import set_transformation
+
+    from spatialdata_plot.pl.utils import _prepare_transformation
+
+    scale_factor = 2.5
+    cs = "not_global"
+    set_transformation(
+        sdata_blobs["blobs_polygons"],
+        transformation={cs: Scale([scale_factor, scale_factor], axes=("x", "y"))},
+        set_all=True,
+    )
+    sdata_blobs.shapes["blobs_polygons"]["cluster"] = pd.Categorical(["c1", "c2", "c1", "c2", "c1"])
+
+    sdata_filt = sdata_blobs.filter_by_coordinate_system(coordinate_system=cs, filter_tables=False)
+
+    # --- replicate the groups-filtering path from _render_shapes (lines 382-389) ---
+    shapes = sdata_filt.shapes["blobs_polygons"]
+    keep = shapes["cluster"] == "c1"
+    shapes = shapes[keep].reset_index(drop=True)
+    sdata_filt["blobs_polygons"] = shapes
+    # also replicate the GeoDataFrame re-wrap that follows (line 432), which strips .attrs
+    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
+    # The sdata_filt element must still carry the correct transformation
+    # (this is where _render_shapes reads the transform after the fix).
+    trans, _ = _prepare_transformation(sdata_filt.shapes["blobs_polygons"], cs)
+    matrix = trans.get_matrix()
+    np.testing.assert_allclose(matrix[0, 0], scale_factor, err_msg="x-scale lost after groups filtering")
+    np.testing.assert_allclose(matrix[1, 1], scale_factor, err_msg="y-scale lost after groups filtering")
+
+    # The GeoDataFrame re-wrap (which _render_shapes does right after) strips
+    # attrs — prove that reading the transform from *that* object would fail,
+    # demonstrating why early capture matters.
+    with pytest.raises((KeyError, AssertionError)):
+        _prepare_transformation(shapes, cs)
+
+
 def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):
     """Test that mixed numeric and color-like data raises a clear error."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)

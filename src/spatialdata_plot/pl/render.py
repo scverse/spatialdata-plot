@@ -350,6 +350,10 @@ def _render_shapes(
 
     shapes = sdata_filt[element]
 
+    # Capture the transformation *before* any groups filtering that may strip
+    # coordinate-system metadata from the element (see #420, #447).
+    trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
+
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
@@ -424,9 +428,6 @@ def _render_shapes(
     if has_valid_color and color_source_vector is not None and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table
         color_source_vector = color_source_vector.remove_unused_categories()
-
-    # Apply the transformation to the PatchCollection's paths
-    trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
     # convert shapes if necessary
