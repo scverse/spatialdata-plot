@@ -1210,3 +1210,45 @@ def test_datashader_colorbar_range_matches_data(sdata_blobs: SpatialData):
     )
     assert cbar_vmin >= data_min * 0.99 - 0.01, f"Colorbar min ({cbar_vmin:.2f}) is below data min ({data_min:.2f})"
     plt.close(fig)
+
+
+def test_datashader_na_color_none_no_nan_overlay(sdata_blobs: SpatialData):
+    """Datashader must not render NaN overlay when na_color is fully transparent.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/565.
+    Before the fix, _hex_no_alpha stripped the transparency from na_color=None,
+    causing NaN shapes to render as opaque grey.
+    """
+    n = len(sdata_blobs.shapes["blobs_circles"])
+    values = np.full(n, np.nan)
+    values[: n // 2] = np.random.default_rng(0).uniform(0, 100, n // 2)
+    sdata_blobs.shapes["blobs_circles"]["val"] = values
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", color="val", na_color=None, method="datashader").pl.show(ax=ax)
+
+    # With na_color=None the NaN overlay should be skipped: only 1 image (the main data).
+    # Before the fix there were 2 images (NaN overlay + main data).
+    assert len(ax.get_images()) == 1, (
+        f"Expected 1 image (no NaN overlay), got {len(ax.get_images())}; "
+        "datashader is still rendering an opaque NaN overlay despite na_color=None"
+    )
+    plt.close(fig)
+
+
+def test_datashader_na_color_opaque_renders_nan_overlay(sdata_blobs: SpatialData):
+    """Datashader must still render the NaN overlay when na_color is opaque."""
+    n = len(sdata_blobs.shapes["blobs_circles"])
+    values = np.full(n, np.nan)
+    values[: n // 2] = np.random.default_rng(0).uniform(0, 100, n // 2)
+    sdata_blobs.shapes["blobs_circles"]["val"] = values
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", color="val", na_color="red", method="datashader").pl.show(ax=ax)
+
+    # With opaque na_color, the NaN overlay should be present: 2 images.
+    assert len(ax.get_images()) == 2, (
+        f"Expected 2 images (NaN overlay + main data), got {len(ax.get_images())}; "
+        "NaN overlay is missing for opaque na_color"
+    )
+    plt.close(fig)

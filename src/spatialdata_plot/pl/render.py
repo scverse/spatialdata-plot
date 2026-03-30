@@ -530,6 +530,9 @@ def _render_shapes(
 
         agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        # Skip NaN overlay when na_color is fully transparent (#565)
+        if render_params.cmap_params.na_color.alpha == "00":
+            nan_agg = None
         color_key = _build_color_key(
             transformed_element,
             col_for_color,
@@ -925,6 +928,9 @@ def _render_points(
 
         agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        # Skip NaN overlay when na_color is fully transparent (#565)
+        if render_params.cmap_params.na_color.alpha == "00":
+            nan_agg = None
         color_key = _build_color_key(
             transformed_element,
             col_for_color,

@@ -913,3 +913,25 @@ def test_shade_categorical_cmap_used_when_no_color_key():
     shaded_blue = _ds_shade_categorical(agg, None, np.array(["#0000ff"] * 100), alpha=1.0)
     # Different color_vector[0] values should produce different shaded output
     assert not np.array_equal(np.asarray(shaded_red), np.asarray(shaded_blue))
+
+
+def test_datashader_na_color_none_no_nan_overlay_points(sdata_blobs: SpatialData):
+    """Datashader must not render NaN overlay when na_color is fully transparent.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/565.
+    """
+    pts = sdata_blobs.points["blobs_points"].compute()
+    n = len(pts)
+    values = np.full(n, np.nan)
+    values[: n // 2] = np.random.default_rng(0).uniform(0, 100, n // 2)
+    pts["val"] = values
+    sdata_blobs.points["blobs_points"] = PointsModel.parse(pts)
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_points("blobs_points", color="val", na_color=None, method="datashader").pl.show(ax=ax)
+
+    assert len(ax.get_images()) == 1, (
+        f"Expected 1 image (no NaN overlay), got {len(ax.get_images())}; "
+        "datashader is still rendering an opaque NaN overlay despite na_color=None"
+    )
+    plt.close(fig)
