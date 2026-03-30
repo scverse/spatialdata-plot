@@ -916,10 +916,7 @@ def test_shade_categorical_cmap_used_when_no_color_key():
 
 
 def test_datashader_na_color_none_no_nan_overlay_points(sdata_blobs: SpatialData):
-    """Datashader must not render NaN overlay when na_color is fully transparent.
-
-    Regression test for https://github.com/scverse/spatialdata-plot/issues/565.
-    """
+    """NaN overlay is skipped when na_color is fully transparent (#565)."""
     pts = sdata_blobs.points["blobs_points"].compute()
     n = len(pts)
     values = np.full(n, np.nan)
