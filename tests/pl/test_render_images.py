@@ -2,6 +2,7 @@ import dask.array as da
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import scanpy as sc
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
@@ -150,7 +151,81 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         fig.tight_layout()
 
 
-# Regression tests for #406: RGBA image support
+# ---------------------------------------------------------------------------
+# Grayscale + transfunc visual tests
+# ---------------------------------------------------------------------------
+
+
+class TestGrayscale(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_grayscale_renders(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_image", grayscale=True).pl.show()
+
+    def test_plot_grayscale_explicit_cmap(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_image", grayscale=True, cmap="viridis").pl.show()
+
+    def test_plot_grayscale_uint8(self, sdata_raccoon: SpatialData):
+        sdata_raccoon.pl.render_images("raccoon", grayscale=True).pl.show()
+
+    def test_grayscale_default_cmap_is_gray(self, sdata_blobs: SpatialData):
+        """When grayscale=True and no explicit cmap, the colormap should be 'gray'."""
+        fig, ax = plt.subplots()
+        sdata_blobs.pl.render_images("blobs_image", grayscale=True).pl.show(ax=ax)
+        images = ax.get_images()
+        assert len(images) == 1
+        assert images[0].cmap.name == "gray"
+        plt.close("all")
+
+    def test_grayscale_wrong_channel_count_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="grayscale=True requires exactly 3 channels"):
+            sdata_blobs.pl.render_images("blobs_image", channel=0, grayscale=True).pl.show()
+        plt.close("all")
+
+    def test_grayscale_with_palette_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="Cannot combine grayscale=True with palette"):
+            sdata_blobs.pl.render_images("blobs_image", grayscale=True, palette=["red", "green", "blue"]).pl.show()
+        plt.close("all")
+
+
+class TestTransfunc(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_transfunc_log1p(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_image", transfunc=np.log1p).pl.show()
+
+    def test_plot_transfunc_channel_reduction(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images("blobs_image", transfunc=lambda x: x[:1]).pl.show()
+
+    def test_plot_transfunc_list_per_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            "blobs_image",
+            transfunc=[lambda c: c**0.3, np.log1p, np.sqrt],
+        ).pl.show()
+
+    def test_plot_transfunc_with_norm(self, sdata_blobs: SpatialData):
+        norm = Normalize(vmin=0.0, vmax=0.5, clip=True)
+        sdata_blobs.pl.render_images("blobs_image", transfunc=np.sqrt, norm=norm).pl.show()
+
+    def test_plot_transfunc_then_grayscale(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            "blobs_image",
+            transfunc=[lambda c: c**0.8, lambda c: c, lambda c: c**0.9],
+            grayscale=True,
+        ).pl.show()
+
+    def test_transfunc_list_wrong_length_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="Length of transfunc list"):
+            sdata_blobs.pl.render_images("blobs_image", transfunc=[np.sqrt, np.log1p]).pl.show()
+        plt.close("all")
+
+    def test_transfunc_wrong_output_channels_with_grayscale_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="grayscale=True requires exactly 3 channels"):
+            sdata_blobs.pl.render_images(
+                "blobs_image",
+                transfunc=lambda x: x[:1],
+                grayscale=True,
+            ).pl.show()
+        plt.close("all")
+
+
+# Regression tests for RGBA image support
 class TestRGBDetection:
     """Unit tests for _is_rgb_image helper."""
 
@@ -186,7 +261,7 @@ class TestRGBDetection:
 
 
 class TestRGBARendering:
-    """Regression tests for #406: RGBA images rendered correctly."""
+    """Regression tests: RGBA images rendered correctly."""
 
     @staticmethod
     def _make_rgba_sdata(c_coords: list, alpha_val: float = 1.0) -> SpatialData:

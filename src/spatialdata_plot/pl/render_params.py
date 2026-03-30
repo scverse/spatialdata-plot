@@ -269,6 +269,8 @@ class ImageRenderParams:
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+    transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
+    grayscale: bool = False
 
 
 @dataclass
