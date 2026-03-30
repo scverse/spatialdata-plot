@@ -138,6 +138,10 @@ class Color:
         """Get whether an alpha was set during object creation."""
         return self.user_defined_alpha
 
+    def is_fully_transparent(self) -> bool:
+        """Check whether this color is fully transparent (alpha == 0)."""
+        return self.alpha == "00"
+
 
 @dataclass
 class CmapParams:

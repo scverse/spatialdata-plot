@@ -383,7 +383,7 @@ def _render_shapes(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
+    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.is_fully_transparent()):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -535,6 +535,8 @@ def _render_shapes(
 
         agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        if render_params.cmap_params.na_color.is_fully_transparent():
+            nan_agg = None
         color_key = _build_color_key(
             transformed_element,
             col_for_color,
@@ -837,7 +839,7 @@ def _render_points(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.alpha == "00"):
+    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.is_fully_transparent()):
         keep, color_source_vector, color_vector = _filter_groups_transparent_na(
             groups, color_source_vector, color_vector
         )
@@ -930,6 +932,8 @@ def _render_points(
 
         agg, color_span = _apply_ds_norm(agg, norm)
         na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
+        if render_params.cmap_params.na_color.is_fully_transparent():
+            nan_agg = None
         color_key = _build_color_key(
             transformed_element,
             col_for_color,
@@ -1557,7 +1561,7 @@ def _render_labels(
         groups is not None
         and categorical
         and color_source_vector is not None
-        and (_na.default_color_set or _na.alpha == "00")
+        and (_na.default_color_set or _na.is_fully_transparent())
     ):
         keep_vec = color_source_vector.isin(groups)
         matching_ids = instance_id[keep_vec]
