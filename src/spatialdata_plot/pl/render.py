@@ -354,6 +354,10 @@ def _render_shapes(
 
     shapes = sdata_filt[element]
 
+    # Capture the transformation *before* any groups filtering that may strip
+    # coordinate-system metadata from the element (see #420, #447).
+    trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
+
     # get color vector (categorical or continuous)
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
@@ -428,9 +432,6 @@ def _render_shapes(
     if has_valid_color and color_source_vector is not None and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table
         color_source_vector = color_source_vector.remove_unused_categories()
-
-    # Apply the transformation to the PatchCollection's paths
-    trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
     # convert shapes if necessary
@@ -1029,6 +1030,63 @@ def _grayscale_transform(img_cyx: np.ndarray) -> np.ndarray:
     return np.tensordot(_LUMINANCE_WEIGHTS, img_cyx, axes=([0], [0]))[np.newaxis]
 
 
+def _normalize_dtype_to_float(arr: np.ndarray) -> np.ndarray:
+    """Normalize an array to float64 in [0, 1] for display with matplotlib.
+
+    Intended for RGB/RGBA image data where negative values are not meaningful.
+
+    - uint8 → divide by 255
+    - other unsigned int → divide by dtype max
+    - signed int → divide by dtype max, clip negatives to 0
+    - float already in [0, 1] → pass through
+    - float outside [0, 1] → global auto-range (preserves relative balance across channels)
+    """
+    if arr.dtype == np.uint8:
+        return arr.astype(np.float64) / 255.0
+    if arr.dtype.kind == "u":
+        return arr.astype(np.float64) / np.iinfo(arr.dtype).max
+    if arr.dtype.kind == "i":
+        return np.clip(arr.astype(np.float64) / np.iinfo(arr.dtype).max, 0, 1)
+    # Float: if already in [0, 1], keep as-is; otherwise auto-range globally
+    arr_f: np.ndarray = arr.astype(np.float64)
+    vmin, vmax = arr_f.min(), arr_f.max()
+    if vmin >= 0.0 and vmax <= 1.0:
+        return arr_f
+    if vmin == vmax:
+        return np.zeros_like(arr_f)
+    logger.info(
+        "Float RGB image has values outside [0, 1] (range [%.3f, %.3f]); "
+        "auto-ranging globally. Pass an explicit 'norm' to control contrast.",
+        vmin,
+        vmax,
+    )
+    result: np.ndarray = (arr_f - vmin) / (vmax - vmin)
+    return result
+
+
+def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
+    """Check if channel coordinates indicate an RGB(A) image.
+
+    Checks case-insensitively whether channel names are {r, g, b} or {r, g, b, a}.
+
+    Parameters
+    ----------
+    channel_coords
+        The channel coordinate values from the image.
+
+    Returns
+    -------
+    tuple[bool, bool]
+        (is_rgb, has_alpha) — whether the image is RGB and whether it includes an alpha channel.
+    """
+    names = {str(c).lower() for c in channel_coords}
+    if names == {"r", "g", "b", "a"} and len(channel_coords) == 4:
+        return True, True
+    if names == {"r", "g", "b"} and len(channel_coords) == 3:
+        return True, False
+    return False, False
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -1149,6 +1207,50 @@ def _render_images(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
+    # Detect RGB(A) images by channel names — skip when user overrides with palette/cmap
+    is_rgb, has_alpha = _is_rgb_image(channels)
+    has_explicit_cmap = (
+        isinstance(render_params.cmap_params, CmapParams) and not render_params.cmap_params.cmap_is_default
+    )
+    if is_rgb and palette is None and not got_multiple_cmaps and not has_explicit_cmap:
+        coord_map = {str(c).lower(): c for c in channels}
+        ordered = [coord_map[ch] for ch in ("r", "g", "b")]
+
+        # Apply norm per channel if user provided one, otherwise normalize by dtype
+        user_norm = (
+            render_params.cmap_params.norm
+            if isinstance(render_params.cmap_params, CmapParams)
+            and isinstance(render_params.cmap_params.norm, Normalize)
+            and (render_params.cmap_params.norm.vmin is not None or render_params.cmap_params.norm.vmax is not None)
+            else None
+        )
+
+        if user_norm is not None:
+            rgb_layers = []
+            for ch in ordered:
+                ch_norm = copy(user_norm)
+                rgb_layers.append(np.clip(ch_norm(img.sel(c=ch).values).astype(np.float64), 0, 1))
+            stacked = np.stack(rgb_layers, axis=-1)
+        else:
+            stacked = _normalize_dtype_to_float(np.moveaxis(img.sel(c=ordered).values, 0, -1))
+
+        show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
+
+        if has_alpha and render_params.alpha == 1.0:
+            alpha_layer = _normalize_dtype_to_float(img.sel(c=coord_map["a"]).values)
+            stacked = np.concatenate([stacked, alpha_layer[..., np.newaxis]], axis=-1)
+        else:
+            show_kwargs["alpha"] = render_params.alpha
+            if has_alpha:
+                logger.info(
+                    "Image has an alpha channel, but an explicit 'alpha' value was provided. "
+                    "Using the user-specified alpha=%.2f instead of the per-pixel alpha from the data.",
+                    render_params.alpha,
+                )
+
+        _ax_show_and_transform(stacked, trans_data, ax, **show_kwargs)
+        return
+
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
         layer = img.sel(c=channels[0]).squeeze() if isinstance(channels[0], str) else img.isel(c=channels[0]).squeeze()
@@ -1204,13 +1306,16 @@ def _render_images(
             else:
                 ch_norm = render_params.cmap_params.norm
 
-            if ch_norm is not None:
-                layers[ch] = ch_norm(layers[ch])
+            # Auto-ranging norms are stateful — copy so each channel normalizes independently
+            if isinstance(ch_norm, Normalize) and (ch_norm.vmin is None or ch_norm.vmax is None):
+                ch_norm = copy(ch_norm)
+
+            layers[ch] = ch_norm(layers[ch])
 
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
-                stacked = np.stack([layers[ch] for ch in layers], axis=-1)
+                stacked = np.clip(np.stack([layers[ch] for ch in layers], axis=-1), 0, 1)
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
@@ -1248,7 +1353,7 @@ def _render_images(
                     [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
-                colored = colored[:, :, :3]
+                colored = np.clip(colored[:, :, :3], 0, 1)
             elif n_channels == 3:
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
@@ -1256,7 +1361,7 @@ def _render_images(
                     [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
                     0,
                 ).sum(0)
-                colored = colored[:, :, :3]
+                colored = np.clip(colored[:, :, :3], 0, 1)
             else:
                 if isinstance(render_params.cmap_params, list):
                     cmap_is_default = render_params.cmap_params[0].cmap_is_default
@@ -1307,7 +1412,7 @@ def _render_images(
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = colored[:, :, :3]
+            colored = np.clip(colored[:, :, :3], 0, 1)
 
             _ax_show_and_transform(
                 colored,

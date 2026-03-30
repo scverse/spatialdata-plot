@@ -506,7 +506,7 @@ class PlotAccessor:
 
         return sdata
 
-    @_deprecation_alias(elements="element", quantiles_for_norm="percentiles_for_norm", version="version 0.3.0")
+    @_deprecation_alias(elements="element", version="version 0.3.0")
     def render_images(
         self,
         element: str | None = None,
