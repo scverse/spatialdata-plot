@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 import matplotlib
+import matplotlib.pyplot as plt
 import scanpy as sc
 from spatialdata import SpatialData
 
@@ -21,3 +24,19 @@ _ = spatialdata_plot
 class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
+
+    def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
+        """plt.show() must not be called when the user supplies ax= (regression for #362)."""
+        _, ax = plt.subplots()
+        with patch("spatialdata_plot.pl.basic.plt.show") as mock_show:
+            sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax)
+            mock_show.assert_not_called()
+        plt.close("all")
+
+    def test_plt_show_when_ax_provided_and_show_true(self, sdata_blobs: SpatialData):
+        """Explicit show=True still calls plt.show() even with ax=."""
+        _, ax = plt.subplots()
+        with patch("spatialdata_plot.pl.basic.plt.show") as mock_show:
+            sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax, show=True)
+            mock_show.assert_called_once()
+        plt.close("all")
