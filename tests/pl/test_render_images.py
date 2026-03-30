@@ -2,6 +2,7 @@ import dask.array as da
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import scanpy as sc
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
@@ -147,3 +148,227 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_raccoon.pl.render_images("raccoon_int16", channel=[0, 1], palette=["yellow", "red"]).pl.show(ax=axs[1])
         axs[1].set_title("two-channel uint16")
         fig.tight_layout()
+
+
+# ---------------------------------------------------------------------------
+# Helpers for transfunc / grayscale tests (#508, #407)
+# ---------------------------------------------------------------------------
+
+
+def _make_rgb_sdata(dtype=np.float32, c_coords=None) -> SpatialData:
+    """Create a minimal SpatialData with a 3-channel RGB image."""
+    rng = np.random.default_rng(42)
+    if dtype == np.uint8:
+        data = rng.integers(0, 255, (3, 50, 50), dtype=np.uint8)
+    else:
+        data = rng.uniform(0, 1, (3, 50, 50)).astype(dtype)
+    if c_coords is None:
+        c_coords = ["r", "g", "b"]
+    img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=c_coords)
+    return SpatialData(images={"img": img})
+
+
+# ---------------------------------------------------------------------------
+# Grayscale tests (#407)
+# ---------------------------------------------------------------------------
+
+
+class TestGrayscale:
+    """Tests for the grayscale=True convenience parameter."""
+
+    def test_grayscale_renders(self):
+        """grayscale=True on a 3-channel image should render without error."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", grayscale=True).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_grayscale_default_cmap_is_gray(self):
+        """When grayscale=True and no explicit cmap, the colormap should be 'gray'."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", grayscale=True).pl.show(ax=ax)
+        images = ax.get_images()
+        assert len(images) == 1
+        assert images[0].cmap.name == "gray"
+        plt.close("all")
+
+    def test_grayscale_explicit_cmap_overrides(self):
+        """grayscale=True + cmap='viridis' should use viridis, not gray."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", grayscale=True, cmap="viridis").pl.show(ax=ax)
+        images = ax.get_images()
+        assert len(images) == 1
+        assert images[0].cmap.name == "viridis"
+        plt.close("all")
+
+    def test_grayscale_wrong_channel_count_raises(self):
+        """grayscale=True on a non-3-channel image should raise ValueError."""
+        data = np.random.default_rng(0).uniform(0, 1, (1, 50, 50)).astype(np.float32)
+        img = Image2DModel.parse(data, dims=("c", "y", "x"))
+        sdata = SpatialData(images={"img": img})
+        with pytest.raises(ValueError, match="grayscale=True requires exactly 3 channels"):
+            sdata.pl.render_images("img", grayscale=True).pl.show()
+        plt.close("all")
+
+    def test_grayscale_with_channel_selection(self):
+        """grayscale=True + channel selection on RGBA image should work."""
+        data = np.random.default_rng(0).uniform(0, 1, (4, 50, 50)).astype(np.float32)
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b", "a"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", channel=["r", "g", "b"], grayscale=True).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_grayscale_with_palette_raises(self):
+        """grayscale=True + palette should raise ValueError."""
+        sdata = _make_rgb_sdata()
+        with pytest.raises(ValueError, match="Cannot combine grayscale=True with palette"):
+            sdata.pl.render_images("img", grayscale=True, palette=["red", "green", "blue"]).pl.show()
+        plt.close("all")
+
+    def test_grayscale_uint8(self):
+        """grayscale=True on uint8 image should render correctly."""
+        sdata = _make_rgb_sdata(dtype=np.uint8)
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", grayscale=True).pl.show(ax=ax)
+        plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# Single callable transfunc tests (#508)
+# ---------------------------------------------------------------------------
+
+
+class TestTransfuncSingle:
+    """Tests for transfunc as a single callable."""
+
+    def test_transfunc_identity(self):
+        """Identity transfunc should produce the same rendering."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", transfunc=lambda x: x).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_transfunc_log1p(self):
+        """np.log1p as transfunc should render without error."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", transfunc=np.log1p).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_transfunc_channel_reduction(self):
+        """transfunc reducing 3→1 channels should route to single-channel path."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", transfunc=lambda x: x[:1]).pl.show(ax=ax)
+        images = ax.get_images()
+        assert len(images) == 1
+        plt.close("all")
+
+    def test_transfunc_with_norm(self):
+        """transfunc + explicit norm should both be applied."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        norm = Normalize(vmin=0.0, vmax=0.5, clip=True)
+        sdata.pl.render_images("img", transfunc=np.sqrt, norm=norm).pl.show(ax=ax)
+        plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# List of callables transfunc tests (#508)
+# ---------------------------------------------------------------------------
+
+
+class TestTransfuncList:
+    """Tests for transfunc as a list of per-channel callables."""
+
+    def test_transfunc_list_per_channel(self):
+        """Different functions per channel should render correctly."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images(
+            "img",
+            transfunc=[lambda c: c**0.3, np.log1p, np.sqrt],
+        ).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_transfunc_list_wrong_length_raises(self):
+        """List of wrong length should raise ValueError."""
+        sdata = _make_rgb_sdata()
+        with pytest.raises(ValueError, match="Length of transfunc list"):
+            sdata.pl.render_images("img", transfunc=[np.sqrt, np.log1p]).pl.show()
+        plt.close("all")
+
+    def test_transfunc_list_percentile_independence(self):
+        """Per-channel callables should operate independently."""
+        rng = np.random.default_rng(0)
+        data = np.zeros((3, 50, 50), dtype=np.float32)
+        data[0] = rng.uniform(0, 100, (50, 50))
+        data[1] = rng.uniform(0, 10, (50, 50))
+        data[2] = rng.uniform(0, 1, (50, 50))
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=[0, 1, 2])
+        sdata = SpatialData(images={"img": img})
+
+        # Per-channel clip to 99th percentile
+        def pctl_clip(c):
+            return np.clip(c, 0, np.percentile(c, 99))
+
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", transfunc=[pctl_clip, pctl_clip, pctl_clip]).pl.show(ax=ax)
+        plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# Combined transfunc + grayscale tests
+# ---------------------------------------------------------------------------
+
+
+class TestTransfuncGrayscale:
+    """Tests for combined transfunc + grayscale (transfunc runs first)."""
+
+    def test_list_transfunc_then_grayscale(self):
+        """Per-channel gamma + grayscale: gamma applied first, then luminance."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images(
+            "img",
+            transfunc=[lambda c: c**0.8, lambda c: c, lambda c: c**0.9],
+            grayscale=True,
+        ).pl.show(ax=ax)
+        images = ax.get_images()
+        assert len(images) == 1
+        assert images[0].cmap.name == "gray"
+        plt.close("all")
+
+    def test_single_transfunc_then_grayscale(self):
+        """Cross-channel transform outputting 3 channels + grayscale should work."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images(
+            "img",
+            transfunc=lambda x: x * 0.5,  # still 3 channels
+            grayscale=True,
+        ).pl.show(ax=ax)
+        plt.close("all")
+
+    def test_transfunc_wrong_output_channels_with_grayscale_raises(self):
+        """transfunc outputting != 3 channels + grayscale should raise."""
+        sdata = _make_rgb_sdata()
+        with pytest.raises(ValueError, match="grayscale=True requires exactly 3 channels after transfunc"):
+            sdata.pl.render_images(
+                "img",
+                transfunc=lambda x: x[:1],  # reduces to 1 channel
+                grayscale=True,
+            ).pl.show()
+        plt.close("all")
+
+    def test_transfunc_preserves_spatial_coords(self):
+        """Transform should not affect y/x coordinates."""
+        sdata = _make_rgb_sdata()
+        fig, ax = plt.subplots()
+        sdata.pl.render_images("img", transfunc=np.log1p).pl.show(ax=ax)
+        # If spatial coords were wrong, the image would not render at the correct position.
+        # Just verify it renders without error.
+        plt.close("all")

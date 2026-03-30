@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from collections import OrderedDict
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -517,6 +518,8 @@ class PlotAccessor:
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
+        grayscale: bool = False,
+        transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
@@ -561,6 +564,34 @@ class PlotAccessor:
                 3) "full": Renders the full image without rasterization. In the case of
                 multiscale images, the highest resolution scale is selected. Note that
                 this may result in long computing times for large images.
+        grayscale : bool, default False
+            Convert the image to grayscale before rendering using luminance
+            weights (Rec. 601: 0.2989 R + 0.5870 G + 0.1140 B). Requires
+            exactly 3 channels at the point of conversion — if ``transfunc``
+            is also provided, it runs first, and the result must have 3
+            channels. The grayscale image is rendered as a single-channel
+            image with ``cmap="gray"`` unless an explicit ``cmap`` is given.
+            Useful for de-emphasising H&E tissue when overlaying colored
+            annotations. Cannot be combined with ``palette``.
+        transfunc : callable or list of callables, optional
+            Transform(s) applied to the raw image array before normalization
+            and rendering.
+
+            **Single callable**: receives a numpy array of shape ``(c, y, x)``
+            (channels first) and must return an array of the same layout.
+            The number of channels may change (e.g., stain deconvolution).
+            Elementwise functions like ``np.log1p`` broadcast naturally.
+            Note that reductions like ``np.percentile`` will compute a
+            *single* value across all channels.
+
+            **List of callables**: one per channel (length must match the
+            number of selected channels). Each receives a ``(y, x)`` array
+            for its channel and must return a ``(y, x)`` array. Use this
+            when each channel needs independent treatment (e.g., different
+            gamma corrections for different fluorescence markers).
+
+            When combined with ``grayscale=True``, ``transfunc`` runs first
+            and ``grayscale`` is applied to the result.
         colorbar :
             Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
         colorbar_params :
@@ -575,6 +606,8 @@ class PlotAccessor:
             The SpatialData object with the rendered images.
         """
         # TODO add Normalize object in tutorial notebook and point to that notebook here
+        if grayscale and palette is not None:
+            raise ValueError("Cannot combine grayscale=True with palette.")
         if "vmin" in kwargs or "vmax" in kwargs:
             logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_image_render_params(
@@ -624,6 +657,8 @@ class PlotAccessor:
                 zorder=n_steps,
                 colorbar=param_values["colorbar"],
                 colorbar_params=param_values["colorbar_params"],
+                transfunc=transfunc,
+                grayscale=grayscale,
             )
             n_steps += 1
 

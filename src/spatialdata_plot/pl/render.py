@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from collections import abc
 from copy import copy
 from typing import Any
@@ -15,6 +16,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import spatialdata as sd
+import xarray as xr
 from anndata import AnnData
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
@@ -39,6 +41,7 @@ from spatialdata_plot.pl._datashader import (
     _render_ds_outlines,
 )
 from spatialdata_plot.pl.render_params import (
+    CmapParams,
     Color,
     ColorbarSpec,
     FigParams,
@@ -63,6 +66,7 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
+    _prepare_cmap_norm,
     _prepare_transformation,
     _rasterize_if_necessary,
     _set_color_source_vec,
@@ -1017,6 +1021,14 @@ def _render_points(
     )
 
 
+_LUMINANCE_WEIGHTS = np.array([0.2989, 0.5870, 0.1140])
+
+
+def _grayscale_transform(img_cyx: np.ndarray) -> np.ndarray:
+    """Convert a (3, y, x) RGB image to (1, y, x) luminance."""
+    return np.tensordot(_LUMINANCE_WEIGHTS, img_cyx, axes=([0], [0]))[np.newaxis]
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -1063,7 +1075,64 @@ def _render_images(
 
     # the channel parameter has been previously validated, so when not None, render_params.channel is a list
     assert isinstance(channels, list)
+
+    _, trans_data = _prepare_transformation(img, coordinate_system, ax)
+
+    # --- Apply image transforms (#508, #407) ---
+    transfunc = render_params.transfunc
+    needs_transform = transfunc is not None or render_params.grayscale
+
+    if needs_transform:
+        raw = np.stack([img.sel(c=ch).values for ch in channels], axis=0)
+
+        # 1) Apply transfunc (before grayscale)
+        if isinstance(transfunc, list):
+            if len(transfunc) != raw.shape[0]:
+                raise ValueError(
+                    f"Length of transfunc list ({len(transfunc)}) must match the number of channels ({raw.shape[0]})."
+                )
+            raw = np.stack([fn(raw[i]) for i, fn in enumerate(transfunc)], axis=0)
+        elif transfunc is not None:
+            raw = transfunc(raw)
+
+        # 2) Apply grayscale (after transfunc)
+        if render_params.grayscale:
+            if raw.shape[0] != 3:
+                raise ValueError(
+                    f"grayscale=True requires exactly 3 channels"
+                    f"{' after transfunc' if transfunc is not None else ''}, "
+                    f"got {raw.shape[0]}. Select 3 channels via the 'channel' parameter."
+                )
+            raw = _grayscale_transform(raw)
+
+        # Rebuild image with new channel coords
+        new_channels = list(range(raw.shape[0]))
+        img = xr.DataArray(
+            data=raw,
+            dims=("c", "y", "x"),
+            coords={"c": new_channels, "y": img.coords["y"], "x": img.coords["x"]},
+        )
+        channels = new_channels
+
     n_channels = len(channels)
+
+    # When grayscale was applied and user didn't provide an explicit cmap,
+    # default to "gray" for intuitive single-channel rendering.
+    got_multiple_cmaps = isinstance(render_params.cmap_params, list)
+    if (
+        render_params.grayscale
+        and not got_multiple_cmaps
+        and isinstance(render_params.cmap_params, CmapParams)
+        and render_params.cmap_params.cmap_is_default
+    ):
+        render_params = dataclasses.replace(
+            render_params,
+            cmap_params=_prepare_cmap_norm(
+                cmap="gray",
+                norm=render_params.cmap_params.norm,
+                na_color=render_params.cmap_params.na_color,
+            ),
+        )
 
     # True if user gave n cmaps for n channels
     got_multiple_cmaps = isinstance(render_params.cmap_params, list)
@@ -1079,8 +1148,6 @@ def _render_images(
     # not using got_multiple_cmaps here because of ruff :(
     if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
         raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
-
-    _, trans_data = _prepare_transformation(img, coordinate_system, ax)
 
     # 1) Image has only 1 channel
     if n_channels == 1 and not isinstance(render_params.cmap_params, list):
