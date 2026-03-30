@@ -1136,7 +1136,7 @@ def _render_images(
 
     _, trans_data = _prepare_transformation(img, coordinate_system, ax)
 
-    # --- Apply image transforms (#508, #407) ---
+    # --- Apply image transforms ---
     transfunc = render_params.transfunc
     needs_transform = transfunc is not None or render_params.grayscale
 

@@ -152,7 +152,7 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
 
 
 # ---------------------------------------------------------------------------
-# Grayscale + transfunc visual tests (#508, #407)
+# Grayscale + transfunc visual tests
 # ---------------------------------------------------------------------------
 
 
@@ -225,7 +225,7 @@ class TestTransfunc(PlotTester, metaclass=PlotTesterMeta):
         plt.close("all")
 
 
-# Regression tests for #406: RGBA image support
+# Regression tests for RGBA image support
 class TestRGBDetection:
     """Unit tests for _is_rgb_image helper."""
 
@@ -261,7 +261,7 @@ class TestRGBDetection:
 
 
 class TestRGBARendering:
-    """Regression tests for #406: RGBA images rendered correctly."""
+    """Regression tests: RGBA images rendered correctly."""
 
     @staticmethod
     def _make_rgba_sdata(c_coords: list, alpha_val: float = 1.0) -> SpatialData:
