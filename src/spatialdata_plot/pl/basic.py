@@ -950,6 +950,10 @@ class PlotAccessor:
             if not all(isinstance(t, str) for t in title):
                 raise TypeError("All titles must be strings.")
 
+        # Track whether the caller supplied their own axes so we can skip
+        # plt.show() later (ax is reassigned inside the rendering loop).
+        user_supplied_ax = ax is not None
+
         # get original axis extent for later comparison
         ax_x_min, ax_x_max = (np.inf, -np.inf)
         ax_y_min, ax_y_max = (np.inf, -np.inf)
@@ -1273,8 +1277,11 @@ class PlotAccessor:
         # Default (show=None): display in non-interactive mode (scripts), suppress in interactive
         # sessions. We check both sys.ps1 (standard REPL) and matplotlib.is_interactive()
         # (covers IPython, Jupyter, plt.ion(), and IDE consoles like PyCharm).
+        # When the user supplies their own axes, they manage the figure lifecycle, so we
+        # default to not calling plt.show(). This allows multiple .pl.show(ax=...) calls
+        # to accumulate content on the same axes (see #362, #71).
         if show is None:
-            show = not hasattr(sys, "ps1") and not matplotlib.is_interactive()
+            show = False if user_supplied_ax else (not hasattr(sys, "ps1") and not matplotlib.is_interactive())
         if show:
             plt.show()
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
