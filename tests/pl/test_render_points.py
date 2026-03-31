@@ -953,3 +953,34 @@ def test_datashader_na_color_none_no_nan_overlay_points(sdata_blobs: SpatialData
         "datashader is still rendering an opaque NaN overlay despite na_color=None"
     )
     plt.close(fig)
+
+
+def test_no_table_fallback_warning_for_element_column(caplog):
+    """No spurious 'using X as fallback for color mapping' warning when coloring by an element column (#562)."""
+    n = 50
+    rng = np.random.default_rng(42)
+    coords = pd.DataFrame({"x": rng.uniform(0, 100, n), "y": rng.uniform(0, 100, n)})
+    coords["cell_type"] = pd.Categorical(rng.choice(["A", "B", "C"], n))
+    points = PointsModel.parse(coords)
+
+    # Two tables so the multi-table fallback path is triggered
+    obs1 = pd.DataFrame(index=pd.RangeIndex(10).astype(str))
+    obs1["region"] = "s1"
+    obs1["instance_id"] = range(10)
+    table1 = AnnData(obs=obs1, X=np.zeros((10, 1)))
+    table1 = TableModel.parse(table1, region="s1", region_key="region", instance_key="instance_id")
+
+    obs2 = pd.DataFrame(index=pd.RangeIndex(10).astype(str))
+    obs2["region"] = "s2"
+    obs2["instance_id"] = range(10)
+    table2 = AnnData(obs=obs2, X=np.zeros((10, 1)))
+    table2 = TableModel.parse(table2, region="s2", region_key="region", instance_key="instance_id")
+
+    sdata = SpatialData(
+        points={"pts": points},
+        tables={"RNA": table1, "protein": table2},
+    )
+
+    with logger_no_warns(caplog, logger, match="fallback for color mapping"):
+        sdata.pl.render_points("pts", color="cell_type").pl.show()
+    plt.close("all")

@@ -1101,9 +1101,15 @@ def _set_color_source_vec(
             processed = processed.reorder_categories(sorted(processed.categories))
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
+        # When the value lives on the element's own DataFrame (origin="df"),
+        # there is no reason to look up a table for .uns colors.
+        value_from_element = origins[0].origin == "df"
+
         # Use the provided table_name parameter, fall back to only one present
         table_to_use: str | None
-        if table_name is not None and table_name in sdata.tables:
+        if value_from_element:
+            table_to_use = None
+        elif table_name is not None and table_name in sdata.tables:
             table_to_use = table_name
         elif table_name is not None and table_name not in sdata.tables:
             logger.warning(f"Table '{table_name}' not found in `sdata.tables`. Falling back to default behavior.")
@@ -1120,14 +1126,18 @@ def _set_color_source_vec(
 
         adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
 
-        # Check if custom colors exist in the table's .uns slot
-        if value_to_plot is not None and _has_colors_in_uns(sdata, table_name, value_to_plot):
+        # Check if custom colors exist in the resolved table's .uns slot
+        if (
+            value_to_plot is not None
+            and table_to_use is not None
+            and _has_colors_in_uns(sdata, table_to_use, value_to_plot)
+        ):
             # Extract colors directly from the table's .uns slot
             # Convert Color to ColorLike (str) for the function
             na_color_like: ColorLike = na_color.get_hex() if isinstance(na_color, Color) else na_color
             color_mapping = _extract_colors_from_table_uns(
                 sdata=sdata,
-                table_name=table_name,
+                table_name=table_to_use,
                 col_to_colorby=value_to_plot,
                 color_source_vector=color_source_vector,
                 na_color=na_color_like,
