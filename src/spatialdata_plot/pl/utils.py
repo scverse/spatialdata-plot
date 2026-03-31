@@ -1103,7 +1103,7 @@ def _set_color_source_vec(
 
         # When the value lives on the element's own DataFrame (origin="df"),
         # there is no reason to look up a table for .uns colors.
-        value_from_element = len(origins) == 1 and origins[0].origin == "df"
+        value_from_element = origins[0].origin == "df"
 
         # Use the provided table_name parameter, fall back to only one present
         table_to_use: str | None
@@ -1127,13 +1127,13 @@ def _set_color_source_vec(
         adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
 
         # Check if custom colors exist in the table's .uns slot
-        if value_to_plot is not None and _has_colors_in_uns(sdata, table_name, value_to_plot):
+        if value_to_plot is not None and _has_colors_in_uns(sdata, table_to_use, value_to_plot):
             # Extract colors directly from the table's .uns slot
             # Convert Color to ColorLike (str) for the function
             na_color_like: ColorLike = na_color.get_hex() if isinstance(na_color, Color) else na_color
             color_mapping = _extract_colors_from_table_uns(
                 sdata=sdata,
-                table_name=table_name,
+                table_name=table_to_use,
                 col_to_colorby=value_to_plot,
                 color_source_vector=color_source_vector,
                 na_color=na_color_like,
