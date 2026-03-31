@@ -513,7 +513,7 @@ class PlotAccessor:
         *,
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
-        norm: Normalize | None = None,
+        norm: list[Normalize] | Normalize | None = None,
         na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
@@ -544,9 +544,11 @@ class PlotAccessor:
         cmap : list[Colormap | str] | Colormap | str | None
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
-        norm : Normalize | None, optional
+        norm : list[Normalize] | Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-            Applies to all channels if set.
+            A single :class:`~matplotlib.colors.Normalize` applies to all channels.
+            A list of :class:`~matplotlib.colors.Normalize` objects applies per-channel
+            (length must match the number of colormaps/channels).
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -631,13 +633,21 @@ class PlotAccessor:
         for element, param_values in params_dict.items():
             cmap_params: list[CmapParams] | CmapParams
             if isinstance(cmap, list):
+                if isinstance(norm, list):
+                    if len(norm) != len(cmap):
+                        raise ValueError(
+                            f"Length of 'norm' list ({len(norm)}) must match the number of colormaps ({len(cmap)})."
+                        )
+                    norms = norm
+                else:
+                    norms = [norm] * len(cmap)
                 cmap_params = [
                     _prepare_cmap_norm(
                         cmap=c,
-                        norm=norm,
+                        norm=n,
                         na_color=param_values["na_color"],
                     )
-                    for c in cmap
+                    for c, n in zip(cmap, norms, strict=True)
                 ]
 
             else:

@@ -416,3 +416,60 @@ class TestMultiChannelClipping:
             plt.close("all")
             clip_warns = [x for x in w if "Clipping input data" in str(x.message)]
             assert len(clip_warns) == 0, f"Got unexpected clipping warning: {clip_warns[0].message}"
+
+
+def _make_multichannel_sdata():
+    """Create a 3-channel image with different intensity ranges."""
+    rng = np.random.default_rng(42)
+    data = np.stack(
+        [
+            rng.uniform(0, 0.05, (50, 50)),  # dim
+            rng.uniform(0, 1.0, (50, 50)),  # full range
+            rng.uniform(0, 0.5, (50, 50)),  # medium
+        ],
+        axis=0,
+    ).astype(np.float32)
+    img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=[0, 1, 2])
+    return SpatialData(images={"img": img})
+
+
+def test_per_channel_norm_list():
+    """Per-channel norm list is accepted and renders without error (#460)."""
+    sdata = _make_multichannel_sdata()
+    norms = [
+        Normalize(vmin=0, vmax=0.05, clip=True),
+        Normalize(vmin=0, vmax=1.0, clip=True),
+        Normalize(vmin=0, vmax=0.5, clip=True),
+    ]
+    fig, ax = plt.subplots()
+    sdata.pl.render_images("img", channel=[0, 1, 2], norm=norms, cmap=[plt.cm.gray] * 3).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_single_norm_with_multiple_channels():
+    """A single Normalize shared across channels still works."""
+    sdata = _make_multichannel_sdata()
+    fig, ax = plt.subplots()
+    sdata.pl.render_images("img", channel=[0, 1, 2], norm=Normalize(0, 1), cmap=[plt.cm.gray] * 3).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_norm_list_length_mismatch_raises():
+    """Norm list length must match cmap list length."""
+    sdata = _make_multichannel_sdata()
+    with pytest.raises(ValueError, match="must match"):
+        sdata.pl.render_images("img", channel=[0, 1, 2], norm=[Normalize(0, 1)] * 2, cmap=[plt.cm.gray] * 3).pl.show()
+
+
+def test_norm_list_empty_raises():
+    """Empty norm list is rejected."""
+    sdata = _make_multichannel_sdata()
+    with pytest.raises(ValueError, match="must not be empty"):
+        sdata.pl.render_images("img", norm=[]).pl.show()
+
+
+def test_norm_list_with_invalid_element_raises():
+    """Non-Normalize items in norm list are rejected."""
+    sdata = _make_multichannel_sdata()
+    with pytest.raises(TypeError, match="Normalize instance"):
+        sdata.pl.render_images("img", norm=["not_a_norm"]).pl.show()
