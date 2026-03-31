@@ -1101,9 +1101,15 @@ def _set_color_source_vec(
             processed = processed.reorder_categories(sorted(processed.categories))
         color_source_vector = processed  # convert, e.g., `pd.Series`
 
+        # When the value lives on the element's own DataFrame (origin="df"),
+        # there is no reason to look up a table for .uns colors.
+        value_from_element = len(origins) == 1 and origins[0].origin == "df"
+
         # Use the provided table_name parameter, fall back to only one present
         table_to_use: str | None
-        if table_name is not None and table_name in sdata.tables:
+        if value_from_element:
+            table_to_use = None
+        elif table_name is not None and table_name in sdata.tables:
             table_to_use = table_name
         elif table_name is not None and table_name not in sdata.tables:
             logger.warning(f"Table '{table_name}' not found in `sdata.tables`. Falling back to default behavior.")
