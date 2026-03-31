@@ -2409,7 +2409,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     norm = param_dict.get("norm")
     if norm is not None:
-        if element_type in {"images", "labels"}:
+        if element_type == "images":
             if isinstance(norm, list):
                 if not norm:
                     raise ValueError("Parameter 'norm' list must not be empty.")
@@ -2417,6 +2417,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                     raise TypeError("Every item in 'norm' list must be a Normalize instance.")
             elif not isinstance(norm, Normalize):
                 raise TypeError("Parameter 'norm' must be a Normalize or a list of Normalize instances.")
+        elif element_type == "labels" and not isinstance(norm, Normalize):
+            raise TypeError("Parameter 'norm' must be of type Normalize.")
         if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
 
