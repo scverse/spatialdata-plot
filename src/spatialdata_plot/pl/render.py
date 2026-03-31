@@ -743,6 +743,9 @@ def _render_points(
         )
         added_color_from_table = True
 
+    # Reset to sequential index so row order matches after _reparse_points round-trip (#358).
+    points = points.reset_index(drop=True)
+
     n_points = len(points)
     points_pd_with_color = points
     # When we pull colors from a table, keep the raw points (with color) for later,
@@ -758,7 +761,7 @@ def _render_points(
     if table_name is None:
         adata = AnnData(
             X=points[["x", "y"]].values,
-            obs=points[coords].reset_index(),
+            obs=points[coords],
             dtype=points[["x", "y"]].values.dtype,
         )
     else:

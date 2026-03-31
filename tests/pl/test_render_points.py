@@ -606,6 +606,27 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             "blobs_points", color="cat_color", groups=["a"], size=30, method="datashader"
         ).pl.show(ax=axs[1], title="default (filtered)")
 
+    @staticmethod
+    def _make_sampled_sdata() -> SpatialData:
+        """Points with two spatially separated clusters, shuffled via .sample() (#358)."""
+        rng = get_standard_RNG()
+        n = 100
+        x = np.concatenate([rng.uniform(0, 10, n // 2), rng.uniform(90, 100, n // 2)])
+        y = np.concatenate([rng.uniform(0, 10, n // 2), rng.uniform(90, 100, n // 2)])
+        df = pd.DataFrame({"x": x, "y": y, "cluster": pd.Categorical(["A"] * (n // 2) + ["B"] * (n // 2))})
+        sdata = SpatialData(points={"pts": PointsModel.parse(df)})
+        sampled = sdata.points["pts"].compute().sample(frac=0.8, random_state=42)
+        sdata.points["pts"] = PointsModel.parse(sampled)
+        return sdata
+
+    def test_plot_sampled_points_categorical_color_matplotlib(self):
+        """Regression test for #358: .sample() must not shuffle categorical colors."""
+        self._make_sampled_sdata().pl.render_points("pts", color="cluster", method="matplotlib").pl.show()
+
+    def test_plot_sampled_points_categorical_color_datashader(self):
+        """Regression test for #358: .sample() must not shuffle categorical colors."""
+        self._make_sampled_sdata().pl.render_points("pts", color="cluster", method="datashader").pl.show()
+
 
 def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
     """When no elements match the groups, the plot should render without error."""
