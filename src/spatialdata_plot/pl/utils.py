@@ -1126,8 +1126,12 @@ def _set_color_source_vec(
 
         adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
 
-        # Check if custom colors exist in the table's .uns slot
-        if value_to_plot is not None and _has_colors_in_uns(sdata, table_to_use, value_to_plot):
+        # Check if custom colors exist in the resolved table's .uns slot
+        if (
+            value_to_plot is not None
+            and table_to_use is not None
+            and _has_colors_in_uns(sdata, table_to_use, value_to_plot)
+        ):
             # Extract colors directly from the table's .uns slot
             # Convert Color to ColorLike (str) for the function
             na_color_like: ColorLike = na_color.get_hex() if isinstance(na_color, Color) else na_color
