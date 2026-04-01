@@ -632,24 +632,27 @@ class PlotAccessor:
 
         for element, param_values in params_dict.items():
             cmap_params: list[CmapParams] | CmapParams
-            resolved_cmap = param_values.get("cmap") or cmap
-            if isinstance(resolved_cmap, list):
+            # Use the resolved per-element cmap when the user passed a norm list,
+            # so that auto-replicated cmaps are correctly zipped with per-channel norms.
+            # Otherwise preserve the original user-supplied cmap for branching.
+            effective_cmap = param_values.get("cmap") if isinstance(norm, list) else cmap
+            if isinstance(effective_cmap, list):
                 if isinstance(norm, list):
-                    if len(norm) != len(resolved_cmap):
+                    if len(norm) != len(effective_cmap):
                         raise ValueError(
                             f"Length of 'norm' list ({len(norm)}) must match "
-                            f"the number of colormaps ({len(resolved_cmap)})."
+                            f"the number of colormaps ({len(effective_cmap)})."
                         )
                     norms = norm
                 else:
-                    norms = [norm] * len(resolved_cmap)
+                    norms = [norm] * len(effective_cmap)
                 cmap_params = [
                     _prepare_cmap_norm(
                         cmap=c,
                         norm=n,
                         na_color=param_values["na_color"],
                     )
-                    for c, n in zip(resolved_cmap, norms, strict=True)
+                    for c, n in zip(effective_cmap, norms, strict=True)
                 ]
 
             else:
@@ -659,7 +662,7 @@ class PlotAccessor:
                         "Pass a list of colormaps via 'cmap' or use a single Normalize."
                     )
                 cmap_params = _prepare_cmap_norm(
-                    cmap=resolved_cmap,
+                    cmap=cmap,
                     norm=norm,
                     na_color=param_values["na_color"],
                     **kwargs,
