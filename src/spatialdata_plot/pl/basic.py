@@ -632,11 +632,9 @@ class PlotAccessor:
 
         for element, param_values in params_dict.items():
             cmap_params: list[CmapParams] | CmapParams
-            # Use the resolved per-element cmap when the user passed a norm list,
-            # so that auto-replicated cmaps are correctly zipped with per-channel norms.
-            # Otherwise preserve the original user-supplied cmap for branching.
+            # Resolve which cmap to use for norm-list path vs scalar path.
             effective_cmap = param_values.get("cmap") if isinstance(norm, list) else cmap
-            if isinstance(effective_cmap, list):
+            if isinstance(effective_cmap, list) and len(effective_cmap) > 1:
                 if isinstance(norm, list):
                     if len(norm) != len(effective_cmap):
                         raise ValueError(
@@ -657,20 +655,22 @@ class PlotAccessor:
 
             else:
                 if isinstance(norm, list):
-                    raise ValueError(
-                        "When 'norm' is a list, you must also pass a list of colormaps via 'cmap' "
-                        "with matching length, or use a single Normalize."
-                    )
+                    if len(norm) == 1:
+                        norm_scalar: Normalize | None = norm[0]
+                    else:
+                        raise ValueError(
+                            "When 'norm' is a list, you must also pass a list of colormaps via 'cmap' "
+                            "with matching length, or use a single Normalize."
+                        )
+                else:
+                    norm_scalar = norm
+                scalar_cmap = effective_cmap[0] if isinstance(effective_cmap, list) else cmap
                 cmap_params = _prepare_cmap_norm(
-                    cmap=cmap,
-                    norm=norm,
+                    cmap=scalar_cmap,
+                    norm=norm_scalar,
                     na_color=param_values["na_color"],
                     **kwargs,
                 )
-            # Unwrap length-1 list so the single-channel rendering path
-            # (which checks `not isinstance(cmap_params, list)`) still works.
-            if isinstance(cmap_params, list) and len(cmap_params) == 1:
-                cmap_params = cmap_params[0]
             sdata.plotting_tree[f"{n_steps + 1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],
