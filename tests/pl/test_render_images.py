@@ -475,11 +475,13 @@ def test_norm_list_with_invalid_element_raises():
         sdata.pl.render_images("img", norm=["not_a_norm"]).pl.show()
 
 
-def test_norm_list_without_cmap_list_raises():
-    """Norm list requires explicit cmap list."""
+def test_norm_list_without_explicit_cmap():
+    """Per-channel norms work without explicit cmap (auto-assigns default cmap per channel)."""
     sdata = _make_multichannel_sdata()
-    with pytest.raises(ValueError, match="must also pass a list of colormaps"):
-        sdata.pl.render_images("img", norm=[Normalize(0, 1)] * 3).pl.show()
+    norms = [Normalize(0, 0.05), Normalize(0, 1.0), Normalize(0, 0.5)]
+    fig, ax = plt.subplots()
+    sdata.pl.render_images("img", channel=[0, 1, 2], norm=norms).pl.show(ax=ax)
+    plt.close(fig)
 
 
 def test_cmap_matches_selected_channels_not_full_image(sdata_blobs: SpatialData):

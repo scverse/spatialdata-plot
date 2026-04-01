@@ -548,7 +548,7 @@ class PlotAccessor:
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
             A single :class:`~matplotlib.colors.Normalize` applies to all channels.
             A list of :class:`~matplotlib.colors.Normalize` objects applies per-channel
-            (length must match the number of colormaps/channels).
+            (length must match the number of channels).
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -632,8 +632,14 @@ class PlotAccessor:
 
         for element, param_values in params_dict.items():
             cmap_params: list[CmapParams] | CmapParams
-            # Resolve which cmap to use for norm-list path vs scalar path.
+            # Resolve which cmap to use for the norm-list path vs scalar path.
             effective_cmap = param_values.get("cmap") if isinstance(norm, list) else cmap
+
+            # When the user passes per-channel norms without explicit cmaps,
+            # generate a default cmap list so the per-channel path works.
+            if isinstance(norm, list) and len(norm) > 1 and not isinstance(effective_cmap, list):
+                effective_cmap = [None] * len(norm)
+
             if isinstance(effective_cmap, list) and len(effective_cmap) > 1:
                 if isinstance(norm, list):
                     if len(norm) != len(effective_cmap):
@@ -654,16 +660,7 @@ class PlotAccessor:
                 ]
 
             else:
-                if isinstance(norm, list):
-                    if len(norm) == 1:
-                        norm_scalar: Normalize | None = norm[0]
-                    else:
-                        raise ValueError(
-                            "When 'norm' is a list, you must also pass a list of colormaps via 'cmap' "
-                            "with matching length, or use a single Normalize."
-                        )
-                else:
-                    norm_scalar = norm
+                norm_scalar = norm[0] if isinstance(norm, list) else norm
                 scalar_cmap = effective_cmap[0] if isinstance(effective_cmap, list) else cmap
                 cmap_params = _prepare_cmap_norm(
                     cmap=scalar_cmap,
