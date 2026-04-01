@@ -2867,10 +2867,10 @@ def _validate_image_render_params(
 
         cmap = param_dict["cmap"]
         if cmap is not None:
+            expected_len = len(channel) if channel is not None else len(spatial_element_ch)
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
-                cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
+                cmap = cmap * expected_len
+            if len(cmap) != expected_len:
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]
