@@ -7,6 +7,7 @@ import pytest
 import scanpy as sc
 from matplotlib.figure import Figure
 from spatialdata import SpatialData
+from spatialdata.transformations import Identity, set_transformation
 
 import spatialdata_plot  # noqa: F401
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -24,6 +25,12 @@ _ = spatialdata_plot
 #    ".png" is appended to <your_filename>, no need to set it
 
 
+def _add_second_cs(sdata: SpatialData) -> SpatialData:
+    """Register blobs_image in a second coordinate system to enable multi-panel tests."""
+    set_transformation(sdata["blobs_image"], Identity(), "second_cs")
+    return sdata
+
+
 class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
@@ -32,10 +39,10 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         """Visual test: frameon=False hides axes decorations on a single panel (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
 
-    def test_plot_frameon_false_multi_panel(self, get_sdata_with_multiple_images):
+    def test_plot_frameon_false_multi_panel(self, sdata_blobs: SpatialData):
         """Visual test: frameon=False hides axes decorations on all panels (regression for #204)."""
-        sdata = get_sdata_with_multiple_images("two")
-        sdata.pl.render_images().pl.show(frameon=False)
+        _add_second_cs(sdata_blobs)
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
 
     def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
         """plt.show() must not be called when the user supplies ax= (regression for #362)."""
@@ -88,20 +95,20 @@ def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData):
     plt.close("all")
 
 
-def test_fig_parameter_no_warning_with_ax_list(get_sdata_with_multiple_images):
+def test_fig_parameter_no_warning_with_ax_list(sdata_blobs: SpatialData):
     """Passing fig= with a list of axes should not warn (fig is still required there)."""
-    sdata = get_sdata_with_multiple_images("two")
+    _add_second_cs(sdata_blobs)
     fig, axs = plt.subplots(1, 2)
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        sdata.pl.render_images().pl.show(fig=fig, ax=list(axs), show=False)
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(fig=fig, ax=list(axs), show=False)
     plt.close("all")
 
 
-def test_frameon_false_multi_panel(get_sdata_with_multiple_images):
+def test_frameon_false_multi_panel(sdata_blobs: SpatialData):
     """frameon=False should apply to all panels in a multi-panel plot (regression for #204)."""
-    sdata = get_sdata_with_multiple_images("two")
-    axs = sdata.pl.render_images().pl.show(frameon=False, return_ax=True, show=False)
+    _add_second_cs(sdata_blobs)
+    axs = sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, return_ax=True, show=False)
     for ax in axs:
         assert not ax.axison
     plt.close("all")
