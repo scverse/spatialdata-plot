@@ -658,9 +658,8 @@ class PlotAccessor:
             else:
                 if isinstance(norm, list):
                     raise ValueError(
-                        "Parameter 'norm' can only be a list when a matching list of colormaps is resolved. "
-                        "Pass an explicit list of colormaps via 'cmap' whose length matches the number of "
-                        "channels, or use a single Normalize."
+                        "When 'norm' is a list, you must also pass a list of colormaps via 'cmap' "
+                        "with matching length, or use a single Normalize."
                     )
                 cmap_params = _prepare_cmap_norm(
                     cmap=cmap,

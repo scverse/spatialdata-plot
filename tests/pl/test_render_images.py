@@ -478,5 +478,14 @@ def test_norm_list_with_invalid_element_raises():
 def test_norm_list_without_cmap_list_raises():
     """Norm list requires explicit cmap list."""
     sdata = _make_multichannel_sdata()
-    with pytest.raises(ValueError, match="can only be a list when a matching list of colormaps"):
+    with pytest.raises(ValueError, match="must also pass a list of colormaps"):
         sdata.pl.render_images("img", norm=[Normalize(0, 1)] * 3).pl.show()
+
+
+def test_cmap_matches_selected_channels_not_full_image(sdata_blobs: SpatialData):
+    """Cmap length should be validated against selected channels, not the full image channel count."""
+    # blobs_image has 3 channels; select 1 with a matching length-1 cmap
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_images("blobs_image", channel=[0], cmap=["gray"]).pl.show(ax=ax)
+    assert len(ax.get_images()) == 1
+    plt.close(fig)
