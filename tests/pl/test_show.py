@@ -38,6 +38,10 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
 
+    def test_plot_no_decorations(self, sdata_blobs: SpatialData):
+        """Visual test: frameon=False + title='' produces just the plot content (regression for #204)."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, title="", colorbar=False)
+
     def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
         """plt.show() must not be called when the user supplies ax= (regression for #362)."""
         _, ax = plt.subplots()
