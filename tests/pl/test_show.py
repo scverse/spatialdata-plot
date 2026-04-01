@@ -1,13 +1,14 @@
+import warnings
 from unittest.mock import patch
 
 import matplotlib
 import matplotlib.pyplot as plt
+import pytest
 import scanpy as sc
 from matplotlib.figure import Figure
 from spatialdata import SpatialData
 
 import spatialdata_plot  # noqa: F401
-from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -26,6 +27,15 @@ _ = spatialdata_plot
 class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
+
+    def test_plot_frameon_false_single_panel(self, sdata_blobs: SpatialData):
+        """Visual test: frameon=False hides axes decorations on a single panel (regression for #204)."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
+
+    def test_plot_frameon_false_multi_panel(self, get_sdata_with_multiple_images):
+        """Visual test: frameon=False hides axes decorations on all panels (regression for #204)."""
+        sdata = get_sdata_with_multiple_images("two")
+        sdata.pl.render_images().pl.show(frameon=False)
 
     def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
         """plt.show() must not be called when the user supplies ax= (regression for #362)."""
@@ -62,26 +72,28 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         plt.close("all")
 
 
-def test_fig_parameter_emits_deprecation_warning(sdata_blobs: SpatialData, caplog):
-    """Passing fig= should emit a deprecation warning (regression for #204)."""
+def test_fig_parameter_emits_deprecation_warning(sdata_blobs: SpatialData):
+    """Passing fig= should emit a DeprecationWarning (regression for #204)."""
     fig = Figure()
-    with logger_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+    with pytest.warns(DeprecationWarning, match="`fig` is being deprecated"):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(fig=fig, show=False)
     plt.close("all")
 
 
-def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData, caplog):
+def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData):
     """Not passing fig= should not emit a deprecation warning."""
-    with logger_no_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(show=False)
     plt.close("all")
 
 
-def test_fig_parameter_no_warning_with_ax_list(get_sdata_with_multiple_images, caplog):
+def test_fig_parameter_no_warning_with_ax_list(get_sdata_with_multiple_images):
     """Passing fig= with a list of axes should not warn (fig is still required there)."""
     sdata = get_sdata_with_multiple_images("two")
     fig, axs = plt.subplots(1, 2)
-    with logger_no_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
         sdata.pl.render_images().pl.show(fig=fig, ax=list(axs), show=False)
     plt.close("all")
 

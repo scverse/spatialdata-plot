@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from copy import deepcopy
@@ -939,10 +940,12 @@ class PlotAccessor:
         )
 
         if fig is not None and not isinstance(ax, Sequence):
-            logger.warning(
-                "The `fig` parameter is deprecated and will be removed in a future version. "
+            warnings.warn(
+                "`fig` is being deprecated as an argument to `PlotAccessor.show` in spatialdata-plot. "
                 "To use a custom figure, create axes from it and pass them via `ax` instead: "
-                "`ax = fig.add_subplot(111)`."
+                "`ax = fig.add_subplot(111)`.",
+                DeprecationWarning,
+                stacklevel=2,
             )
 
         sdata = self._copy()
