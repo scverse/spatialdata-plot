@@ -2794,7 +2794,7 @@ def _validate_image_render_params(
     palette: list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
-    norm: Normalize | None,
+    norm: list[Normalize] | Normalize | None,
     scale: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
