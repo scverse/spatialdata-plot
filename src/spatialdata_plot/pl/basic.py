@@ -658,8 +658,9 @@ class PlotAccessor:
             else:
                 if isinstance(norm, list):
                     raise ValueError(
-                        "Parameter 'norm' can only be a list when multiple colormaps are used. "
-                        "Pass a list of colormaps via 'cmap' or use a single Normalize."
+                        "Parameter 'norm' can only be a list when a matching list of colormaps is resolved. "
+                        "Pass an explicit list of colormaps via 'cmap' whose length matches the number of "
+                        "channels, or use a single Normalize."
                     )
                 cmap_params = _prepare_cmap_norm(
                     cmap=cmap,
@@ -667,6 +668,10 @@ class PlotAccessor:
                     na_color=param_values["na_color"],
                     **kwargs,
                 )
+            # Unwrap length-1 list so the single-channel rendering path
+            # (which checks `not isinstance(cmap_params, list)`) still works.
+            if isinstance(cmap_params, list) and len(cmap_params) == 1:
+                cmap_params = cmap_params[0]
             sdata.plotting_tree[f"{n_steps + 1}_render_images"] = ImageRenderParams(
                 element=element,
                 channel=param_values["channel"],

@@ -478,5 +478,5 @@ def test_norm_list_with_invalid_element_raises():
 def test_norm_list_without_cmap_list_raises():
     """Norm list requires explicit cmap list."""
     sdata = _make_multichannel_sdata()
-    with pytest.raises(ValueError, match="can only be a list when multiple colormaps"):
+    with pytest.raises(ValueError, match="can only be a list when a matching list of colormaps"):
         sdata.pl.render_images("img", norm=[Normalize(0, 1)] * 3).pl.show()
