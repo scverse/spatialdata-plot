@@ -513,7 +513,7 @@ class PlotAccessor:
         *,
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
-        norm: Normalize | None = None,
+        norm: list[Normalize] | Normalize | None = None,
         na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
@@ -544,9 +544,11 @@ class PlotAccessor:
         cmap : list[Colormap | str] | Colormap | str | None
             Colormap or list of colormaps for continuous annotations, see :class:`matplotlib.colors.Colormap`.
             Each colormap applies to a corresponding channel.
-        norm : Normalize | None, optional
+        norm : list[Normalize] | Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-            Applies to all channels if set.
+            A single :class:`~matplotlib.colors.Normalize` applies to all channels.
+            A list of :class:`~matplotlib.colors.Normalize` objects applies per-channel
+            (length must match the number of channels).
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -630,20 +632,39 @@ class PlotAccessor:
 
         for element, param_values in params_dict.items():
             cmap_params: list[CmapParams] | CmapParams
-            if isinstance(cmap, list):
+            # Resolve which cmap to use for the norm-list path vs scalar path.
+            effective_cmap = param_values.get("cmap") if isinstance(norm, list) else cmap
+
+            # When the user passes per-channel norms without explicit cmaps,
+            # generate a default cmap list so the per-channel path works.
+            if isinstance(norm, list) and len(norm) > 1 and not isinstance(effective_cmap, list):
+                effective_cmap = [None] * len(norm)
+
+            if isinstance(effective_cmap, list) and len(effective_cmap) > 1:
+                if isinstance(norm, list):
+                    if len(norm) != len(effective_cmap):
+                        raise ValueError(
+                            f"Length of 'norm' list ({len(norm)}) must match "
+                            f"the number of colormaps ({len(effective_cmap)})."
+                        )
+                    norms = norm
+                else:
+                    norms = [norm] * len(effective_cmap)
                 cmap_params = [
                     _prepare_cmap_norm(
                         cmap=c,
-                        norm=norm,
+                        norm=n,
                         na_color=param_values["na_color"],
                     )
-                    for c in cmap
+                    for c, n in zip(effective_cmap, norms, strict=True)
                 ]
 
             else:
+                norm_scalar = norm[0] if isinstance(norm, list) else norm
+                scalar_cmap = effective_cmap[0] if isinstance(effective_cmap, list) else cmap
                 cmap_params = _prepare_cmap_norm(
-                    cmap=cmap,
-                    norm=norm,
+                    cmap=scalar_cmap,
+                    norm=norm_scalar,
                     na_color=param_values["na_color"],
                     **kwargs,
                 )

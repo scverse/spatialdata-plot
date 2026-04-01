@@ -2419,7 +2419,15 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     norm = param_dict.get("norm")
     if norm is not None:
-        if element_type in {"images", "labels"} and not isinstance(norm, Normalize):
+        if element_type == "images":
+            if isinstance(norm, list):
+                if not norm:
+                    raise ValueError("Parameter 'norm' list must not be empty.")
+                if not all(isinstance(n, Normalize) for n in norm):
+                    raise TypeError("Every item in 'norm' list must be a Normalize instance.")
+            elif not isinstance(norm, Normalize):
+                raise TypeError("Parameter 'norm' must be a Normalize or a list of Normalize instances.")
+        elif element_type == "labels" and not isinstance(norm, Normalize):
             raise TypeError("Parameter 'norm' must be of type Normalize.")
         if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
@@ -2796,7 +2804,7 @@ def _validate_image_render_params(
     palette: list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
-    norm: Normalize | None,
+    norm: list[Normalize] | Normalize | None,
     scale: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
@@ -2869,10 +2877,10 @@ def _validate_image_render_params(
 
         cmap = param_dict["cmap"]
         if cmap is not None:
+            expected_len = len(channel) if channel is not None else len(spatial_element_ch)
             if len(cmap) == 1:
-                cmap_length = len(channel) if channel is not None else len(spatial_element_ch)
-                cmap = cmap * cmap_length
-            if (channel is not None and len(cmap) != len(channel)) or len(cmap) != len(spatial_element_ch):
+                cmap = cmap * expected_len
+            if len(cmap) != expected_len:
                 cmap = None
         element_params[el]["cmap"] = cmap
         element_params[el]["norm"] = param_dict["norm"]

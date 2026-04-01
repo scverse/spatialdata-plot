@@ -1313,8 +1313,8 @@ def _render_images(
             else:
                 ch_norm = render_params.cmap_params.norm
 
-            # Auto-ranging norms are stateful — copy so each channel normalizes independently
-            if isinstance(ch_norm, Normalize) and (ch_norm.vmin is None or ch_norm.vmax is None):
+            # Normalize objects are stateful — always copy to prevent cross-channel mutation
+            if isinstance(ch_norm, Normalize):
                 ch_norm = copy(ch_norm)
 
             layers[ch] = ch_norm(layers[ch])
