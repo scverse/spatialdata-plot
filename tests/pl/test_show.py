@@ -33,10 +33,11 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         """Visual test: frameon=False hides axes decorations on a single panel (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
 
-    def test_plot_frameon_false_multi_panel(self, sdata_blobs: SpatialData):
+    def test_visual_frameon_false_multi_panel(self, sdata_blobs: SpatialData):
         """Visual test: frameon=False hides axes decorations on all panels (regression for #204)."""
         set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
+        self.compare("Show_frameon_false_multi_panel", tolerance=20)
 
     def test_plot_no_decorations(self, sdata_blobs: SpatialData):
         """Visual test: frameon=False + title='' produces just the plot content (regression for #204)."""
