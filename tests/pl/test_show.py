@@ -3,9 +3,11 @@ from unittest.mock import patch
 import matplotlib
 import matplotlib.pyplot as plt
 import scanpy as sc
+from matplotlib.figure import Figure
 from spatialdata import SpatialData
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -40,3 +42,54 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
             sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax, show=True)
             mock_show.assert_called_once()
         plt.close("all")
+
+    def test_frameon_false_hides_axes_decorations(self, sdata_blobs: SpatialData):
+        """frameon=False should turn off axes decorations (regression for #204)."""
+        ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, return_ax=True, show=False)
+        assert not ax.axison
+        plt.close("all")
+
+    def test_frameon_none_keeps_axes_decorations(self, sdata_blobs: SpatialData):
+        """Default frameon=None should keep axes decorations visible."""
+        ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=None, return_ax=True, show=False)
+        assert ax.axison
+        plt.close("all")
+
+    def test_title_empty_string_suppresses_title(self, sdata_blobs: SpatialData):
+        """title='' should suppress the default coordinate system title (regression for #204)."""
+        ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(title="", return_ax=True, show=False)
+        assert ax.get_title() == ""
+        plt.close("all")
+
+
+def test_fig_parameter_emits_deprecation_warning(sdata_blobs: SpatialData, caplog):
+    """Passing fig= should emit a deprecation warning (regression for #204)."""
+    fig = Figure()
+    with logger_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(fig=fig, show=False)
+    plt.close("all")
+
+
+def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData, caplog):
+    """Not passing fig= should not emit a deprecation warning."""
+    with logger_no_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(show=False)
+    plt.close("all")
+
+
+def test_fig_parameter_no_warning_with_ax_list(get_sdata_with_multiple_images, caplog):
+    """Passing fig= with a list of axes should not warn (fig is still required there)."""
+    sdata = get_sdata_with_multiple_images("two")
+    fig, axs = plt.subplots(1, 2)
+    with logger_no_warns(caplog, logger, match="The `fig` parameter is deprecated"):
+        sdata.pl.render_images().pl.show(fig=fig, ax=list(axs), show=False)
+    plt.close("all")
+
+
+def test_frameon_false_multi_panel(get_sdata_with_multiple_images):
+    """frameon=False should apply to all panels in a multi-panel plot (regression for #204)."""
+    sdata = get_sdata_with_multiple_images("two")
+    axs = sdata.pl.render_images().pl.show(frameon=False, return_ax=True, show=False)
+    for ax in axs:
+        assert not ax.axison
+    plt.close("all")
