@@ -42,6 +42,16 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         """Visual test: frameon=False + title='' produces just the plot content (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, title="", colorbar=False)
 
+    def test_plot_user_ax_dpi_preserved(self, sdata_blobs: SpatialData):
+        """Visual test: low DPI produces visibly pixelated rasterization (regression for #310).
+
+        Uses dpi=15 so the 512x512 blobs image is downsampled to ~96x72.
+        If the bug regresses and DPI is overridden to the default (~100),
+        no rasterization occurs and the sharper render fails comparison.
+        """
+        fig, ax = plt.subplots(dpi=15)
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax)
+
     def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
         """plt.show() must not be called when the user supplies ax= (regression for #362)."""
         _, ax = plt.subplots()

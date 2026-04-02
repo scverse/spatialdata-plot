@@ -1960,10 +1960,10 @@ def _rasterize_if_necessary(
     target_y_dims = dpi * height
     target_x_dims = dpi * width
 
-    # Heuristics for when to rasterize
+    # Rasterize when the source image is substantially larger than what the
+    # current figure DPI × size requires.  The +100 margin avoids rasterizing
+    # when the image is only slightly larger than the target.
     do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
-    if x_dims < 2000 and y_dims < 2000:
-        do_rasterization = False
 
     if do_rasterization:
         logger.info("Rasterizing image for faster rendering.")
