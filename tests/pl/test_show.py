@@ -42,6 +42,11 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         """Visual test: frameon=False + title='' produces just the plot content (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, title="", colorbar=False)
 
+    def test_plot_user_ax_dpi_preserved(self, sdata_blobs: SpatialData):
+        """Visual test: rendering into a user-provided high-DPI ax produces correct layout (regression for #310)."""
+        fig, ax = plt.subplots(dpi=200)
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax)
+
     def test_no_plt_show_when_ax_provided(self, sdata_blobs: SpatialData):
         """plt.show() must not be called when the user supplies ax= (regression for #362)."""
         _, ax = plt.subplots()
@@ -110,3 +115,27 @@ def test_frameon_false_multi_panel(sdata_blobs: SpatialData):
     for ax in axs:
         assert not ax.axison
     plt.close("all")
+
+
+def test_user_figure_dpi_preserved_when_ax_provided(sdata_blobs: SpatialData):
+    """User's figure DPI must not be overridden when ax is passed without explicit dpi (regression for #310)."""
+    fig, ax = plt.subplots(dpi=300)
+    sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax, show=False)
+    assert fig.get_dpi() == 300
+    plt.close(fig)
+
+
+def test_explicit_dpi_overrides_figure_dpi(sdata_blobs: SpatialData):
+    """Explicit dpi= in show() should override the figure's DPI."""
+    fig, ax = plt.subplots(dpi=300)
+    sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=ax, dpi=150, show=False)
+    assert fig.get_dpi() == 150
+    plt.close(fig)
+
+
+def test_dpi_default_used_when_no_ax(sdata_blobs: SpatialData):
+    """When no ax is provided and dpi is not set, rcParams default should be used."""
+    ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(return_ax=True, show=False)
+    fig = ax.get_figure()
+    assert fig.get_dpi() == matplotlib.rcParams["figure.dpi"]
+    plt.close(fig)
