@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import sys
+import warnings
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -938,6 +939,15 @@ class PlotAccessor:
             show,
         )
 
+        if fig is not None and not isinstance(ax, Sequence):
+            warnings.warn(
+                "`fig` is being deprecated as an argument to `PlotAccessor.show` in spatialdata-plot. "
+                "To use a custom figure, create axes from it and pass them via `ax` instead: "
+                "`ax = fig.add_subplot(111)`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         sdata = self._copy()
 
         # Evaluate execution tree for plotting
@@ -1242,6 +1252,8 @@ class PlotAccessor:
                         raise IndexError("The number of titles must match the number of coordinate systems.") from e
                 ax.set_title(t)
                 ax.set_aspect("equal")
+                if fig_params.frameon is False:
+                    ax.axis("off")
 
             extent = get_extent(
                 sdata,
