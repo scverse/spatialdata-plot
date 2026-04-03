@@ -524,6 +524,16 @@ class TestChannelsAsCategories(PlotTester, metaclass=PlotTesterMeta):
             channels_as_categories=True,
         ).pl.show()
 
+    def test_plot_channels_as_categories_legend_upper_left(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_categories=True).pl.show(
+            legend_loc="upper left"
+        )
+
+    def test_plot_channels_as_categories_legend_lower_right(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_categories=True).pl.show(
+            legend_loc="lower right"
+        )
+
 
 class TestChannelsAsCategoriesNonVisual:
     """Non-visual tests for channels_as_categories edge cases."""
