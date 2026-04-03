@@ -199,6 +199,14 @@ class ColorbarSpec:
     alpha: float | None = None
 
 
+@dataclass
+class ChannelLegendEntry:
+    """A single channel-to-color mapping for the categorical channel legend."""
+
+    channel_name: str
+    color_hex: str
+
+
 CBAR_DEFAULT_LOCATION = "right"
 CBAR_DEFAULT_FRACTION = 0.075
 CBAR_DEFAULT_PAD = 0.015
@@ -275,6 +283,7 @@ class ImageRenderParams:
     colorbar_params: dict[str, object] | None = None
     transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
     grayscale: bool = False
+    channels_as_categories: bool = False
 
 
 @dataclass

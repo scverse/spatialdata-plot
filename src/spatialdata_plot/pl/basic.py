@@ -30,6 +30,7 @@ from xarray import DataArray, DataTree
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl.render import (
+    _draw_channel_legend,
     _render_images,
     _render_labels,
     _render_points,
@@ -40,6 +41,7 @@ from spatialdata_plot.pl.render_params import (
     CBAR_DEFAULT_FRACTION,
     CBAR_DEFAULT_LOCATION,
     CBAR_DEFAULT_PAD,
+    ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
     ImageRenderParams,
@@ -523,6 +525,7 @@ class PlotAccessor:
         transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
+        channels_as_categories: bool = False,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -600,6 +603,13 @@ class PlotAccessor:
         colorbar_params :
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
+        channels_as_categories : bool, default False
+            When ``True`` and rendering multiple channels, show a categorical
+            legend mapping each channel name to its compositing color.  The
+            legend uses the ``legend_*`` parameters from :meth:`show`.
+            Ignored for single-channel and RGB(A) images.  When multiple
+            ``render_images`` calls use this flag on the same axes, all
+            channel entries are combined into a single legend.
         kwargs
             Additional arguments to be passed to cmap, norm, and other rendering functions.
 
@@ -681,6 +691,7 @@ class PlotAccessor:
                 colorbar_params=param_values["colorbar_params"],
                 transfunc=transfunc,
                 grayscale=grayscale,
+                channels_as_categories=channels_as_categories,
             )
             n_steps += 1
 
@@ -1140,6 +1151,7 @@ class PlotAccessor:
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             assert isinstance(ax, Axes)
             axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params.colorbar else None
+            axis_channel_legend_entries: list[ChannelLegendEntry] = []
 
             wants_images = False
             wants_labels = False
@@ -1170,6 +1182,7 @@ class PlotAccessor:
                             scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
+                            channel_legend_entries=axis_channel_legend_entries,
                             rasterize=rasterize,
                         )
 
@@ -1278,6 +1291,9 @@ class PlotAccessor:
 
             if legend_params.colorbar and axis_colorbar_requests:
                 pending_colorbars.append((ax, axis_colorbar_requests))
+
+            if axis_channel_legend_entries:
+                _draw_channel_legend(ax, axis_channel_legend_entries, legend_params, fig_params)
 
         if pending_colorbars and fig_params.fig is not None:
             fig = fig_params.fig
