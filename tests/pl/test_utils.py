@@ -78,13 +78,21 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         )
 
     def _render_transparent_cmap_shapes(self, sdata_blobs: SpatialData, method: str):
+        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
         new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
         sdata_blobs.shapes["blobs_polygons"]["value"] = [0.0, 2.0, 3.0, 4.0, 5.0]
+
+        # left: baseline with standard viridis
+        sdata_blobs.pl.render_images("blobs_image").pl.render_shapes(
+            "blobs_polygons", color="value", cmap="viridis", method=method
+        ).pl.show(ax=axs[0], colorbar=False)
+
+        # right: transparent cmap — shape with value=0 should reveal the image
         sdata_blobs.pl.render_images("blobs_image").pl.render_shapes(
             "blobs_polygons", color="value", cmap=new_cmap, method=method
-        ).pl.show(colorbar=False)
+        ).pl.show(ax=axs[1], colorbar=False)
 
     def test_plot_transparent_cmap_shapes_matplotlib(self, sdata_blobs: SpatialData):
         self._render_transparent_cmap_shapes(sdata_blobs, method="matplotlib")
