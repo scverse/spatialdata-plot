@@ -3194,50 +3194,67 @@ def _prepare_transformation(
     return trans, trans_data
 
 
-def _mask_transparent_cmap_entries(
+def _apply_cmap_alpha_to_datashader_result(
+    result: Any,
     agg: DataArray,
     cmap: str | list[str] | Colormap,
     span: list[float] | tuple[float, float] | None,
-) -> tuple[DataArray, list[float] | tuple[float, float] | None]:
-    """Set aggregate values to NaN where the colormap alpha is zero.
+) -> Any:
+    """Apply the colormap's alpha channel to a datashader RGBA result.
 
     Datashader ignores the per-entry alpha channel of matplotlib colormaps,
-    so entries meant to be fully transparent (alpha=0) must be converted to
-    NaN — which datashader already renders as transparent — before shading.
-    See :issue:`376`.
-
-    Returns ``(masked_agg, span)`` where *span* is the data range computed
-    **before** masking.  The caller must pass this span to ``ds.tf.shade``
-    to prevent datashader from auto-scaling the remaining values into the
-    transparent bin.
+    so pixels that the cmap marks as transparent (alpha=0) are rendered
+    opaque.  This function post-processes the shaded RGBA output to restore
+    the cmap's intended transparency.  See :issue:`376`.
     """
     if not isinstance(cmap, Colormap):
-        return agg, span
+        return result
 
-    # Only the bottom entry is checked — this is what
-    # ``set_zero_in_cmap_to_transparent`` targets.
-    if cmap(0.0)[3] >= 1.0:
-        return agg, span
+    # Quick check: does this cmap have any transparent entries?
+    test_vals = np.linspace(0, 1, min(cmap.N, 256))
+    cmap_alphas = cmap(test_vals)[:, 3]
+    if np.all(cmap_alphas >= 1.0):
+        return result
 
-    # For a ListedColormap with N colors, index 0 covers [0, 1/N) in
-    # normalised space. Compute the data value at the upper boundary of that bin.
-    frac = 1.0 / cmap.N
+    # Get or ensure we have an (H, W, 4) uint8 array
+    if hasattr(result, "values"):
+        # datashader Image — uint32 packed, convert via to_numpy()
+        rgba = result.to_numpy().base
+        if rgba is None:
+            return result
+    else:
+        rgba = result
+
+    if rgba.ndim != 3 or rgba.shape[2] != 4:
+        return result
+
+    # Normalise aggregate values to [0, 1] using the same span datashader used
+    agg_vals = agg.values.astype(np.float64)
+    valid = np.isfinite(agg_vals)
+    if not valid.any():
+        return result
 
     if span is not None:
         lo, hi = float(span[0]), float(span[1])
     else:
-        lo = float(agg.min())
-        hi = float(agg.max())
+        lo = float(np.nanmin(agg_vals))
+        hi = float(np.nanmax(agg_vals))
 
     if hi <= lo or not np.isfinite(lo) or not np.isfinite(hi):
-        return agg, span
+        return result
 
-    # Freeze the span before masking so datashader doesn't auto-scale
-    # the remaining values into the now-transparent first bin.
-    span = [lo, hi]
+    normed = np.clip((agg_vals - lo) / (hi - lo), 0.0, 1.0)
 
-    threshold = lo + frac * (hi - lo)
-    return agg.where(agg >= threshold), span
+    # Look up cmap alpha for each pixel
+    desired_alpha = cmap(normed)[:, :, 3]
+
+    # Zero out pixels where the cmap wants transparency
+    transparent = valid & (desired_alpha < 1.0)
+    if transparent.any():
+        # Scale the existing alpha by the cmap's alpha
+        rgba[transparent, 3] = (rgba[transparent, 3].astype(np.float32) * desired_alpha[transparent]).astype(np.uint8)
+
+    return result
 
 
 def _datashader_map_aggregate_to_color(
@@ -3245,7 +3262,7 @@ def _datashader_map_aggregate_to_color(
     cmap: str | list[str] | ListedColormap,
     color_key: list[str] | dict[str, str] | None = None,
     min_alpha: float = 40,
-    span: list[float] | tuple[float, float] | None = None,
+    span: None | list[float] = None,
     clip: bool = True,
 ) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
     """ds.tf.shade() part, ensuring correct clipping behavior.
@@ -3257,8 +3274,6 @@ def _datashader_map_aggregate_to_color(
         # in case we use datashader together with a Normalize object where clip=False
         # why we need this is documented in https://github.com/scverse/spatialdata-plot/issues/372
         agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
-        agg_in, span = _mask_transparent_cmap_entries(agg_in, cmap, span)
-        assert span is not None  # guaranteed: we passed a non-None span above
         img_in = ds.tf.shade(
             agg_in,
             cmap=cmap,
@@ -3293,10 +3308,10 @@ def _datashader_map_aggregate_to_color(
         img_over = img_over.to_numpy().base
         if img_over is not None:
             stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
-        return stack
 
-    agg, span = _mask_transparent_cmap_entries(agg, cmap, span)
-    return ds.tf.shade(
+        return _apply_cmap_alpha_to_datashader_result(stack, agg, cmap, span)
+
+    result = ds.tf.shade(
         agg,
         cmap=cmap,
         color_key=color_key,
@@ -3304,6 +3319,7 @@ def _datashader_map_aggregate_to_color(
         span=span,
         how="linear",
     )
+    return _apply_cmap_alpha_to_datashader_result(result, agg, cmap, span)
 
 
 def _hex_no_alpha(hex: str) -> str:
