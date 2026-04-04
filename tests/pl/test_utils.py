@@ -125,26 +125,27 @@ class TestMaskTransparentCmapEntries:
         data = np.array([[0.0, 1.0, 5.0], [0.0, 2.0, 10.0]])
         agg = xr.DataArray(data, dims=["y", "x"])
 
-        masked = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
+        masked, returned_span = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
 
         assert np.isnan(masked.values[0, 0])
         assert np.isnan(masked.values[1, 0])
         assert masked.values[0, 1] == 1.0
         assert masked.values[0, 2] == 5.0
+        assert returned_span == [0.0, 10.0]
 
     def test_no_effect_for_opaque_cmap(self):
         cmap = plt.get_cmap("viridis")
         data = np.array([[0.0, 5.0, 10.0]])
         agg = xr.DataArray(data, dims=["y", "x"])
 
-        masked = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
+        masked, returned_span = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
         np.testing.assert_array_equal(masked.values, data)
 
     def test_no_effect_for_string_cmap(self):
         data = np.array([[0.0, 5.0, 10.0]])
         agg = xr.DataArray(data, dims=["y", "x"])
 
-        masked = _mask_transparent_cmap_entries(agg, "viridis", span=[0.0, 10.0])
+        masked, _ = _mask_transparent_cmap_entries(agg, "viridis", span=[0.0, 10.0])
         np.testing.assert_array_equal(masked.values, data)
 
     def test_datashader_shade_respects_transparent_cmap(self):
@@ -168,11 +169,12 @@ class TestMaskTransparentCmapEntries:
         data = np.array([[0.0, 3.0, 10.0]])
         agg = xr.DataArray(data, dims=["y", "x"])
 
-        masked = _mask_transparent_cmap_entries(agg, cmap, span=None)
+        masked, returned_span = _mask_transparent_cmap_entries(agg, cmap, span=None)
 
         assert np.isnan(masked.values[0, 0])
         assert masked.values[0, 1] == 3.0
         assert masked.values[0, 2] == 10.0
+        assert returned_span == [0.0, 10.0], "span should be frozen from pre-masking range"
 
     def test_all_nan_aggregate(self):
         """All-NaN aggregate is returned unchanged."""
@@ -181,7 +183,7 @@ class TestMaskTransparentCmapEntries:
         data = np.array([[np.nan, np.nan]])
         agg = xr.DataArray(data, dims=["y", "x"])
 
-        masked = _mask_transparent_cmap_entries(agg, cmap, span=None)
+        masked, _ = _mask_transparent_cmap_entries(agg, cmap, span=None)
         np.testing.assert_array_equal(np.isnan(masked.values), np.isnan(data))
 
 
