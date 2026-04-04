@@ -3194,6 +3194,43 @@ def _prepare_transformation(
     return trans, trans_data
 
 
+def _mask_transparent_cmap_entries(
+    agg: DataArray,
+    cmap: str | list[str] | Colormap,
+    span: list[float] | tuple[float, float] | None,
+) -> DataArray:
+    """Set aggregate values to NaN where the colormap alpha is zero.
+
+    Datashader ignores the per-entry alpha channel of matplotlib colormaps,
+    so entries meant to be fully transparent (alpha=0) must be converted to
+    NaN — which datashader already renders as transparent — before shading.
+    See :issue:`376`.
+    """
+    if not isinstance(cmap, Colormap):
+        return agg
+
+    # Only the bottom entry is checked — this is what
+    # ``set_zero_in_cmap_to_transparent`` targets.
+    if cmap(0.0)[3] >= 1.0:
+        return agg
+
+    # For a ListedColormap with N colors, index 0 covers [0, 1/N) in
+    # normalised space. Compute the data value at the upper boundary of that bin.
+    frac = 1.0 / cmap.N
+
+    if span is not None:
+        lo, hi = float(span[0]), float(span[1])
+    else:
+        lo = float(agg.min())
+        hi = float(agg.max())
+
+    if hi <= lo or not np.isfinite(lo) or not np.isfinite(hi):
+        return agg
+
+    threshold = lo + frac * (hi - lo)
+    return agg.where(agg >= threshold)
+
+
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
@@ -3211,6 +3248,7 @@ def _datashader_map_aggregate_to_color(
         # in case we use datashader together with a Normalize object where clip=False
         # why we need this is documented in https://github.com/scverse/spatialdata-plot/issues/372
         agg_in = agg.where((agg >= span[0]) & (agg <= span[1]))
+        agg_in = _mask_transparent_cmap_entries(agg_in, cmap, span)
         img_in = ds.tf.shade(
             agg_in,
             cmap=cmap,
@@ -3247,6 +3285,7 @@ def _datashader_map_aggregate_to_color(
             stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
         return stack
 
+    agg = _mask_transparent_cmap_entries(agg, cmap, span)
     return ds.tf.shade(
         agg,
         cmap=cmap,

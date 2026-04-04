@@ -4,10 +4,16 @@ import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
+import xarray as xr
 from spatialdata import SpatialData
 
 import spatialdata_plot
-from spatialdata_plot.pl.utils import _get_subplots
+from spatialdata_plot.pl.utils import (
+    _datashader_map_aggregate_to_color,
+    _get_subplots,
+    _mask_transparent_cmap_entries,
+    set_zero_in_cmap_to_transparent,
+)
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -88,6 +94,74 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
+
+
+class TestMaskTransparentCmapEntries:
+    """Regression tests for #376: set_zero_in_cmap_to_transparent with datashader."""
+
+    def test_masks_zero_values_when_cmap_has_transparent_entry(self):
+        cmap = set_zero_in_cmap_to_transparent("viridis")
+        data = np.array([[0.0, 1.0, 5.0], [0.0, 2.0, 10.0]])
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        masked = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
+
+        assert np.isnan(masked.values[0, 0])
+        assert np.isnan(masked.values[1, 0])
+        assert masked.values[0, 1] == 1.0
+        assert masked.values[0, 2] == 5.0
+
+    def test_no_effect_for_opaque_cmap(self):
+        cmap = plt.get_cmap("viridis")
+        data = np.array([[0.0, 5.0, 10.0]])
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        masked = _mask_transparent_cmap_entries(agg, cmap, span=[0.0, 10.0])
+        np.testing.assert_array_equal(masked.values, data)
+
+    def test_no_effect_for_string_cmap(self):
+        data = np.array([[0.0, 5.0, 10.0]])
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        masked = _mask_transparent_cmap_entries(agg, "viridis", span=[0.0, 10.0])
+        np.testing.assert_array_equal(masked.values, data)
+
+    def test_datashader_shade_respects_transparent_cmap(self):
+        """End-to-end: _datashader_map_aggregate_to_color produces alpha=0 for transparent cmap entries."""
+        cmap = set_zero_in_cmap_to_transparent("viridis")
+        data = np.array([[0.0, 5.0, 10.0]], dtype=np.float64)
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        result = _datashader_map_aggregate_to_color(agg, cmap=cmap, min_alpha=254, span=[0.0, 10.0])
+        img = result.values if hasattr(result, "values") else result
+
+        alpha_at_zero = (int(img[0, 0]) >> 24) & 0xFF
+        alpha_at_five = (int(img[0, 1]) >> 24) & 0xFF
+
+        assert alpha_at_zero == 0, f"Expected alpha=0 at value=0.0, got {alpha_at_zero}"
+        assert alpha_at_five > 0, f"Expected non-zero alpha at value=5.0, got {alpha_at_five}"
+
+    def test_span_none_with_zeros(self):
+        """Masking works when span is inferred from the aggregate (span=None)."""
+        cmap = set_zero_in_cmap_to_transparent("viridis")
+        data = np.array([[0.0, 3.0, 10.0]])
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        masked = _mask_transparent_cmap_entries(agg, cmap, span=None)
+
+        assert np.isnan(masked.values[0, 0])
+        assert masked.values[0, 1] == 3.0
+        assert masked.values[0, 2] == 10.0
+
+    def test_all_nan_aggregate(self):
+        """All-NaN aggregate is returned unchanged."""
+
+        cmap = set_zero_in_cmap_to_transparent("viridis")
+        data = np.array([[np.nan, np.nan]])
+        agg = xr.DataArray(data, dims=["y", "x"])
+
+        masked = _mask_transparent_cmap_entries(agg, cmap, span=None)
+        np.testing.assert_array_equal(np.isnan(masked.values), np.isnan(data))
 
 
 def test_extract_scalar_value():
