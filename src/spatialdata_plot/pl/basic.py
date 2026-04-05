@@ -182,6 +182,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
@@ -263,6 +264,10 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         shape: Literal["circle", "hex", "visium_hex", "square"] | None
             If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
             specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
@@ -313,6 +318,7 @@ class PlotAccessor:
             ds_reduction=kwargs.get("datashader_reduction"),
             colorbar=colorbar,
             colorbar_params=colorbar_params,
+            gene_symbols=gene_symbols,
         )
 
         sdata = self._copy()
@@ -370,6 +376,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
@@ -434,6 +441,10 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -467,6 +478,7 @@ class PlotAccessor:
             ds_reduction=kwargs.get("datashader_reduction"),
             colorbar=colorbar,
             colorbar_params=colorbar_params,
+            gene_symbols=gene_symbols,
         )
 
         if method is not None:
@@ -706,6 +718,7 @@ class PlotAccessor:
         colorbar_params: dict[str, object] | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -775,6 +788,10 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the AnnData table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None,
             :attr:`sdata.table.X` of the default table is used for coloring.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         kwargs
             Additional arguments to be passed to cmap and norm.
 
@@ -803,6 +820,7 @@ class PlotAccessor:
             colorbar_params=colorbar_params,
             table_name=table_name,
             table_layer=table_layer,
+            gene_symbols=gene_symbols,
         )
 
         sdata = self._copy()
