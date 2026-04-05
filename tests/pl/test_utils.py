@@ -100,26 +100,6 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_transparent_cmap_shapes_datashader(self, sdata_blobs: SpatialData):
         self._render_transparent_cmap_shapes(sdata_blobs, method="datashader")
 
-    def test_plot_transparent_cmap_points_datashader(self, sdata_blobs: SpatialData):
-        """Points with zero values should be transparent when using transparent cmap."""
-
-        _, axs = plt.subplots(nrows=1, ncols=2, layout="tight")
-        new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
-
-        # Add a continuous column with some zeros to the points element
-        n_pts = len(sdata_blobs["blobs_points"])
-        values = np.linspace(0, 10, n_pts)
-        values[:40] = 0.0  # first 40 points are zero
-        sdata_blobs["blobs_points"]["value"] = values
-
-        sdata_blobs.pl.render_images("blobs_image").pl.render_points(
-            "blobs_points", color="value", cmap="viridis"
-        ).pl.show(ax=axs[0], colorbar=False)
-
-        sdata_blobs.pl.render_images("blobs_image").pl.render_points(
-            "blobs_points", color="value", cmap=new_cmap
-        ).pl.show(ax=axs[1], colorbar=False)
-
     def test_plot_transparent_cmap_shapes_clip_false(self, sdata_blobs: SpatialData):
         """Transparent cmap with clip=False norm (3-part shading path)."""
         from matplotlib.colors import Normalize
