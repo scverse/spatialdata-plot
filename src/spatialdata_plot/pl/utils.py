@@ -2819,7 +2819,7 @@ def _validate_col_for_column_table(
                 # Try gene_symbols fallback before discarding this table
                 if gene_symbols is not None:
                     try:
-                        col_for_color = _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
+                        _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
                     except KeyError:
                         tables.remove(annotates)
                 else:
@@ -2832,6 +2832,13 @@ def _validate_col_for_column_table(
         table_name = next(iter(tables))
         if len(tables) > 1:
             logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
+        # Resolve gene symbol to var_name using the selected table
+        if (
+            gene_symbols is not None
+            and col_for_color not in sdata[table_name].obs.columns
+            and col_for_color not in sdata[table_name].var_names
+        ):
+            col_for_color = _resolve_gene_symbols(sdata[table_name], col_for_color, gene_symbols)
     return col_for_color, table_name
 
 
