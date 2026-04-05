@@ -2776,6 +2776,12 @@ def _resolve_gene_symbols(
     mask = adata.var[gene_symbols] == col_for_color
     if not mask.any():
         raise KeyError(f"'{col_for_color}' not found in `adata.var['{gene_symbols}']`.")
+    n_matches = mask.sum()
+    if n_matches > 1:
+        logger.warning(
+            f"Gene symbol '{col_for_color}' maps to {n_matches} var_names in column '{gene_symbols}'. "
+            f"Using the first match: '{adata.var.index[mask][0]}'."
+        )
     return str(adata.var.index[mask][0])
 
 
@@ -2814,12 +2820,12 @@ def _validate_col_for_column_table(
                 "Please ensure the element is annotated by at least one table."
             )
         # Now check which tables contain the column
+        resolved_var_name: str | None = None
         for annotates in tables.copy():
             if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
-                # Try gene_symbols fallback before discarding this table
                 if gene_symbols is not None:
                     try:
-                        _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
+                        resolved_var_name = _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
                     except KeyError:
                         tables.remove(annotates)
                 else:
@@ -2832,13 +2838,8 @@ def _validate_col_for_column_table(
         table_name = next(iter(tables))
         if len(tables) > 1:
             logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
-        # Resolve gene symbol to var_name using the selected table
-        if (
-            gene_symbols is not None
-            and col_for_color not in sdata[table_name].obs.columns
-            and col_for_color not in sdata[table_name].var_names
-        ):
-            col_for_color = _resolve_gene_symbols(sdata[table_name], col_for_color, gene_symbols)
+        if resolved_var_name is not None:
+            col_for_color = resolved_var_name
     return col_for_color, table_name
 
 
