@@ -95,6 +95,13 @@ ColorLike = tuple[float, ...] | list[float] | str
 
 _GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
 
+_RENDER_CMD_TO_CS_FLAG: dict[str, str] = {
+    "render_images": "has_images",
+    "render_shapes": "has_shapes",
+    "render_points": "has_points",
+    "render_labels": "has_labels",
+}
+
 
 def _gate_palette_and_groups(
     element_params: dict[str, Any],
@@ -264,6 +271,7 @@ def _prepare_params_plot(
         if ax is not None and len(ax) != num_panels:
             raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
         if fig is None:
+            # TODO(#579): infer fig from ax[0].get_figure() instead of requiring it
             raise ValueError(
                 f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
             )
@@ -2080,17 +2088,11 @@ def _get_elements_to_be_rendered(
     List of names of the SpatialElements to be rendered in the plot.
     """
     elements_to_be_rendered: list[str] = []
-    render_cmds_map = {
-        "render_images": "has_images",
-        "render_shapes": "has_shapes",
-        "render_points": "has_points",
-        "render_labels": "has_labels",
-    }
 
     cs_query = cs_contents.query(f"cs == '{cs}'")
 
     for cmd, params in render_cmds:
-        key = render_cmds_map.get(cmd)
+        key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
         if key and cs_query[key][0]:
             elements_to_be_rendered += [params.element]
 

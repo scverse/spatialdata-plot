@@ -51,6 +51,7 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 from spatialdata_plot.pl.utils import (
+    _RENDER_CMD_TO_CS_FLAG,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
@@ -993,9 +994,11 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        cs_was_auto = coordinate_systems is None
+        coordinate_systems = list(sdata.coordinate_systems) if cs_was_auto else coordinate_systems
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
+        assert coordinate_systems is not None
 
         for cs in coordinate_systems:
             if cs not in sdata.coordinate_systems:
@@ -1019,14 +1022,32 @@ class PlotAccessor:
             elements=elements_to_be_rendered,
         )
 
-        # catch error in ruff-friendly way
-        if ax is not None:  # we'll generate matching number then
+        # When CS was auto-detected and ax is provided, keep only CS that have
+        # element types for ALL render commands (workaround for upstream #176).
+        if ax is not None:
             n_ax = 1 if isinstance(ax, Axes) else len(ax)
+            if cs_was_auto and len(coordinate_systems) > n_ax:
+                required_flags = [_RENDER_CMD_TO_CS_FLAG[cmd] for cmd in cmds if cmd in _RENDER_CMD_TO_CS_FLAG]
+                strict_cs = [
+                    cs_name
+                    for cs_name in coordinate_systems
+                    if all(cs_contents.query(f"cs == '{cs_name}'").iloc[0][flag] for flag in required_flags)
+                ]
+                if strict_cs:
+                    coordinate_systems = strict_cs
+
             if len(coordinate_systems) != n_ax:
-                raise ValueError(
+                msg = (
                     f"Mismatch between number of matplotlib axes objects ({n_ax}) "
                     f"and number of coordinate systems ({len(coordinate_systems)})."
                 )
+                if cs_was_auto:
+                    msg += (
+                        " This can happen when elements have transformations to multiple "
+                        "coordinate systems (e.g. after filter_by_coordinate_system). "
+                        "Pass `coordinate_systems=` explicitly to select which ones to plot."
+                    )
+                raise ValueError(msg)
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
