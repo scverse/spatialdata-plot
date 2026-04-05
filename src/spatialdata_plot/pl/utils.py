@@ -2550,6 +2550,7 @@ def _validate_label_render_params(
     table_layer: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2593,7 +2594,7 @@ def _validate_label_render_params(
         element_params[el]["col_for_color"] = None
         if (col_for_color := param_dict["col_for_color"]) is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"], labels=True
+                sdata, el, col_for_color, param_dict["table_name"], labels=True, gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2621,6 +2622,7 @@ def _validate_points_render_params(
     ds_reduction: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2660,7 +2662,7 @@ def _validate_points_render_params(
         col_for_color = param_dict["col_for_color"]
         if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"]
+                sdata, el, col_for_color, param_dict["table_name"], gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2694,6 +2696,7 @@ def _validate_shape_render_params(
     ds_reduction: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2743,7 +2746,7 @@ def _validate_shape_render_params(
         col_for_color = param_dict["col_for_color"]
         if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"]
+                sdata, el, col_for_color, param_dict["table_name"], gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2757,12 +2760,32 @@ def _validate_shape_render_params(
     return element_params
 
 
+def _resolve_gene_symbols(
+    adata: AnnData,
+    col_for_color: str,
+    gene_symbols: str,
+) -> str:
+    """Resolve a gene symbol to its var_name using an alternate var column.
+
+    Mimics scanpy's ``gene_symbols`` behaviour: look up *col_for_color* in
+    ``adata.var[gene_symbols]`` and return the corresponding ``var_name``
+    (i.e. the var index value).
+    """
+    if gene_symbols not in adata.var.columns:
+        raise KeyError(f"Column '{gene_symbols}' not found in `adata.var`. Cannot use it as `gene_symbols` lookup.")
+    mask = adata.var[gene_symbols] == col_for_color
+    if not mask.any():
+        raise KeyError(f"'{col_for_color}' not found in `adata.var['{gene_symbols}']`.")
+    return str(adata.var.index[mask][0])
+
+
 def _validate_col_for_column_table(
     sdata: SpatialData,
     element_name: str,
     col_for_color: str | None,
     table_name: str | None,
     labels: bool = False,
+    gene_symbols: str | None = None,
 ) -> tuple[str | None, str | None]:
     if col_for_color is None:
         return None, None
@@ -2775,9 +2798,13 @@ def _validate_col_for_column_table(
             logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
         if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-            raise KeyError(
-                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
-            )
+            if gene_symbols is not None:
+                col_for_color = _resolve_gene_symbols(sdata[table_name], col_for_color, gene_symbols)
+            else:
+                raise KeyError(
+                    f"Column '{col_for_color}' not found in obs/var of table '{table_name}' "
+                    f"for element '{element_name}'."
+                )
     else:
         tables = get_element_annotators(sdata, element_name)
         if len(tables) == 0:
@@ -2789,7 +2816,14 @@ def _validate_col_for_column_table(
         # Now check which tables contain the column
         for annotates in tables.copy():
             if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
-                tables.remove(annotates)
+                # Try gene_symbols fallback before discarding this table
+                if gene_symbols is not None:
+                    try:
+                        col_for_color = _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
+                    except KeyError:
+                        tables.remove(annotates)
+                else:
+                    tables.remove(annotates)
         if len(tables) == 0:
             raise KeyError(
                 f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "

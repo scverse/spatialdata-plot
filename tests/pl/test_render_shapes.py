@@ -1009,6 +1009,15 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             ax=axs[1], title="default (filtered)"
         )
 
+    def test_plot_can_color_shapes_by_gene_symbols(self, sdata_blobs: SpatialData):
+        """Color shapes by gene symbol alias instead of var_name (#247)."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="GeneA", table_name="table", gene_symbols="gene_symbol"
+        ).pl.show()
+
 
 def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
     """When no elements match the groups, the plot should render without error."""

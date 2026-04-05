@@ -627,6 +627,26 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         """Regression test for #358: .sample() must not shuffle categorical colors."""
         self._make_sampled_sdata().pl.render_points("pts", color="cluster", method="datashader").pl.show()
 
+    def test_plot_can_color_points_by_gene_symbols(self, sdata_blobs: SpatialData):
+        """Color points by gene symbol alias instead of var_name (#247)."""
+        rng = get_standard_RNG()
+        pts = sdata_blobs["blobs_points"].compute()
+        n_obs = len(pts)
+        # Assign unique instance IDs to each point
+        pts["instance_id"] = np.arange(n_obs)
+        sdata_blobs["blobs_points"] = PointsModel.parse(pts)
+        adata = AnnData(
+            X=rng.random((n_obs, 3)),
+            var=pd.DataFrame({"gene_symbol": ["GeneA", "GeneB", "GeneC"]}, index=["f0", "f1", "f2"]),
+        )
+        adata.obs["region"] = pd.Categorical(["blobs_points"] * n_obs)
+        adata.obs["instance_id"] = np.arange(n_obs)
+        table = TableModel.parse(adata, region="blobs_points", region_key="region", instance_key="instance_id")
+        sdata_blobs["table"] = table
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="GeneA", table_name="table", gene_symbols="gene_symbol", size=10
+        ).pl.show()
+
 
 def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
     """When no elements match the groups, the plot should render without error."""
