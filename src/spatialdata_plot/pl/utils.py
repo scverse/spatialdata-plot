@@ -3194,6 +3194,69 @@ def _prepare_transformation(
     return trans, trans_data
 
 
+def _apply_cmap_alpha_to_datashader_result(
+    result: Any,
+    agg: DataArray,
+    cmap: str | list[str] | Colormap,
+    span: list[float] | tuple[float, float] | None,
+) -> Any:
+    """Apply the colormap's alpha channel to a datashader RGBA result.
+
+    Datashader ignores the per-entry alpha channel of matplotlib colormaps,
+    so pixels that the cmap marks as transparent (alpha=0) are rendered
+    opaque.  This function post-processes the shaded RGBA output to restore
+    the cmap's intended transparency.  See :issue:`376`.
+    """
+    if not isinstance(cmap, Colormap):
+        return result
+
+    # Quick check: does this cmap have any transparent entries?
+    test_vals = np.linspace(0, 1, min(cmap.N, 256))
+    cmap_alphas = cmap(test_vals)[:, 3]
+    if np.all(cmap_alphas >= 1.0):
+        return result
+
+    # Get or ensure we have an (H, W, 4) uint8 array
+    if hasattr(result, "values"):
+        # datashader Image — uint32 packed, convert via to_numpy()
+        rgba = result.to_numpy().base
+        if rgba is None:
+            return result
+    else:
+        rgba = result
+
+    if rgba.ndim != 3 or rgba.shape[2] != 4:
+        return result
+
+    # Normalise aggregate values to [0, 1] using the same span datashader used
+    agg_vals = agg.values.astype(np.float64)
+    valid = np.isfinite(agg_vals)
+    if not valid.any():
+        return result
+
+    if span is not None:
+        lo, hi = float(span[0]), float(span[1])
+    else:
+        lo = float(np.nanmin(agg_vals))
+        hi = float(np.nanmax(agg_vals))
+
+    if hi <= lo or not np.isfinite(lo) or not np.isfinite(hi):
+        return result
+
+    normed = np.clip((agg_vals - lo) / (hi - lo), 0.0, 1.0)
+
+    # Look up cmap alpha for each pixel
+    desired_alpha = cmap(normed)[:, :, 3]
+
+    # Zero out pixels where the cmap wants transparency
+    transparent = valid & (desired_alpha < 1.0)
+    if transparent.any():
+        # Scale the existing alpha by the cmap's alpha
+        rgba[transparent, 3] = (rgba[transparent, 3].astype(np.float32) * desired_alpha[transparent]).astype(np.uint8)
+
+    return result
+
+
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
@@ -3245,9 +3308,10 @@ def _datashader_map_aggregate_to_color(
         img_over = img_over.to_numpy().base
         if img_over is not None:
             stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
-        return stack
 
-    return ds.tf.shade(
+        return _apply_cmap_alpha_to_datashader_result(stack, agg, cmap, span)
+
+    result = ds.tf.shade(
         agg,
         cmap=cmap,
         color_key=color_key,
@@ -3255,6 +3319,7 @@ def _datashader_map_aggregate_to_color(
         span=span,
         how="linear",
     )
+    return _apply_cmap_alpha_to_datashader_result(result, agg, cmap, span)
 
 
 def _hex_no_alpha(hex: str) -> str:
