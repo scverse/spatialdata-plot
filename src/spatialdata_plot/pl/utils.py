@@ -251,17 +251,14 @@ def _prepare_params_plot(
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
     figsize = rcParams["figure.figsize"] if figsize is None else figsize
-    # When creating a new figure, fall back to rcParams; when the user provides
-    # their own axes, preserve the figure's existing DPI (only override if
-    # the user explicitly passed dpi= to show()).
-    resolved_dpi = rcParams["figure.dpi"] if dpi is None else dpi
+    dpi = rcParams["figure.dpi"] if dpi is None else dpi
     if num_panels > 1 and ax is None:
         fig, grid = _panel_grid(
             num_panels=num_panels,
             hspace=hspace,
             wspace=wspace,
             ncols=ncols,
-            dpi=resolved_dpi,
+            dpi=dpi,
             figsize=figsize,
         )
         axs: None | Sequence[Axes] = [plt.subplot(grid[c]) for c in range(num_panels)]
@@ -277,16 +274,14 @@ def _prepare_params_plot(
             )
         assert ax is None or isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
         axs = ax
-        if dpi is not None:
-            fig.set_dpi(dpi)
     else:
         axs = None
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize, dpi=resolved_dpi, constrained_layout=True)
+            fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
         elif isinstance(ax, Axes):
+            # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
-            if dpi is not None:
-                fig.set_dpi(dpi)
+            fig.set_dpi(dpi)
 
     # set scalebar
     if scalebar_dx is not None:
@@ -1024,7 +1019,7 @@ def _set_color_source_vec(
     na_color: Color,
     element_name: list[str] | str | None = None,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
     alpha: float = 1.0,
     table_name: str | None = None,
@@ -1519,7 +1514,7 @@ def _extract_colors_from_table_uns(
 def _modify_categorical_color_mapping(
     mapping: Mapping[str, str],
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
 ) -> Mapping[str, str]:
     if groups is None or isinstance(groups, list) and groups[0] is None:
         return mapping
@@ -1577,11 +1572,18 @@ def _get_categorical_color_mapping(
     cmap_params: CmapParams | None = None,
     alpha: float = 1,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     render_type: Literal["points", "labels"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
+
+    # Dict palette (e.g. from optimize_palette): use directly as category→color mapping
+    if isinstance(palette, dict):
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        mapping = {cat: palette.get(cat, na_color_hex) for cat in color_source_vector.categories}
+        mapping["NaN"] = na_color_hex
+        return mapping
 
     if isinstance(groups, str):
         groups = [groups]
@@ -2395,14 +2397,17 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if isinstance(palette, list):
+    # dict palettes (e.g. from optimize_palette) bypass groups validation
+    if isinstance(palette, dict):
+        pass
+    elif isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
     elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
     palette_group = param_dict.get("palette")
-    if element_type in ["shapes", "points", "labels"] and palette_group is not None:
+    if element_type in ["shapes", "points", "labels"] and palette_group is not None and not isinstance(palette, dict):
         groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
@@ -2542,7 +2547,7 @@ def _validate_label_render_params(
     fill_alpha: float | int | None,
     contour_px: int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     norm: Normalize | None,
     outline_alpha: float | int,
@@ -2614,7 +2619,7 @@ def _validate_points_render_params(
     alpha: float | int | None,
     color: ColorLike | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
@@ -2682,7 +2687,7 @@ def _validate_shape_render_params(
     element: str | None,
     fill_alpha: float | int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     color: ColorLike | None,
     na_color: ColorLike | None,
     outline_width: float | int | tuple[float | int, float | int] | None,
