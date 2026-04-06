@@ -1024,7 +1024,7 @@ def _set_color_source_vec(
     na_color: Color,
     element_name: list[str] | str | None = None,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
     alpha: float = 1.0,
     table_name: str | None = None,
@@ -1519,7 +1519,7 @@ def _extract_colors_from_table_uns(
 def _modify_categorical_color_mapping(
     mapping: Mapping[str, str],
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
 ) -> Mapping[str, str]:
     if groups is None or isinstance(groups, list) and groups[0] is None:
         return mapping
@@ -1577,11 +1577,23 @@ def _get_categorical_color_mapping(
     cmap_params: CmapParams | None = None,
     alpha: float = 1,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     render_type: Literal["points", "labels"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
+
+    # Dict palette (e.g. from make_palette_from_data): use directly as category→color mapping
+    if isinstance(palette, dict):
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        if isinstance(groups, str):
+            groups = [groups]
+        if groups is not None:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in groups if cat in color_source_vector.categories}
+        else:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in color_source_vector.categories}
+        mapping["NaN"] = na_color_hex
+        return mapping
 
     if isinstance(groups, str):
         groups = [groups]
@@ -2395,14 +2407,21 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if isinstance(palette, list):
+    # dict palettes (e.g. from make_palette_from_data) bypass groups validation
+    if isinstance(palette, dict):
+        from matplotlib.colors import is_color_like
+
+        invalid = [f"'{k}': '{v}'" for k, v in palette.items() if not is_color_like(v)]
+        if invalid:
+            raise ValueError(f"Dict palette contains invalid color values: {', '.join(invalid)}.")
+    elif isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
     elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
     palette_group = param_dict.get("palette")
-    if element_type in ["shapes", "points", "labels"] and palette_group is not None:
+    if element_type in ["shapes", "points", "labels"] and palette_group is not None and not isinstance(palette, dict):
         groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
@@ -2542,7 +2561,7 @@ def _validate_label_render_params(
     fill_alpha: float | int | None,
     contour_px: int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     norm: Normalize | None,
     outline_alpha: float | int,
@@ -2614,7 +2633,7 @@ def _validate_points_render_params(
     alpha: float | int | None,
     color: ColorLike | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
@@ -2682,7 +2701,7 @@ def _validate_shape_render_params(
     element: str | None,
     fill_alpha: float | int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     color: ColorLike | None,
     na_color: ColorLike | None,
     outline_width: float | int | tuple[float | int, float | int] | None,

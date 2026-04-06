@@ -223,7 +223,7 @@ class ShapesRenderParams:
     col_for_color: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
-    palette: ListedColormap | list[str] | None = None
+    palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: tuple[float, float] = (1.0, 1.0)
     fill_alpha: float = 0.3
     scale: float = 1.0
@@ -247,7 +247,7 @@ class PointsRenderParams:
     color: Color | None = None
     col_for_color: str | None = None
     groups: str | list[str] | None = None
-    palette: ListedColormap | list[str] | None = None
+    palette: ListedColormap | dict[str, str] | list[str] | None = None
     alpha: float = 1.0
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
@@ -288,7 +288,7 @@ class LabelsRenderParams:
     groups: str | list[str] | None = None
     contour_px: int | None = None
     outline: bool = False
-    palette: ListedColormap | list[str] | None = None
+    palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: float = 1.0
     outline_color: Color | None = None
     fill_alpha: float = 0.4
