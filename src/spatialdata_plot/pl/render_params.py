@@ -214,7 +214,7 @@ class ScalebarParams:
 
 @dataclass
 class ShapesRenderParams:
-    """Shapes render parameters.."""
+    """Shapes render parameters."""
 
     cmap_params: CmapParams
     outline_params: OutlineParams
@@ -239,7 +239,7 @@ class ShapesRenderParams:
 
 @dataclass
 class PointsRenderParams:
-    """Points render parameters.."""
+    """Points render parameters."""
 
     cmap_params: CmapParams
     element: str
@@ -261,7 +261,7 @@ class PointsRenderParams:
 
 @dataclass
 class ImageRenderParams:
-    """Image render parameters.."""
+    """Image render parameters."""
 
     cmap_params: list[CmapParams] | CmapParams
     element: str
@@ -278,7 +278,7 @@ class ImageRenderParams:
 
 @dataclass
 class LabelsRenderParams:
-    """Labels render parameters.."""
+    """Labels render parameters."""
 
     cmap_params: CmapParams
     element: str

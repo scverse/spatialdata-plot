@@ -1305,11 +1305,11 @@ def _render_images(
 
     # 2) Image has any number of channels but 1
     else:
-        if n_channels >= 5 and render_params.colorbar is True:
-            logger.warning(
-                "Colorbars are not supported for multi-channel images with 5+ channels. "
-                "To view individual channel scales, render channels separately with "
-                "`channel=<name>` and `colorbar=True`."
+        if n_channels >= 5 and render_params.colorbar == "auto":
+            logger.info(
+                "Colorbars are not shown by default for images with 5+ channels. "
+                "To show individual channel colorbars, render channels separately "
+                "with `channel=<name>` and `colorbar=True`."
             )
         layers = {}
         for ch_idx, ch in enumerate(channels):
