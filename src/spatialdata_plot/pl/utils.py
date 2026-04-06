@@ -251,14 +251,17 @@ def _prepare_params_plot(
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
     figsize = rcParams["figure.figsize"] if figsize is None else figsize
-    dpi = rcParams["figure.dpi"] if dpi is None else dpi
+    # When creating a new figure, fall back to rcParams; when the user provides
+    # their own axes, preserve the figure's existing DPI (only override if
+    # the user explicitly passed dpi= to show()).
+    resolved_dpi = rcParams["figure.dpi"] if dpi is None else dpi
     if num_panels > 1 and ax is None:
         fig, grid = _panel_grid(
             num_panels=num_panels,
             hspace=hspace,
             wspace=wspace,
             ncols=ncols,
-            dpi=dpi,
+            dpi=resolved_dpi,
             figsize=figsize,
         )
         axs: None | Sequence[Axes] = [plt.subplot(grid[c]) for c in range(num_panels)]
@@ -274,14 +277,16 @@ def _prepare_params_plot(
             )
         assert ax is None or isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
         axs = ax
+        if dpi is not None:
+            fig.set_dpi(dpi)
     else:
         axs = None
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize, dpi=dpi, constrained_layout=True)
+            fig, ax = plt.subplots(figsize=figsize, dpi=resolved_dpi, constrained_layout=True)
         elif isinstance(ax, Axes):
-            # needed for rasterization if user provides Axes object
             fig = ax.get_figure()
-            fig.set_dpi(dpi)
+            if dpi is not None:
+                fig.set_dpi(dpi)
 
     # set scalebar
     if scalebar_dx is not None:
