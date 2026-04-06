@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
-from matplotlib.colors import to_hex, to_rgb
+from matplotlib.colors import ListedColormap, to_hex, to_rgb
 from matplotlib.pyplot import colormaps as mpl_colormaps
 from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import cKDTree
@@ -172,8 +172,15 @@ def _optimize_assignment(
         rng = np.random.default_rng()
 
     n = weight_matrix.shape[0]
-    if n <= 1:
-        return np.arange(n)
+    if n <= 2:
+        # For n<=2 there are at most 2 permutations; just try both.
+        if n <= 1:
+            return np.arange(n)
+        id_perm = np.arange(n)
+        sw_perm = np.array([1, 0])
+        s_id = float(np.sum(weight_matrix * color_dist[np.ix_(id_perm, id_perm)]))
+        s_sw = float(np.sum(weight_matrix * color_dist[np.ix_(sw_perm, sw_perm)]))
+        return sw_perm if s_sw > s_id else id_perm
 
     def _score(perm: np.ndarray) -> float:
         return float(np.sum(weight_matrix * color_dist[np.ix_(perm, perm)]))
@@ -249,16 +256,25 @@ def _spatial_interlacement(
     tree = cKDTree(coords)
     dists, indices = tree.query(coords, k=min(n_neighbors + 1, len(coords)))
 
+    # Vectorized accumulation (avoids Python double-loop over cells × neighbors)
+    neighbor_dists = dists[:, 1:]
+    neighbor_indices = indices[:, 1:]
+    cell_cats = label_idx
+    neighbor_cats = label_idx[neighbor_indices]
+
+    # Mask: different category and positive distance
+    cross_cat = neighbor_cats != cell_cats[:, np.newaxis]
+    valid_dist = neighbor_dists > 0
+    mask = cross_cat & valid_dist
+
+    weights = np.where(mask, 1.0 / np.where(neighbor_dists > 0, neighbor_dists, 1.0), 0.0)
+
+    rows = np.broadcast_to(cell_cats[:, np.newaxis], neighbor_cats.shape)[mask]
+    cols = neighbor_cats[mask]
+    vals = weights[mask]
+
     mat = np.zeros((n_cat, n_cat), dtype=np.float64)
-    for i in range(len(coords)):
-        ci = label_idx[i]
-        for j in range(1, dists.shape[1]):  # skip self
-            d = dists[i, j]
-            if d <= 0:
-                continue  # skip coincident points
-            cj = label_idx[indices[i, j]]
-            if ci != cj:
-                mat[ci, cj] += 1.0 / d
+    np.add.at(mat, (rows, cols), vals)
 
     mat = np.maximum(mat, mat.T)
     max_val = mat.max()
@@ -291,6 +307,11 @@ def _resolve_palette(palette: list[str] | str | None, n: int) -> list[str]:
 
         if palette in mpl_colormaps:
             cmap = mpl_colormaps[palette]
+            if isinstance(cmap, ListedColormap):
+                # Qualitative colormaps (tab10, Set1, etc.): sample by index
+                if n > cmap.N:
+                    raise ValueError(f"Colormap '{palette}' has {cmap.N} colors but {n} are needed.")
+                return [to_hex(cmap(i)) for i in range(n)]
             indices = np.linspace(0, 1, n)
             return [to_hex(cmap(i)) for i in indices]
 
@@ -324,9 +345,12 @@ def _resolve_element(
         coords = np.column_stack([gdf.geometry.centroid.x, gdf.geometry.centroid.y])
         labels_series = gdf[color] if color in gdf.columns else _get_labels_from_table(sdata, element, color)
     elif element in sdata.points:
-        df = sdata.points[element].compute()
-        if "x" not in df.columns or "y" not in df.columns:
+        ddf = sdata.points[element]
+        if "x" not in ddf.columns or "y" not in ddf.columns:
             raise ValueError(f"Points element '{element}' does not have 'x' and 'y' columns.")
+        # Only compute needed columns to avoid materializing the full dataframe
+        needed_cols = ["x", "y"] + ([color] if color in ddf.columns else [])
+        df = ddf[needed_cols].compute()
         coords = df[["x", "y"]].values.astype(np.float64)
         labels_series = df[color] if color in df.columns else _get_labels_from_table(sdata, element, color)
     else:
@@ -335,7 +359,8 @@ def _resolve_element(
             f"Element '{element}' not found in sdata.shapes or sdata.points. Available elements: {available}"
         )
 
-    labels_cat = pd.Categorical(labels_series) if not hasattr(labels_series, "cat") else labels_series.values
+    is_categorical = isinstance(getattr(labels_series, "dtype", None), pd.CategoricalDtype)
+    labels_cat = labels_series.values if is_categorical else pd.Categorical(labels_series)
     return coords, labels_cat
 
 
@@ -376,7 +401,7 @@ _SPACO_CVD_TYPES: dict[str, str | None] = {
     "spaco_tritanopia": "tritanopia",
 }
 
-_ALL_METHODS = ["default", *_CONTRAST_CVD_TYPES, *_SPACO_CVD_TYPES]
+_ALL_METHODS = sorted({"default", *_CONTRAST_CVD_TYPES, *_SPACO_CVD_TYPES})
 
 
 # ---------------------------------------------------------------------------
