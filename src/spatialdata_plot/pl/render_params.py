@@ -168,7 +168,7 @@ class FigParams:
 
 @dataclass
 class OutlineParams:
-    """Cmap params."""
+    """Outline params."""
 
     outer_outline_color: Color | None = None
     outer_outline_linewidth: float = 1.5
@@ -222,7 +222,6 @@ class ShapesRenderParams:
     color: Color | None = None
     col_for_color: str | None = None
     groups: str | list[str] | None = None
-    contour_px: int | None = None
     palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: tuple[float, float] = (1.0, 1.0)
     fill_alpha: float = 0.3
@@ -287,12 +286,10 @@ class LabelsRenderParams:
     col_for_color: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
-    outline: bool = False
     palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: float = 1.0
     outline_color: Color | None = None
     fill_alpha: float = 0.4
-    transfunc: Callable[[float], float] | None = None
     scale: str | None = None
     table_name: str | None = None
     table_layer: str | None = None
