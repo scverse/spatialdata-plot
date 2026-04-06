@@ -338,25 +338,41 @@ def _resolve_element(
     sdata: sd.SpatialData,
     element: str,
     color: str,
+    table_name: str | None = None,
 ) -> tuple[np.ndarray, pd.Categorical]:
-    """Extract coordinates and categorical labels from a SpatialData element."""
+    """Extract coordinates and categorical labels from a SpatialData element.
+
+    Coordinates come from the element geometry (shapes) or x/y columns
+    (points).  Labels come from a column on the element itself, or from
+    a linked table (joined on the instance key to guarantee alignment).
+    """
     if element in sdata.shapes:
         gdf = sdata.shapes[element]
         coords = np.column_stack([gdf.geometry.centroid.x, gdf.geometry.centroid.y])
-        labels_series = gdf[color] if color in gdf.columns else _get_labels_from_table(sdata, element, color)
+        if color in gdf.columns:
+            labels_series = gdf[color]
+        else:
+            labels_series, matched_indices = _get_labels_from_table(sdata, element, color, table_name)
+            # Align coords to table rows via matched instance indices
+            coords = coords[matched_indices]
     elif element in sdata.points:
         ddf = sdata.points[element]
         if "x" not in ddf.columns or "y" not in ddf.columns:
             raise ValueError(f"Points element '{element}' does not have 'x' and 'y' columns.")
-        # Only compute needed columns to avoid materializing the full dataframe
-        needed_cols = ["x", "y"] + ([color] if color in ddf.columns else [])
-        df = ddf[needed_cols].compute()
-        coords = df[["x", "y"]].values.astype(np.float64)
-        labels_series = df[color] if color in df.columns else _get_labels_from_table(sdata, element, color)
+        if color in ddf.columns:
+            df = ddf[["x", "y", color]].compute()
+            coords = df[["x", "y"]].values.astype(np.float64)
+            labels_series = df[color]
+        else:
+            df = ddf[["x", "y"]].compute()
+            coords = df[["x", "y"]].values.astype(np.float64)
+            labels_series, matched_indices = _get_labels_from_table(sdata, element, color, table_name)
+            coords = coords[matched_indices]
     else:
         available = list(sdata.shapes.keys()) + list(sdata.points.keys())
         raise KeyError(
-            f"Element '{element}' not found in sdata.shapes or sdata.points. Available elements: {available}"
+            f"Element '{element}' not found in sdata.shapes or sdata.points. "
+            f"Available elements: {available}. Note: labels (raster) elements are not yet supported."
         )
 
     is_categorical = isinstance(getattr(labels_series, "dtype", None), pd.CategoricalDtype)
@@ -364,19 +380,72 @@ def _resolve_element(
     return coords, labels_cat
 
 
-def _get_labels_from_table(sdata: sd.SpatialData, element: str, color: str) -> pd.Series:
-    """Extract a column from the table linked to an element."""
-    for table_name in sdata.tables:
-        table = sdata.tables[table_name]
-        region_key = table.uns.get("spatialdata_attrs", {}).get("region")
-        if region_key is not None:
-            regions = [region_key] if isinstance(region_key, str) else region_key
-            if element in regions and color in table.obs.columns:
-                return table.obs[color]
+def _get_labels_from_table(
+    sdata: sd.SpatialData,
+    element: str,
+    color: str,
+    table_name: str | None = None,
+) -> tuple[pd.Series, np.ndarray]:
+    """Extract a column from the table linked to an element.
 
-    raise KeyError(
-        f"Column '{color}' not found for element '{element}'. Looked in the element itself and all linked tables."
-    )
+    Returns (labels_series, element_indices) where element_indices maps
+    each table row to its position in the element, ensuring coord-label
+    alignment.
+    """
+    from spatialdata.models import get_table_keys
+
+    matches: list[str] = []
+    for name in sdata.tables:
+        table = sdata.tables[name]
+        region = table.uns.get("spatialdata_attrs", {}).get("region")
+        if region is not None:
+            regions = [region] if isinstance(region, str) else region
+            if element in regions and color in table.obs.columns:
+                matches.append(name)
+
+    if not matches:
+        raise KeyError(
+            f"Column '{color}' not found for element '{element}'. Looked in the element itself and all linked tables."
+        )
+
+    if table_name is not None:
+        if table_name not in matches:
+            raise KeyError(
+                f"Table '{table_name}' does not annotate element '{element}' or does not contain column '{color}'."
+            )
+        resolved_name = table_name
+    elif len(matches) == 1:
+        resolved_name = matches[0]
+    else:
+        raise ValueError(
+            f"Multiple tables annotate element '{element}' with column '{color}': {matches}. "
+            f"Please specify table_name= to disambiguate."
+        )
+
+    table = sdata.tables[resolved_name]
+    _, _, instance_key = get_table_keys(table)
+
+    # Join on instance key to align table rows with element positions
+    instance_ids = table.obs[instance_key].values
+    element_index = sdata.shapes[element].index if element in sdata.shapes else sdata.points[element].compute().index
+
+    # Map each table instance_id to its position in the element index
+    element_idx_map = {val: i for i, val in enumerate(element_index)}
+    matched_indices = []
+    valid_mask = []
+    for iid in instance_ids:
+        if iid in element_idx_map:
+            matched_indices.append(element_idx_map[iid])
+            valid_mask.append(True)
+        else:
+            valid_mask.append(False)
+
+    valid_mask_arr = np.array(valid_mask)
+    if not any(valid_mask):
+        raise ValueError(f"No matching instance keys between table '{resolved_name}' and element '{element}'.")
+
+    labels = table.obs.loc[valid_mask_arr, color]
+    return labels.reset_index(drop=True), np.array(matched_indices)
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +576,7 @@ def make_palette_from_data(
     *,
     palette: list[str] | str | None = None,
     method: Method = "default",
+    table_name: str | None = None,
     n_neighbors: int = 15,
     n_random: int = 5000,
     n_swaps: int = 10000,
@@ -530,6 +600,9 @@ def make_palette_from_data(
         Source colours.  Accepts the same values as
         :func:`make_palette` (*None*, a list, a named palette, or a
         matplotlib colormap name).
+    table_name
+        Name of the table to use when *color* is looked up from a linked
+        table.  Required when multiple tables annotate the same element.
     method
         Strategy for assigning colours to categories.  Accepts all
         methods from :func:`make_palette` plus spatially-aware ones:
@@ -571,7 +644,7 @@ def make_palette_from_data(
     >>> palette = sdp.pl.make_palette_from_data(sdata, "cells", "cell_type", method="spaco_colorblind")
     >>> sdata.pl.render_shapes("cells", color="cell_type", palette=palette).pl.show()
     """
-    coords, labels_cat = _resolve_element(sdata, element, color)
+    coords, labels_cat = _resolve_element(sdata, element, color, table_name=table_name)
 
     categories = list(labels_cat.categories)
     n_cat = len(categories)

@@ -1583,10 +1583,15 @@ def _get_categorical_color_mapping(
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
 
-    # Dict palette (e.g. from optimize_palette): use directly as category→color mapping
+    # Dict palette (e.g. from make_palette_from_data): use directly as category→color mapping
     if isinstance(palette, dict):
         na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
-        mapping = {cat: palette.get(cat, na_color_hex) for cat in color_source_vector.categories}
+        if isinstance(groups, str):
+            groups = [groups]
+        if groups is not None:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in groups if cat in color_source_vector.categories}
+        else:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in color_source_vector.categories}
         mapping["NaN"] = na_color_hex
         return mapping
 
@@ -2402,9 +2407,13 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    # dict palettes (e.g. from optimize_palette) bypass groups validation
+    # dict palettes (e.g. from make_palette_from_data) bypass groups validation
     if isinstance(palette, dict):
-        pass
+        from matplotlib.colors import is_color_like
+
+        invalid = [f"'{k}': '{v}'" for k, v in palette.items() if not is_color_like(v)]
+        if invalid:
+            raise ValueError(f"Dict palette contains invalid color values: {', '.join(invalid)}.")
     elif isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
