@@ -594,8 +594,9 @@ def make_palette_from_data(
     element
         Name of a shapes or points element in *sdata*.
     color
-        Column name containing categorical labels (in the element itself
-        for points, or in the linked table for shapes/labels).
+        Column name containing categorical labels.  The column is first
+        looked up directly on the element (both for shapes and points);
+        if not found there, it falls back to the linked AnnData table.
     palette
         Source colours.  Accepts the same values as
         :func:`make_palette` (*None*, a list, a named palette, or a

@@ -2128,7 +2128,6 @@ def _validate_show_parameters(
     dpi: int | None,
     fig: Figure | None,
     title: list[str] | str | None,
-    share_extent: bool,
     pad_extent: int | float,
     ax: list[Axes] | Axes | None,
     return_ax: bool,
@@ -2207,9 +2206,6 @@ def _validate_show_parameters(
 
     if title is not None and not isinstance(title, list | str):
         raise TypeError("Parameter 'title' must be a string or a list of strings.")
-
-    if not isinstance(share_extent, bool):
-        raise TypeError("Parameter 'share_extent' must be a boolean.")
 
     if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")
@@ -2440,8 +2436,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    # validation happens within Color constructor
-    param_dict["na_color"] = Color(param_dict.get("na_color"))
+    # validation happens within Color constructor (images don't use na_color)
+    if "na_color" in param_dict:
+        param_dict["na_color"] = Color(param_dict.get("na_color"))
 
     norm = param_dict.get("norm")
     if norm is not None:
@@ -2870,7 +2867,6 @@ def _validate_image_render_params(
     channel: list[str] | list[int] | str | int | None,
     alpha: float | int | None,
     palette: list[str] | str | None,
-    na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: list[Normalize] | Normalize | None,
     scale: str | None,
@@ -2883,7 +2879,6 @@ def _validate_image_render_params(
         "channel": channel,
         "alpha": alpha,
         "palette": palette,
-        "na_color": na_color,
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
@@ -2941,7 +2936,6 @@ def _validate_image_render_params(
                     f"({', '.join(str(c) for c in channels_to_use)})."
                 )
         element_params[el]["palette"] = palette
-        element_params[el]["na_color"] = param_dict["na_color"]
 
         cmap = param_dict["cmap"]
         if cmap is not None:
