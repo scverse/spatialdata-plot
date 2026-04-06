@@ -209,24 +209,50 @@ def _get_coordinate_system_mapping(sdata: SpatialData) -> dict[str, list[str]]:
     return mapping
 
 
+_MPL_SINGLE_LETTER_COLORS = frozenset("bgrcmykw")
+
+
 def _is_color_like(color: Any) -> bool:
     """Check if a value is a valid color.
 
-    For discussion, see: https://github.com/scverse/spatialdata-plot/issues/327.
-    matplotlib accepts strings in [0, 1] as grey-scale values - therefore,
-    "0" and "1" are considered valid colors. However, we won't do that
-    so we're filtering these out.
+    We reject several matplotlib shorthand notations that are likely to collide
+    with column or gene names. For discussion, see:
+
+    - https://github.com/scverse/spatialdata-plot/issues/211
+    - https://github.com/scverse/spatialdata-plot/issues/327
+
+    Rejected shorthands:
+
+    - Greyscale strings: ``"0"``, ``"0.5"``, ``"1"`` (floats in [0, 1])
+    - Short hex: ``"#RGB"`` / ``"#RGBA"`` (only ``#RRGGBB`` / ``#RRGGBBAA`` accepted)
+    - Single-letter colors: ``"b"``, ``"g"``, ``"r"``, ``"c"``, ``"m"``, ``"y"``, ``"k"``, ``"w"``
+    - CN cycle notation: ``"C0"``, ``"C1"``, …
+    - ``tab:`` prefixed colors: ``"tab:blue"``, ``"tab:orange"``, …
+    - ``xkcd:`` prefixed colors: ``"xkcd:sky blue"``, …
     """
     if isinstance(color, str):
+        # greyscale strings
         try:
             num_value = float(color)
             if 0 <= num_value <= 1:
                 return False
         except ValueError:
-            # we're not dealing with what matplotlib considers greyscale
             pass
+
+        # short hex
         if color.startswith("#") and len(color) not in [7, 9]:
-            # we only accept hex colors in the form #RRGGBB or #RRGGBBAA, not short forms as matplotlib does
+            return False
+
+        # single-letter color shortcuts
+        if color in _MPL_SINGLE_LETTER_COLORS:
+            return False
+
+        # CN cycle notation (C0, C1, …)
+        if len(color) >= 2 and color[0] == "C" and color[1:].isdigit():
+            return False
+
+        # tab: and xkcd: prefixed colors
+        if color.startswith(("tab:", "xkcd:")):
             return False
 
     return bool(colors.is_color_like(color))

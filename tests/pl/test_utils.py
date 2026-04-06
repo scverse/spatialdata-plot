@@ -124,11 +124,38 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
 @pytest.mark.parametrize(
     "color_result",
     [
+        # greyscale strings rejected
         ("0", False),
         ("0.5", False),
         ("1", False),
+        # valid full-form colors accepted
         ("#00ff00", True),
+        ("#00ff00aa", True),
         ((0.0, 1.0, 0.0, 1.0), True),
+        ("red", True),
+        ("blue", True),
+        # short hex rejected
+        ("#f00", False),
+        ("#f00a", False),
+        # single-letter shortcuts rejected (#211)
+        ("b", False),
+        ("g", False),
+        ("r", False),
+        ("c", False),
+        ("m", False),
+        ("y", False),
+        ("k", False),
+        ("w", False),
+        # CN cycle notation rejected (#211)
+        ("C0", False),
+        ("C1", False),
+        ("C10", False),
+        # tab: prefixed rejected (#211)
+        ("tab:blue", False),
+        ("tab:orange", False),
+        # xkcd: prefixed rejected (#211)
+        ("xkcd:sky blue", False),
+        ("xkcd:red", False),
     ],
 )
 def test_is_color_like(color_result: tuple[ColorLike, bool]):
