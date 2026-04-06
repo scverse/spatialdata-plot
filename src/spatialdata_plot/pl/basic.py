@@ -749,9 +749,10 @@ class PlotAccessor:
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills entire segment, see:
             func:`skimage.morphology.erosion`.
-        cmap : Colormap | str | None
-            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-        norm : Normalize | None
+        cmap : Colormap | str | None, optional
+            Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
+            For categorical data, use ``palette`` instead.
+        norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
@@ -789,8 +790,6 @@ class PlotAccessor:
             Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
             ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
-        kwargs
-            Additional arguments to be passed to cmap and norm.
 
         Returns
         -------

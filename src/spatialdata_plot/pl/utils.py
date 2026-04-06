@@ -2436,8 +2436,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    # validation happens within Color constructor
-    param_dict["na_color"] = Color(param_dict.get("na_color"))
+    # validation happens within Color constructor (images don't use na_color)
+    if "na_color" in param_dict:
+        param_dict["na_color"] = Color(param_dict.get("na_color"))
 
     norm = param_dict.get("norm")
     if norm is not None:
