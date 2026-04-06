@@ -495,7 +495,7 @@ class TestPaletteVisual(PlotTester, metaclass=PlotTesterMeta):
 
     def test_plot_dict_palette_hex_labels(self, sdata_blobs: SpatialData):
         """Visual test: hex dict palette renders labels correctly."""
-        palette = make_palette_from_data(sdata_blobs, "blobs_labels", "region", palette="okabe_ito")
+        palette = {"blobs_labels": "#E69F00"}
         sdata_blobs.pl.render_labels("blobs_labels", color="region", palette=palette).pl.show()
 
     def test_plot_dict_palette_named_colors_points(self, sdata_blobs: SpatialData):
