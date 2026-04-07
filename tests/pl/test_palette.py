@@ -18,7 +18,6 @@ from spatialdata_plot.pl._palette import (
     _perceptual_distance_matrix,
     _rgb_to_oklab,
     _simulate_cvd,
-    _spatial_interlacement,
     make_palette,
     make_palette_from_data,
 )
@@ -120,23 +119,6 @@ class TestCVD:
         assert _perceptual_distance_matrix(rgb, colorblind_type=cvd_type)[0, 1] < _perceptual_distance_matrix(rgb)[0, 1]
 
 
-class TestSpatialInterlacement:
-    def test_interleaved_higher_than_separated(self):
-        coords = np.array([[0, 0], [1, 0], [0.5, 0.5], [1.5, 0.5], [10, 10], [11, 10]])
-        mat = _spatial_interlacement(coords, np.array(["A", "B", "A", "B", "C", "C"]), ["A", "B", "C"], n_neighbors=3)
-        assert mat[0, 1] > mat[0, 2]
-        assert mat[0, 1] > mat[1, 2]
-
-    def test_diagonal_is_zero(self):
-        mat = _spatial_interlacement(np.array([[0, 0], [1, 0], [0.5, 0.5]]), np.array(["A", "B", "A"]), ["A", "B"], 2)
-        np.testing.assert_allclose(np.diag(mat), 0)
-
-    def test_symmetric(self):
-        rng = np.random.default_rng(42)
-        mat = _spatial_interlacement(rng.normal(size=(50, 2)), np.array(list("ABCDE") * 10), list("ABCDE"), 5)
-        np.testing.assert_allclose(mat, mat.T)
-
-
 class TestOptimizer:
     def test_single_category(self):
         assert list(_optimize_assignment(np.zeros((1, 1)), np.zeros((1, 1)))) == [0]
@@ -196,11 +178,6 @@ class TestMakePalette:
         with pytest.raises(ValueError, match="needed"):
             make_palette(10, palette=["red", "blue"])
 
-    @pytest.mark.parametrize("method", ["spaco", "spaco_colorblind"])
-    def test_spaco_methods_raise(self, method: str):
-        with pytest.raises(ValueError, match="requires spatial data"):
-            make_palette(3, method=method)  # type: ignore[arg-type]
-
     def test_unknown_method_raises(self):
         with pytest.raises(ValueError, match="Unknown method"):
             make_palette(3, method="invalid")  # type: ignore[arg-type]
@@ -239,55 +216,16 @@ class TestMakePaletteFromData:
         result = make_palette_from_data(clustered_sdata, "cells", "cell_type", palette=palette)
         assert isinstance(result, dict) and len(result) == 3
 
-    @pytest.mark.parametrize(
-        "method",
-        ["contrast", "colorblind", "spaco", "spaco_colorblind", "spaco_deuteranopia"],
-    )
-    def test_all_methods_return_valid_dict(self, clustered_sdata: SpatialData, method: str):
+    @pytest.mark.parametrize("method", ["contrast", "colorblind"])
+    def test_optimization_methods_return_valid_dict(self, clustered_sdata: SpatialData, method: str):
         result = make_palette_from_data(clustered_sdata, "cells", "cell_type", method=method, seed=42)
         assert isinstance(result, dict)
         assert set(result.keys()) == {"A", "B", "C"}
 
-    def test_spaco_deterministic(self, clustered_sdata: SpatialData):
-        r1 = make_palette_from_data(clustered_sdata, "cells", "cell_type", method="spaco", seed=42)
-        r2 = make_palette_from_data(clustered_sdata, "cells", "cell_type", method="spaco", seed=42)
-        assert r1 == r2
-
-    def test_spaco_different_seeds_can_differ(self, clustered_sdata: SpatialData):
-        r1 = make_palette_from_data(clustered_sdata, "cells", "cell_type", method="spaco", seed=0)
-        r2 = make_palette_from_data(clustered_sdata, "cells", "cell_type", method="spaco", seed=999)
-        assert set(r1.keys()) == set(r2.keys())
-
-    def test_spaco_custom_palette_is_permutation(self, clustered_sdata: SpatialData):
-        colors = ["#ff0000", "#00ff00", "#0000ff"]
-        result = make_palette_from_data(clustered_sdata, "cells", "cell_type", method="spaco", palette=colors, seed=42)
-        assert set(result.values()) == {to_hex(to_rgb(c)) for c in colors}
-
-    def test_spaco_single_category(self):
-        df = pd.DataFrame({"x": [0.0, 1.0], "y": [0.0, 1.0], "ct": pd.Categorical(["A", "A"])})
-        sdata = SpatialData(points={"pts": PointsModel.parse(df)})
-        result = make_palette_from_data(sdata, "pts", "ct", method="spaco", seed=0)
-        assert len(result) == 1 and "A" in result
-
-    def test_spaco_nan_labels_filtered(self):
-        df = pd.DataFrame(
-            {"x": [0.0, 1.0, 0.0, 10.0], "y": [0.0, 0.0, 1.0, 10.0], "ct": pd.Categorical(["A", "B", "A", None])}
-        )
-        sdata = SpatialData(points={"pts": PointsModel.parse(df)})
-        result = make_palette_from_data(sdata, "pts", "ct", method="spaco", seed=0)
-        assert {"A", "B"} <= set(result.keys())
-
     def test_shapes_with_table(self, shapes_sdata: SpatialData):
-        result = make_palette_from_data(shapes_sdata, "my_shapes", "cell_type", method="spaco", seed=42)
+        result = make_palette_from_data(shapes_sdata, "my_shapes", "cell_type", seed=42)
         assert isinstance(result, dict)
         assert set(result.keys()) == {"X", "Y", "Z"}
-
-    def test_interleaved_get_distinct_colors(self):
-        sdata = _build_clustered_points_sdata(seed=0)
-        palette = ["#ff0000", "#ff1100", "#0000ff"]
-        result = make_palette_from_data(sdata, "cells", "cell_type", method="spaco", palette=palette, seed=0)
-        # A and B (interleaved) should not both get red-ish colors
-        assert result["A"] == "#0000ff" or result["B"] == "#0000ff"
 
 
 # ---------------------------------------------------------------------------
