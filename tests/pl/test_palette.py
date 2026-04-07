@@ -31,13 +31,10 @@ matplotlib.use("agg")
 
 
 def _build_clustered_points_sdata(seed: int = 0) -> SpatialData:
-    """SpatialData with interleaved A/B clusters near origin and isolated C far away."""
+    """SpatialData with three categorical labels (A, B, C) on a points element."""
     rng = np.random.default_rng(seed)
-    coords_a = np.array([[0, 0], [1, 0], [0, 1]], dtype=float) + rng.normal(0, 0.05, (3, 2))
-    coords_b = np.array([[0.5, 0.5], [1.5, 0.5], [0.5, 1.5]], dtype=float) + rng.normal(0, 0.05, (3, 2))
-    coords_c = np.array([[10, 10], [11, 10], [10, 11]], dtype=float) + rng.normal(0, 0.05, (3, 2))
-
-    coords = np.vstack([coords_a, coords_b, coords_c])
+    n = 9
+    coords = rng.normal(size=(n, 2))
     labels = pd.Categorical(["A"] * 3 + ["B"] * 3 + ["C"] * 3)
     df = pd.DataFrame({"x": coords[:, 0], "y": coords[:, 1], "cell_type": labels})
     return SpatialData(points={"cells": PointsModel.parse(df)})

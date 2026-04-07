@@ -291,13 +291,13 @@ def _resolve_element(
         if color in gdf.columns:
             labels_series = gdf[color]
         else:
-            labels_series, _matched_indices = _get_labels_from_table(sdata, element, color, table_name)
+            labels_series = _get_labels_from_table(sdata, element, color, table_name)
     elif element in sdata.points:
         ddf = sdata.points[element]
         if color in ddf.columns:
             labels_series = ddf[[color]].compute()[color]
         else:
-            labels_series, _matched_indices = _get_labels_from_table(sdata, element, color, table_name)
+            labels_series = _get_labels_from_table(sdata, element, color, table_name)
     else:
         available = list(sdata.shapes.keys()) + list(sdata.points.keys())
         raise KeyError(
@@ -314,15 +314,8 @@ def _get_labels_from_table(
     element: str,
     color: str,
     table_name: str | None = None,
-) -> tuple[pd.Series, np.ndarray]:
-    """Extract a column from the table linked to an element.
-
-    Returns (labels_series, element_indices) where element_indices maps
-    each table row to its position in the element, ensuring coord-label
-    alignment.
-    """
-    from spatialdata.models import get_table_keys
-
+) -> pd.Series:
+    """Extract a column from the table linked to an element."""
     matches: list[str] = []
     for name in sdata.tables:
         table = sdata.tables[name]
@@ -352,29 +345,7 @@ def _get_labels_from_table(
         )
 
     table = sdata.tables[resolved_name]
-    _, _, instance_key = get_table_keys(table)
-
-    # Join on instance key to align table rows with element positions
-    instance_ids = table.obs[instance_key].values
-    element_index = sdata.shapes[element].index if element in sdata.shapes else sdata.points[element].compute().index
-
-    # Map each table instance_id to its position in the element index
-    element_idx_map = {val: i for i, val in enumerate(element_index)}
-    matched_indices = []
-    valid_mask = []
-    for iid in instance_ids:
-        if iid in element_idx_map:
-            matched_indices.append(element_idx_map[iid])
-            valid_mask.append(True)
-        else:
-            valid_mask.append(False)
-
-    valid_mask_arr = np.array(valid_mask)
-    if not any(valid_mask):
-        raise ValueError(f"No matching instance keys between table '{resolved_name}' and element '{element}'.")
-
-    labels = table.obs.loc[valid_mask_arr, color]
-    return labels.reset_index(drop=True), np.array(matched_indices)
+    return table.obs[color].reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
