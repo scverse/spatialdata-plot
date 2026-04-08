@@ -85,6 +85,30 @@ envs.hatch-test.scripts.cov-report = [ "coverage report", "coverage xml -o cover
 metadata.allow-direct-references = true
 version.source = "vcs"
 
+[tool.pixi]
+workspace.channels = [ "conda-forge" ]
+workspace.platforms = [ "linux-64", "osx-arm64" ]
+dependencies.python = ">=3.11"
+pypi-dependencies.spatialdata-plot = { path = ".", editable = true }
+tasks.format = "ruff format ."
+tasks.kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
+tasks.lab = "jupyter lab"
+tasks.lint = "ruff check ."
+tasks.pre-commit-install = "pre-commit install"
+tasks.pre-commit-run = "pre-commit run --all-files"
+tasks.test = "pytest -v --color=yes --tb=short --durations=10"
+# for gh-actions
+feature.py311.dependencies.python = "3.11.*"
+feature.py313.dependencies.python = "3.13.*"
+# 3.13 lane
+environments.default = { features = [ "py313" ], solve-group = "py313" }
+# 3.11 lane (for gh-actions)
+environments.dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
+environments.dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
+environments.docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
+environments.docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
+environments.test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
+
 [tool.ruff]
 line-length = 120
 exclude = [
@@ -178,27 +202,3 @@ skip = [
   "docs/references.md",
   "docs/notebooks/example.ipynb",
 ]
-
-[tool.pixi]
-dependencies.python = ">=3.11"
-# 3.11 lane (for gh-actions)
-environments.dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
-environments.docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
-# 3.13 lane
-environments.default = { features = [ "py313" ], solve-group = "py313" }
-environments.dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
-environments.docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
-environments.test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
-# for gh-actions
-feature.py311.dependencies.python = "3.11.*"
-feature.py313.dependencies.python = "3.13.*"
-pypi-dependencies.spatialdata-plot = { path = ".", editable = true }
-tasks.lab = "jupyter lab"
-tasks.kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
-tasks.test = "pytest -v --color=yes --tb=short --durations=10"
-tasks.lint = "ruff check ."
-tasks.format = "ruff format ."
-tasks.pre-commit-install = "pre-commit install"
-tasks.pre-commit-run = "pre-commit run --all-files"
-workspace.channels = [ "conda-forge" ]
-workspace.platforms = [ "osx-arm64", "linux-64" ]

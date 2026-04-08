@@ -1404,6 +1404,12 @@ def _render_images(
 
     # 2) Image has any number of channels but 1
     else:
+        if n_channels >= 5 and render_params.colorbar == "auto":
+            logger.info(
+                "Colorbars are not shown by default for images with 5+ channels. "
+                "To show individual channel colorbars, render channels separately "
+                "with `channel=<name>` and `colorbar=True`."
+            )
         layers = {}
         for ch_idx, ch in enumerate(channels):
             layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()

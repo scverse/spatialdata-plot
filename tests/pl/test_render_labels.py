@@ -407,6 +407,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs["table"].X[0:5, 0] = np.nan
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
+    def test_plot_can_color_labels_by_gene_symbols(self, sdata_blobs: SpatialData):
+        """Color labels by gene symbol alias instead of var_name (#247)."""
+        sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="GeneA", table_name="table", gene_symbols="gene_symbol"
+        ).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables

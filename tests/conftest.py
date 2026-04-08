@@ -632,6 +632,31 @@ def get_sdata_with_multiple_images(request) -> sd.SpatialData:
 
 
 @pytest.fixture
+def sdata_multi_cs():
+    """SpatialData with an image in one CS and shapes in two CS.
+
+    Useful for testing behaviour when elements have transformations to
+    different sets of coordinate systems (e.g. after
+    ``filter_by_coordinate_system``).
+    """
+    from shapely.geometry import Point
+
+    image = Image2DModel.parse(
+        np.zeros((1, 10, 10)),
+        dims=("c", "y", "x"),
+        transformations={"aligned": sd.transformations.Identity()},
+    )
+    shapes = ShapesModel.parse(
+        GeoDataFrame(geometry=[Point(5, 5)], data={"radius": [2]}),
+        transformations={
+            "aligned": sd.transformations.Identity(),
+            "global": sd.transformations.Identity(),
+        },
+    )
+    return SpatialData(images={"img": image}, shapes={"shp": shapes})
+
+
+@pytest.fixture
 def sdata_hexagonal_grid_spots():
     """Create a hexagonal grid of points for testing visium_hex functionality."""
     from shapely.geometry import Point

@@ -53,6 +53,7 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 from spatialdata_plot.pl.utils import (
+    _RENDER_CMD_TO_CS_FLAG,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
@@ -173,7 +174,7 @@ class PlotAccessor:
         *,
         fill_alpha: float | int | None = None,
         groups: list[str] | str | None = None,
-        palette: list[str] | str | None = None,
+        palette: dict[str, str] | list[str] | str | None = None,
         na_color: ColorLike | None = "default",
         outline_width: float | int | tuple[float | int, float | int] | None = None,
         outline_color: ColorLike | tuple[ColorLike] | None = None,
@@ -184,6 +185,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
@@ -220,10 +222,10 @@ class PlotAccessor:
             them. By default, non-matching elements are hidden. To show non-matching elements, set ``na_color``
             explicitly.
             If element is None, broadcasting behaviour is attempted (use the same values for all elements).
-        palette :  list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
-            match the number of groups. If element is None, broadcasting behaviour is attempted (use the same values for
-            all elements). If groups is provided but not palette, palette is set to default "lightgray".
+        palette : dict[str, str] | list[str] | str | None
+            Palette for discrete annotations. Can be a dictionary mapping category names to colors, a list of valid
+            color names (must match the number of groups), a single named palette or matplotlib colormap name, or
+            ``None``. If element is None, broadcasting behaviour is attempted (use the same values for all elements).
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
@@ -245,17 +247,18 @@ class PlotAccessor:
             with outline_alpha=1.0 if outline_color does not imply an alpha. For two outlines, alpha values can be
             passed in a tuple of length 2.
         cmap : Colormap | str | None, optional
-            Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
-        norm : bool | Normalize, default False
-            Colormap normalization for continuous annotations.
+            Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
+            For categorical data, use ``palette`` instead.
+        norm : Normalize | None, optional
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
         scale : float | int, default 1.0
-            Value to scale circles, if present.
+            Value to scale shapes (circles and polygons).
         method : str | None, optional
-            Whether to use 'matplotlib' and 'datashader'. When None, the method is
-            chosen based on the size of the data.
-        colorbar :
-            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
-        colorbar_params :
+            Whether to use ``'matplotlib'`` or ``'datashader'``. When ``None``, the method is
+            chosen automatically based on the size of the data (datashader for >10 000 elements).
+        colorbar : bool | str | None, default "auto"
+            Whether to request a colorbar for continuous colors. Use ``"auto"`` (default) for automatic selection.
+        colorbar_params : dict[str, object] | None
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
         table_name: str | None
@@ -265,6 +268,10 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         shape: Literal["circle", "hex", "visium_hex", "square"] | None
             If None (default), the shapes are rendered as they are. Else, if either of "circle", "hex" or "square" is
             specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
@@ -284,14 +291,13 @@ class PlotAccessor:
         -----
         - Empty geometries will be removed at the time of plotting.
         - An `outline_width` of 0.0 leads to no border being plotted.
-        - When passing a color-like to 'color', this has precendence over the potential existence as a column name.
+        - When passing a color-like to 'color', this has precedence over the potential existence as a column name.
 
         Returns
         -------
         sd.SpatialData
-            The modified SpatialData object with the rendered shapes.
+            A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
             logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_shape_render_params(
@@ -315,6 +321,7 @@ class PlotAccessor:
             ds_reduction=kwargs.get("datashader_reduction"),
             colorbar=colorbar,
             colorbar_params=colorbar_params,
+            gene_symbols=gene_symbols,
         )
 
         sdata = self._copy()
@@ -364,7 +371,7 @@ class PlotAccessor:
         *,
         alpha: float | int | None = None,
         groups: list[str] | str | None = None,
-        palette: list[str] | str | None = None,
+        palette: dict[str, str] | list[str] | str | None = None,
         na_color: ColorLike | None = "default",
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
@@ -372,6 +379,7 @@ class PlotAccessor:
         method: str | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         **kwargs: Any,
@@ -390,10 +398,10 @@ class PlotAccessor:
         element : str | None, optional
             The name of the points element to render. If `None`, all points elements in the `SpatialData` object will be
             used.
-        color : str | None, optional
+        color : ColorLike | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
-            indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
+            indicated, the value of ``alpha`` takes precedence if given) or a string representing a key in
             :attr:`sdata.table.obs`. The latter can be used to color by categorical or continuous variables. If
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
@@ -406,27 +414,28 @@ class PlotAccessor:
             them. By default, non-matching points are filtered out entirely. To show non-matching points, set
             ``na_color`` explicitly.
             If element is None, broadcasting behaviour is attempted (use the same values for all elements).
-        palette : list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
-            match the number of groups. If `element` is `None`, broadcasting behaviour is attempted (use the same values
-            for all elements). If groups is provided but not palette, palette is set to default "lightgray".
+        palette : dict[str, str] | list[str] | str | None
+            Palette for discrete annotations. Can be a dictionary mapping category names to colors, a list of valid
+            color names (must match the number of groups), a single named palette or matplotlib colormap name, or
+            ``None``. If `element` is `None`, broadcasting behaviour is attempted (use the same values for all
+            elements).
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
             ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
             won't be shown.
         cmap : Colormap | str | None, optional
-            Colormap for discrete or continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`. If
+            Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`. If
             no palette is given and `color` refers to a categorical, the colors are sampled from this colormap.
-        norm : bool | Normalize, default False
-            Colormap normalization for continuous annotations.
+        norm : Normalize | None, optional
+            Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
         size : float | int, default 1.0
-            Size of the points
+            Size of the points.
         method : str | None, optional
-            Whether to use 'matplotlib' and 'datashader'. When None, the method is
-            chosen based on the size of the data.
-        colorbar :
-            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
-        colorbar_params :
+            Whether to use ``'matplotlib'`` or ``'datashader'``. When ``None``, the method is
+            chosen automatically based on the size of the data (datashader for >10 000 elements).
+        colorbar : bool | str | None, default "auto"
+            Whether to request a colorbar for continuous colors. Use ``"auto"`` (default) for automatic selection.
+        colorbar_params : dict[str, object] | None
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
         table_name: str | None
@@ -436,6 +445,10 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None, the data in
             :attr:`sdata.table.X` is used for coloring.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
 
         **kwargs : Any
             Additional arguments for customization. This can include:
@@ -448,9 +461,8 @@ class PlotAccessor:
         Returns
         -------
         sd.SpatialData
-            The modified SpatialData object with the rendered shapes.
+            A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
             logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_points_render_params(
@@ -469,6 +481,7 @@ class PlotAccessor:
             ds_reduction=kwargs.get("datashader_reduction"),
             colorbar=colorbar,
             colorbar_params=colorbar_params,
+            gene_symbols=gene_symbols,
         )
 
         if method is not None:
@@ -517,7 +530,6 @@ class PlotAccessor:
         channel: list[str] | list[int] | str | int | None = None,
         cmap: list[Colormap | str] | Colormap | str | None = None,
         norm: list[Normalize] | Normalize | None = None,
-        na_color: ColorLike | None = "default",
         palette: list[str] | str | None = None,
         alpha: float | int = 1.0,
         scale: str | None = None,
@@ -526,7 +538,6 @@ class PlotAccessor:
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         channels_as_legend: bool = False,
-        **kwargs: Any,
     ) -> sd.SpatialData:
         """
         Render image elements in SpatialData.
@@ -553,12 +564,9 @@ class PlotAccessor:
             A single :class:`~matplotlib.colors.Normalize` applies to all channels.
             A list of :class:`~matplotlib.colors.Normalize` objects applies per-channel
             (length must match the number of channels).
-        na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
-            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
-            won't be shown.
         palette : list[str] | str | None
-            Palette to color images. The number of palettes should be equal to the number of channels.
+            Palette to color images. Can be a single palette name (broadcast to all channels) or a list
+            matching the number of channels.
         alpha : float | int, default 1.0
             Alpha value for the images. Must be a numeric between 0 and 1.
         scale : str | None
@@ -598,9 +606,9 @@ class PlotAccessor:
 
             When combined with ``grayscale=True``, ``transfunc`` runs first
             and ``grayscale`` is applied to the result.
-        colorbar :
-            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
-        colorbar_params :
+        colorbar : bool | str | None, default "auto"
+            Whether to request a colorbar for continuous colors. Use ``"auto"`` (default) for automatic selection.
+        colorbar_params : dict[str, object] | None
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
         channels_as_legend : bool, default False
@@ -610,26 +618,30 @@ class PlotAccessor:
             Ignored for single-channel and RGB(A) images.  When multiple
             ``render_images`` calls use this flag on the same axes, all
             channel entries are combined into a single legend.
-        kwargs
-            Additional arguments to be passed to cmap, norm, and other rendering functions.
+
+        Notes
+        -----
+        - **RGB(A) auto-detection**: when the channel names are exactly ``{r, g, b}`` or ``{r, g, b, a}``
+          (case-insensitive) and no explicit ``cmap`` or ``palette`` is given, the image is rendered as
+          true-color RGB(A) without colormaps.
+        - **Multi-channel compositing**: when multiple channels are rendered with per-channel colormaps,
+          they are additively blended. Colormaps that go from a color to white (rather than to transparent)
+          will cause upper layers to occlude lower ones.
+        - A single ``cmap`` is automatically broadcast to all selected channels.
 
         Returns
         -------
         sd.SpatialData
-            The SpatialData object with the rendered images.
+            A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        # TODO add Normalize object in tutorial notebook and point to that notebook here
         if grayscale and palette is not None:
             raise ValueError("Cannot combine grayscale=True with palette.")
-        if "vmin" in kwargs or "vmax" in kwargs:
-            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
             channel=channel,
             alpha=alpha,
             palette=palette,
-            na_color=na_color,
             cmap=cmap,
             norm=norm,
             scale=scale,
@@ -665,7 +677,6 @@ class PlotAccessor:
                     _prepare_cmap_norm(
                         cmap=c,
                         norm=n,
-                        na_color=param_values["na_color"],
                     )
                     for c, n in zip(effective_cmap, norms, strict=True)
                 ]
@@ -676,8 +687,6 @@ class PlotAccessor:
                 cmap_params = _prepare_cmap_norm(
                     cmap=scalar_cmap,
                     norm=norm_scalar,
-                    na_color=param_values["na_color"],
-                    **kwargs,
                 )
             sdata.plotting_tree[f"{n_steps + 1}_render_images"] = ImageRenderParams(
                 element=element,
@@ -705,7 +714,7 @@ class PlotAccessor:
         *,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
-        palette: list[str] | str | None = None,
+        palette: dict[str, str] | list[str] | str | None = None,
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
@@ -717,6 +726,7 @@ class PlotAccessor:
         colorbar_params: dict[str, object] | None = None,
         table_name: str | None = None,
         table_layer: str | None = None,
+        gene_symbols: str | None = None,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -725,7 +735,7 @@ class PlotAccessor:
         In case of no elements specified, "broadcasting" of parameters is applied. This means that for any particular
         SpatialElement, we validate whether a given parameter is valid. If not valid for a particular SpatialElement the
         specific parameter for that particular SpatialElement will be ignored. If you want to set specific parameters
-        for specific elements please chain the render functions: `pl.render_images(...).pl.render_images(...).pl.show()`
+        for specific elements please chain the render functions: `pl.render_labels(...).pl.render_labels(...).pl.show()`
         .
 
         Parameters
@@ -743,16 +753,17 @@ class PlotAccessor:
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. By default, non-matching labels are hidden. To show non-matching labels, set ``na_color`` explicitly.
-        palette : list[str] | str | None
-            Palette for discrete annotations. List of valid color names that should be used for the categories. Must
-            match the number of groups. The list can contain multiple palettes (one per group) to be visualized. If
-            groups is provided but not palette, palette is set to default "lightgray".
+        palette : dict[str, str] | list[str] | str | None
+            Palette for discrete annotations. Can be a dictionary mapping category names to colors, a list of valid
+            color names (must match the number of groups), a single named palette or matplotlib colormap name, or
+            ``None``.
         contour_px : int, default 3
             Draw contour of specified width for each segment. If `None`, fills entire segment, see:
             func:`skimage.morphology.erosion`.
-        cmap : Colormap | str | None
-            Colormap for continuous annotations, see :class:`matplotlib.colors.Colormap`.
-        norm : Normalize | None
+        cmap : Colormap | str | None, optional
+            Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
+            For categorical data, use ``palette`` instead.
+        norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
         na_color : ColorLike | None, default "default" (gets set to "lightgray")
             Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
@@ -776,9 +787,9 @@ class PlotAccessor:
                 (exception: a dpi is specified in `show()`. Then the image is rasterized to fit the canvas and dpi).
                 3) "full": render the full image without rasterization. In the case of a multiscale image, the scale
                 with the highest resolution is selected. This can lead to long computing times for large images!
-        colorbar :
-            Whether to request a colorbar for continuous colors. Use "auto" (default) for automatic selection.
-        colorbar_params :
+        colorbar : bool | str | None, default "auto"
+            Whether to request a colorbar for continuous colors. Use ``"auto"`` (default) for automatic selection.
+        colorbar_params : dict[str, object] | None
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
         table_name: str | None
@@ -786,14 +797,16 @@ class PlotAccessor:
         table_layer: str | None
             Layer of the AnnData table to use for coloring if `color` is in :attr:`sdata.table.var_names`. If None,
             :attr:`sdata.table.X` of the default table is used for coloring.
-        kwargs
-            Additional arguments to be passed to cmap and norm.
+        gene_symbols: str | None
+            Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
+            ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
+            in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
 
         Returns
         -------
-        None
+        sd.SpatialData
+            A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        # TODO add Normalize object in tutorial notebook and point to that notebook here
         if "vmin" in kwargs or "vmax" in kwargs:
             logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_label_render_params(
@@ -814,6 +827,7 @@ class PlotAccessor:
             colorbar_params=colorbar_params,
             table_name=table_name,
             table_layer=table_layer,
+            gene_symbols=gene_symbols,
         )
 
         sdata = self._copy()
@@ -837,7 +851,6 @@ class PlotAccessor:
                 outline_alpha=param_values["outline_alpha"],
                 outline_color=param_values["outline_color"],
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc"),
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
@@ -867,54 +880,76 @@ class PlotAccessor:
         dpi: int | None = None,
         fig: Figure | None = None,
         title: list[str] | str | None = None,
-        share_extent: bool = True,
         pad_extent: int | float = 0,
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
         show: bool | None = None,
-    ) -> sd.SpatialData:
+    ) -> Axes | list[Axes] | None:
         """
-        Plot the images in the SpatialData object.
+        Execute the plotting tree and display the final figure.
 
         Parameters
         ----------
-        coordinate_systems :
-            Name(s) of the coordinate system(s) to be plotted. If None, all coordinate systems are plotted.
-            If a coordinate system doesn't contain any relevant elements (as specified in the render_* calls),
-            it is automatically not plotted.
-        figsize :
-            Size of the figure (width, height) in inches. The size of the actual canvas may deviate from this,
-            depending on the dpi! In matplotlib, the actual figure size (in pixels) is dpi * figsize.
-            If None, the default of matlotlib is used (6.4, 4.8)
-        dpi :
-            Resolution of the plot in dots per inch (as in matplotlib).
-            If None, the default of matplotlib is used (100.0).
-        ax :
-            Matplotlib axes object to plot on. If None, a new figure is created.
-            Works only if there is one image in the SpatialData object.
-        ncols :
-            Number of columns in the figure. Default is 4.
-        return_ax :
-            Whether to return the axes object created. False by default.
-        show :
-            Whether to call ``plt.show()`` at the end. If ``None`` (default), the plot is shown
-            automatically when running in non-interactive mode (scripts) and suppressed in
-            interactive sessions (e.g. Jupyter). Set to ``False`` to prevent ``plt.show()``
-            from being called, which is useful when you want to save or further modify the
-            figure after calling this method.
-        colorbar :
-            Global switch to enable/disable all colorbars. Per-layer settings are ignored when this is False.
-        colorbar_params :
+        coordinate_systems : list[str] | str | None
+            Name(s) of the coordinate system(s) to be plotted. If ``None``, all coordinate systems that contain
+            relevant elements (as specified in the ``render_*`` calls) are plotted automatically.
+        legend_fontsize : int | float | str | None
+            Font size for the legend text. Accepts numeric values or matplotlib font size strings
+            (e.g. ``"small"``, ``"large"``).
+        legend_fontweight : int | str, default "bold"
+            Font weight for the legend text (e.g. ``"bold"``, ``"normal"``).
+        legend_loc : str | None, default "right margin"
+            Location of the legend. Standard matplotlib legend locations (e.g. ``"upper left"``) or
+            ``"right margin"``, ``"left margin"``, ``"top margin"``, ``"bottom margin"`` to place
+            the legend outside the axes.
+        legend_fontoutline : int | None
+            Stroke width for a white outline around legend text, improving readability on busy plots.
+        na_in_legend : bool, default True
+            Whether to include NA / unmapped categories in the legend.
+        colorbar : bool, default True
+            Global switch to enable/disable all colorbars. Per-layer settings are ignored when this is ``False``.
+        colorbar_params : dict[str, object] | None
             Global overrides passed to colorbars for all axes. Accepts the same keys as per-layer ``colorbar_params``
             (e.g., ``loc``, ``width``, ``pad``, ``label``).
-        title :
-            The title of the plot. If not provided the plot will have the name of the coordinate system as title.
+        wspace : float | None
+            Horizontal spacing between panels (passed to :class:`matplotlib.gridspec.GridSpec`).
+        hspace : float, default 0.25
+            Vertical spacing between panels (passed to :class:`matplotlib.gridspec.GridSpec`).
+        ncols : int, default 4
+            Number of columns in the multi-panel grid.
+        frameon : bool | None
+            Whether to draw the axes frame. If ``None``, the frame is hidden automatically for multi-panel plots.
+        figsize : tuple[float, float] | None
+            Size of the figure ``(width, height)`` in inches. The actual canvas size in pixels is
+            ``dpi * figsize``. If ``None``, the matplotlib default is used ``(6.4, 4.8)``.
+        dpi : int | None
+            Resolution of the plot in dots per inch. If ``None``, the matplotlib default is used ``(100.0)``.
+        fig : Figure | None
+            .. deprecated::
+                Pass axes created from your figure via ``ax`` instead.
+        title : list[str] | str | None
+            Title(s) for the plot. A single string is applied to all panels; a list must match the number
+            of coordinate systems. If ``None``, each panel is titled with its coordinate system name.
+        pad_extent : int | float, default 0
+            Padding added around the computed spatial extent on all sides.
+        ax : list[Axes] | Axes | None
+            Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
+            matching the number of coordinate systems. If ``None``, a new figure and axes are created.
+        return_ax : bool, default False
+            Whether to return the axes object(s) instead of ``None``.
+        save : str | Path | None
+            Path to save the figure to. If ``None``, the figure is not saved.
+        show : bool | None
+            Whether to call ``plt.show()`` at the end. If ``None`` (default), the plot is shown
+            automatically when running in non-interactive mode (scripts) and suppressed in
+            interactive sessions (e.g. Jupyter). When ``ax`` is provided by the user, defaults
+            to ``False`` to allow further modifications.
 
         Returns
         -------
-        sd.SpatialData
-            A SpatialData object.
+        Axes | list[Axes] | None
+            The axes object(s) if ``return_ax=True``, otherwise ``None``.
         """
         _log_context.set("show")
         # copy the SpatialData object so we don't modify the original
@@ -942,7 +977,6 @@ class PlotAccessor:
             dpi,
             fig,
             title,
-            share_extent,
             pad_extent,
             ax,
             return_ax,
@@ -1004,9 +1038,11 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        coordinate_systems = sdata.coordinate_systems if coordinate_systems is None else coordinate_systems
+        cs_was_auto = coordinate_systems is None
+        coordinate_systems = list(sdata.coordinate_systems) if cs_was_auto else coordinate_systems
         if isinstance(coordinate_systems, str):
             coordinate_systems = [coordinate_systems]
+        assert coordinate_systems is not None
 
         for cs in coordinate_systems:
             if cs not in sdata.coordinate_systems:
@@ -1030,14 +1066,32 @@ class PlotAccessor:
             elements=elements_to_be_rendered,
         )
 
-        # catch error in ruff-friendly way
-        if ax is not None:  # we'll generate matching number then
+        # When CS was auto-detected and ax is provided, keep only CS that have
+        # element types for ALL render commands (workaround for upstream #176).
+        if ax is not None:
             n_ax = 1 if isinstance(ax, Axes) else len(ax)
+            if cs_was_auto and len(coordinate_systems) > n_ax:
+                required_flags = [_RENDER_CMD_TO_CS_FLAG[cmd] for cmd in cmds if cmd in _RENDER_CMD_TO_CS_FLAG]
+                strict_cs = [
+                    cs_name
+                    for cs_name in coordinate_systems
+                    if all(cs_contents.query(f"cs == '{cs_name}'").iloc[0][flag] for flag in required_flags)
+                ]
+                if strict_cs:
+                    coordinate_systems = strict_cs
+
             if len(coordinate_systems) != n_ax:
-                raise ValueError(
+                msg = (
                     f"Mismatch between number of matplotlib axes objects ({n_ax}) "
                     f"and number of coordinate systems ({len(coordinate_systems)})."
                 )
+                if cs_was_auto:
+                    msg += (
+                        " This can happen when elements have transformations to multiple "
+                        "coordinate systems (e.g. after filter_by_coordinate_system). "
+                        "Pass `coordinate_systems=` explicitly to select which ones to plot."
+                    )
+                raise ValueError(msg)
 
         # set up canvas
         fig_params, scalebar_params = _prepare_params_plot(
