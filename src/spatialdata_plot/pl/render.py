@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections import abc
+from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
@@ -18,9 +19,11 @@ import scanpy as sc
 import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
+from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
+from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values, join_spatialelement_table
 from spatialdata._core.query.relational_query import match_table_to_element
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
@@ -41,6 +44,7 @@ from spatialdata_plot.pl._datashader import (
     _render_ds_outlines,
 )
 from spatialdata_plot.pl.render_params import (
+    ChannelLegendEntry,
     CmapParams,
     Color,
     ColorbarSpec,
@@ -185,7 +189,9 @@ def _filter_groups_transparent_na(
     return keep, filtered_csv, filtered_cv
 
 
-def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
+def _split_colorbar_params(
+    params: dict[str, object] | None,
+) -> tuple[dict[str, object], dict[str, object], str | None]:
     """Split colorbar params into layout hints, Matplotlib kwargs, and label override."""
     layout: dict[str, object] = {}
     cbar_kwargs: dict[str, object] = {}
@@ -206,7 +212,10 @@ def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, 
 
 
 def _resolve_colorbar_label(
-    colorbar_params: dict[str, object] | None, fallback: str | None, *, is_default_channel_name: bool = False
+    colorbar_params: dict[str, object] | None,
+    fallback: str | None,
+    *,
+    is_default_channel_name: bool = False,
 ) -> str | None:
     """Pick a colorbar label from params or fall back to provided value."""
     _, _, label = _split_colorbar_params(colorbar_params)
@@ -366,7 +375,7 @@ def _render_shapes(
         value_to_plot=col_for_color,
         groups=groups,
         palette=render_params.palette,
-        na_color=render_params.color if render_params.color is not None else render_params.cmap_params.na_color,
+        na_color=(render_params.color if render_params.color is not None else render_params.cmap_params.na_color),
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
@@ -440,7 +449,10 @@ def _render_shapes(
         if not (render_params.shape == "circle" and (current_type == "Point").all()):
             logger.info(f"Converting {shapes.shape[0]} shapes to {render_params.shape}.")
             max_extent = np.max(
-                [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
+                [
+                    shapes.total_bounds[2] - shapes.total_bounds[0],
+                    shapes.total_bounds[3] - shapes.total_bounds[1],
+                ]
             )
             shapes = _convert_shapes(shapes, render_params.shape, max_extent)
 
@@ -565,7 +577,15 @@ def _render_shapes(
                 na_color_hex,
             )
 
-        _render_ds_outlines(cvs, transformed_element, render_params, fig_params, ax, factor, x_ext + y_ext)
+        _render_ds_outlines(
+            cvs,
+            transformed_element,
+            render_params,
+            fig_params,
+            ax,
+            factor,
+            x_ext + y_ext,
+        )
 
         _cax = _render_ds_image(
             ax,
@@ -832,7 +852,13 @@ def _render_points(
     )
 
     if added_color_from_table and col_for_color is not None:
-        _reparse_points(sdata_filt, element, points_pd_with_color, transformation_in_cs, coordinate_system)
+        _reparse_points(
+            sdata_filt,
+            element,
+            points_pd_with_color,
+            transformation_in_cs,
+            coordinate_system,
+        )
 
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
@@ -1094,6 +1120,78 @@ def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
     return False, False
 
 
+def _collect_channel_legend_entries(
+    channels: Sequence[str | int],
+    seed_colors: Sequence[str | tuple[float, ...]],
+    channel_legend_entries: list[ChannelLegendEntry],
+) -> None:
+    """Accumulate channel-to-color mappings for a deferred combined legend."""
+    channel_names = [str(ch) for ch in channels]
+    if len(set(channel_names)) != len(channel_names):
+        logger.warning("channels_as_legend: duplicate channel names detected; skipping legend entries.")
+        return
+
+    color_hexes = [matplotlib.colors.to_hex(c, keep_alpha=False) for c in seed_colors]
+    for name, color in zip(channel_names, color_hexes, strict=True):
+        channel_legend_entries.append(ChannelLegendEntry(channel_name=name, color_hex=color))
+
+
+def _draw_channel_legend(
+    ax: matplotlib.axes.SubplotBase,
+    entries: list[ChannelLegendEntry],
+    legend_params: LegendParams,
+    fig_params: FigParams,
+) -> None:
+    """Draw a single combined categorical legend from accumulated channel entries.
+
+    Because ``_add_categorical_legend`` adds invisible labeled scatter artists,
+    calling it here automatically merges with any earlier legend entries
+    (e.g. from labels or shapes) on the same axes via ``ax.legend()``.
+
+    ``multi_panel`` is only set when no prior legend exists on the axis,
+    to avoid shrinking the axes twice (once for labels/shapes, once for
+    channels).
+    """
+    # Deduplicate: if the same channel name appears twice, keep the last color
+    palette_dict: dict[str, str] = {}
+    for entry in entries:
+        palette_dict[entry.channel_name] = entry.color_hex
+
+    legend_loc = legend_params.legend_loc
+    if legend_loc == "on data":
+        logger.warning(
+            "legend_loc='on data' is not supported for channel legends (no scatter coordinates); "
+            "falling back to 'right margin'."
+        )
+        legend_loc = "right margin"
+
+    categories = pd.Categorical(list(palette_dict))
+
+    path_effect = (
+        [patheffects.withStroke(linewidth=legend_params.legend_fontoutline, foreground="w")]
+        if legend_params.legend_fontoutline is not None
+        else []
+    )
+
+    # Only apply multi_panel shrink if no legend already exists on this axis
+    # (labels/shapes draw their legend during the render loop and already shrink).
+    has_existing_legend = ax.get_legend() is not None
+    needs_multi_panel = fig_params.axs is not None and not has_existing_legend
+
+    _add_categorical_legend(
+        ax,
+        categories,
+        palette=palette_dict,
+        legend_loc=legend_loc,
+        legend_fontweight=legend_params.legend_fontweight,
+        legend_fontsize=legend_params.legend_fontsize,
+        legend_fontoutline=path_effect,
+        na_color=["lightgray"],
+        na_in_legend=False,
+        multi_panel=needs_multi_panel,
+    )
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -1104,6 +1202,7 @@ def _render_images(
     legend_params: LegendParams,
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
+    channel_legend_entries: list[ChannelLegendEntry] | None = None,
 ) -> None:
     _log_context.set("render_images")
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -1325,10 +1424,14 @@ def _render_images(
 
             layers[ch] = ch_norm(layers[ch])
 
+        # Colors for the channel legend (set by each branch if applicable)
+        legend_colors: list[str] | None = None
+
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
                 stacked = np.clip(np.stack([layers[ch] for ch in layers], axis=-1), 0, 1)
+                legend_colors = ["red", "green", "blue"]
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
                 stacked = (
@@ -1410,6 +1513,8 @@ def _render_images(
                     f"multichannel strategy 'stack' to render."
                 )  # TODO: update when pca is added as strategy
 
+            legend_colors = seed_colors
+
             _ax_show_and_transform(
                 colored,
                 trans_data,
@@ -1426,6 +1531,8 @@ def _render_images(
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
             colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
             colored = np.clip(colored[:, :, :3], 0, 1)
+
+            legend_colors = list(palette)
 
             _ax_show_and_transform(
                 colored,
@@ -1446,6 +1553,8 @@ def _render_images(
             )
             colored = colored[:, :, :3]
 
+            legend_colors = [matplotlib.colors.to_hex(cm(0.75)) for cm in channel_cmaps]
+
             _ax_show_and_transform(
                 colored,
                 trans_data,
@@ -1457,6 +1566,17 @@ def _render_images(
         # 2D) Image has n channels, no palette but cmap info
         elif palette is not None and got_multiple_cmaps:
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
+
+        # Collect channel legend entries (single point for all multi-channel paths)
+        if render_params.channels_as_legend and channel_legend_entries is not None:
+            if legend_colors is not None:
+                _collect_channel_legend_entries(channels, legend_colors, channel_legend_entries)
+            else:
+                logger.warning(
+                    "channels_as_legend requires distinct per-channel colors; "
+                    "ignored when a single cmap is shared across channels. "
+                    "Use 'palette' or a list of cmaps instead."
+                )
 
 
 def _render_labels(

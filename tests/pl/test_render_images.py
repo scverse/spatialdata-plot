@@ -42,7 +42,11 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_pass_cmap_list(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(
             element="blobs_image",
-            cmap=[matplotlib.colormaps["seismic"], matplotlib.colormaps["Reds"], matplotlib.colormaps["Blues"]],
+            cmap=[
+                matplotlib.colormaps["seismic"],
+                matplotlib.colormaps["Reds"],
+                matplotlib.colormaps["Blues"],
+            ],
         ).pl.show()
 
     def test_plot_can_render_a_single_channel_from_image(self, sdata_blobs: SpatialData):
@@ -491,3 +495,105 @@ def test_cmap_matches_selected_channels_not_full_image(sdata_blobs: SpatialData)
     sdata_blobs.pl.render_images("blobs_image", channel=[0], cmap=["gray"]).pl.show(ax=ax)
     assert len(ax.get_images()) == 1
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# channels_as_legend visual tests (#459)
+# ---------------------------------------------------------------------------
+
+
+class TestChannelsAsCategories(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_channels_as_legend_two_channels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_legend=True).pl.show()
+
+    def test_plot_channels_as_legend_three_channels_default(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channels_as_legend=True).pl.show()
+
+    def test_plot_channels_as_legend_with_palette(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(
+            element="blobs_image",
+            channel=["c1", "c2", "c3"],
+            palette=["red", "green", "blue"],
+            channels_as_legend=True,
+        ).pl.show()
+
+    def test_plot_channels_as_legend_many_channels(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images(element="blobs_image", channels_as_legend=True).pl.show()
+
+    def test_plot_channels_as_legend_with_cmap_list(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(
+            element="blobs_image",
+            channel=[0, 1, 2],
+            cmap=["Reds", "Greens", "Blues"],
+            channels_as_legend=True,
+        ).pl.show()
+
+    def test_plot_channels_as_legend_legend_upper_left(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_legend=True).pl.show(
+            legend_loc="upper left"
+        )
+
+    def test_plot_channels_as_legend_legend_lower_right(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_legend=True).pl.show(
+            legend_loc="lower right"
+        )
+
+
+class TestChannelsAsCategoriesNonVisual:
+    """Non-visual tests for channels_as_legend edge cases."""
+
+    def test_channels_as_legend_ignored_for_single_channel(self, sdata_blobs: SpatialData):
+        fig, ax = plt.subplots()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show(ax=ax)
+        assert ax.get_legend() is None
+        plt.close("all")
+
+    def test_channels_as_legend_false_no_legend(self, sdata_blobs: SpatialData):
+        fig, ax = plt.subplots()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_legend=False).pl.show(ax=ax)
+        assert ax.get_legend() is None
+        plt.close("all")
+
+    def test_channels_as_legend_chained_renders_combine(self, sdata_blobs: SpatialData):
+        """Multiple render_images with channels_as_legend should produce one combined legend."""
+        fig, ax = plt.subplots()
+        (
+            sdata_blobs.pl.render_images(
+                element="blobs_image",
+                channel=[0, 1],
+                palette=["red", "green"],
+                channels_as_legend=True,
+            )
+            .pl.render_images(
+                element="blobs_image",
+                channel=[1, 2],
+                palette=["cyan", "blue"],
+                channels_as_legend=True,
+            )
+            .pl.show(ax=ax)
+        )
+        legend = ax.get_legend()
+        assert legend is not None
+        labels = [t.get_text() for t in legend.get_texts()]
+        # Both render calls contribute: channels 0, 1, 2.
+        # Channel "1" appears in both calls — dedup keeps the last color.
+        assert "0" in labels
+        assert "1" in labels
+        assert "2" in labels
+        assert len(labels) == 3
+        plt.close("all")
+
+    def test_channels_as_legend_coexists_with_other_elements(self, sdata_blobs: SpatialData):
+        """Channel legend should not crash when combined with other render calls."""
+        fig, ax = plt.subplots()
+        (
+            sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1], channels_as_legend=True)
+            .pl.render_labels(element="blobs_labels")
+            .pl.show(ax=ax)
+        )
+        legend = ax.get_legend()
+        assert legend is not None
+        labels = [t.get_text() for t in legend.get_texts()]
+        assert "0" in labels
+        assert "1" in labels
+        plt.close("all")
