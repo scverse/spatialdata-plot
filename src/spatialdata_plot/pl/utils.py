@@ -95,6 +95,13 @@ ColorLike = tuple[float, ...] | list[float] | str
 
 _GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
 
+_RENDER_CMD_TO_CS_FLAG: dict[str, str] = {
+    "render_images": "has_images",
+    "render_shapes": "has_shapes",
+    "render_points": "has_points",
+    "render_labels": "has_labels",
+}
+
 
 def _gate_palette_and_groups(
     element_params: dict[str, Any],
@@ -202,24 +209,50 @@ def _get_coordinate_system_mapping(sdata: SpatialData) -> dict[str, list[str]]:
     return mapping
 
 
+_MPL_SINGLE_LETTER_COLORS = frozenset("bgrcmykw")
+
+
 def _is_color_like(color: Any) -> bool:
     """Check if a value is a valid color.
 
-    For discussion, see: https://github.com/scverse/spatialdata-plot/issues/327.
-    matplotlib accepts strings in [0, 1] as grey-scale values - therefore,
-    "0" and "1" are considered valid colors. However, we won't do that
-    so we're filtering these out.
+    We reject several matplotlib shorthand notations that are likely to collide
+    with column or gene names. For discussion, see:
+
+    - https://github.com/scverse/spatialdata-plot/issues/211
+    - https://github.com/scverse/spatialdata-plot/issues/327
+
+    Rejected shorthands:
+
+    - Greyscale strings: ``"0"``, ``"0.5"``, ``"1"`` (floats in [0, 1])
+    - Short hex: ``"#RGB"`` / ``"#RGBA"`` (only ``#RRGGBB`` / ``#RRGGBBAA`` accepted)
+    - Single-letter colors: ``"b"``, ``"g"``, ``"r"``, ``"c"``, ``"m"``, ``"y"``, ``"k"``, ``"w"``
+    - CN cycle notation: ``"C0"``, ``"C1"``, …
+    - ``tab:`` prefixed colors: ``"tab:blue"``, ``"tab:orange"``, …
+    - ``xkcd:`` prefixed colors: ``"xkcd:sky blue"``, …
     """
     if isinstance(color, str):
+        # greyscale strings
         try:
             num_value = float(color)
             if 0 <= num_value <= 1:
                 return False
         except ValueError:
-            # we're not dealing with what matplotlib considers greyscale
             pass
+
+        # short hex
         if color.startswith("#") and len(color) not in [7, 9]:
-            # we only accept hex colors in the form #RRGGBB or #RRGGBBAA, not short forms as matplotlib does
+            return False
+
+        # single-letter color shortcuts
+        if color in _MPL_SINGLE_LETTER_COLORS:
+            return False
+
+        # CN cycle notation (C0, C1, …)
+        if len(color) >= 2 and color[0] == "C" and color[1:].isdigit():
+            return False
+
+        # tab: and xkcd: prefixed colors
+        if color.startswith(("tab:", "xkcd:")):
             return False
 
     return bool(colors.is_color_like(color))
@@ -264,6 +297,7 @@ def _prepare_params_plot(
         if ax is not None and len(ax) != num_panels:
             raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
         if fig is None:
+            # TODO(#579): infer fig from ax[0].get_figure() instead of requiring it
             raise ValueError(
                 f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
             )
@@ -1016,7 +1050,7 @@ def _set_color_source_vec(
     na_color: Color,
     element_name: list[str] | str | None = None,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     cmap_params: CmapParams | None = None,
     alpha: float = 1.0,
     table_name: str | None = None,
@@ -1511,7 +1545,7 @@ def _extract_colors_from_table_uns(
 def _modify_categorical_color_mapping(
     mapping: Mapping[str, str],
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
 ) -> Mapping[str, str]:
     if groups is None or isinstance(groups, list) and groups[0] is None:
         return mapping
@@ -1569,11 +1603,23 @@ def _get_categorical_color_mapping(
     cmap_params: CmapParams | None = None,
     alpha: float = 1,
     groups: list[str] | str | None = None,
-    palette: list[str] | str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
     render_type: Literal["points", "labels"] | None = None,
 ) -> Mapping[str, str]:
     if not isinstance(color_source_vector, Categorical):
         raise TypeError(f"Expected `categories` to be a `Categorical`, but got {type(color_source_vector).__name__}")
+
+    # Dict palette (e.g. from make_palette_from_data): use directly as category→color mapping
+    if isinstance(palette, dict):
+        na_color_hex = na_color.get_hex_with_alpha() if isinstance(na_color, Color) else str(na_color)
+        if isinstance(groups, str):
+            groups = [groups]
+        if groups is not None:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in groups if cat in color_source_vector.categories}
+        else:
+            mapping = {cat: palette.get(cat, na_color_hex) for cat in color_source_vector.categories}
+        mapping["NaN"] = na_color_hex
+        return mapping
 
     if isinstance(groups, str):
         groups = [groups]
@@ -2080,17 +2126,11 @@ def _get_elements_to_be_rendered(
     List of names of the SpatialElements to be rendered in the plot.
     """
     elements_to_be_rendered: list[str] = []
-    render_cmds_map = {
-        "render_images": "has_images",
-        "render_shapes": "has_shapes",
-        "render_points": "has_points",
-        "render_labels": "has_labels",
-    }
 
     cs_query = cs_contents.query(f"cs == '{cs}'")
 
     for cmd, params in render_cmds:
-        key = render_cmds_map.get(cmd)
+        key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
         if key and cs_query[key][0]:
             elements_to_be_rendered += [params.element]
 
@@ -2114,7 +2154,6 @@ def _validate_show_parameters(
     dpi: int | None,
     fig: Figure | None,
     title: list[str] | str | None,
-    share_extent: bool,
     pad_extent: int | float,
     ax: list[Axes] | Axes | None,
     return_ax: bool,
@@ -2193,9 +2232,6 @@ def _validate_show_parameters(
 
     if title is not None and not isinstance(title, list | str):
         raise TypeError("Parameter 'title' must be a string or a list of strings.")
-
-    if not isinstance(share_extent, bool):
-        raise TypeError("Parameter 'share_extent' must be a boolean.")
 
     if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")
@@ -2393,14 +2429,21 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
     palette = param_dict["palette"]
 
-    if isinstance(palette, list):
+    # dict palettes (e.g. from make_palette_from_data) bypass groups validation
+    if isinstance(palette, dict):
+        from matplotlib.colors import is_color_like
+
+        invalid = [f"'{k}': '{v}'" for k, v in palette.items() if not is_color_like(v)]
+        if invalid:
+            raise ValueError(f"Dict palette contains invalid color values: {', '.join(invalid)}.")
+    elif isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
     elif isinstance(palette, str | type(None)) and "palette" in param_dict:
         param_dict["palette"] = [palette] if palette is not None else None
 
     palette_group = param_dict.get("palette")
-    if element_type in ["shapes", "points", "labels"] and palette_group is not None:
+    if element_type in ["shapes", "points", "labels"] and palette_group is not None and not isinstance(palette, dict):
         groups = param_dict.get("groups")
         if groups is None:
             raise ValueError("When specifying 'palette', 'groups' must also be specified.")
@@ -2419,8 +2462,9 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
 
-    # validation happens within Color constructor
-    param_dict["na_color"] = Color(param_dict.get("na_color"))
+    # validation happens within Color constructor (images don't use na_color)
+    if "na_color" in param_dict:
+        param_dict["na_color"] = Color(param_dict.get("na_color"))
 
     norm = param_dict.get("norm")
     if norm is not None:
@@ -2540,7 +2584,7 @@ def _validate_label_render_params(
     fill_alpha: float | int | None,
     contour_px: int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     norm: Normalize | None,
     outline_alpha: float | int,
@@ -2550,6 +2594,7 @@ def _validate_label_render_params(
     table_layer: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2593,7 +2638,7 @@ def _validate_label_render_params(
         element_params[el]["col_for_color"] = None
         if (col_for_color := param_dict["col_for_color"]) is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"], labels=True
+                sdata, el, col_for_color, param_dict["table_name"], labels=True, gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2611,7 +2656,7 @@ def _validate_points_render_params(
     alpha: float | int | None,
     color: ColorLike | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: Normalize | None,
@@ -2621,6 +2666,7 @@ def _validate_points_render_params(
     ds_reduction: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2660,7 +2706,7 @@ def _validate_points_render_params(
         col_for_color = param_dict["col_for_color"]
         if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"]
+                sdata, el, col_for_color, param_dict["table_name"], gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2678,7 +2724,7 @@ def _validate_shape_render_params(
     element: str | None,
     fill_alpha: float | int | None,
     groups: list[str] | str | None,
-    palette: list[str] | str | None,
+    palette: dict[str, str] | list[str] | str | None,
     color: ColorLike | None,
     na_color: ColorLike | None,
     outline_width: float | int | tuple[float | int, float | int] | None,
@@ -2694,6 +2740,7 @@ def _validate_shape_render_params(
     ds_reduction: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    gene_symbols: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -2743,7 +2790,7 @@ def _validate_shape_render_params(
         col_for_color = param_dict["col_for_color"]
         if col_for_color is not None:
             col_for_color, table_name = _validate_col_for_column_table(
-                sdata, el, col_for_color, param_dict["table_name"]
+                sdata, el, col_for_color, param_dict["table_name"], gene_symbols=gene_symbols
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
@@ -2757,12 +2804,38 @@ def _validate_shape_render_params(
     return element_params
 
 
+def _resolve_gene_symbols(
+    adata: AnnData,
+    col_for_color: str,
+    gene_symbols: str,
+) -> str:
+    """Resolve a gene symbol to its var_name using an alternate var column.
+
+    Mimics scanpy's ``gene_symbols`` behaviour: look up *col_for_color* in
+    ``adata.var[gene_symbols]`` and return the corresponding ``var_name``
+    (i.e. the var index value).
+    """
+    if gene_symbols not in adata.var.columns:
+        raise KeyError(f"Column '{gene_symbols}' not found in `adata.var`. Cannot use it as `gene_symbols` lookup.")
+    mask = adata.var[gene_symbols] == col_for_color
+    if not mask.any():
+        raise KeyError(f"'{col_for_color}' not found in `adata.var['{gene_symbols}']`.")
+    n_matches = mask.sum()
+    if n_matches > 1:
+        logger.warning(
+            f"Gene symbol '{col_for_color}' maps to {n_matches} var_names in column '{gene_symbols}'. "
+            f"Using the first match: '{adata.var.index[mask][0]}'."
+        )
+    return str(adata.var.index[mask][0])
+
+
 def _validate_col_for_column_table(
     sdata: SpatialData,
     element_name: str,
     col_for_color: str | None,
     table_name: str | None,
     labels: bool = False,
+    gene_symbols: str | None = None,
 ) -> tuple[str | None, str | None]:
     if col_for_color is None:
         return None, None
@@ -2775,9 +2848,13 @@ def _validate_col_for_column_table(
             logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
         if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
-            raise KeyError(
-                f"Column '{col_for_color}' not found in obs/var of table '{table_name}' for element '{element_name}'."
-            )
+            if gene_symbols is not None:
+                col_for_color = _resolve_gene_symbols(sdata[table_name], col_for_color, gene_symbols)
+            else:
+                raise KeyError(
+                    f"Column '{col_for_color}' not found in obs/var of table '{table_name}' "
+                    f"for element '{element_name}'."
+                )
     else:
         tables = get_element_annotators(sdata, element_name)
         if len(tables) == 0:
@@ -2787,9 +2864,16 @@ def _validate_col_for_column_table(
                 "Please ensure the element is annotated by at least one table."
             )
         # Now check which tables contain the column
+        resolved_var_name: str | None = None
         for annotates in tables.copy():
             if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
-                tables.remove(annotates)
+                if gene_symbols is not None:
+                    try:
+                        resolved_var_name = _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)
+                    except KeyError:
+                        tables.remove(annotates)
+                else:
+                    tables.remove(annotates)
         if len(tables) == 0:
             raise KeyError(
                 f"Unable to locate color key '{col_for_color}' for element '{element_name}'. "
@@ -2798,6 +2882,8 @@ def _validate_col_for_column_table(
         table_name = next(iter(tables))
         if len(tables) > 1:
             logger.warning(f"Multiple tables contain column '{col_for_color}', using table '{table_name}'.")
+        if resolved_var_name is not None:
+            col_for_color = resolved_var_name
     return col_for_color, table_name
 
 
@@ -2807,7 +2893,6 @@ def _validate_image_render_params(
     channel: list[str] | list[int] | str | int | None,
     alpha: float | int | None,
     palette: list[str] | str | None,
-    na_color: ColorLike | None,
     cmap: list[Colormap | str] | Colormap | str | None,
     norm: list[Normalize] | Normalize | None,
     scale: str | None,
@@ -2820,7 +2905,6 @@ def _validate_image_render_params(
         "channel": channel,
         "alpha": alpha,
         "palette": palette,
-        "na_color": na_color,
         "cmap": cmap,
         "norm": norm,
         "scale": scale,
@@ -2878,7 +2962,6 @@ def _validate_image_render_params(
                     f"({', '.join(str(c) for c in channels_to_use)})."
                 )
         element_params[el]["palette"] = palette
-        element_params[el]["na_color"] = param_dict["na_color"]
 
         cmap = param_dict["cmap"]
         if cmap is not None:
@@ -3194,6 +3277,69 @@ def _prepare_transformation(
     return trans, trans_data
 
 
+def _apply_cmap_alpha_to_datashader_result(
+    result: Any,
+    agg: DataArray,
+    cmap: str | list[str] | Colormap,
+    span: list[float] | tuple[float, float] | None,
+) -> Any:
+    """Apply the colormap's alpha channel to a datashader RGBA result.
+
+    Datashader ignores the per-entry alpha channel of matplotlib colormaps,
+    so pixels that the cmap marks as transparent (alpha=0) are rendered
+    opaque.  This function post-processes the shaded RGBA output to restore
+    the cmap's intended transparency.  See :issue:`376`.
+    """
+    if not isinstance(cmap, Colormap):
+        return result
+
+    # Quick check: does this cmap have any transparent entries?
+    test_vals = np.linspace(0, 1, min(cmap.N, 256))
+    cmap_alphas = cmap(test_vals)[:, 3]
+    if np.all(cmap_alphas >= 1.0):
+        return result
+
+    # Get or ensure we have an (H, W, 4) uint8 array
+    if hasattr(result, "values"):
+        # datashader Image — uint32 packed, convert via to_numpy()
+        rgba = result.to_numpy().base
+        if rgba is None:
+            return result
+    else:
+        rgba = result
+
+    if rgba.ndim != 3 or rgba.shape[2] != 4:
+        return result
+
+    # Normalise aggregate values to [0, 1] using the same span datashader used
+    agg_vals = agg.values.astype(np.float64)
+    valid = np.isfinite(agg_vals)
+    if not valid.any():
+        return result
+
+    if span is not None:
+        lo, hi = float(span[0]), float(span[1])
+    else:
+        lo = float(np.nanmin(agg_vals))
+        hi = float(np.nanmax(agg_vals))
+
+    if hi <= lo or not np.isfinite(lo) or not np.isfinite(hi):
+        return result
+
+    normed = np.clip((agg_vals - lo) / (hi - lo), 0.0, 1.0)
+
+    # Look up cmap alpha for each pixel
+    desired_alpha = cmap(normed)[:, :, 3]
+
+    # Zero out pixels where the cmap wants transparency
+    transparent = valid & (desired_alpha < 1.0)
+    if transparent.any():
+        # Scale the existing alpha by the cmap's alpha
+        rgba[transparent, 3] = (rgba[transparent, 3].astype(np.float32) * desired_alpha[transparent]).astype(np.uint8)
+
+    return result
+
+
 def _datashader_map_aggregate_to_color(
     agg: DataArray,
     cmap: str | list[str] | ListedColormap,
@@ -3245,9 +3391,10 @@ def _datashader_map_aggregate_to_color(
         img_over = img_over.to_numpy().base
         if img_over is not None:
             stack[stack[:, :, 3] == 0] = img_over[stack[:, :, 3] == 0]
-        return stack
 
-    return ds.tf.shade(
+        return _apply_cmap_alpha_to_datashader_result(stack, agg, cmap, span)
+
+    result = ds.tf.shade(
         agg,
         cmap=cmap,
         color_key=color_key,
@@ -3255,6 +3402,7 @@ def _datashader_map_aggregate_to_color(
         span=span,
         how="linear",
     )
+    return _apply_cmap_alpha_to_datashader_result(result, agg, cmap, span)
 
 
 def _hex_no_alpha(hex: str) -> str:

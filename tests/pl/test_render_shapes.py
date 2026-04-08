@@ -1009,6 +1009,44 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             ax=axs[1], title="default (filtered)"
         )
 
+    def test_plot_can_color_shapes_by_gene_symbols(self, sdata_blobs: SpatialData):
+        """Color shapes by gene symbol alias instead of var_name (#247)."""
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+        sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="GeneA", table_name="table", gene_symbols="gene_symbol"
+        ).pl.show()
+
+
+def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
+    """gene_symbols resolves correctly without explicit table_name (#247)."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+    # No table_name — auto-detect path
+    sdata_blobs.pl.render_shapes("blobs_circles", color="GeneA", gene_symbols="gene_symbol").pl.show()
+    plt.close("all")
+
+
+def test_gene_symbols_missing_symbol_raises(sdata_blobs: SpatialData):
+    """gene_symbols raises KeyError when the symbol is not found (#247)."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+    with pytest.raises(KeyError, match="Unable to locate color key 'NoSuchGene'"):
+        sdata_blobs.pl.render_shapes("blobs_circles", color="NoSuchGene", gene_symbols="gene_symbol").pl.show()
+
+
+def test_gene_symbols_missing_column_raises(sdata_blobs: SpatialData):
+    """gene_symbols raises KeyError when the var column doesn't exist (#247)."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    with pytest.raises(KeyError, match="not found in `adata.var`"):
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="GeneA", table_name="table", gene_symbols="nonexistent_col"
+        ).pl.show()
+
 
 def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
     """When no elements match the groups, the plot should render without error."""
