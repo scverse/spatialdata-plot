@@ -522,10 +522,10 @@ class PlotAccessor:
         alpha: float | int = 1.0,
         scale: str | None = None,
         grayscale: bool = False,
-        transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None,
+        transfunc: (Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None) = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
-        channels_as_categories: bool = False,
+        channels_as_legend: bool = False,
         **kwargs: Any,
     ) -> sd.SpatialData:
         """
@@ -603,7 +603,7 @@ class PlotAccessor:
         colorbar_params :
             Parameters forwarded to Matplotlib's colorbar alongside layout hints such as ``loc``, ``width``, ``pad``,
             and ``label``.
-        channels_as_categories : bool, default False
+        channels_as_legend : bool, default False
             When ``True`` and rendering multiple channels, show a categorical
             legend mapping each channel name to its compositing color.  The
             legend uses the ``legend_*`` parameters from :meth:`show`.
@@ -691,7 +691,7 @@ class PlotAccessor:
                 colorbar_params=param_values["colorbar_params"],
                 transfunc=transfunc,
                 grayscale=grayscale,
-                channels_as_categories=channels_as_categories,
+                channels_as_legend=channels_as_legend,
             )
             n_steps += 1
 
@@ -1229,7 +1229,10 @@ class PlotAccessor:
                         table = params_copy.table_name
                         if table is not None and params_copy.col_for_color is not None:
                             colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
-                            if isinstance(colors[params_copy.col_for_color].dtype, pd.CategoricalDtype):
+                            if isinstance(
+                                colors[params_copy.col_for_color].dtype,
+                                pd.CategoricalDtype,
+                            ):
                                 _maybe_set_colors(
                                     source=sdata[table],
                                     target=sdata[table],

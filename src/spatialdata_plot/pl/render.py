@@ -189,7 +189,9 @@ def _filter_groups_transparent_na(
     return keep, filtered_csv, filtered_cv
 
 
-def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, object], dict[str, object], str | None]:
+def _split_colorbar_params(
+    params: dict[str, object] | None,
+) -> tuple[dict[str, object], dict[str, object], str | None]:
     """Split colorbar params into layout hints, Matplotlib kwargs, and label override."""
     layout: dict[str, object] = {}
     cbar_kwargs: dict[str, object] = {}
@@ -210,7 +212,10 @@ def _split_colorbar_params(params: dict[str, object] | None) -> tuple[dict[str, 
 
 
 def _resolve_colorbar_label(
-    colorbar_params: dict[str, object] | None, fallback: str | None, *, is_default_channel_name: bool = False
+    colorbar_params: dict[str, object] | None,
+    fallback: str | None,
+    *,
+    is_default_channel_name: bool = False,
 ) -> str | None:
     """Pick a colorbar label from params or fall back to provided value."""
     _, _, label = _split_colorbar_params(colorbar_params)
@@ -370,7 +375,7 @@ def _render_shapes(
         value_to_plot=col_for_color,
         groups=groups,
         palette=render_params.palette,
-        na_color=render_params.color if render_params.color is not None else render_params.cmap_params.na_color,
+        na_color=(render_params.color if render_params.color is not None else render_params.cmap_params.na_color),
         cmap_params=render_params.cmap_params,
         table_name=table_name,
         table_layer=table_layer,
@@ -444,7 +449,10 @@ def _render_shapes(
         if not (render_params.shape == "circle" and (current_type == "Point").all()):
             logger.info(f"Converting {shapes.shape[0]} shapes to {render_params.shape}.")
             max_extent = np.max(
-                [shapes.total_bounds[2] - shapes.total_bounds[0], shapes.total_bounds[3] - shapes.total_bounds[1]]
+                [
+                    shapes.total_bounds[2] - shapes.total_bounds[0],
+                    shapes.total_bounds[3] - shapes.total_bounds[1],
+                ]
             )
             shapes = _convert_shapes(shapes, render_params.shape, max_extent)
 
@@ -569,7 +577,15 @@ def _render_shapes(
                 na_color_hex,
             )
 
-        _render_ds_outlines(cvs, transformed_element, render_params, fig_params, ax, factor, x_ext + y_ext)
+        _render_ds_outlines(
+            cvs,
+            transformed_element,
+            render_params,
+            fig_params,
+            ax,
+            factor,
+            x_ext + y_ext,
+        )
 
         _cax = _render_ds_image(
             ax,
@@ -836,7 +852,13 @@ def _render_points(
     )
 
     if added_color_from_table and col_for_color is not None:
-        _reparse_points(sdata_filt, element, points_pd_with_color, transformation_in_cs, coordinate_system)
+        _reparse_points(
+            sdata_filt,
+            element,
+            points_pd_with_color,
+            transformation_in_cs,
+            coordinate_system,
+        )
 
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
@@ -1106,7 +1128,7 @@ def _collect_channel_legend_entries(
     """Accumulate channel-to-color mappings for a deferred combined legend."""
     channel_names = [str(ch) for ch in channels]
     if len(set(channel_names)) != len(channel_names):
-        logger.warning("channels_as_categories: duplicate channel names detected; skipping legend entries.")
+        logger.warning("channels_as_legend: duplicate channel names detected; skipping legend entries.")
         return
 
     color_hexes = [matplotlib.colors.to_hex(c, keep_alpha=False) for c in seed_colors]
@@ -1540,12 +1562,12 @@ def _render_images(
             raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 
         # Collect channel legend entries (single point for all multi-channel paths)
-        if render_params.channels_as_categories and channel_legend_entries is not None:
+        if render_params.channels_as_legend and channel_legend_entries is not None:
             if legend_colors is not None:
                 _collect_channel_legend_entries(channels, legend_colors, channel_legend_entries)
             else:
                 logger.warning(
-                    "channels_as_categories requires distinct per-channel colors; "
+                    "channels_as_legend requires distinct per-channel colors; "
                     "ignored when a single cmap is shared across channels. "
                     "Use 'palette' or a list of cmaps instead."
                 )

@@ -37,7 +37,9 @@ class Color:
     user_defined_alpha: bool = False
 
     def __init__(
-        self, color: None | str | list[float] | tuple[float, ...] = "default", alpha: float | int | None = None
+        self,
+        color: None | str | list[float] | tuple[float, ...] = "default",
+        alpha: float | int | None = None,
     ) -> None:
         # 1) Validate alpha value
         if alpha is None:
@@ -283,7 +285,7 @@ class ImageRenderParams:
     colorbar_params: dict[str, object] | None = None
     transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
     grayscale: bool = False
-    channels_as_categories: bool = False
+    channels_as_legend: bool = False
 
 
 @dataclass
