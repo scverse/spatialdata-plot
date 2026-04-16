@@ -1823,7 +1823,6 @@ def _render_graph(
     render_params: GraphRenderParams,
     coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
-    **kwargs: Any,
 ) -> None:
     """Render spatial graph edges as a LineCollection on the given axes."""
     from matplotlib.collections import LineCollection
@@ -1836,17 +1835,17 @@ def _render_graph(
     # Get table and adjacency matrix
     table = sdata[table_name]
     obsp_key = render_params.connectivity_key
-    # _validate_graph_render_params already resolved the actual obsp key,
-    # but we stored the prefix in render_params — re-resolve here
     if obsp_key not in table.obsp:
-        suffixed = f"{obsp_key}_connectivities"
-        if suffixed in table.obsp:
-            obsp_key = suffixed
-        else:
-            logger.warning(f"Connectivity key '{obsp_key}' not found in table obsp. Skipping graph rendering.")
-            return
+        logger.warning(f"Connectivity key '{obsp_key}' not found in table obsp. Skipping graph rendering.")
+        return
 
     adjacency = table.obsp[obsp_key]
+
+    if adjacency.shape[0] != table.n_obs:
+        raise ValueError(
+            f"Adjacency matrix shape {adjacency.shape} does not match table.n_obs ({table.n_obs}). "
+            "The graph must be computed on the full table, not a subset."
+        )
 
     # Get the spatial element
     if element_name in sdata.shapes:
@@ -1866,67 +1865,54 @@ def _render_graph(
 
     centroid_coords = np.column_stack([centroids_df["x"].values, centroids_df["y"].values])
 
-    # Align table observations to centroid positions
-    # The table's instance_key maps obs rows to spatial element instances.
-    # Centroids are ordered by element instance (e.g., label ID or GeoDataFrame index).
+    # Align table observations to centroid positions via instance_key.
+    # Build a coordinate array indexed by full-table row so edge lookups are O(1).
     _, region_key, instance_key = get_table_keys(table)
 
-    # Filter table to only rows annotating this element
     element_mask = table.obs[region_key] == element_name if region_key is not None else np.ones(table.n_obs, dtype=bool)
-    table_subset_indices = np.where(element_mask)[0]
     instance_ids = table.obs[instance_key].values[element_mask]
+    table_subset_indices = np.where(element_mask)[0]
 
-    # Build mapping from instance_id to centroid row index
-    # For shapes/points, centroids follow the GeoDataFrame/DataFrame index order.
-    # For labels, centroids follow unique label IDs (excluding background).
     centroid_ids = centroids_df.index.values if hasattr(centroids_df, "index") else np.arange(len(centroids_df))
+    id_to_centroid_row = {cid: row for row, cid in enumerate(centroid_ids)}
 
-    id_to_centroid_row = {}
-    for row, cid in enumerate(centroid_ids):
-        id_to_centroid_row[cid] = row
-
-    # Map each table obs (that annotates this element) to a centroid coordinate
-    obs_to_coord = {}
+    # has_coord[i] is True if table row i has a valid centroid
+    has_coord = np.zeros(table.n_obs, dtype=bool)
+    coord_lookup = np.full((table.n_obs, 2), np.nan)
     for table_row, iid in zip(table_subset_indices, instance_ids, strict=True):
         if iid in id_to_centroid_row:
-            obs_to_coord[table_row] = centroid_coords[id_to_centroid_row[iid]]
+            has_coord[table_row] = True
+            coord_lookup[table_row] = centroid_coords[id_to_centroid_row[iid]]
 
-    # Apply group filtering
+    # Apply group filtering: narrow has_coord to only rows in requested groups
     groups = render_params.groups
     group_key = render_params.group_key
     if groups is not None and group_key is not None:
         group_values = table.obs[group_key].values
-        group_set = set(groups)
-        obs_in_groups = {idx for idx in obs_to_coord if group_values[idx] in group_set}
-    else:
-        obs_in_groups = set(obs_to_coord.keys())
+        in_groups = np.isin(group_values, groups)
+        has_coord &= in_groups
 
-    # Extract edges from upper triangle (undirected graph — draw each edge once)
-    adj_upper = triu(adjacency, k=0)
+    # Extract edges from upper triangle (undirected — draw each edge once, skip self-loops)
+    adj_upper = triu(adjacency, k=1)
     rows, cols = adj_upper.nonzero()
 
-    # Build line segments for edges where both endpoints are valid
-    segments = []
-    for r, c in zip(rows, cols, strict=True):
-        if r == c:
-            continue  # skip self-loops
-        if r in obs_in_groups and c in obs_in_groups and r in obs_to_coord and c in obs_to_coord:
-            segments.append([obs_to_coord[r], obs_to_coord[c]])
-
-    if not segments:
+    # Vectorized filter: keep edges where both endpoints are valid
+    edge_mask = has_coord[rows] & has_coord[cols]
+    if not edge_mask.any():
         return
 
-    segments_arr = np.array(segments)
+    valid_rows = rows[edge_mask]
+    valid_cols = cols[edge_mask]
+    segments = np.stack([coord_lookup[valid_rows], coord_lookup[valid_cols]], axis=1)
 
     edge_color = render_params.color.get_hex() if render_params.color is not None else "#808080"
 
     lc = LineCollection(
-        segments_arr,
+        segments,
         linewidths=render_params.edge_width,
         colors=edge_color,
         alpha=render_params.edge_alpha,
         zorder=render_params.zorder,
-        **kwargs,
     )
     lc.set_rasterized(True)
     ax.add_collection(lc)

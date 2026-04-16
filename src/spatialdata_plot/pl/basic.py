@@ -25,6 +25,7 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
+from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
@@ -875,7 +876,6 @@ class PlotAccessor:
         edge_width: float = 1.0,
         edge_alpha: float = 1.0,
         table_name: str | None = None,
-        **kwargs: Any,
     ) -> sd.SpatialData:
         """Render spatial graph edges between observations.
 
@@ -904,8 +904,6 @@ class PlotAccessor:
             Transparency for edges (0 = invisible, 1 = opaque).
         table_name : str | None, optional
             Table containing the graph. Auto-discovered if not given.
-        **kwargs
-            Forwarded to :class:`matplotlib.collections.LineCollection`.
 
         Returns
         -------
@@ -1392,13 +1390,9 @@ class PlotAccessor:
                         )
 
                 elif cmd == "render_graph":
-                    # Graph rendering: resolve which element the graph connects,
-                    # check if that element exists in this CS.
                     graph_element = params_copy.element
-                    element_in_cs = (
-                        (graph_element in sdata.shapes and has_shapes)
-                        or (graph_element in sdata.points and has_points)
-                        or (graph_element in sdata.labels and has_labels)
+                    element_in_cs = graph_element in sdata and cs in set(
+                        get_transformation(sdata[graph_element], get_all=True).keys()
                     )
                     if element_in_cs:
                         _render_graph(
