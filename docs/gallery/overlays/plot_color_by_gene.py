@@ -11,9 +11,4 @@ import spatialdata_plot  # noqa: F401
 
 sdata = load_visium_breast_cancer()
 
-(
-    sdata.pl
-    .render_images("tissue")
-    .pl.render_shapes("spots", color="ERBB2", fill_alpha=0.8)
-    .pl.show()
-)
+(sdata.pl.render_images("tissue").pl.render_shapes("spots", color="ERBB2", fill_alpha=0.8).pl.show())

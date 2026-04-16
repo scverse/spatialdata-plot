@@ -6,6 +6,7 @@ Render transcript detections as points.
 """
 
 import spatialdata as sd
+
 import spatialdata_plot  # noqa: F401
 
 sdata = sd.datasets.blobs()

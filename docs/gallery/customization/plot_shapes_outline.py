@@ -12,8 +12,7 @@ import spatialdata_plot  # noqa: F401
 sdata = load_visium_breast_cancer()
 
 (
-    sdata.pl
-    .render_images("tissue")
+    sdata.pl.render_images("tissue")
     .pl.render_shapes(
         "spots",
         fill_alpha=0.3,
