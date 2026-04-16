@@ -49,6 +49,7 @@ from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
     FigParams,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -1815,3 +1816,117 @@ def _render_labels(
         scalebar_units=scalebar_params.scalebar_units,
         # scalebar_kwargs=scalebar_params.scalebar_kwargs,
     )
+
+
+def _render_graph(
+    sdata: sd.SpatialData,
+    render_params: GraphRenderParams,
+    coordinate_system: str,
+    ax: matplotlib.axes.SubplotBase,
+    **kwargs: Any,
+) -> None:
+    """Render spatial graph edges as a LineCollection on the given axes."""
+    from matplotlib.collections import LineCollection
+    from scipy.sparse import triu
+
+    _log_context.set("render_graph")
+    element_name = render_params.element
+    table_name = render_params.table_name
+
+    # Get table and adjacency matrix
+    table = sdata[table_name]
+    obsp_key = render_params.connectivity_key
+    # _validate_graph_render_params already resolved the actual obsp key,
+    # but we stored the prefix in render_params — re-resolve here
+    if obsp_key not in table.obsp:
+        suffixed = f"{obsp_key}_connectivities"
+        if suffixed in table.obsp:
+            obsp_key = suffixed
+        else:
+            logger.warning(f"Connectivity key '{obsp_key}' not found in table obsp. Skipping graph rendering.")
+            return
+
+    adjacency = table.obsp[obsp_key]
+
+    # Get the spatial element
+    if element_name in sdata.shapes:
+        element = sdata.shapes[element_name]
+    elif element_name in sdata.points:
+        element = sdata.points[element_name]
+    elif element_name in sdata.labels:
+        element = sdata.labels[element_name]
+    else:
+        logger.warning(f"Element '{element_name}' not found in sdata. Skipping graph rendering.")
+        return
+
+    # Get centroids in the target coordinate system
+    centroids_df = sd.get_centroids(element, coordinate_system=coordinate_system)
+    if hasattr(centroids_df, "compute"):
+        centroids_df = centroids_df.compute()
+
+    centroid_coords = np.column_stack([centroids_df["x"].values, centroids_df["y"].values])
+
+    # Align table observations to centroid positions
+    # The table's instance_key maps obs rows to spatial element instances.
+    # Centroids are ordered by element instance (e.g., label ID or GeoDataFrame index).
+    _, region_key, instance_key = get_table_keys(table)
+
+    # Filter table to only rows annotating this element
+    element_mask = table.obs[region_key] == element_name if region_key is not None else np.ones(table.n_obs, dtype=bool)
+    table_subset_indices = np.where(element_mask)[0]
+    instance_ids = table.obs[instance_key].values[element_mask]
+
+    # Build mapping from instance_id to centroid row index
+    # For shapes/points, centroids follow the GeoDataFrame/DataFrame index order.
+    # For labels, centroids follow unique label IDs (excluding background).
+    centroid_ids = centroids_df.index.values if hasattr(centroids_df, "index") else np.arange(len(centroids_df))
+
+    id_to_centroid_row = {}
+    for row, cid in enumerate(centroid_ids):
+        id_to_centroid_row[cid] = row
+
+    # Map each table obs (that annotates this element) to a centroid coordinate
+    obs_to_coord = {}
+    for table_row, iid in zip(table_subset_indices, instance_ids, strict=True):
+        if iid in id_to_centroid_row:
+            obs_to_coord[table_row] = centroid_coords[id_to_centroid_row[iid]]
+
+    # Apply group filtering
+    groups = render_params.groups
+    group_key = render_params.group_key
+    if groups is not None and group_key is not None:
+        group_values = table.obs[group_key].values
+        group_set = set(groups)
+        obs_in_groups = {idx for idx in obs_to_coord if group_values[idx] in group_set}
+    else:
+        obs_in_groups = set(obs_to_coord.keys())
+
+    # Extract edges from upper triangle (undirected graph — draw each edge once)
+    adj_upper = triu(adjacency, k=0)
+    rows, cols = adj_upper.nonzero()
+
+    # Build line segments for edges where both endpoints are valid
+    segments = []
+    for r, c in zip(rows, cols, strict=True):
+        if r == c:
+            continue  # skip self-loops
+        if r in obs_in_groups and c in obs_in_groups and r in obs_to_coord and c in obs_to_coord:
+            segments.append([obs_to_coord[r], obs_to_coord[c]])
+
+    if not segments:
+        return
+
+    segments_arr = np.array(segments)
+
+    edge_color = render_params.color.get_hex() if render_params.color is not None else "#808080"
+
+    lc = LineCollection(
+        segments_arr,
+        linewidths=render_params.edge_width,
+        colors=edge_color,
+        alpha=render_params.edge_alpha,
+        zorder=render_params.zorder,
+        **kwargs,
+    )
+    lc.set_rasterized(True)
+    ax.add_collection(lc)

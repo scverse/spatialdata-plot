@@ -307,3 +307,18 @@ class LabelsRenderParams:
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+
+
+@dataclass
+class GraphRenderParams:
+    """Graph render parameters."""
+
+    element: str
+    connectivity_key: str = "spatial"
+    table_name: str | None = None
+    color: Color | None = None
+    groups: list[str] | str | None = None
+    group_key: str | None = None
+    edge_width: float = 1.0
+    edge_alpha: float = 1.0
+    zorder: int = 0
