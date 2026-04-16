@@ -119,7 +119,7 @@ exclude_patterns = [
     "tutorials/notebooks/README.md",
     "tutorials/notebooks/references.md",
     "tutorials/notebooks/notebooks/paper_reproducibility/*",
-    "gallery",
+    "gallery/*",
     "auto_gallery/**/*.ipynb",
     "auto_gallery/**/*.py",
 ]
@@ -174,5 +174,6 @@ sphinx_gallery_conf = {
     "image_scrapers": ("matplotlib",),
     "matplotlib_animations": True,
     "within_subsection_order": "FileNameSortKey",
+    "nested_sections": True,
     "download_all_examples": True,
 }

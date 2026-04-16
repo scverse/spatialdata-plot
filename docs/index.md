@@ -4,9 +4,9 @@
 
 ```{toctree}
 :hidden: true
-:maxdepth: 1
+:maxdepth: 2
 
-auto_gallery/index
+gallery
 api.md
 changelog.md
 contributing.md
