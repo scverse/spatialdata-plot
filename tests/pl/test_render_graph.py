@@ -2,10 +2,11 @@ import geopandas as gpd
 import matplotlib
 import numpy as np
 import pandas as pd
+import pytest
 import scanpy as sc
 import spatialdata as sd
 from anndata import AnnData
-from scipy.sparse import lil_matrix
+from scipy.sparse import csr_matrix, lil_matrix
 from scipy.spatial import KDTree
 from shapely.geometry import Point
 from spatialdata import SpatialData
@@ -148,3 +149,29 @@ class TestGraph(PlotTester, metaclass=PlotTesterMeta):
             .pl.render_shapes("my_shapes", color="cell_type")
             .pl.show()
         )
+
+    def test_plot_can_render_graph_with_auto_discovery(self):
+        """Auto-discover element and table when unambiguous."""
+        sdata = _make_sdata_with_graph_on_shapes()
+        sdata.pl.render_graph().pl.render_shapes("my_shapes").pl.show()
+
+    def test_render_graph_empty_graph_does_not_error(self):
+        """An adjacency matrix with no edges should render without error."""
+        sdata = _make_sdata_with_graph_on_shapes()
+        sdata["table"].obsp["spatial_connectivities"] = csr_matrix((20, 20))
+        sdata.pl.render_graph("my_shapes", table_name="table").pl.render_shapes("my_shapes").pl.show()
+
+    def test_render_graph_raises_on_missing_obsp_key(self):
+        sdata = _make_sdata_with_graph_on_shapes()
+        with pytest.raises(KeyError, match="not found in `table.obsp`"):
+            sdata.pl.render_graph("my_shapes", connectivity_key="nonexistent", table_name="table")
+
+    def test_render_graph_raises_on_missing_element(self):
+        sdata = _make_sdata_with_graph_on_shapes()
+        with pytest.raises(KeyError, match="not found in shapes, points, or labels"):
+            sdata.pl.render_graph("no_such_element", table_name="table")
+
+    def test_render_graph_raises_on_groups_without_group_key(self):
+        sdata = _make_sdata_with_graph_on_shapes()
+        with pytest.raises(ValueError, match="`groups` requires `group_key`"):
+            sdata.pl.render_graph("my_shapes", table_name="table", groups=["tumor"])
