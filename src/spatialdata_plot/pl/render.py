@@ -1841,12 +1841,6 @@ def _render_graph(
 
     adjacency = table.obsp[obsp_key]
 
-    if adjacency.shape[0] != table.n_obs:
-        raise ValueError(
-            f"Adjacency matrix shape {adjacency.shape} does not match table.n_obs ({table.n_obs}). "
-            "The graph must be computed on the full table, not a subset."
-        )
-
     # Get the spatial element
     if element_name in sdata.shapes:
         element = sdata.shapes[element_name]
