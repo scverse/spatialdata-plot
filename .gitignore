@@ -22,6 +22,10 @@ __pycache__/
 # docs
 /docs/generated/
 /docs/_build/
+/docs/auto_gallery/
+/docs/sg_execution_times.rst
+/docs/gallery/**/data/
+/docs/gallery/**/__pycache__/
 
 # IDEs
 /.idea/
