@@ -56,6 +56,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "sphinx_gallery.gen_gallery",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
@@ -118,6 +119,9 @@ exclude_patterns = [
     "tutorials/notebooks/README.md",
     "tutorials/notebooks/references.md",
     "tutorials/notebooks/notebooks/paper_reproducibility/*",
+    "gallery/*",
+    "auto_gallery/**/*.ipynb",
+    "auto_gallery/**/*.py",
 ]
 
 
@@ -157,3 +161,19 @@ nitpick_ignore = [
     # you can add an exception to this list.
     ("py:class", "igraph.Graph"),
 ]
+
+# -- Sphinx-Gallery configuration -------------------------------------------
+
+sys.path.insert(0, str(HERE / "gallery"))
+
+sphinx_gallery_conf = {
+    "examples_dirs": ["gallery"],
+    "gallery_dirs": ["auto_gallery"],
+    "filename_pattern": r"/plot_",
+    "ignore_pattern": r"(__init__|_helpers)\.py",
+    "image_scrapers": ("matplotlib",),
+    "matplotlib_animations": True,
+    "within_subsection_order": "FileNameSortKey",
+    "nested_sections": True,
+    "download_all_examples": True,
+}
