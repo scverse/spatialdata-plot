@@ -1004,3 +1004,18 @@ def test_no_table_fallback_warning_for_element_column(caplog):
     with logger_no_warns(caplog, logger, match="fallback for color mapping"):
         sdata.pl.render_points("pts", color="cell_type").pl.show()
     plt.close("all")
+
+
+def test_render_points_registers_artist_once():
+    # Regression test for #594: ax.scatter already registers the PathCollection internally;
+    # the previous ax.add_collection(_cax) call added a second reference to the same object.
+    rng = np.random.default_rng(0)
+    n = 20
+    coords = pd.DataFrame({"x": rng.uniform(0, 10, n), "y": rng.uniform(0, 10, n)})
+    points = PointsModel.parse(coords)
+    sdata = SpatialData(points={"pts": points})
+
+    fig, ax = plt.subplots()
+    sdata.pl.render_points("pts").pl.show(ax=ax)
+    assert len(ax.collections) == 1, f"Expected 1 collection artist, got {len(ax.collections)}"
+    plt.close(fig)

@@ -1029,7 +1029,7 @@ def _render_points(
             zorder=render_params.zorder,
             plotnonfinite=True,  # nan points should be rendered as well
         )
-        cax = ax.add_collection(_cax)
+        cax = _cax
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
             extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
@@ -1731,8 +1731,7 @@ def _render_labels(
             zorder=render_params.zorder,
         )
         _cax.set_transform(trans_data)
-        cax = ax.add_image(_cax)
-        return cax  # noqa: RET504
+        return _cax
 
     # When color is a literal (col_for_color is None) and no explicit outline_color,
     # use the literal color for outlines so they are visible (e.g., color='white' on
