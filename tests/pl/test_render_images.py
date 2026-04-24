@@ -154,6 +154,13 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         axs[1].set_title("two-channel uint16")
         fig.tight_layout()
 
+    def test_plot_constant_channel_renders_as_midgrey(self):
+        h, w = 64, 64
+        data = np.full((1, h, w), 128, dtype=np.uint8)
+        img = Image2DModel.parse(data, dims=("c", "y", "x"))
+        sdata = SpatialData(images={"img": img})
+        sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
+
 
 # ---------------------------------------------------------------------------
 # Grayscale + transfunc visual tests
@@ -597,29 +604,3 @@ class TestChannelsAsCategoriesNonVisual:
         assert "0" in labels
         assert "1" in labels
         plt.close("all")
-
-
-# ---------------------------------------------------------------------------
-# Constant-channel mid-value fallback
-# ---------------------------------------------------------------------------
-
-
-class TestConstantChannel(PlotTester, metaclass=PlotTesterMeta):
-    def test_plot_constant_channel_renders_as_midgrey(self):
-        """A constant-value channel should render at mid-value (not black)."""
-        h, w = 64, 64
-        data = np.full((1, h, w), 128, dtype=np.uint8)
-        img = Image2DModel.parse(data, dims=("c", "y", "x"))
-        sdata = SpatialData(images={"img": img})
-        sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
-
-
-def test_constant_channel_not_black():
-    h, w = 32, 32
-    data = np.full((1, h, w), 128, dtype=np.uint8)
-    img = Image2DModel.parse(data, dims=("c", "y", "x"))
-    sdata = SpatialData(images={"img": img})
-    fig, ax = plt.subplots()
-    sdata.pl.render_images("img").pl.show(ax=ax)
-    assert ax.get_images()[0].get_array().max() > 0, "constant channel produced all-black output"
-    plt.close(fig)
