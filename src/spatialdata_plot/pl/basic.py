@@ -854,6 +854,7 @@ class PlotAccessor:
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
+                transfunc=kwargs.get("transfunc"),
                 zorder=n_steps,
                 colorbar=param_values["colorbar"],
                 colorbar_params=param_values["colorbar_params"],
