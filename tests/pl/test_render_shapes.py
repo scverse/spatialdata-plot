@@ -732,6 +732,11 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_polygons", color="value", norm=Normalize(2, 4, clip=False), cmap=_viridis_with_under_over()
         ).pl.show()
 
+    def test_plot_transfunc_applied_to_continuous_shapes(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated.pl.render_shapes(
+            element="blobs_polygons", color="value", transfunc=np.sqrt
+        ).pl.show()
+
     def test_plot_datashader_can_color_with_norm_and_clipping(self, sdata_blobs_shapes_annotated: SpatialData):
         sdata_blobs_shapes_annotated.pl.render_shapes(
             element="blobs_polygons",
