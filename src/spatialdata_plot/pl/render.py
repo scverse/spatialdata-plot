@@ -1421,7 +1421,20 @@ def _render_images(
             if isinstance(ch_norm, Normalize):
                 ch_norm = copy(ch_norm)
 
-            layers[ch] = ch_norm(layers[ch])
+            ch_arr = np.asarray(layers[ch])
+            ch_min, ch_max = float(ch_arr.min()), float(ch_arr.max())
+            if ch_min == ch_max and not (
+                isinstance(ch_norm, Normalize) and (ch_norm.vmin is not None or ch_norm.vmax is not None)
+            ):
+                logger.warning(
+                    "Channel %r has a constant value (%.6g); rendering as mid-grey. "
+                    "Pass an explicit norm to control its appearance.",
+                    ch,
+                    ch_min,
+                )
+                layers[ch] = np.full(ch_arr.shape, 0.5, dtype=np.float64)
+            else:
+                layers[ch] = ch_norm(layers[ch])
 
         # Colors for the channel legend (set by each branch if applicable)
         legend_colors: list[str] | None = None
