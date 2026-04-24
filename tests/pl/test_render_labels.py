@@ -296,7 +296,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_transfunc_applied_to_continuous_labels(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", transfunc=np.sqrt).pl.show()
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", transfunc=lambda x: x * 100).pl.show(
+            title="transfunc: x * 100"
+        )
 
     def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].layers["normalized"] = get_standard_RNG().random(sdata_blobs["table"].X.shape)
