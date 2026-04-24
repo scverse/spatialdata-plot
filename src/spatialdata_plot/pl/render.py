@@ -1426,11 +1426,7 @@ def _render_images(
             if ch_min == ch_max and not (
                 isinstance(ch_norm, Normalize) and (ch_norm.vmin is not None or ch_norm.vmax is not None)
             ):
-                logger.warning(
-                    "Channel %r has a constant value (%.6g).",
-                    ch,
-                    ch_min,
-                )
+                logger.warning(f"Channel {ch!r} has a constant value ({ch_min:.6g}).")
                 layers[ch] = np.full(ch_arr.shape, 0.5, dtype=np.float64)
             else:
                 layers[ch] = ch_norm(layers[ch])
