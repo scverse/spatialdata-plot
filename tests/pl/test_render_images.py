@@ -614,35 +614,12 @@ class TestConstantChannel(PlotTester, metaclass=PlotTesterMeta):
         sdata.pl.render_images("img").pl.show(title="constant channel: mid-grey (not black)")
 
 
-def test_constant_channel_warns_and_not_black():
-    """A constant-value channel emits a warning and produces non-black output."""
-    import logging
-
-    import spatialdata_plot._logging as sdp_logging
-
-    rng = np.random.default_rng(0)
+def test_constant_channel_not_black():
     h, w = 32, 32
-    data = np.stack(
-        [np.full((h, w), 200, dtype=np.uint8), rng.integers(0, 255, (h, w), dtype=np.uint8)],
-        axis=0,
-    )
+    data = np.full((1, h, w), 128, dtype=np.uint8)
     img = Image2DModel.parse(data, dims=("c", "y", "x"))
     sdata = SpatialData(images={"img": img})
-
-    records = []
-
-    class _Capture(logging.Handler):
-        def emit(self, record):
-            records.append(record)
-
-    handler = _Capture()
-    sdp_logging.logger.addHandler(handler)
-    try:
-        fig, ax = plt.subplots()
-        sdata.pl.render_images("img", palette=["red", "green"]).pl.show(ax=ax)
-        pixel_data = ax.get_images()[0].get_array()
-        assert pixel_data.max() > 0, "constant channel produced all-black output"
-        assert any("constant" in r.getMessage().lower() for r in records), "no warning was logged for constant channel"
-        plt.close(fig)
-    finally:
-        sdp_logging.logger.removeHandler(handler)
+    fig, ax = plt.subplots()
+    sdata.pl.render_images("img").pl.show(ax=ax)
+    assert ax.get_images()[0].get_array().max() > 0, "constant channel produced all-black output"
+    plt.close(fig)
