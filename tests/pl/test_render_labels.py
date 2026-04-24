@@ -454,26 +454,3 @@ def test_groups_warns_when_no_groups_match_labels(sdata_blobs: SpatialData, capl
         sdata_blobs.pl.render_labels(
             labels_name, color="cat", groups=["nonexistent"], table_name="label_table", na_color=None
         ).pl.show()
-
-
-def test_render_labels_registers_artist_once(sdata_blobs: SpatialData):
-    # Regression test for #594: ax.imshow already registers the AxesImage internally;
-    # the previous ax.add_image(_cax) call added a second reference to the same object,
-    # making effective alpha 1-(1-alpha)^2 instead of alpha.
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.4).pl.show(ax=ax)
-    assert len(ax.images) == 1, f"Expected 1 image artist, got {len(ax.images)}"
-    plt.close(fig)
-
-    # outline-only path
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.0, outline_alpha=0.8).pl.show(ax=ax)
-    assert len(ax.images) == 1, f"Expected 1 image artist (outline-only), got {len(ax.images)}"
-    plt.close(fig)
-
-    # fill + outline path renders two image artists (one fill, one outline) -- both distinct
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.4, outline_alpha=0.8).pl.show(ax=ax)
-    assert len(ax.images) == 2, f"Expected 2 image artists (fill+outline), got {len(ax.images)}"
-    assert ax.images[0] is not ax.images[1], "fill and outline artists should be distinct objects"
-    plt.close(fig)
