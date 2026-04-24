@@ -1427,8 +1427,7 @@ def _render_images(
                 isinstance(ch_norm, Normalize) and (ch_norm.vmin is not None or ch_norm.vmax is not None)
             ):
                 logger.warning(
-                    "Channel %r has a constant value (%.6g); rendering as mid-grey. "
-                    "Pass an explicit norm to control its appearance.",
+                    "Channel %r has a constant value (%.6g). Pass an explicit norm to control its appearance.",
                     ch,
                     ch_min,
                 )
