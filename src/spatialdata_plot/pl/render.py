@@ -49,6 +49,7 @@ from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
     FigParams,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -1817,3 +1818,97 @@ def _render_labels(
         scalebar_units=scalebar_params.scalebar_units,
         # scalebar_kwargs=scalebar_params.scalebar_kwargs,
     )
+
+
+def _render_graph(
+    sdata: sd.SpatialData,
+    render_params: GraphRenderParams,
+    coordinate_system: str,
+    ax: matplotlib.axes.SubplotBase,
+) -> None:
+    """Render spatial graph edges as a LineCollection on the given axes."""
+    from matplotlib.collections import LineCollection
+    from scipy.sparse import triu
+
+    _log_context.set("render_graph")
+    element_name = render_params.element
+    table_name = render_params.table_name
+
+    # Get table and adjacency matrix
+    table = sdata[table_name]
+    obsp_key = render_params.connectivity_key
+    if obsp_key not in table.obsp:
+        logger.warning(f"Connectivity key '{obsp_key}' not found in table obsp. Skipping graph rendering.")
+        return
+
+    adjacency = table.obsp[obsp_key]
+
+    # Get the spatial element
+    if element_name in sdata.shapes:
+        element = sdata.shapes[element_name]
+    elif element_name in sdata.points:
+        element = sdata.points[element_name]
+    elif element_name in sdata.labels:
+        element = sdata.labels[element_name]
+    else:
+        logger.warning(f"Element '{element_name}' not found in sdata. Skipping graph rendering.")
+        return
+
+    # Get centroids in the target coordinate system
+    centroids_df = sd.get_centroids(element, coordinate_system=coordinate_system)
+    if hasattr(centroids_df, "compute"):
+        centroids_df = centroids_df.compute()
+
+    centroid_coords = np.column_stack([centroids_df["x"].values, centroids_df["y"].values])
+
+    # Align table observations to centroid positions via instance_key.
+    # Build a coordinate array indexed by full-table row so edge lookups are O(1).
+    _, region_key, instance_key = get_table_keys(table)
+
+    element_mask = table.obs[region_key] == element_name if region_key is not None else np.ones(table.n_obs, dtype=bool)
+    instance_ids = table.obs[instance_key].values[element_mask]
+    table_subset_indices = np.where(element_mask)[0]
+
+    centroid_ids = centroids_df.index.values if hasattr(centroids_df, "index") else np.arange(len(centroids_df))
+    id_to_centroid_row = {cid: row for row, cid in enumerate(centroid_ids)}
+
+    # has_coord[i] is True if table row i has a valid centroid
+    has_coord = np.zeros(table.n_obs, dtype=bool)
+    coord_lookup = np.full((table.n_obs, 2), np.nan)
+    for table_row, iid in zip(table_subset_indices, instance_ids, strict=True):
+        if iid in id_to_centroid_row:
+            has_coord[table_row] = True
+            coord_lookup[table_row] = centroid_coords[id_to_centroid_row[iid]]
+
+    # Apply group filtering: narrow has_coord to only rows in requested groups
+    groups = render_params.groups
+    group_key = render_params.group_key
+    if groups is not None and group_key is not None:
+        group_values = table.obs[group_key].values
+        in_groups = np.isin(group_values, groups)
+        has_coord &= in_groups
+
+    # Extract edges from upper triangle (undirected — draw each edge once, skip self-loops)
+    adj_upper = triu(adjacency, k=1)
+    rows, cols = adj_upper.nonzero()
+
+    # Vectorized filter: keep edges where both endpoints are valid
+    edge_mask = has_coord[rows] & has_coord[cols]
+    if not edge_mask.any():
+        return
+
+    valid_rows = rows[edge_mask]
+    valid_cols = cols[edge_mask]
+    segments = np.stack([coord_lookup[valid_rows], coord_lookup[valid_cols]], axis=1)
+
+    edge_color = render_params.color.get_hex() if render_params.color is not None else "#808080"
+
+    lc = LineCollection(
+        segments,
+        linewidths=render_params.edge_width,
+        colors=edge_color,
+        alpha=render_params.edge_alpha,
+        zorder=render_params.zorder,
+    )
+    lc.set_rasterized(True)
+    ax.add_collection(lc)
