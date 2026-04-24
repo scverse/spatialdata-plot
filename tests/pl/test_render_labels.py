@@ -454,3 +454,17 @@ def test_groups_warns_when_no_groups_match_labels(sdata_blobs: SpatialData, capl
         sdata_blobs.pl.render_labels(
             labels_name, color="cat", groups=["nonexistent"], table_name="label_table", na_color=None
         ).pl.show()
+
+
+def test_transfunc_is_applied_for_continuous_labels(sdata_blobs: SpatialData):
+    called = []
+
+    def track(x):
+        called.append(True)
+        return x
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", transfunc=track).pl.show(ax=ax)
+    plt.close(fig)
+
+    assert called, "transfunc was not called for continuous labels data"

@@ -1310,3 +1310,17 @@ def test_datashader_na_color_nan_overlay(sdata_blobs: SpatialData, na_color: str
         f"Expected {expected_images} image(s), got {len(ax.get_images())} for na_color={na_color!r}"
     )
     plt.close(fig)
+
+
+def test_transfunc_is_applied_for_continuous_shapes(sdata_blobs_shapes_annotated: SpatialData):
+    called = []
+
+    def track(x):
+        called.append(True)
+        return x
+
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="value", transfunc=track).pl.show(ax=ax)
+    plt.close(fig)
+
+    assert called, "transfunc was not called for continuous shapes data"
