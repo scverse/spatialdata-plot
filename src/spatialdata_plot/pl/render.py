@@ -1016,7 +1016,7 @@ def _render_points(
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
-        _cax = ax.scatter(
+        cax = ax.scatter(
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
             s=render_params.size,
@@ -1029,7 +1029,6 @@ def _render_points(
             zorder=render_params.zorder,
             plotnonfinite=True,  # nan points should be rendered as well
         )
-        cax = ax.add_collection(_cax)
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
             extent = get_extent(sdata_filt.points[element], coordinate_system=coordinate_system)
@@ -1721,7 +1720,7 @@ def _render_labels(
             outline_color=outline_color,
         )
 
-        _cax = ax.imshow(
+        cax = ax.imshow(
             labels,
             rasterized=True,
             cmap=None if categorical else render_params.cmap_params.cmap,
@@ -1730,9 +1729,8 @@ def _render_labels(
             origin="lower",
             zorder=render_params.zorder,
         )
-        _cax.set_transform(trans_data)
-        cax = ax.add_image(_cax)
-        return cax  # noqa: RET504
+        cax.set_transform(trans_data)
+        return cax
 
     # When color is a literal (col_for_color is None) and no explicit outline_color,
     # use the literal color for outlines so they are visible (e.g., color='white' on
