@@ -600,18 +600,18 @@ class TestChannelsAsCategoriesNonVisual:
 
 
 # ---------------------------------------------------------------------------
-# Constant-channel mid-grey fallback
+# Constant-channel mid-value fallback
 # ---------------------------------------------------------------------------
 
 
 class TestConstantChannel(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_constant_channel_renders_as_midgrey(self):
-        """A constant-value channel should render as a solid mid-grey rectangle, not black."""
+        """A constant-value channel should render at mid-value (not black)."""
         h, w = 64, 64
         data = np.full((1, h, w), 128, dtype=np.uint8)
         img = Image2DModel.parse(data, dims=("c", "y", "x"))
         sdata = SpatialData(images={"img": img})
-        sdata.pl.render_images("img").pl.show(title="constant channel: mid-grey (not black)")
+        sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
 
 
 def test_constant_channel_not_black():
