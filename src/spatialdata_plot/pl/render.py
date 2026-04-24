@@ -402,7 +402,7 @@ def _render_shapes(
         sdata_filt[element] = shapes
 
     # color_source_vector is None when the values aren't categorical
-    if values_are_categorical and render_params.transfunc is not None:
+    if not values_are_categorical and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
 
     norm = copy(render_params.cmap_params.norm)
@@ -1701,6 +1701,10 @@ def _render_labels(
         color_vector = color_vector[keep_vec]
         if isinstance(color_vector.dtype, pd.CategoricalDtype):
             color_vector = color_vector.remove_unused_categories()
+
+    # color_source_vector is None when the values aren't categorical
+    if color_source_vector is None and render_params.transfunc is not None:
+        color_vector = render_params.transfunc(color_vector)
 
     def _draw_labels(
         seg_erosionpx: int | None,

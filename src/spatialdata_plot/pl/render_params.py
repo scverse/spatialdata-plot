@@ -304,6 +304,7 @@ class LabelsRenderParams:
     scale: str | None = None
     table_name: str | None = None
     table_layer: str | None = None
+    transfunc: Callable[[float], float] | None = None
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None

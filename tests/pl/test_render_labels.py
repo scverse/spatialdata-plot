@@ -295,6 +295,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             cmap=_viridis_with_under_over(),
         ).pl.show()
 
+    def test_plot_transfunc_applied_to_continuous_labels(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", transfunc=lambda x: x * 100).pl.show(
+            title="transfunc: x * 100"
+        )
+
     def test_plot_can_annotate_labels_with_table_layer(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].layers["normalized"] = get_standard_RNG().random(sdata_blobs["table"].X.shape)
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", table_layer="normalized").pl.show()
@@ -454,3 +459,17 @@ def test_groups_warns_when_no_groups_match_labels(sdata_blobs: SpatialData, capl
         sdata_blobs.pl.render_labels(
             labels_name, color="cat", groups=["nonexistent"], table_name="label_table", na_color=None
         ).pl.show()
+
+
+def test_transfunc_is_applied_for_continuous_labels(sdata_blobs: SpatialData):
+    called = []
+
+    def track(x):
+        called.append(True)
+        return x
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", transfunc=track).pl.show(ax=ax)
+    plt.close(fig)
+
+    assert called, "transfunc was not called for continuous labels data"

@@ -732,6 +732,11 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             element="blobs_polygons", color="value", norm=Normalize(2, 4, clip=False), cmap=_viridis_with_under_over()
         ).pl.show()
 
+    def test_plot_transfunc_applied_to_continuous_shapes(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated.pl.render_shapes(
+            element="blobs_polygons", color="value", transfunc=lambda x: x * 100
+        ).pl.show(title="transfunc: x * 100")
+
     def test_plot_datashader_can_color_with_norm_and_clipping(self, sdata_blobs_shapes_annotated: SpatialData):
         sdata_blobs_shapes_annotated.pl.render_shapes(
             element="blobs_polygons",
@@ -1310,3 +1315,17 @@ def test_datashader_na_color_nan_overlay(sdata_blobs: SpatialData, na_color: str
         f"Expected {expected_images} image(s), got {len(ax.get_images())} for na_color={na_color!r}"
     )
     plt.close(fig)
+
+
+def test_transfunc_is_applied_for_continuous_shapes(sdata_blobs_shapes_annotated: SpatialData):
+    called = []
+
+    def track(x):
+        called.append(True)
+        return x
+
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="value", transfunc=track).pl.show(ax=ax)
+    plt.close(fig)
+
+    assert called, "transfunc was not called for continuous shapes data"
