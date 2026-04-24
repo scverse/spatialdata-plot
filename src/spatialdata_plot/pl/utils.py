@@ -1102,14 +1102,14 @@ def _set_color_source_vec(
 
         if color_series.isna().all():
             element_label = _format_element_name(element_name)
-            location = f"table '{table_name}'" if table_name is not None else "the element"
             dtype_hint = _build_alignment_dtype_hint(sdata, element, color_series, table_name)
-            raise ValueError(
-                f"Column '{value_to_plot}' for element '{element_label}' contains only missing values after aligning "
-                f"with {location}. This usually means the instance ids/indices could not be aligned or converted, so "
-                "colors cannot be determined. Please ensure the table annotates the element with matching instance ids."
-                f"{dtype_hint}"
+            hint_suffix = f" {dtype_hint.strip()}" if dtype_hint else ""
+            logger.warning(
+                f"Column '{value_to_plot}' for element '{element_label}' contains only NaN values; "
+                f"rendering with na_color.{hint_suffix}"
             )
+            na_color_arr = np.full(len(color_series), na_color.get_hex_with_alpha())
+            return na_color_arr, na_color_arr, False
 
         kind, processed = _infer_color_data_kind(
             series=color_series,
