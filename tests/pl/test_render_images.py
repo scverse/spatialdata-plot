@@ -154,6 +154,13 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         axs[1].set_title("two-channel uint16")
         fig.tight_layout()
 
+    def test_plot_constant_channel_renders_as_midgrey(self):
+        h, w = 64, 64
+        data = np.full((1, h, w), 128, dtype=np.uint8)
+        img = Image2DModel.parse(data, dims=("c", "y", "x"))
+        sdata = SpatialData(images={"img": img})
+        sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
+
 
 # ---------------------------------------------------------------------------
 # Grayscale + transfunc visual tests
