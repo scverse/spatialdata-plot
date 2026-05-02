@@ -76,6 +76,7 @@ from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
     FigParams,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     OutlineParams,
@@ -2103,7 +2104,7 @@ def _get_elements_to_be_rendered(
     render_cmds: list[
         tuple[
             str,
-            ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+            ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams | GraphRenderParams,
         ]
     ],
     cs_contents: pd.DataFrame,
@@ -2130,9 +2131,14 @@ def _get_elements_to_be_rendered(
     cs_query = cs_contents.query(f"cs == '{cs}'")
 
     for cmd, params in render_cmds:
-        key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
-        if key and cs_query[key][0]:
+        if cmd == "render_graph":
+            # Graph doesn't have its own CS flag; include its element so
+            # _get_valid_cs keeps the coordinate system alive.
             elements_to_be_rendered += [params.element]
+        else:
+            key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
+            if key and cs_query[key][0]:
+                elements_to_be_rendered += [params.element]
 
     return elements_to_be_rendered
 
@@ -2827,6 +2833,105 @@ def _resolve_gene_symbols(
             f"Using the first match: '{adata.var.index[mask][0]}'."
         )
     return str(adata.var.index[mask][0])
+
+
+def _validate_graph_render_params(
+    sdata: SpatialData,
+    element: str | None,
+    connectivity_key: str,
+    table_name: str | None,
+    color: ColorLike | None,
+    edge_width: float,
+    edge_alpha: float,
+    groups: list[str] | str | None,
+    group_key: str | None,
+) -> dict[str, Any]:
+    """Validate and resolve parameters for render_graph."""
+    # Resolve table_name: find a table with the connectivity key
+    if table_name is None:
+        candidates = []
+        for tname in sdata.tables:
+            t = sdata[tname]
+            obsp_key = _resolve_obsp_key(t, connectivity_key)
+            if obsp_key is not None:
+                candidates.append(tname)
+        if len(candidates) == 0:
+            raise ValueError(
+                f"No table found with connectivity key '{connectivity_key}' in obsp. "
+                f"Available tables: {list(sdata.tables.keys())}."
+            )
+        if len(candidates) > 1:
+            raise ValueError(
+                f"Multiple tables contain connectivity key '{connectivity_key}': {candidates}. "
+                "Please specify `table_name` explicitly."
+            )
+        table_name = candidates[0]
+
+    if table_name not in sdata.tables:
+        raise KeyError(f"Table '{table_name}' not found. Available: {list(sdata.tables.keys())}.")
+
+    table = sdata[table_name]
+    obsp_key = _resolve_obsp_key(table, connectivity_key)
+    if obsp_key is None:
+        raise KeyError(
+            f"Connectivity key '{connectivity_key}' not found in `table.obsp`. "
+            f"Tried '{connectivity_key}' and '{connectivity_key}_connectivities'. "
+            f"Available obsp keys: {list(table.obsp.keys())}."
+        )
+
+    # Resolve element: find the spatial element this table annotates
+    if element is None:
+        _, region_key, _ = get_table_keys(table)
+        regions = table.obs[region_key].unique().tolist() if region_key else []
+        spatial_regions = [r for r in regions if r in sdata.shapes or r in sdata.points or r in sdata.labels]
+        if len(spatial_regions) == 0:
+            raise ValueError(f"Table '{table_name}' does not annotate any spatial element. Region values: {regions}.")
+        if len(spatial_regions) > 1:
+            raise ValueError(
+                f"Table '{table_name}' annotates multiple spatial elements: {spatial_regions}. "
+                "Please specify `element` explicitly."
+            )
+        element = spatial_regions[0]
+    else:
+        if not (element in sdata.shapes or element in sdata.points or element in sdata.labels):
+            raise KeyError(
+                f"Element '{element}' not found in shapes, points, or labels. "
+                f"Available: shapes={list(sdata.shapes.keys())}, "
+                f"points={list(sdata.points.keys())}, labels={list(sdata.labels.keys())}."
+            )
+
+    # Validate groups/group_key
+    if groups is not None and group_key is None:
+        raise ValueError("`groups` requires `group_key` to be specified.")
+    if group_key is not None and group_key not in table.obs.columns:
+        raise KeyError(
+            f"`group_key='{group_key}'` not found in table obs columns. Available: {list(table.obs.columns)}."
+        )
+
+    # Parse color
+    edge_color = Color(color) if color is not None else Color("grey")
+
+    return {
+        "element": element,
+        "connectivity_key": connectivity_key,
+        "obsp_key": obsp_key,
+        "table_name": table_name,
+        "color": edge_color,
+        "edge_width": edge_width,
+        "edge_alpha": edge_alpha,
+        "groups": [groups] if isinstance(groups, str) else groups,
+        "group_key": group_key,
+    }
+
+
+def _resolve_obsp_key(table: AnnData, connectivity_key: str) -> str | None:
+    """Resolve connectivity_key to an actual obsp key. Accepts full key or prefix."""
+    if connectivity_key in table.obsp:
+        return connectivity_key
+    suffixed = f"{connectivity_key}_connectivities"
+    if suffixed in table.obsp:
+        return suffixed
+    return None
 
 
 def _validate_col_for_column_table(

@@ -25,12 +25,14 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
+from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl.render import (
     _draw_channel_legend,
+    _render_graph,
     _render_images,
     _render_labels,
     _render_points,
@@ -44,6 +46,7 @@ from spatialdata_plot.pl.render_params import (
     ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -63,6 +66,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _validate_graph_render_params,
     _validate_image_render_params,
     _validate_label_render_params,
     _validate_points_render_params,
@@ -862,6 +866,79 @@ class PlotAccessor:
             n_steps += 1
         return sdata
 
+    def render_graph(
+        self,
+        element: str | None = None,
+        color: ColorLike | None = "grey",
+        *,
+        connectivity_key: str = "spatial",
+        groups: list[str] | str | None = None,
+        group_key: str | None = None,
+        edge_width: float = 1.0,
+        edge_alpha: float = 1.0,
+        table_name: str | None = None,
+    ) -> sd.SpatialData:
+        """Render spatial graph edges between observations.
+
+        Draws edges from a connectivity matrix stored in a table's ``obsp``,
+        using centroid coordinates of the linked spatial element.
+
+        Parameters
+        ----------
+        element : str | None, optional
+            Name of the spatial element (shapes, points, or labels) whose
+            observations the graph connects. Auto-resolved from the table
+            if not given.
+        color : ColorLike | None, default "grey"
+            Edge color as a color-like value (e.g. ``"red"``, ``"#aabbcc"``).
+        connectivity_key : str, default "spatial"
+            Key prefix in ``table.obsp``. Tries ``obsp[key]`` first, then
+            ``obsp[f"{key}_connectivities"]``.
+        groups : list[str] | str | None, optional
+            Show only edges where **both** endpoints belong to the specified
+            groups. Requires ``group_key``.
+        group_key : str | None, optional
+            Column in ``table.obs`` used for group filtering.
+        edge_width : float, default 1.0
+            Line width for edges.
+        edge_alpha : float, default 1.0
+            Transparency for edges (0 = invisible, 1 = opaque).
+        table_name : str | None, optional
+            Table containing the graph. Auto-discovered if not given.
+
+        Returns
+        -------
+        sd.SpatialData
+            Copy with rendering parameters stored in the plotting tree.
+        """
+        params = _validate_graph_render_params(
+            self._sdata,
+            element=element,
+            connectivity_key=connectivity_key,
+            table_name=table_name,
+            color=color,
+            edge_width=edge_width,
+            edge_alpha=edge_alpha,
+            groups=groups,
+            group_key=group_key,
+        )
+
+        sdata = self._copy()
+        sdata = _verify_plotting_tree(sdata)
+        n_steps = len(sdata.plotting_tree.keys())
+        sdata.plotting_tree[f"{n_steps + 1}_render_graph"] = GraphRenderParams(
+            element=params["element"],
+            connectivity_key=params["obsp_key"],
+            table_name=params["table_name"],
+            color=params["color"],
+            groups=params["groups"],
+            group_key=params["group_key"],
+            edge_width=params["edge_width"],
+            edge_alpha=params["edge_alpha"],
+            zorder=n_steps,
+        )
+        return sdata
+
     def show(
         self,
         coordinate_systems: list[str] | str | None = None,
@@ -1002,6 +1079,7 @@ class PlotAccessor:
             "render_shapes",
             "render_labels",
             "render_points",
+            "render_graph",
         ]
 
         # prepare rendering params
@@ -1310,6 +1388,19 @@ class PlotAccessor:
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
                             rasterize=rasterize,
+                        )
+
+                elif cmd == "render_graph":
+                    graph_element = params_copy.element
+                    element_in_cs = graph_element in sdata and cs in set(
+                        get_transformation(sdata[graph_element], get_all=True).keys()
+                    )
+                    if element_in_cs:
+                        _render_graph(
+                            sdata=sdata,
+                            render_params=params_copy,
+                            coordinate_system=cs,
+                            ax=ax,
                         )
 
                 if title is None:
