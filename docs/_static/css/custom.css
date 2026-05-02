@@ -2,3 +2,8 @@
 div.cell_output table.dataframe {
     font-size: 0.8em;
 }
+
+/* Gallery landing: subsection links are shown in the sidebar; hide the duplicate inline list. */
+section#gallery > .toctree-wrapper {
+    display: none;
+}
