@@ -1,5 +1,11 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
+from spatialdata import SpatialData
+from spatialdata.models import Image2DModel
+from spatialdata.transformations import Identity, set_transformation
+
+import spatialdata_plot  # noqa: F401
 
 
 def test_render_images_can_plot_one_cyx_image(request):
@@ -97,3 +103,15 @@ def test_single_ax_auto_cs_unresolvable_raises(sdata_multi_cs):
     with pytest.raises(ValueError, match="coordinate_systems="):
         # Only render shapes (present in both CS), so strict filter can't narrow down
         sdata_multi_cs.pl.render_shapes("shp").pl.show(ax=ax)
+
+
+def test_cs_name_with_apostrophe_does_not_crash():
+    # Regression test for #602: .query(f"cs == '{cs}'") raised TokenError for cs names
+    # containing single quotes.
+    data = np.zeros((1, 10, 10), dtype=np.float64)
+    img = Image2DModel.parse(data, dims=("c", "y", "x"))
+    sdata = SpatialData(images={"img": img})
+    set_transformation(sdata["img"], Identity(), to_coordinate_system="patient's_cs")
+    _, ax = plt.subplots()
+    sdata.pl.render_images("img").pl.show(ax=ax, coordinate_systems="patient's_cs")
+    plt.close("all")
