@@ -572,19 +572,13 @@ class TestChannelsAsCategories(PlotTester, metaclass=PlotTesterMeta):
 class TestChannelsAsCategoriesNonVisual:
     """Non-visual tests for channels_as_legend edge cases."""
 
-    def test_channels_as_legend_single_channel_shows_legend(self, sdata_blobs: SpatialData):
+    def test_channels_as_legend_single_channel_shows_legend_no_colorbar(self, sdata_blobs: SpatialData):
         fig, ax = plt.subplots()
         sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show(ax=ax)
         legend = ax.get_legend()
         assert legend is not None
         assert "0" in [t.get_text() for t in legend.get_texts()]
-        plt.close("all")
-
-    def test_channels_as_legend_single_channel_suppresses_colorbar(self, sdata_blobs: SpatialData):
-        fig, ax = plt.subplots()
-        sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show(ax=ax)
-        # channels_as_legend replaces the colorbar — only the legend axes should exist
-        assert len(fig.axes) == 1
+        assert len(fig.axes) == 1  # no colorbar inset axes
         plt.close("all")
 
     def test_channels_as_legend_rgb_warns_and_no_legend(self, caplog):

@@ -1388,12 +1388,13 @@ def _render_images(
             is_continuous=True,
             auto_condition=n_channels == 1,
         )
-        if (
-            wants_colorbar
-            and legend_params.colorbar
-            and colorbar_requests is not None
-            and not render_params.channels_as_legend
-        ):
+        if render_params.channels_as_legend and channel_legend_entries is not None:
+            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color;
+            # consistent with the multi-channel composite path below.
+            _collect_channel_legend_entries(
+                [channels[0]], [matplotlib.colors.to_hex(cmap(0.75))], channel_legend_entries
+            )
+        elif wants_colorbar and legend_params.colorbar and colorbar_requests is not None:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
             colorbar_requests.append(
                 ColorbarSpec(
@@ -1406,13 +1407,6 @@ def _render_images(
                         is_default_channel_name=isinstance(channels[0], (int, np.integer)),
                     ),
                 )
-            )
-
-        if render_params.channels_as_legend and channel_legend_entries is not None:
-            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color;
-            # consistent with the multi-channel composite path below.
-            _collect_channel_legend_entries(
-                [channels[0]], [matplotlib.colors.to_hex(cmap(0.75))], channel_legend_entries
             )
 
     # 2) Image has any number of channels but 1
@@ -1574,7 +1568,6 @@ def _render_images(
             )
             colored = colored[:, :, :3]
 
-            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color.
             legend_colors = [matplotlib.colors.to_hex(cm(0.75)) for cm in channel_cmaps]
 
             _ax_show_and_transform(
