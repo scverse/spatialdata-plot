@@ -1404,6 +1404,8 @@ def _render_images(
             )
 
         if render_params.channels_as_legend and channel_legend_entries is not None:
+            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color;
+            # consistent with the multi-channel composite path below.
             _collect_channel_legend_entries(
                 [channels[0]], [matplotlib.colors.to_hex(cmap(0.75))], channel_legend_entries
             )
@@ -1567,6 +1569,7 @@ def _render_images(
             )
             colored = colored[:, :, :3]
 
+            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color.
             legend_colors = [matplotlib.colors.to_hex(cm(0.75)) for cm in channel_cmaps]
 
             _ax_show_and_transform(
