@@ -283,3 +283,82 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
 
     assert len_axs == len(axs.flatten())
     assert axs_visible == [ax.axison for ax in axs.flatten()]
+
+
+class TestMultiscaleToSpatialImage:
+    """Regression tests for #589: multiscale resolution selection."""
+
+    @staticmethod
+    def _make_multiscale(shape, scale_factors):
+        from spatialdata.models import Image2DModel
+
+        rng = np.random.default_rng(42)
+        return Image2DModel.parse(
+            rng.normal(size=shape),
+            scale_factors=scale_factors,
+            dims=("c", "y", "x"),
+            c_coords=["r", "g", "b"],
+        )
+
+    def test_larger_figure_never_picks_lower_resolution(self):
+        """Increasing figure size must select equal or higher resolution."""
+        from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+        multiscale = self._make_multiscale((3, 1024, 1024), [2, 2])
+        dpi = 100.0
+        prev_x = 0
+        for size in [3, 4, 5, 6, 7, 8, 10, 12]:
+            result = _multiscale_to_spatial_image(multiscale, dpi, float(size), float(size))
+            cur_x = result.sizes["x"]
+            assert cur_x >= prev_x, (
+                f"figsize {size} selected x={cur_x} which is lower than x={prev_x} from a smaller figure"
+            )
+            prev_x = cur_x
+
+    def test_asymmetric_image_picks_sufficient_resolution(self):
+        """When image aspect ratio differs from figure, both axes must be covered."""
+        from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+        multiscale = self._make_multiscale((3, 400, 1200), [2, 2])
+        scales_info = {
+            leaf.name: (multiscale[leaf.name].dims["x"], multiscale[leaf.name].dims["y"]) for leaf in multiscale.leaves
+        }
+        max_x = max(x for x, _ in scales_info.values())
+        max_y = max(y for _, y in scales_info.values())
+
+        dpi = 100.0
+        for w, h in [(5, 5), (3, 10), (10, 3), (7, 4)]:
+            result = _multiscale_to_spatial_image(multiscale, dpi, float(w), float(h))
+            sel_x, sel_y = result.sizes["x"], result.sizes["y"]
+            opt_x, opt_y = w * dpi, h * dpi
+            assert sel_x >= opt_x or sel_x == max_x, (
+                f"figsize {w}x{h}: x={sel_x} < optimal {opt_x} and not the maximum available"
+            )
+            assert sel_y >= opt_y or sel_y == max_y, (
+                f"figsize {w}x{h}: y={sel_y} < optimal {opt_y} and not the maximum available"
+            )
+
+    def test_all_scales_too_small_picks_highest_resolution(self):
+        """When no scale is large enough, the highest resolution is selected."""
+        from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+        multiscale = self._make_multiscale((3, 64, 64), [2, 2])
+        result = _multiscale_to_spatial_image(multiscale, dpi=100.0, width=20.0, height=20.0)
+        assert result.sizes["x"] == 64
+
+    def test_single_scale_level(self):
+        """A single-level multiscale image always returns that level."""
+        from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+        multiscale = self._make_multiscale((3, 512, 512), [2])
+        for size in [2, 5, 10]:
+            result = _multiscale_to_spatial_image(multiscale, dpi=100.0, width=float(size), height=float(size))
+            assert result.sizes["x"] in (512, 256)
+
+    def test_exact_match_selects_that_scale(self):
+        """When optimal pixels exactly match a scale's dimensions, that scale is selected."""
+        from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+        multiscale = self._make_multiscale((3, 500, 500), [2, 2])
+        result = _multiscale_to_spatial_image(multiscale, dpi=100.0, width=2.5, height=2.5)
+        assert result.sizes["x"] == 250

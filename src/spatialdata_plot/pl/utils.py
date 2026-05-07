@@ -2071,7 +2071,7 @@ def _multiscale_to_spatial_image(
             # use scale with highest resolution
             optimal_scale = scales[np.argmax(x_dims)]
     else:
-        # ensure that lists are sorted
+        # sort scales ascending by x resolution
         order = np.argsort(x_dims)
         scales = [scales[i] for i in order]
         x_dims = [x_dims[i] for i in order]
@@ -2080,17 +2080,13 @@ def _multiscale_to_spatial_image(
         optimal_x = width * dpi
         optimal_y = height * dpi
 
-        # get scale where the dimensions are close to the optimal values
-        # when possible, pick higher resolution (worst case: downscaled afterwards)
-        optimal_index_y = np.searchsorted(y_dims, optimal_y)
-        if optimal_index_y == len(y_dims):
-            optimal_index_y -= 1
-        optimal_index_x = np.searchsorted(x_dims, optimal_x)
-        if optimal_index_x == len(x_dims):
-            optimal_index_x -= 1
-
-        # pick the scale with higher resolution (worst case: downscaled afterwards)
-        optimal_scale = scales[min(int(optimal_index_x), int(optimal_index_y))]
+        # Pick the lowest-resolution scale where both x and y are >= the
+        # target pixel count.  Falls back to highest available resolution.
+        optimal_scale = scales[-1]
+        for i, (xd, yd) in enumerate(zip(x_dims, y_dims, strict=True)):
+            if xd >= optimal_x and yd >= optimal_y:
+                optimal_scale = scales[i]
+                break
 
     # NOTE: problematic if there are cases with > 1 data variable
     data_var_keys = list(multiscale_image[optimal_scale].data_vars)
