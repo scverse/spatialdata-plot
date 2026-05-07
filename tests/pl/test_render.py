@@ -109,8 +109,8 @@ def test_single_ax_auto_cs_unresolvable_raises(sdata_multi_cs):
 
 
 def test_cs_name_with_apostrophe_does_not_crash():
-    # Regression test for #602: .query(f"cs == '{cs}'") raised TokenError for names
-    # containing single quotes (e.g. "patient's_sample").
+    # Regression test for #602: .query(f"cs == '{cs}'") raised TokenError for cs names
+    # containing single quotes.
     data = np.zeros((1, 10, 10), dtype=np.float64)
     img = Image2DModel.parse(data, dims=("c", "y", "x"))
     sdata = SpatialData(images={"img": img})
@@ -122,7 +122,6 @@ def test_cs_name_with_apostrophe_does_not_crash():
 
 def test_get_cs_contents_is_linear():
     # Regression test for #602: pd.concat inside loop was O(n²).
-    # Build two SpatialData objects: n=10 and n=50 coordinate systems.
     def build(n: int) -> SpatialData:
         data = np.zeros((1, 4, 4), dtype=np.float64)
         images = {}
@@ -137,7 +136,6 @@ def test_get_cs_contents_is_linear():
     t10 = timeit.timeit(lambda: _get_cs_contents(sd10), number=20) / 20
     t50 = timeit.timeit(lambda: _get_cs_contents(sd50), number=20) / 20
     ratio = t50 / t10
-    # O(n) → ratio ≈ 5×; O(n²) → ratio ≈ 25×. Allow generous headroom for CI variance.
     assert ratio < 15, (
         f"_get_cs_contents appears quadratic: n=10 {t10 * 1e3:.1f}ms, n=50 {t50 * 1e3:.1f}ms, ratio={ratio:.1f}x"
     )
