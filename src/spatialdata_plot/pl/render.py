@@ -832,8 +832,13 @@ def _render_points(
     # from the registered points (see above) avoids duplicate-origin ambiguities.
     color_table_name = table_name
 
-    # Reuse color data already loaded from the table to avoid a redundant get_values() call.
-    _preloaded = points_pd_with_color[col_for_color] if added_color_from_table and col_for_color is not None else None
+    # Reuse already-loaded color data to avoid a redundant get_values() call — applies to both
+    # native-column and table-sourced cases, both of which are present in points_pd_with_color.
+    _preloaded = (
+        points_pd_with_color[col_for_color]
+        if col_for_color is not None and col_for_color in points_pd_with_color.columns
+        else None
+    )
 
     color_source_vector, color_vector, _ = _set_color_source_vec(
         sdata=sdata_filt,
