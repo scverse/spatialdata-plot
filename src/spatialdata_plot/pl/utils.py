@@ -348,8 +348,7 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
         )
 
     cs_contents = pd.DataFrame(rows, columns=["cs"] + content_flags)
-    for flag in content_flags:
-        cs_contents[flag] = cs_contents[flag].astype("bool")
+    cs_contents[content_flags] = cs_contents[content_flags].astype("bool")
     return cs_contents
 
 
@@ -2093,7 +2092,7 @@ def _get_elements_to_be_rendered(
             ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
         ]
     ],
-    cs_contents: pd.DataFrame,
+    cs_index: pd.DataFrame,
     cs: str,
 ) -> list[str]:
     """
@@ -2103,10 +2102,10 @@ def _get_elements_to_be_rendered(
     ----------
     render_cmds
         List of tuples containing the commands and their respective parameters.
-    cs_contents
-        The dataframe indicating for each coordinate system which SpatialElements it contains.
+    cs_index
+        The cs_contents dataframe indexed by the "cs" column.
     cs
-        The name of the coordinate system to query cs_contents for.
+        The name of the coordinate system to query cs_index for.
 
     Returns
     -------
@@ -2114,13 +2113,12 @@ def _get_elements_to_be_rendered(
     """
     elements_to_be_rendered: list[str] = []
 
-    cs_index = cs_contents.set_index("cs")
     cs_row = cs_index.loc[cs] if cs in cs_index.index else None
 
     for cmd, params in render_cmds:
         key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
         if key and cs_row is not None and cs_row[key]:
-            elements_to_be_rendered += [params.element]
+            elements_to_be_rendered.append(params.element)
 
     return elements_to_be_rendered
 

@@ -1057,7 +1057,7 @@ class PlotAccessor:
         cs_index = cs_contents.set_index("cs")
         pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]] = []
 
-        elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_contents, cs)
+        elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_index, cs)
 
         # filter out cs without relevant elements
         cmds = [cmd for cmd, _ in render_cmds]
