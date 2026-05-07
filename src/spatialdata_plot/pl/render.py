@@ -1354,6 +1354,8 @@ def _render_images(
                 )
 
         _ax_show_and_transform(stacked, trans_data, ax, **show_kwargs)
+        if render_params.channels_as_legend:
+            logger.warning("channels_as_legend is not supported for true RGB images and will be ignored.")
         return
 
     # 1) Image has only 1 channel
@@ -1399,6 +1401,11 @@ def _render_images(
                         is_default_channel_name=isinstance(channels[0], (int, np.integer)),
                     ),
                 )
+            )
+
+        if render_params.channels_as_legend and channel_legend_entries is not None:
+            _collect_channel_legend_entries(
+                [channels[0]], [matplotlib.colors.to_hex(cmap(0.75))], channel_legend_entries
             )
 
     # 2) Image has any number of channels but 1
