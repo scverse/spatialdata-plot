@@ -1354,6 +1354,8 @@ def _render_images(
                 )
 
         _ax_show_and_transform(stacked, trans_data, ax, **show_kwargs)
+        if render_params.channels_as_legend:
+            logger.warning("channels_as_legend is not supported for true RGB images and will be ignored.")
         return
 
     # 1) Image has only 1 channel
@@ -1386,7 +1388,13 @@ def _render_images(
             is_continuous=True,
             auto_condition=n_channels == 1,
         )
-        if wants_colorbar and legend_params.colorbar and colorbar_requests is not None:
+        if render_params.channels_as_legend and channel_legend_entries is not None:
+            # Sample at 0.75 (upper quarter) for a vivid, non-extreme representative color;
+            # consistent with the multi-channel composite path below.
+            _collect_channel_legend_entries(
+                [channels[0]], [matplotlib.colors.to_hex(cmap(0.75))], channel_legend_entries
+            )
+        elif wants_colorbar and legend_params.colorbar and colorbar_requests is not None:
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
             colorbar_requests.append(
                 ColorbarSpec(

@@ -10,6 +10,7 @@ from spatialdata import SpatialData
 from spatialdata.models import Image2DModel
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot._logging import logger, logger_warns
 from spatialdata_plot.pl.render import _is_rgb_image
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
@@ -545,13 +546,49 @@ class TestChannelsAsCategories(PlotTester, metaclass=PlotTesterMeta):
             legend_loc="lower right"
         )
 
+    def test_plot_channels_as_legend_single_channel(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show()
+
+    def test_plot_channels_as_legend_sequential_single_channels(self, sdata_blobs_str: SpatialData):
+        (
+            sdata_blobs_str.pl.render_images(
+                element="blobs_image",
+                channel="c1",
+                palette=["cyan"],
+                alpha=0.5,
+                channels_as_legend=True,
+            )
+            .pl.render_images(
+                element="blobs_image",
+                channel="c2",
+                palette=["magenta"],
+                alpha=0.5,
+                channels_as_legend=True,
+            )
+            .pl.show()
+        )
+
 
 class TestChannelsAsCategoriesNonVisual:
     """Non-visual tests for channels_as_legend edge cases."""
 
-    def test_channels_as_legend_ignored_for_single_channel(self, sdata_blobs: SpatialData):
+    def test_channels_as_legend_single_channel_shows_legend_no_colorbar(self, sdata_blobs: SpatialData):
         fig, ax = plt.subplots()
         sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show(ax=ax)
+        legend = ax.get_legend()
+        assert legend is not None
+        assert "0" in [t.get_text() for t in legend.get_texts()]
+        assert len(fig.axes) == 1  # no colorbar inset axes
+        plt.close("all")
+
+    def test_channels_as_legend_rgb_warns_and_no_legend(self, caplog):
+        data = np.zeros((3, 50, 50), dtype=np.float64)
+        data[0], data[1], data[2] = 0.8, 0.2, 0.1
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        sdata = SpatialData(images={"img": img})
+        fig, ax = plt.subplots()
+        with logger_warns(caplog, logger, match="not supported for true RGB"):
+            sdata.pl.render_images("img", channels_as_legend=True).pl.show(ax=ax)
         assert ax.get_legend() is None
         plt.close("all")
 
