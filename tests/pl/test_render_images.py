@@ -555,12 +555,14 @@ class TestChannelsAsCategories(PlotTester, metaclass=PlotTesterMeta):
                 element="blobs_image",
                 channel="c1",
                 palette=["cyan"],
+                alpha=0.5,
                 channels_as_legend=True,
             )
             .pl.render_images(
                 element="blobs_image",
                 channel="c2",
                 palette=["magenta"],
+                alpha=0.5,
                 channels_as_legend=True,
             )
             .pl.show()
@@ -576,6 +578,13 @@ class TestChannelsAsCategoriesNonVisual:
         legend = ax.get_legend()
         assert legend is not None
         assert "0" in [t.get_text() for t in legend.get_texts()]
+        plt.close("all")
+
+    def test_channels_as_legend_single_channel_suppresses_colorbar(self, sdata_blobs: SpatialData):
+        fig, ax = plt.subplots()
+        sdata_blobs.pl.render_images(element="blobs_image", channel=0, channels_as_legend=True).pl.show(ax=ax)
+        # channels_as_legend replaces the colorbar — only the legend axes should exist
+        assert len(fig.axes) == 1
         plt.close("all")
 
     def test_channels_as_legend_rgb_warns_and_no_legend(self, caplog):

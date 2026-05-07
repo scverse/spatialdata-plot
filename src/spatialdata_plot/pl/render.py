@@ -1388,7 +1388,12 @@ def _render_images(
             is_continuous=True,
             auto_condition=n_channels == 1,
         )
-        if wants_colorbar and legend_params.colorbar and colorbar_requests is not None:
+        if (
+            wants_colorbar
+            and legend_params.colorbar
+            and colorbar_requests is not None
+            and not render_params.channels_as_legend
+        ):
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=render_params.cmap_params.norm)
             colorbar_requests.append(
                 ColorbarSpec(
