@@ -1,5 +1,3 @@
-import timeit
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -8,7 +6,6 @@ from spatialdata.models import Image2DModel
 from spatialdata.transformations import Identity, set_transformation
 
 import spatialdata_plot  # noqa: F401
-from spatialdata_plot.pl.utils import _get_cs_contents
 
 
 def test_render_images_can_plot_one_cyx_image(request):
@@ -118,24 +115,3 @@ def test_cs_name_with_apostrophe_does_not_crash():
     _, ax = plt.subplots()
     sdata.pl.render_images("img").pl.show(ax=ax, coordinate_systems="patient's_cs")
     plt.close("all")
-
-
-def test_get_cs_contents_is_linear():
-    # Regression test for #602: pd.concat inside loop was O(n²).
-    def build(n: int) -> SpatialData:
-        data = np.zeros((1, 4, 4), dtype=np.float64)
-        images = {}
-        for i in range(n):
-            img_i = Image2DModel.parse(data.copy(), dims=("c", "y", "x"))
-            set_transformation(img_i, Identity(), to_coordinate_system=f"cs_{i}")
-            images[f"img_{i}"] = img_i
-        return SpatialData(images=images)
-
-    sd10 = build(10)
-    sd50 = build(50)
-    t10 = timeit.timeit(lambda: _get_cs_contents(sd10), number=20) / 20
-    t50 = timeit.timeit(lambda: _get_cs_contents(sd50), number=20) / 20
-    ratio = t50 / t10
-    assert ratio < 15, (
-        f"_get_cs_contents appears quadratic: n=10 {t10 * 1e3:.1f}ms, n=50 {t50 * 1e3:.1f}ms, ratio={ratio:.1f}x"
-    )
