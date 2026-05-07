@@ -226,10 +226,11 @@ class PlotAccessor:
             Palette for discrete annotations. Can be a dictionary mapping category names to colors, a list of valid
             color names (must match the number of groups), a single named palette or matplotlib colormap name, or
             ``None``. If element is None, broadcasting behaviour is attempted (use the same values for all elements).
-        na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
-            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
-            won't be shown.
+        na_color : ColorLike | None, optional
+            Color for NA values and, when ``groups`` is set, for non-matching elements. When omitted, non-matching
+            elements are hidden. Pass any explicit color (e.g. ``"lightgray"``) to show them in that color instead.
+            Accepts a named color (``"red"``), a hex string (``"#000000ff"``), or an RGB/RGBA list
+            (``[1.0, 0.0, 0.0, 1.0]``). Pass ``None`` to make NA values fully transparent.
         outline_width : float | int | tuple[float | int, float | int], optional
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
             If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
@@ -419,10 +420,11 @@ class PlotAccessor:
             color names (must match the number of groups), a single named palette or matplotlib colormap name, or
             ``None``. If `element` is `None`, broadcasting behaviour is attempted (use the same values for all
             elements).
-        na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NA values, if present. Can either be a named color ("red"), a hex representation
-            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
-            won't be shown.
+        na_color : ColorLike | None, optional
+            Color for NA values and, when ``groups`` is set, for non-matching points. When omitted, non-matching
+            points are hidden. Pass any explicit color (e.g. ``"lightgray"``) to show them in that color instead.
+            Accepts a named color (``"red"``), a hex string (``"#000000ff"``), or an RGB/RGBA list
+            (``[1.0, 0.0, 0.0, 1.0]``). Pass ``None`` to make NA values fully transparent.
         cmap : Colormap | str | None, optional
             Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`. If
             no palette is given and `color` refers to a categorical, the colors are sampled from this colormap.
@@ -765,10 +767,11 @@ class PlotAccessor:
             For categorical data, use ``palette`` instead.
         norm : Normalize | None, optional
             Colormap normalization for continuous annotations, see :class:`matplotlib.colors.Normalize`.
-        na_color : ColorLike | None, default "default" (gets set to "lightgray")
-            Color to be used for NAs values, if present. Can either be a named color ("red"), a hex representation
-            ("#000000ff") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). When None, the values
-            won't be shown.
+        na_color : ColorLike | None, optional
+            Color for NA values and, when ``groups`` is set, for non-matching labels. When omitted, non-matching
+            labels are hidden. Pass any explicit color (e.g. ``"lightgray"``) to show them in that color instead.
+            Accepts a named color (``"red"``), a hex string (``"#000000ff"``), or an RGB/RGBA list
+            (``[1.0, 0.0, 0.0, 1.0]``). Pass ``None`` to make NA values fully transparent.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
         fill_alpha : float | int | None, optional
