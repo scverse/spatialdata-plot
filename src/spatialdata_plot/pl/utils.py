@@ -334,35 +334,22 @@ def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
     """Check which coordinate systems contain which elements and return that info."""
     cs_mapping = _get_coordinate_system_mapping(sdata)
     content_flags = ["has_images", "has_labels", "has_points", "has_shapes"]
-    cs_contents = pd.DataFrame(columns=["cs"] + content_flags)
 
+    rows = []
     for cs_name, element_ids in cs_mapping.items():
-        # determine if coordinate system has the respective elements
-        cs_has_images = any(e in sdata.images for e in element_ids)
-        cs_has_labels = any(e in sdata.labels for e in element_ids)
-        cs_has_points = any(e in sdata.points for e in element_ids)
-        cs_has_shapes = any(e in sdata.shapes for e in element_ids)
-
-        cs_contents = pd.concat(
-            [
-                cs_contents,
-                pd.DataFrame(
-                    {
-                        "cs": cs_name,
-                        "has_images": [cs_has_images],
-                        "has_labels": [cs_has_labels],
-                        "has_points": [cs_has_points],
-                        "has_shapes": [cs_has_shapes],
-                    }
-                ),
-            ]
+        rows.append(
+            {
+                "cs": cs_name,
+                "has_images": any(e in sdata.images for e in element_ids),
+                "has_labels": any(e in sdata.labels for e in element_ids),
+                "has_points": any(e in sdata.points for e in element_ids),
+                "has_shapes": any(e in sdata.shapes for e in element_ids),
+            }
         )
 
-        cs_contents["has_images"] = cs_contents["has_images"].astype("bool")
-        cs_contents["has_labels"] = cs_contents["has_labels"].astype("bool")
-        cs_contents["has_points"] = cs_contents["has_points"].astype("bool")
-        cs_contents["has_shapes"] = cs_contents["has_shapes"].astype("bool")
-
+    cs_contents = pd.DataFrame(rows, columns=["cs"] + content_flags)
+    for flag in content_flags:
+        cs_contents[flag] = cs_contents[flag].astype("bool")
     return cs_contents
 
 
@@ -2127,11 +2114,12 @@ def _get_elements_to_be_rendered(
     """
     elements_to_be_rendered: list[str] = []
 
-    cs_query = cs_contents.query(f"cs == '{cs}'")
+    cs_index = cs_contents.set_index("cs")
+    cs_row = cs_index.loc[cs] if cs in cs_index.index else None
 
     for cmd, params in render_cmds:
         key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
-        if key and cs_query[key][0]:
+        if key and cs_row is not None and cs_row[key]:
             elements_to_be_rendered += [params.element]
 
     return elements_to_be_rendered

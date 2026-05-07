@@ -1054,6 +1054,7 @@ class PlotAccessor:
 
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
+        cs_index = cs_contents.set_index("cs")
         pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]] = []
 
         elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_contents, cs)
@@ -1079,7 +1080,7 @@ class PlotAccessor:
                 strict_cs = [
                     cs_name
                     for cs_name in coordinate_systems
-                    if all(cs_contents.query(f"cs == '{cs_name}'").iloc[0][flag] for flag in required_flags)
+                    if cs_name in cs_index.index and all(cs_index.loc[cs_name][flag] for flag in required_flags)
                 ]
                 if strict_cs:
                     coordinate_systems = strict_cs
@@ -1197,15 +1198,15 @@ class PlotAccessor:
             elif location == "top":
                 trackers_axes["top"] = pad_axes + bbox_axes.height
 
-        cs_contents = _get_cs_contents(sdata)
-
         # go through tree
 
         for i, cs in enumerate(coordinate_systems):
             sdata = self._copy()
-            _, has_images, has_labels, has_points, has_shapes = (
-                cs_contents.query(f"cs == '{cs}'").iloc[0, :].values.tolist()
-            )
+            cs_row = cs_index.loc[cs]
+            has_images = cs_row["has_images"]
+            has_labels = cs_row["has_labels"]
+            has_points = cs_row["has_points"]
+            has_shapes = cs_row["has_shapes"]
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             assert isinstance(ax, Axes)
             axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params.colorbar else None
