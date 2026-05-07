@@ -1010,7 +1010,6 @@ def test_no_table_fallback_warning_for_element_column(caplog):
 def test_render_points_native_color_column_single_compute():
     # Regression test for #633: color column native to the points element triggered
     # two .compute() calls instead of one.
-    dask.config.set({"dataframe.query-planning": False})
     compute_calls = []
     original_compute = dask.dataframe.DataFrame.compute
 
@@ -1018,22 +1017,24 @@ def test_render_points_native_color_column_single_compute():
         compute_calls.append(True)
         return original_compute(self, **kwargs)
 
-    dask.dataframe.DataFrame.compute = counting_compute
-    try:
-        rng = np.random.default_rng(42)
-        n = 100
-        df = pd.DataFrame(
-            {
-                "x": rng.uniform(0, 100, n),
-                "y": rng.uniform(0, 100, n),
-                "cell_type": pd.Categorical(rng.choice(["A", "B", "C"], n)),
-            }
-        )
-        points = PointsModel.parse(df)
-        sdata = SpatialData(points={"pts": points})
+    rng = np.random.default_rng(42)
+    n = 100
+    df = pd.DataFrame(
+        {
+            "x": rng.uniform(0, 100, n),
+            "y": rng.uniform(0, 100, n),
+            "cell_type": pd.Categorical(rng.choice(["A", "B", "C"], n)),
+        }
+    )
+    points = PointsModel.parse(df)
+    sdata = SpatialData(points={"pts": points})
+
+    with (
+        dask.config.set({"dataframe.query-planning": False}),
+        pytest.MonkeyPatch().context() as mp,
+    ):
+        mp.setattr(dask.dataframe.DataFrame, "compute", counting_compute)
         sdata.pl.render_points("pts", color="cell_type").pl.show()
         plt.close("all")
-    finally:
-        dask.dataframe.DataFrame.compute = original_compute
 
     assert len(compute_calls) == 1, f"Expected 1 .compute() call, got {len(compute_calls)}"
