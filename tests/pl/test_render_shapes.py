@@ -1228,6 +1228,39 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
     plt.close(fig)
 
 
+@pytest.mark.parametrize(
+    ("fill_alpha", "expected_max"),
+    [
+        (0.0, 0),
+        (0.3, 76),
+        (0.5, 127),
+        (1.0, 255),
+    ],
+)
+def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: float, expected_max: int):
+    """Datashader must apply fill_alpha as a multiplicative scale on the rendered alpha.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/617.
+    Before the fix, ``fill_alpha`` was passed only as ``ds.tf.shade(min_alpha=...)``,
+    which is a floor on alpha for non-empty pixels rather than a scaling factor, so
+    shapes always rendered at alpha=255 regardless of ``fill_alpha`` (including 0.0).
+    """
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons",
+        method="datashader",
+        fill_alpha=fill_alpha,
+    ).pl.show(ax=ax)
+    fig.canvas.draw()
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    assert len(axes_images) >= 1
+    rgba = axes_images[0].get_array()
+    assert rgba.ndim == 3 and rgba.shape[-1] == 4
+    assert int(rgba[..., 3].max()) == expected_max
+    plt.close(fig)
+
+
 def test_render_shapes_color_with_conflicting_index_name():
     """render_shapes(color=...) must not crash when obs.index.name matches an existing column.
 
