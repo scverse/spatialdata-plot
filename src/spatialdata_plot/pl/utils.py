@@ -3007,12 +3007,12 @@ def _validate_image_render_params(
         element_params[el]["norm"] = norm
         scale = param_dict["scale"]
         if scale and isinstance(param_dict["sdata"][el], DataTree):
-            if scale not in list(param_dict["sdata"][el].keys()) and scale != "full":
-                element_params[el]["scale"] = None
-            else:
-                element_params[el]["scale"] = scale
-        else:
-            element_params[el]["scale"] = scale
+            valid_scales = list(param_dict["sdata"][el].keys())
+            if scale not in valid_scales and scale != "full":
+                raise ValueError(
+                    f"Scale '{scale}' does not exist in image '{el}'. Valid scales: {valid_scales + ['full']}."
+                )
+        element_params[el]["scale"] = scale
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
 
