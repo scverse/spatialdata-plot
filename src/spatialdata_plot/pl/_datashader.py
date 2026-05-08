@@ -43,6 +43,21 @@ _DS_NAN_CATEGORY = "ds_nan"
 # ---------------------------------------------------------------------------
 
 
+def _apply_user_alpha(result: ds.tf.Image | np.ndarray, alpha: float) -> ds.tf.Image | np.ndarray:
+    """Scale the alpha channel of a datashader shade result by ``alpha``.
+
+    ``ds.tf.shade(min_alpha=...)`` is a floor, not a scale, so user alpha
+    must be applied post-hoc. See #617.
+    """
+    if alpha >= 1.0 or result is None:
+        return result
+    arr = result if isinstance(result, np.ndarray) else result.to_numpy().base
+    if arr is None or arr.ndim != 3 or arr.shape[-1] != 4:
+        return result
+    arr[..., 3] = (arr[..., 3].astype(np.float32) * alpha).astype(np.uint8)
+    return result
+
+
 def _coerce_categorical_source(series: pd.Series | dd.Series) -> pd.Categorical:
     """Return a ``pd.Categorical`` from a pandas or dask Series."""
     if isinstance(series, dd.Series):
@@ -241,6 +256,7 @@ def _ds_shade_continuous(
         span=color_span,
         clip=norm.clip,
     )
+    shaded = _apply_user_alpha(shaded, alpha)
 
     nan_shaded = None
     if nan_agg is not None:
@@ -251,6 +267,7 @@ def _ds_shade_continuous(
             # only shapes (no spread) pass min_alpha for NaN shading
             shade_kwargs["min_alpha"] = _convert_alpha_to_datashader_range(alpha)
         nan_shaded = ds.tf.shade(nan_agg, **shade_kwargs)
+        nan_shaded = _apply_user_alpha(nan_shaded, alpha)
 
     return shaded, nan_shaded, reduction_bounds
 
@@ -270,12 +287,13 @@ def _ds_shade_categorical(
             ds_cmap = _hex_no_alpha(ds_cmap)
 
     agg_to_shade = ds.tf.spread(agg, px=spread_px) if spread_px is not None else agg
-    return _datashader_map_aggregate_to_color(
+    shaded = _datashader_map_aggregate_to_color(
         agg_to_shade,
         cmap=ds_cmap,
         color_key=color_key,
         min_alpha=_convert_alpha_to_datashader_range(alpha),
     )
+    return _apply_user_alpha(shaded, alpha)
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +356,7 @@ def _render_ds_outlines(
                 min_alpha=_convert_alpha_to_datashader_range(alpha),
                 how="linear",
             )
+            shaded = _apply_user_alpha(shaded, alpha)
             rgba, trans = _create_image_from_datashader_result(shaded, factor, ax)
             _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, extent=extent)
 

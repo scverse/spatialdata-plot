@@ -1228,6 +1228,68 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
     plt.close(fig)
 
 
+@pytest.mark.parametrize(
+    ("fill_alpha", "expected_max"),
+    [
+        (0.0, 0),
+        (0.3, 76),
+        (0.5, 127),
+        (1.0, 255),
+    ],
+)
+def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: float, expected_max: int):
+    """fill_alpha must scale the rendered alpha channel linearly on the datashader path (#617)."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons",
+        method="datashader",
+        fill_alpha=fill_alpha,
+    ).pl.show(ax=ax)
+    fig.canvas.draw()
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    assert axes_images
+    rgba = axes_images[0].get_array()
+    assert rgba.ndim == 3 and rgba.shape[-1] == 4
+    assert int(rgba[..., 3].max()) == expected_max
+    plt.close(fig)
+
+
+@pytest.mark.parametrize(
+    ("outline_alpha", "expected_max"),
+    [
+        (0.0, None),
+        (0.3, 76),
+        (0.5, 127),
+        (1.0, 255),
+    ],
+)
+def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alpha: float, expected_max: int | None):
+    """outline_alpha must scale the outline image's alpha; alpha=0 must skip rendering entirely (#617)."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons",
+        method="datashader",
+        fill_alpha=1.0,
+        outline_alpha=outline_alpha,
+        outline_color="red",
+    ).pl.show(ax=ax)
+    fig.canvas.draw()
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    outline_imgs = [
+        img
+        for img in axes_images
+        if (arr := img.get_array()).ndim == 3 and arr.shape[-1] == 4 and arr[..., 0].max() > arr[..., 1].max()
+    ]
+    if expected_max is None:
+        assert not outline_imgs
+    else:
+        assert outline_imgs
+        assert int(outline_imgs[0].get_array()[..., 3].max()) == expected_max
+    plt.close(fig)
+
+
 def test_render_shapes_color_with_conflicting_index_name():
     """render_shapes(color=...) must not crash when obs.index.name matches an existing column.
 

@@ -8,10 +8,12 @@ import xarray as xr
 from spatialdata import SpatialData
 
 import spatialdata_plot
+from spatialdata_plot.pl.render_params import Color
 from spatialdata_plot.pl.utils import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
     _get_subplots,
+    _set_outline,
     set_zero_in_cmap_to_transparent,
 )
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -162,6 +164,22 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
     assert spatialdata_plot.pl.utils._is_color_like(color) == result
+
+
+@pytest.mark.parametrize(
+    ("outline_alpha", "outline_color", "expected"),
+    [
+        (0.0, Color("#ff0000"), (0.0, 0.0)),
+        (0, Color("#ff0000"), (0.0, 0.0)),
+        ((0.0, 0.0), Color("#ff0000"), (0.0, 0.0)),
+        (0.5, Color("#ff0000"), (0.5, 0.0)),
+        (1.0, Color("#ff0000"), (1.0, 0.0)),
+    ],
+)
+def test_set_outline_respects_zero_alpha(outline_alpha, outline_color, expected):
+    """outline_alpha=0 must yield (0.0, 0.0) even when outline_color is set (#617 follow-up)."""
+    alpha, _ = _set_outline(outline_alpha=outline_alpha, outline_width=None, outline_color=outline_color)
+    assert alpha == expected
 
 
 class TestCmapAlphaDatashader:
