@@ -1147,6 +1147,14 @@ class PlotAccessor:
             legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
             na_in_legend = legend_params.get("na_in_legend", na_in_legend)
 
+        if legend_loc == "on data":
+            raise ValueError(
+                "legend_loc='on data' is not supported in spatialdata-plot: it requires "
+                "scatter embedding coordinates that do not exist for shapes, points, "
+                "labels, or image channels. Use 'right margin' (default), None, or any "
+                "matplotlib legend location string (e.g. 'upper right')."
+            )
+
         legend_params_obj = LegendParams(
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,

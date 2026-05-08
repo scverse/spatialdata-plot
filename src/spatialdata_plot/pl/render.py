@@ -1153,12 +1153,6 @@ def _draw_channel_legend(
         palette_dict[entry.channel_name] = entry.color_hex
 
     legend_loc = legend_params.legend_loc
-    if legend_loc == "on data":
-        logger.warning(
-            "legend_loc='on data' is not supported for channel legends (no scatter coordinates); "
-            "falling back to 'right margin'."
-        )
-        legend_loc = "right margin"
 
     categories = pd.Categorical(list(palette_dict))
 
