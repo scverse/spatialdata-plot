@@ -2368,8 +2368,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         else:
             param_dict["outline_color"] = Color(outline_color)
 
-    if contour_px is not None and contour_px <= 0:
-        raise ValueError("Parameter 'contour_px' must be a positive number.")
+    if contour_px is not None and contour_px < 2:
+        raise ValueError(
+            "Parameter 'contour_px' must be >= 2; values below 2 produce no visible outline "
+            "(a 1x1 erosion is the identity transformation)."
+        )
 
     alpha = param_dict.get("alpha")
     if alpha is not None:
