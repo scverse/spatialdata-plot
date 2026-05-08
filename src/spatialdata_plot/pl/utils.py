@@ -2989,15 +2989,22 @@ def _validate_image_render_params(
                 )
         element_params[el]["palette"] = palette
 
+        expected_len = len(channel) if channel is not None else len(spatial_element_ch)
+
         cmap = param_dict["cmap"]
         if cmap is not None:
-            expected_len = len(channel) if channel is not None else len(spatial_element_ch)
             if len(cmap) == 1:
                 cmap = cmap * expected_len
             if len(cmap) != expected_len:
-                cmap = None
+                raise ValueError(
+                    f"Length of 'cmap' list ({len(cmap)}) must match the number of channels ({expected_len})."
+                )
         element_params[el]["cmap"] = cmap
-        element_params[el]["norm"] = param_dict["norm"]
+
+        norm = param_dict["norm"]
+        if isinstance(norm, list) and len(norm) > 1 and len(norm) != expected_len:
+            raise ValueError(f"Length of 'norm' list ({len(norm)}) must match the number of channels ({expected_len}).")
+        element_params[el]["norm"] = norm
         scale = param_dict["scale"]
         if scale and isinstance(param_dict["sdata"][el], DataTree):
             if scale not in list(param_dict["sdata"][el].keys()) and scale != "full":
