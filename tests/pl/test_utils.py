@@ -285,6 +285,38 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
     assert axs_visible == [ax.axison for ax in axs.flatten()]
 
 
+@pytest.mark.parametrize(
+    "figsize",
+    [
+        (6.0, 4.0),
+        [6.0, 4.0],
+        [6, 4],
+        np.array([6.0, 4.0]),
+    ],
+)
+def test_show_accepts_figsize_as_sequence(sdata_blobs: SpatialData, figsize):
+    # Regression test for #626: figsize must accept tuple, list, and ndarray.
+    sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(figsize=figsize)
+
+
+@pytest.mark.parametrize(
+    "figsize",
+    [
+        [6.0, 4.0, 2.0],
+        [6.0],
+        ["a", "b"],
+        "big",
+        42,
+        {6, 4},
+        [True, False],
+    ],
+)
+def test_show_rejects_invalid_figsize(sdata_blobs: SpatialData, figsize):
+    # Regression test for #626: invalid figsize values still raise TypeError.
+    with pytest.raises(TypeError, match="figsize"):
+        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(figsize=figsize)
+
+
 class TestMultiscaleToSpatialImage:
     """Regression tests for #589: multiscale resolution selection."""
 
