@@ -54,6 +54,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _RENDER_CMD_TO_CS_FLAG,
+    _draw_scalebar,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
@@ -889,6 +890,9 @@ class PlotAccessor:
         return_ax: bool = False,
         save: str | Path | None = None,
         show: bool | None = None,
+        scalebar_dx: float | None = None,
+        scalebar_units: str = "um",
+        scalebar_params: dict[str, Any] | None = None,
     ) -> Axes | list[Axes] | None:
         """
         Execute the plotting tree and display the final figure.
@@ -949,6 +953,18 @@ class PlotAccessor:
             automatically when running in non-interactive mode (scripts) and suppressed in
             interactive sessions (e.g. Jupyter). When ``ax`` is provided by the user, defaults
             to ``False`` to allow further modifications.
+        scalebar_dx : float | None
+            Physical size of one axes-unit in ``scalebar_units``. If ``None``, no scalebar is drawn.
+            SpatialData coordinate systems carry no unit metadata, so this value must be supplied
+            explicitly (e.g. ``1.0`` when axes are already in micrometers; the microns-per-pixel
+            value when axes are in image pixels).
+        scalebar_units : str, default "um"
+            Unit string for the scalebar (passed to :class:`matplotlib_scalebar.scalebar.ScaleBar`).
+            Only takes effect when ``scalebar_dx`` is set.
+        scalebar_params : dict[str, Any] | None
+            Extra keyword arguments forwarded to :class:`matplotlib_scalebar.scalebar.ScaleBar`,
+            e.g. ``{"location": "lower right", "color": "white", "length_fraction": 0.25}``.
+            See the matplotlib-scalebar documentation for the full list of options.
 
         Returns
         -------
@@ -986,6 +1002,9 @@ class PlotAccessor:
             return_ax,
             save,
             show,
+            scalebar_dx,
+            scalebar_units,
+            scalebar_params,
         )
 
         if fig is not None and not isinstance(ax, Sequence):
@@ -1098,7 +1117,7 @@ class PlotAccessor:
                 raise ValueError(msg)
 
         # set up canvas
-        fig_params, scalebar_params = _prepare_params_plot(
+        fig_params, scalebar_params_obj = _prepare_params_plot(
             num_panels=len(coordinate_systems),
             figsize=figsize,
             dpi=dpi,
@@ -1108,6 +1127,9 @@ class PlotAccessor:
             hspace=hspace,
             ncols=ncols,
             frameon=frameon,
+            scalebar_dx=scalebar_dx,
+            scalebar_units=scalebar_units,
+            scalebar_kwargs=scalebar_params,
         )
         legend_colorbar = colorbar
         legend_params = LegendParams(
@@ -1237,7 +1259,6 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
                             channel_legend_entries=axis_channel_legend_entries,
@@ -1256,7 +1277,6 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
                         )
@@ -1273,7 +1293,6 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
                         )
@@ -1309,7 +1328,6 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            scalebar_params=scalebar_params,
                             legend_params=legend_params,
                             colorbar_requests=axis_colorbar_requests,
                             rasterize=rasterize,
@@ -1355,6 +1373,8 @@ class PlotAccessor:
 
             if axis_channel_legend_entries:
                 _draw_channel_legend(ax, axis_channel_legend_entries, legend_params, fig_params)
+
+            _draw_scalebar(ax, scalebar_params_obj, panel_idx=i)
 
         if pending_colorbars and fig_params.fig is not None:
             fig = fig_params.fig

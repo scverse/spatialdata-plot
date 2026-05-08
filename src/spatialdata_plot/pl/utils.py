@@ -7,7 +7,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, Literal
 
 import dask
@@ -273,6 +272,7 @@ def _prepare_params_plot(
     # this args will be inferred from coordinate system
     scalebar_dx: float | Sequence[float] | None = None,
     scalebar_units: str | Sequence[str] | None = None,
+    scalebar_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[FigParams, ScalebarParams]:
     # handle axes and size
     wspace = 0.75 / rcParams["figure.figsize"][0] + 0.02 if wspace is None else wspace
@@ -325,9 +325,27 @@ def _prepare_params_plot(
         num_panels=num_panels,
         frameon=frameon,
     )
-    scalebar_params = ScalebarParams(scalebar_dx=scalebar_dx, scalebar_units=scalebar_units)
+    scalebar_params = ScalebarParams(
+        scalebar_dx=scalebar_dx,
+        scalebar_units=scalebar_units,
+        scalebar_kwargs=dict(scalebar_kwargs) if scalebar_kwargs else {},
+    )
 
     return fig_params, scalebar_params
+
+
+def _draw_scalebar(ax: Axes, scalebar_params: ScalebarParams, panel_idx: int) -> None:
+    """Attach a single :class:`matplotlib_scalebar.scalebar.ScaleBar` to ``ax``.
+
+    No-op when ``scalebar_dx`` is ``None``. ``scalebar_dx`` and ``scalebar_units`` are
+    broadcast lists indexed by the panel position; ``scalebar_kwargs`` is forwarded
+    verbatim to :class:`~matplotlib_scalebar.scalebar.ScaleBar`.
+    """
+    if scalebar_params.scalebar_dx is None or scalebar_params.scalebar_units is None:
+        return
+    dx = scalebar_params.scalebar_dx[panel_idx]
+    units = scalebar_params.scalebar_units[panel_idx]
+    ax.add_artist(ScaleBar(dx, units=units, **scalebar_params.scalebar_kwargs))
 
 
 def _get_cs_contents(sdata: sd.SpatialData) -> pd.DataFrame:
@@ -1694,9 +1712,6 @@ def _decorate_axs(
     colorbar_params: dict[str, object] | None = None,
     colorbar_requests: list[ColorbarSpec] | None = None,
     colorbar_label: str | None = None,
-    scalebar_dx: Sequence[float] | None = None,
-    scalebar_units: Sequence[str] | None = None,
-    scalebar_kwargs: Mapping[str, Any] = MappingProxyType({}),
 ) -> Axes:
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
@@ -1742,10 +1757,6 @@ def _decorate_axs(
                     alpha=alpha,
                 )
             )
-
-    if isinstance(scalebar_dx, list) and isinstance(scalebar_units, list):
-        scalebar = ScaleBar(scalebar_dx, units=scalebar_units, **scalebar_kwargs)
-        ax.add_artist(scalebar)
 
     return ax
 
@@ -2159,6 +2170,9 @@ def _validate_show_parameters(
     return_ax: bool,
     save: str | Path | None,
     show: bool | None,
+    scalebar_dx: float | None,
+    scalebar_units: str,
+    scalebar_params: dict[str, Any] | None,
 ) -> None:
     if coordinate_systems is not None and not isinstance(coordinate_systems, list | str):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
@@ -2247,6 +2261,17 @@ def _validate_show_parameters(
 
     if show is not None and not isinstance(show, bool):
         raise TypeError("Parameter 'show' must be a boolean or None.")
+
+    if scalebar_dx is not None:
+        if not isinstance(scalebar_dx, int | float) or isinstance(scalebar_dx, bool):
+            raise TypeError("Parameter 'scalebar_dx' must be a number or None.")
+        if scalebar_dx <= 0:
+            raise ValueError("Parameter 'scalebar_dx' must be > 0.")
+        if not isinstance(scalebar_units, str):
+            raise TypeError("Parameter 'scalebar_units' must be a string.")
+
+    if scalebar_params is not None and not isinstance(scalebar_params, dict):
+        raise TypeError("Parameter 'scalebar_params' must be a dictionary or None.")
 
 
 def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
