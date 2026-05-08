@@ -43,7 +43,7 @@ _DS_NAN_CATEGORY = "ds_nan"
 # ---------------------------------------------------------------------------
 
 
-def _apply_user_alpha(result: Any, alpha: float) -> Any:
+def _apply_user_alpha(result: ds.tf.Image | np.ndarray, alpha: float) -> ds.tf.Image | np.ndarray:
     """Multiply the alpha channel of a datashader shade result by ``alpha``.
 
     ``ds.tf.shade(min_alpha=...)`` is a floor on the alpha of non-empty pixels,

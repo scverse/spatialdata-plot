@@ -1254,7 +1254,7 @@ def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: fl
     fig.canvas.draw()
 
     axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
-    assert len(axes_images) >= 1
+    assert axes_images
     rgba = axes_images[0].get_array()
     assert rgba.ndim == 3 and rgba.shape[-1] == 4
     assert int(rgba[..., 3].max()) == expected_max
