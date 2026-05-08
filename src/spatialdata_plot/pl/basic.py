@@ -1147,6 +1147,9 @@ class PlotAccessor:
             legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
             na_in_legend = legend_params.get("na_in_legend", na_in_legend)
 
+        if legend_loc == "on data":
+            raise ValueError("legend_loc='on data' is not supported in spatialdata-plot.")
+
         legend_params_obj = LegendParams(
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,
