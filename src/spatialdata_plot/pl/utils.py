@@ -2577,7 +2577,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
 
         return True  # not using any table
 
-    assert _ensure_table_and_layer_exist_in_sdata(param_dict.get("sdata"), table_name, table_layer)
+    _ensure_table_and_layer_exist_in_sdata(param_dict.get("sdata"), table_name, table_layer)
 
     method = param_dict.get("method")
     if method not in ["matplotlib", "datashader", None]:
