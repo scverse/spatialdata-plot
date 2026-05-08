@@ -1293,9 +1293,7 @@ def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alp
     outline_imgs = [
         img
         for img in axes_images
-        if img.get_array().ndim == 3
-        and img.get_array().shape[-1] == 4
-        and img.get_array()[..., 0].max() > img.get_array()[..., 1].max()
+        if (arr := img.get_array()).ndim == 3 and arr.shape[-1] == 4 and arr[..., 0].max() > arr[..., 1].max()
     ]
     if expected_max is None:
         assert not outline_imgs, "outline_alpha=0 should not render an outline image"
