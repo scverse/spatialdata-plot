@@ -2203,8 +2203,12 @@ def _validate_show_parameters(
     if frameon is not None and not isinstance(frameon, bool):
         raise TypeError("Parameter 'frameon' must be a boolean.")
 
-    if figsize is not None and not isinstance(figsize, tuple):
-        raise TypeError("Parameter 'figsize' must be a tuple of two floats.")
+    if figsize is not None and (
+        not isinstance(figsize, tuple | list | np.ndarray)
+        or len(figsize) != 2
+        or not all(isinstance(x, int | float) and not isinstance(x, bool) for x in figsize)
+    ):
+        raise TypeError("Parameter 'figsize' must be a tuple, list, or numpy array of two numbers.")
 
     if dpi is not None and not isinstance(dpi, int):
         raise TypeError("Parameter 'dpi' must be an integer.")
