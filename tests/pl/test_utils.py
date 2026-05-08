@@ -285,6 +285,34 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
     assert axs_visible == [ax.axison for ax in axs.flatten()]
 
 
+def _call_validator(figsize):
+    from spatialdata_plot.pl.utils import _validate_show_parameters
+
+    _validate_show_parameters(
+        coordinate_systems=None,
+        legend_fontsize=None,
+        legend_fontweight="bold",
+        legend_loc=None,
+        legend_fontoutline=None,
+        na_in_legend=True,
+        colorbar=True,
+        colorbar_params=None,
+        wspace=None,
+        hspace=0.25,
+        ncols=4,
+        frameon=None,
+        figsize=figsize,
+        dpi=None,
+        fig=None,
+        title=None,
+        pad_extent=0,
+        ax=None,
+        return_ax=False,
+        save=None,
+        show=None,
+    )
+
+
 @pytest.mark.parametrize(
     "figsize",
     [
@@ -292,11 +320,12 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
         [6.0, 4.0],
         [6, 4],
         np.array([6.0, 4.0]),
+        None,
     ],
 )
-def test_show_accepts_figsize_as_sequence(sdata_blobs: SpatialData, figsize):
-    # Regression test for #626: figsize must accept tuple, list, and ndarray.
-    sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(figsize=figsize)
+def test_show_accepts_figsize_as_sequence(figsize):
+    # Regression test for #626.
+    _call_validator(figsize)
 
 
 @pytest.mark.parametrize(
@@ -311,10 +340,9 @@ def test_show_accepts_figsize_as_sequence(sdata_blobs: SpatialData, figsize):
         [True, False],
     ],
 )
-def test_show_rejects_invalid_figsize(sdata_blobs: SpatialData, figsize):
-    # Regression test for #626: invalid figsize values still raise TypeError.
+def test_show_rejects_invalid_figsize(figsize):
     with pytest.raises(TypeError, match="figsize"):
-        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(figsize=figsize)
+        _call_validator(figsize)
 
 
 class TestMultiscaleToSpatialImage:

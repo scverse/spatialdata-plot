@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import numbers
 import os
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping, Sequence
@@ -2204,14 +2203,12 @@ def _validate_show_parameters(
     if frameon is not None and not isinstance(frameon, bool):
         raise TypeError("Parameter 'frameon' must be a boolean.")
 
-    if figsize is not None:
-        is_seq = isinstance(figsize, tuple | list | np.ndarray)
-        if (
-            not is_seq
-            or len(figsize) != 2
-            or not all(isinstance(x, numbers.Real) and not isinstance(x, bool) for x in figsize)
-        ):
-            raise TypeError("Parameter 'figsize' must be a length-2 sequence of floats (tuple, list, or numpy array).")
+    if figsize is not None and (
+        not isinstance(figsize, tuple | list | np.ndarray)
+        or len(figsize) != 2
+        or not all(isinstance(x, int | float) and not isinstance(x, bool) for x in figsize)
+    ):
+        raise TypeError("Parameter 'figsize' must be a tuple, list, or numpy array of two numbers.")
 
     if dpi is not None and not isinstance(dpi, int):
         raise TypeError("Parameter 'dpi' must be an integer.")
