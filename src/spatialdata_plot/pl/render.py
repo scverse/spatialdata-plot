@@ -1764,6 +1764,11 @@ def _render_labels(
     if effective_outline_color is None and col_for_color is None and render_params.color is not None:
         effective_outline_color = render_params.color
 
+    if render_params.fill_alpha == 0.0 and render_params.outline_alpha == 0.0:
+        raise ValueError(
+            "Parameters 'fill_alpha' and 'outline_alpha' cannot both be 0. Set at least one to a positive value."
+        )
+
     # default case: no contour, just fill
     # since contour_px is passed to skimage.morphology.erosion to create the contour,
     # any border thickness is only within the label, not outside. Therefore, the case
