@@ -156,13 +156,13 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
             _, axs = plt.subplots(nrows=1, ncols=3, layout="tight")
 
-            sdata_blobs.pl.render_labels(label, color="channel_1_sum", table="other_table", scale="scale0").pl.show(
-                ax=axs[0], title="ch_1_sum", colorbar=False
-            )
-            sdata_blobs.pl.render_labels(label, color="channel_2_sum", table="other_table", scale="scale0").pl.show(
-                ax=axs[1], title="ch_2_sum", colorbar=False
-            )
-            sdata_blobs.pl.render_labels(label, color="which_max", table="other_table", scale="scale0").pl.show(
+            sdata_blobs.pl.render_labels(
+                label, color="channel_1_sum", table_name="other_table", scale="scale0"
+            ).pl.show(ax=axs[0], title="ch_1_sum", colorbar=False)
+            sdata_blobs.pl.render_labels(
+                label, color="channel_2_sum", table_name="other_table", scale="scale0"
+            ).pl.show(ax=axs[1], title="ch_2_sum", colorbar=False)
+            sdata_blobs.pl.render_labels(label, color="which_max", table_name="other_table", scale="scale0").pl.show(
                 ax=axs[2], legend_fontsize=6
             )
 

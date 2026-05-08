@@ -68,14 +68,14 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
         new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
 
         # baseline img
-        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap="viridis", table="table").pl.show(
+        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap="viridis", table_name="table").pl.show(
             ax=axs[0], colorbar=False
         )
 
         sdata_blobs.tables["table"].obs.iloc[8:12, 2] = 0
 
         # image with 0s as transparent, so some labels are "missing"
-        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap=new_cmap, table="table").pl.show(
+        sdata_blobs.pl.render_labels("blobs_labels", color="my_var", cmap=new_cmap, table_name="table").pl.show(
             ax=axs[1], colorbar=False
         )
 
