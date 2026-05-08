@@ -760,8 +760,9 @@ class PlotAccessor:
             color names (must match the number of groups), a single named palette or matplotlib colormap name, or
             ``None``.
         contour_px : int, default 3
-            Draw contour of specified width for each segment. If `None`, fills entire segment, see:
-            func:`skimage.morphology.erosion`.
+            Draw contour of specified width for each segment. Must be >= 2; ``contour_px=1`` is rejected
+            because a 1x1 erosion is the identity transformation and produces no visible outline. If
+            ``None``, fills entire segment, see :func:`skimage.morphology.erosion`.
         cmap : Colormap | str | None, optional
             Colormap for continuous annotations using 'color', see :class:`matplotlib.colors.Colormap`.
             For categorical data, use ``palette`` instead.
