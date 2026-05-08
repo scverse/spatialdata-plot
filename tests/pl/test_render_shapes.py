@@ -1261,6 +1261,47 @@ def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: fl
     plt.close(fig)
 
 
+@pytest.mark.parametrize(
+    ("outline_alpha", "expected_max"),
+    [
+        (0.3, 76),
+        (0.5, 127),
+        (1.0, 255),
+    ],
+)
+def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alpha: float, expected_max: int):
+    """Datashader must apply outline_alpha as a multiplicative scale on the rendered alpha.
+
+    Regression test for https://github.com/scverse/spatialdata-plot/issues/617.
+    Same root cause as fill_alpha: ``outline_alpha`` was passed only as
+    ``ds.tf.shade(min_alpha=...)``, which is a floor on alpha for non-empty pixels,
+    so outlines always rendered with max alpha=255 regardless of ``outline_alpha``.
+    """
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        element="blobs_polygons",
+        method="datashader",
+        fill_alpha=1.0,
+        outline_alpha=outline_alpha,
+        outline_color="red",
+    ).pl.show(ax=ax)
+    fig.canvas.draw()
+
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    # The outline is rendered red on top of the (gray) fill; pick the red one.
+    outline_imgs = [
+        img
+        for img in axes_images
+        if img.get_array().ndim == 3
+        and img.get_array().shape[-1] == 4
+        and img.get_array()[..., 0].max() > img.get_array()[..., 1].max()
+    ]
+    assert outline_imgs, "no outline AxesImage found"
+    rgba = outline_imgs[0].get_array()
+    assert int(rgba[..., 3].max()) == expected_max
+    plt.close(fig)
+
+
 def test_render_shapes_color_with_conflicting_index_name():
     """render_shapes(color=...) must not crash when obs.index.name matches an existing column.
 

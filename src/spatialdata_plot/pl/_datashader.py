@@ -357,6 +357,7 @@ def _render_ds_outlines(
                 min_alpha=_convert_alpha_to_datashader_range(alpha),
                 how="linear",
             )
+            shaded = _apply_user_alpha(shaded, alpha)
             rgba, trans = _create_image_from_datashader_result(shaded, factor, ax)
             _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, extent=extent)
 
