@@ -169,19 +169,15 @@ def test_is_color_like(color_result: tuple[ColorLike, bool]):
 @pytest.mark.parametrize(
     ("outline_alpha", "outline_color", "expected"),
     [
-        # Explicit outline_alpha=0.0 with outline_color: previously a falsy
-        # short-circuit (`outline_alpha and outline_alpha == 0.0`) caused
-        # outline_alpha=0.0 to be silently remapped to (1.0, 1.0), rendering
-        # the outline anyway. Regression test for the #617 follow-up.
         (0.0, Color("#ff0000"), (0.0, 0.0)),
         (0, Color("#ff0000"), (0.0, 0.0)),
         ((0.0, 0.0), Color("#ff0000"), (0.0, 0.0)),
-        # Sanity: positive alphas still produce a visible outline.
         (0.5, Color("#ff0000"), (0.5, 0.0)),
         (1.0, Color("#ff0000"), (1.0, 0.0)),
     ],
 )
 def test_set_outline_respects_zero_alpha(outline_alpha, outline_color, expected):
+    """outline_alpha=0 must yield (0.0, 0.0) even when outline_color is set (#617 follow-up)."""
     alpha, _ = _set_outline(outline_alpha=outline_alpha, outline_width=None, outline_color=outline_color)
     assert alpha == expected
 

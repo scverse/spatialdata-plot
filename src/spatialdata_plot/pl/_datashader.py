@@ -44,11 +44,10 @@ _DS_NAN_CATEGORY = "ds_nan"
 
 
 def _apply_user_alpha(result: ds.tf.Image | np.ndarray, alpha: float) -> ds.tf.Image | np.ndarray:
-    """Multiply the alpha channel of a datashader shade result by ``alpha``.
+    """Scale the alpha channel of a datashader shade result by ``alpha``.
 
-    ``ds.tf.shade(min_alpha=...)`` is a floor on the alpha of non-empty pixels,
-    not a scaling factor, so user-supplied ``fill_alpha`` / ``alpha`` must be
-    applied post-hoc to match the matplotlib path. See #617.
+    ``ds.tf.shade(min_alpha=...)`` is a floor, not a scale, so user alpha
+    must be applied post-hoc. See #617.
     """
     if alpha >= 1.0 or result is None:
         return result

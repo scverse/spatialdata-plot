@@ -1238,13 +1238,7 @@ def test_datashader_alpha_not_applied_twice(sdata_blobs: SpatialData):
     ],
 )
 def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: float, expected_max: int):
-    """Datashader must apply fill_alpha as a multiplicative scale on the rendered alpha.
-
-    Regression test for https://github.com/scverse/spatialdata-plot/issues/617.
-    Before the fix, ``fill_alpha`` was passed only as ``ds.tf.shade(min_alpha=...)``,
-    which is a floor on alpha for non-empty pixels rather than a scaling factor, so
-    shapes always rendered at alpha=255 regardless of ``fill_alpha`` (including 0.0).
-    """
+    """fill_alpha must scale the rendered alpha channel linearly on the datashader path (#617)."""
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_shapes(
         element="blobs_polygons",
@@ -1264,20 +1258,14 @@ def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: fl
 @pytest.mark.parametrize(
     ("outline_alpha", "expected_max"),
     [
-        (0.0, None),  # no outline image is rendered
+        (0.0, None),
         (0.3, 76),
         (0.5, 127),
         (1.0, 255),
     ],
 )
 def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alpha: float, expected_max: int | None):
-    """Datashader must apply outline_alpha as a multiplicative scale on the rendered alpha.
-
-    Regression test for https://github.com/scverse/spatialdata-plot/issues/617.
-    Same root cause as fill_alpha: ``outline_alpha`` was passed only as
-    ``ds.tf.shade(min_alpha=...)``, which is a floor on alpha for non-empty pixels,
-    so outlines always rendered with max alpha=255 regardless of ``outline_alpha``.
-    """
+    """outline_alpha must scale the outline image's alpha; alpha=0 must skip rendering entirely (#617)."""
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_shapes(
         element="blobs_polygons",
@@ -1289,18 +1277,16 @@ def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alp
     fig.canvas.draw()
 
     axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
-    # The outline is rendered red on top of the (gray) fill; pick the red one.
     outline_imgs = [
         img
         for img in axes_images
         if (arr := img.get_array()).ndim == 3 and arr.shape[-1] == 4 and arr[..., 0].max() > arr[..., 1].max()
     ]
     if expected_max is None:
-        assert not outline_imgs, "outline_alpha=0 should not render an outline image"
+        assert not outline_imgs
     else:
-        assert outline_imgs, "no outline AxesImage found"
-        rgba = outline_imgs[0].get_array()
-        assert int(rgba[..., 3].max()) == expected_max
+        assert outline_imgs
+        assert int(outline_imgs[0].get_array()[..., 3].max()) == expected_max
     plt.close(fig)
 
 
