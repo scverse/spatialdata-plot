@@ -1286,9 +1286,20 @@ def _render_images(
             ),
         )
 
-    # True if user gave n cmaps for n channels
-    got_multiple_cmaps = isinstance(render_params.cmap_params, list)
-    if got_multiple_cmaps:
+    # A list of cmap_params can be either user-supplied (one cmap per channel) or
+    # synthesized upstream to carry per-channel norms when the user only set `norm`
+    # (or `palette + norm=list`). The synthesized form must not trigger the
+    # blending warning or conflict with `palette`.
+    if isinstance(render_params.cmap_params, list):
+        got_multiple_cmaps = True
+        user_supplied_multi_cmaps = any(not cp.cmap_is_default for cp in render_params.cmap_params)
+        if len(render_params.cmap_params) != n_channels:
+            raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
+    else:
+        got_multiple_cmaps = False
+        user_supplied_multi_cmaps = False
+
+    if user_supplied_multi_cmaps:
         logger.warning(
             "You're blending multiple cmaps. "
             "If the plot doesn't look like you expect, it might be because your "
@@ -1296,10 +1307,6 @@ def _render_images(
             "Therefore, the 'white' of higher layers will overlay the lower layers. "
             "Consider using 'palette' instead."
         )
-
-    # not using got_multiple_cmaps here because of ruff :(
-    if isinstance(render_params.cmap_params, list) and len(render_params.cmap_params) != n_channels:
-        raise ValueError("If 'cmap' is provided, its length must match the number of channels.")
 
     # Detect RGB(A) images by channel names — skip when user overrides with palette/cmap
     is_rgb, has_alpha = _is_rgb_image(channels)
@@ -1527,8 +1534,9 @@ def _render_images(
                 zorder=render_params.zorder,
             )
 
-        # 2C) Image has n channels and palette info
-        elif palette is not None and not got_multiple_cmaps:
+        # 2C) palette set; also covers `palette + norm=list` since synthesized
+        # default cmaps don't conflict and per-channel norms are already in `layers`.
+        elif palette is not None and not user_supplied_multi_cmaps:
             if len(palette) != n_channels:
                 raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
@@ -1566,10 +1574,6 @@ def _render_images(
                 render_params.alpha,
                 zorder=render_params.zorder,
             )
-
-        # 2D) Image has n channels, no palette but cmap info
-        elif palette is not None and got_multiple_cmaps:
-            raise ValueError("If 'palette' is provided, 'cmap' must be None.")
 
         # Collect channel legend entries (single point for all multi-channel paths)
         if render_params.channels_as_legend and channel_legend_entries is not None:

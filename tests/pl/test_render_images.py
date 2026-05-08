@@ -496,6 +496,32 @@ def test_norm_list_without_explicit_cmap():
     plt.close(fig)
 
 
+# Regression tests for #622: misleading 'cmap' errors when norm/palette interact.
+def test_norm_list_wrong_length_raises_with_norm_message():
+    # Without an explicit cmap the user only set norm; the error must mention norm,
+    # not cmap, and report both lengths.
+    sdata = _make_multichannel_sdata()
+    with pytest.raises(ValueError, match=r"'norm' list \(2\).*channels \(3\)"):
+        sdata.pl.render_images("img", norm=[Normalize(0, 1), Normalize(0, 2)]).pl.show()
+
+
+def test_cmap_wrong_length_with_norm_list_no_longer_silent():
+    # Previously the wrong-length cmap was silently nulled when norm was a list of
+    # the correct length, hiding the bug. It must now raise just like the no-norm path.
+    sdata = _make_multichannel_sdata()
+    with pytest.raises(ValueError, match=r"'cmap' list \(2\).*channels \(3\)"):
+        sdata.pl.render_images("img", cmap=["Reds", "Greens"], norm=[Normalize(0, 1)] * 3).pl.show()
+
+
+def test_palette_with_norm_list_renders():
+    # palette + per-channel norms used to fail with "If 'palette' is provided, 'cmap'
+    # must be None." even though the user never passed cmap. Should now render.
+    sdata = _make_multichannel_sdata()
+    fig, ax = plt.subplots()
+    sdata.pl.render_images("img", palette=["red", "green", "blue"], norm=[Normalize(0, 1)] * 3).pl.show(ax=ax)
+    plt.close(fig)
+
+
 def test_cmap_matches_selected_channels_not_full_image(sdata_blobs: SpatialData):
     """Cmap length should be validated against selected channels, not the full image channel count."""
     # blobs_image has 3 channels; select 1 with a matching length-1 cmap
