@@ -54,6 +54,27 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
             scalebar_params={"location": "lower right", "color": "white", "box_alpha": 0.6},
         )
 
+    def test_plot_scalebar_no_frame(self, sdata_blobs: SpatialData):
+        """Visual test: frameon=False drops the surrounding box."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(
+            scalebar_dx=1.0,
+            scalebar_params={"frameon": False, "color": "white"},
+        )
+
+    def test_plot_scalebar_compact(self, sdata_blobs: SpatialData):
+        """Visual test: padding and length_fraction shrink the scalebar footprint."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(
+            scalebar_dx=1.0,
+            scalebar_params={"length_fraction": 0.15, "pad": 0.1, "border_pad": 0.1},
+        )
+
+    def test_plot_scalebar_fixed_value_label(self, sdata_blobs: SpatialData):
+        """Visual test: fixed_value pins the bar length and label overrides the displayed text."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(
+            scalebar_dx=1.0,
+            scalebar_params={"fixed_value": 200, "label": "200 um"},
+        )
+
     def test_plot_user_ax_dpi_preserved(self, sdata_blobs: SpatialData):
         """Visual test: low DPI produces visibly pixelated rasterization (regression for #310).
 
@@ -156,11 +177,6 @@ def test_dpi_default_used_when_no_ax(sdata_blobs: SpatialData):
     fig = ax.get_figure()
     assert fig.get_dpi() == matplotlib.rcParams["figure.dpi"]
     plt.close(fig)
-
-
-# Scalebar regression tests (#614). The scalebar machinery existed but was
-# unreachable: show() did not accept scalebar_dx/scalebar_units. These tests
-# lock the wiring, the defaults, the kwargs passthrough, and validation.
 
 
 def _scalebars_on(ax):
