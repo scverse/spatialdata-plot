@@ -1264,12 +1264,13 @@ def test_datashader_respects_fill_alpha(sdata_blobs: SpatialData, fill_alpha: fl
 @pytest.mark.parametrize(
     ("outline_alpha", "expected_max"),
     [
+        (0.0, None),  # no outline image is rendered
         (0.3, 76),
         (0.5, 127),
         (1.0, 255),
     ],
 )
-def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alpha: float, expected_max: int):
+def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alpha: float, expected_max: int | None):
     """Datashader must apply outline_alpha as a multiplicative scale on the rendered alpha.
 
     Regression test for https://github.com/scverse/spatialdata-plot/issues/617.
@@ -1296,9 +1297,12 @@ def test_datashader_respects_outline_alpha(sdata_blobs: SpatialData, outline_alp
         and img.get_array().shape[-1] == 4
         and img.get_array()[..., 0].max() > img.get_array()[..., 1].max()
     ]
-    assert outline_imgs, "no outline AxesImage found"
-    rgba = outline_imgs[0].get_array()
-    assert int(rgba[..., 3].max()) == expected_max
+    if expected_max is None:
+        assert not outline_imgs, "outline_alpha=0 should not render an outline image"
+    else:
+        assert outline_imgs, "no outline AxesImage found"
+        rgba = outline_imgs[0].get_array()
+        assert int(rgba[..., 3].max()) == expected_max
     plt.close(fig)
 
 

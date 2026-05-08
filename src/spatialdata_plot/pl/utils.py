@@ -681,7 +681,7 @@ def _set_outline(
     """
     # A) User doesn't want to see outlines
     if (
-        (outline_alpha and outline_alpha == 0.0)
+        outline_alpha == 0.0
         or (isinstance(outline_alpha, tuple) and np.all(np.array(outline_alpha) == 0.0))
         or not (outline_alpha or outline_width or outline_color)
     ):
