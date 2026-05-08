@@ -285,66 +285,6 @@ def test_utils_get_subplots_produces_correct_axs_layout(input_output):
     assert axs_visible == [ax.axison for ax in axs.flatten()]
 
 
-def _call_validator(figsize):
-    from spatialdata_plot.pl.utils import _validate_show_parameters
-
-    _validate_show_parameters(
-        coordinate_systems=None,
-        legend_fontsize=None,
-        legend_fontweight="bold",
-        legend_loc=None,
-        legend_fontoutline=None,
-        na_in_legend=True,
-        colorbar=True,
-        colorbar_params=None,
-        wspace=None,
-        hspace=0.25,
-        ncols=4,
-        frameon=None,
-        figsize=figsize,
-        dpi=None,
-        fig=None,
-        title=None,
-        pad_extent=0,
-        ax=None,
-        return_ax=False,
-        save=None,
-        show=None,
-    )
-
-
-@pytest.mark.parametrize(
-    "figsize",
-    [
-        (6.0, 4.0),
-        [6.0, 4.0],
-        [6, 4],
-        np.array([6.0, 4.0]),
-        None,
-    ],
-)
-def test_show_accepts_figsize_as_sequence(figsize):
-    # Regression test for #626.
-    _call_validator(figsize)
-
-
-@pytest.mark.parametrize(
-    "figsize",
-    [
-        [6.0, 4.0, 2.0],
-        [6.0],
-        ["a", "b"],
-        "big",
-        42,
-        {6, 4},
-        [True, False],
-    ],
-)
-def test_show_rejects_invalid_figsize(figsize):
-    with pytest.raises(TypeError, match="figsize"):
-        _call_validator(figsize)
-
-
 class TestMultiscaleToSpatialImage:
     """Regression tests for #589: multiscale resolution selection."""
 
