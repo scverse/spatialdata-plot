@@ -505,6 +505,21 @@ def test_cmap_matches_selected_channels_not_full_image(sdata_blobs: SpatialData)
     plt.close(fig)
 
 
+# Regression for #612: vmin/vmax kwargs are no longer accepted on any render
+# function. The check covers all four to prevent the asymmetry from re-emerging.
+@pytest.mark.parametrize("kwarg", ["vmin", "vmax"])
+@pytest.mark.parametrize("func", ["render_images", "render_shapes", "render_points", "render_labels"])
+def test_vmin_vmax_kwargs_rejected_uniformly(sdata_blobs: SpatialData, func: str, kwarg: str) -> None:
+    elements = {
+        "render_images": "blobs_image",
+        "render_labels": "blobs_labels",
+        "render_points": "blobs_points",
+        "render_shapes": "blobs_circles",
+    }
+    with pytest.raises(TypeError, match=kwarg):
+        getattr(sdata_blobs.pl, func)(elements[func], **{kwarg: 0})
+
+
 # ---------------------------------------------------------------------------
 # channels_as_legend visual tests (#459)
 # ---------------------------------------------------------------------------

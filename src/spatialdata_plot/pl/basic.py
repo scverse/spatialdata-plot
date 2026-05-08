@@ -28,7 +28,7 @@ from spatialdata._utils import _deprecation_alias
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._logging import _log_context, logger
+from spatialdata_plot._logging import _log_context
 from spatialdata_plot.pl.render import (
     _draw_channel_legend,
     _render_images,
@@ -190,7 +190,8 @@ class PlotAccessor:
         shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
-        **kwargs: Any,
+        datashader_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None,
+        transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
         Render shapes elements in SpatialData.
@@ -279,15 +280,10 @@ class PlotAccessor:
             specified, the shapes are converted to a circle/hexagon/square before rendering. If "visium_hex" is
             specified, the shapes are assumed to be Visium spots and the size of the hexagons is adjusted to be adjacent
             to each other.
-
-        **kwargs : Any
-            Additional arguments for customization. This can include:
-
-            datashader_reduction : Literal[
-                "sum", "mean", "any", "count", "std", "var", "max", "min"
-            ], default: "max"
-                Reduction method for datashader when coloring by continuous values. Defaults to 'max'.
-
+        datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
+            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"max"``.
+        transfunc : Callable[[float], float] | None, optional
+            Optional transformation applied to the continuous color vector before normalization and colormap mapping.
 
         Notes
         -----
@@ -300,8 +296,6 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        if "vmin" in kwargs or "vmax" in kwargs:
-            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_shape_render_params(
             self._sdata,
             element=element,
@@ -320,7 +314,7 @@ class PlotAccessor:
             table_layer=table_layer,
             shape=shape,
             method=method,
-            ds_reduction=kwargs.get("datashader_reduction"),
+            ds_reduction=datashader_reduction,
             colorbar=colorbar,
             colorbar_params=colorbar_params,
             gene_symbols=gene_symbols,
@@ -351,7 +345,7 @@ class PlotAccessor:
                 palette=param_values["palette"],
                 outline_alpha=final_outline_alpha,
                 fill_alpha=param_values["fill_alpha"],
-                transfunc=kwargs.get("transfunc"),
+                transfunc=transfunc,
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
                 shape=param_values["shape"],
@@ -384,7 +378,8 @@ class PlotAccessor:
         gene_symbols: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
-        **kwargs: Any,
+        datashader_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None,
+        transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
         Render points elements in SpatialData.
@@ -452,22 +447,16 @@ class PlotAccessor:
             Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
             ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
-
-        **kwargs : Any
-            Additional arguments for customization. This can include:
-
-            datashader_reduction : Literal[
-                "sum", "mean", "any", "count", "std", "var", "max", "min"
-            ], default: "sum"
-                Reduction method for datashader when coloring by continuous values. Defaults to 'sum'.
+        datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
+            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"sum"``.
+        transfunc : Callable[[float], float] | None, optional
+            Optional transformation applied to the continuous color vector before normalization and colormap mapping.
 
         Returns
         -------
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        if "vmin" in kwargs or "vmax" in kwargs:
-            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_points_render_params(
             self._sdata,
             element=element,
@@ -481,7 +470,7 @@ class PlotAccessor:
             size=size,
             table_name=table_name,
             table_layer=table_layer,
-            ds_reduction=kwargs.get("datashader_reduction"),
+            ds_reduction=datashader_reduction,
             colorbar=colorbar,
             colorbar_params=colorbar_params,
             gene_symbols=gene_symbols,
@@ -511,7 +500,7 @@ class PlotAccessor:
                 cmap_params=cmap_params,
                 palette=param_values["palette"],
                 alpha=param_values["alpha"],
-                transfunc=kwargs.get("transfunc"),
+                transfunc=transfunc,
                 size=param_values["size"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
@@ -730,7 +719,7 @@ class PlotAccessor:
         table_name: str | None = None,
         table_layer: str | None = None,
         gene_symbols: str | None = None,
-        **kwargs: Any,
+        transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
         Render labels elements in SpatialData.
@@ -806,14 +795,14 @@ class PlotAccessor:
             Column name in :attr:`sdata.table.var` to use for looking up ``color``. Use this when
             ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
+        transfunc : Callable[[float], float] | None, optional
+            Optional transformation applied to the continuous color vector before normalization and colormap mapping.
 
         Returns
         -------
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        if "vmin" in kwargs or "vmax" in kwargs:
-            logger.warning("`vmin` and `vmax` are deprecated. Pass matplotlib `Normalize` object to norm instead.")
         params_dict = _validate_label_render_params(
             self._sdata,
             element=element,
@@ -859,7 +848,7 @@ class PlotAccessor:
                 scale=param_values["scale"],
                 table_name=param_values["table_name"],
                 table_layer=param_values["table_layer"],
-                transfunc=kwargs.get("transfunc"),
+                transfunc=transfunc,
                 zorder=n_steps,
                 colorbar=param_values["colorbar"],
                 colorbar_params=param_values["colorbar_params"],
