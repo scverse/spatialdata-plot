@@ -2277,7 +2277,10 @@ def _validate_show_parameters(
     if legend_params is not None:
         if not isinstance(legend_params, dict):
             raise TypeError("Parameter 'legend_params' must be a dictionary or None.")
-        allowed_legend_keys = {"loc", "fontsize", "fontweight", "fontoutline", "na_in_legend"}
+        # `location` is the canonical name (matches colorbar_params / scalebar_params); `loc` is
+        # accepted as an alias because that is what matplotlib.legend.Legend natively uses, so
+        # copy-paste from matplotlib examples keeps working.
+        allowed_legend_keys = {"loc", "location", "fontsize", "fontweight", "fontoutline", "na_in_legend"}
         unknown = set(legend_params) - allowed_legend_keys
         if unknown:
             raise ValueError(
