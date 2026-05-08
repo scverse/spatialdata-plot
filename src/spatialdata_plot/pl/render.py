@@ -1621,6 +1621,13 @@ def _render_labels(
             is_label=True,
         )
 
+    if np.issubdtype(label.dtype, np.floating):
+        raise ValueError(
+            f"Label element '{element}' has dtype {label.dtype}. Label arrays must use an "
+            f"integer dtype (e.g. int32 or uint16). Cast before plotting, e.g.:\n"
+            f"    sdata['{element}'] = sdata['{element}'].astype('int32')"
+        )
+
     # rasterize spatial image if necessary to speed up performance
     if rasterize:
         label = _rasterize_if_necessary(

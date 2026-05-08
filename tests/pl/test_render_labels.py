@@ -473,3 +473,20 @@ def test_transfunc_is_applied_for_continuous_labels(sdata_blobs: SpatialData):
     plt.close(fig)
 
     assert called, "transfunc was not called for continuous labels data"
+
+
+@pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64])
+def test_render_labels_rejects_float_dtype(dtype):
+    # Regression test for #606: float-dtype labels must raise a clear
+    # ValueError naming the element and dtype, not a cryptic skimage TypeError.
+    arr = np.zeros((20, 20), dtype=dtype)
+    arr[3:8, 3:8] = 1
+    arr[12:17, 12:17] = 2
+    sdata = SpatialData(labels={"lbl": Labels2DModel.parse(arr, dims=["y", "x"])})
+
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"Label element 'lbl'.*integer dtype"):
+            sdata.pl.render_labels("lbl").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
