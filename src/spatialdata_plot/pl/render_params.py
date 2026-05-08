@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from typing import Literal
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -220,6 +220,7 @@ class ScalebarParams:
 
     scalebar_dx: Sequence[float] | None = None
     scalebar_units: Sequence[str] | None = None
+    scalebar_kwargs: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass

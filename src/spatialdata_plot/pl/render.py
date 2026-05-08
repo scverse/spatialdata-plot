@@ -53,7 +53,6 @@ from spatialdata_plot.pl.render_params import (
     LabelsRenderParams,
     LegendParams,
     PointsRenderParams,
-    ScalebarParams,
     ShapesRenderParams,
 )
 from spatialdata_plot.pl.utils import (
@@ -268,9 +267,8 @@ def _add_legend_and_colorbar(
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
-    scalebar_params: ScalebarParams,
 ) -> None:
-    """Add legend, colorbar, and scalebar decorations if the color vector warrants them."""
+    """Add legend and colorbar decorations if the color vector warrants them."""
     if not _want_decorations(color_vector, na_color):
         return
 
@@ -309,8 +307,6 @@ def _add_legend_and_colorbar(
             colorbar_params,
             col_for_color if isinstance(col_for_color, str) else None,
         ),
-        scalebar_dx=scalebar_params.scalebar_dx,
-        scalebar_units=scalebar_params.scalebar_units,
     )
 
 
@@ -320,7 +316,6 @@ def _render_shapes(
     coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
     fig_params: FigParams,
-    scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
@@ -696,7 +691,6 @@ def _render_shapes(
         colorbar=render_params.colorbar,
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
-        scalebar_params=scalebar_params,
     )
 
 
@@ -706,7 +700,6 @@ def _render_points(
     coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
     fig_params: FigParams,
-    scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
 ) -> None:
@@ -1054,7 +1047,6 @@ def _render_points(
         colorbar=render_params.colorbar,
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
-        scalebar_params=scalebar_params,
     )
 
 
@@ -1201,7 +1193,6 @@ def _render_images(
     coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
     fig_params: FigParams,
-    scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
@@ -1604,7 +1595,6 @@ def _render_labels(
     coordinate_system: str,
     ax: matplotlib.axes.SubplotBase,
     fig_params: FigParams,
-    scalebar_params: ScalebarParams,
     legend_params: LegendParams,
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
@@ -1838,7 +1828,4 @@ def _render_labels(
             render_params.colorbar_params,
             col_for_color if isinstance(col_for_color, str) else None,
         ),
-        scalebar_dx=scalebar_params.scalebar_dx,
-        scalebar_units=scalebar_params.scalebar_units,
-        # scalebar_kwargs=scalebar_params.scalebar_kwargs,
     )
