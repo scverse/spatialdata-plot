@@ -328,9 +328,6 @@ def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, k
 
 def test_legend_params_location_alias_for_loc(sdata_blobs: SpatialData):
     """legend_params accepts both 'location' (canonical) and 'loc' (matplotlib-native alias)."""
-    # Both spellings reach LegendParams.legend_loc; verify by confirming neither raises and the
-    # canonical 'location' takes precedence when both are passed (the alias resolution is a small
-    # consequence of mirroring colorbar_params / scalebar_params naming).
     sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(
         legend_params={"loc": "upper right"}, return_ax=True, show=False
     )

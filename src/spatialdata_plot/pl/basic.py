@@ -967,12 +967,9 @@ class PlotAccessor:
             e.g. ``{"location": "lower right", "color": "white", "length_fraction": 0.25}``.
             See the matplotlib-scalebar documentation for the full list of options.
         legend_params : dict[str, Any] | None
-            Bundled legend options. Mirrors ``colorbar_params`` / ``scalebar_params``. Accepted keys:
-            ``location`` (canonical, alias ``loc`` accepted to match
-            :class:`matplotlib.legend.Legend`), ``fontsize``, ``fontweight``, ``fontoutline``,
-            ``na_in_legend``. When a key is set both as a flat kwarg (e.g. ``legend_fontsize=12``)
-            and inside this dict, the dict value wins. Unknown keys raise ``ValueError`` to surface
-            typos early.
+            Bundled legend options; overrides the matching ``legend_*`` flat kwargs. Accepted keys:
+            ``location`` (or ``loc``), ``fontsize``, ``fontweight``, ``fontoutline``,
+            ``na_in_legend``. Unknown keys raise ``ValueError``.
 
         Returns
         -------
@@ -1140,15 +1137,10 @@ class PlotAccessor:
             scalebar_units=scalebar_units,
             scalebar_kwargs=scalebar_params,
         )
-        # Merge dict-form legend_params over the flat legend_* kwargs (dict wins). Unknown keys
-        # have already been rejected by _validate_show_parameters; treat the dict as authoritative.
-        # Note: matplotlib.legend.Legend uses `loc`, while Figure.colorbar and matplotlib_scalebar
-        # use `location`. We accept both spellings so legend_params reads consistently with
-        # colorbar_params / scalebar_params; `location` is the canonical name and wins if both are
-        # passed.
         if legend_params:
             legend_fontsize = legend_params.get("fontsize", legend_fontsize)
             legend_fontweight = legend_params.get("fontweight", legend_fontweight)
+            # `loc` is matplotlib.Legend's native key; `location` aligns with colorbar/scalebar.
             legend_loc = legend_params.get("location", legend_params.get("loc", legend_loc))
             legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
             na_in_legend = legend_params.get("na_in_legend", na_in_legend)
