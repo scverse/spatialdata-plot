@@ -1007,7 +1007,7 @@ def test_no_table_fallback_warning_for_element_column(caplog):
     plt.close("all")
 
 
-def test_render_points_native_color_column_single_compute():
+def test_render_points_native_color_column_single_compute(monkeypatch):
     # Regression test for #633: color column native to the points element triggered
     # two .compute() calls instead of one.
     compute_calls = []
@@ -1029,11 +1029,8 @@ def test_render_points_native_color_column_single_compute():
     points = PointsModel.parse(df)
     sdata = SpatialData(points={"pts": points})
 
-    with (
-        dask.config.set({"dataframe.query-planning": False}),
-        pytest.MonkeyPatch().context() as mp,
-    ):
-        mp.setattr(dask.dataframe.DataFrame, "compute", counting_compute)
+    with dask.config.set({"dataframe.query-planning": False}):
+        monkeypatch.setattr(dask.dataframe.DataFrame, "compute", counting_compute)
         sdata.pl.render_points("pts", color="cell_type").pl.show()
         plt.close("all")
 
