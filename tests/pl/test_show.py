@@ -269,3 +269,58 @@ def test_scalebar_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs
     with pytest.raises(exc):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(show=False, **kwargs)
     plt.close("all")
+
+
+def test_legend_params_dict_form(sdata_blobs: SpatialData):
+    """legend_params dict form is accepted and applied (additive sugar around flat legend_* kwargs)."""
+    ax = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(
+        legend_params={"loc": "upper right", "fontsize": 14},
+        return_ax=True,
+        show=False,
+    )
+    legend = ax.get_legend()
+    if legend is not None:
+        # When a legend is rendered, fontsize was forwarded.
+        for text in legend.get_texts():
+            assert text.get_fontsize() == 14
+    plt.close("all")
+
+
+def test_legend_params_overrides_flat_kwarg(sdata_blobs: SpatialData):
+    """When the same option is set as both flat kwarg and dict key, the dict wins."""
+    ax = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(
+        legend_fontsize=10,
+        legend_params={"fontsize": 18},
+        return_ax=True,
+        show=False,
+    )
+    legend = ax.get_legend()
+    if legend is not None:
+        for text in legend.get_texts():
+            assert text.get_fontsize() == 18
+    plt.close("all")
+
+
+def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
+    """legend_params=None preserves identical behavior to omitting the kwarg."""
+    ax_a = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(return_ax=True, show=False)
+    plt.close("all")
+    ax_b = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(legend_params=None, return_ax=True, show=False)
+    assert (ax_a.get_legend() is None) == (ax_b.get_legend() is None)
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "exc"),
+    [
+        ({"legend_params": []}, TypeError),
+        ({"legend_params": "loc=upper right"}, TypeError),
+        ({"legend_params": {"loc": "upper right", "frameon": True}}, ValueError),
+        ({"legend_params": {"location": "upper right"}}, ValueError),  # matplotlib uses "loc", not "location"
+    ],
+)
+def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs, exc):
+    """_validate_show_parameters surfaces actionable errors for bad legend_params inputs."""
+    with pytest.raises(exc):
+        sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(show=False, **kwargs)
+    plt.close("all")

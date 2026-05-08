@@ -893,6 +893,7 @@ class PlotAccessor:
         scalebar_dx: float | None = None,
         scalebar_units: str = "um",
         scalebar_params: dict[str, Any] | None = None,
+        legend_params: dict[str, Any] | None = None,
     ) -> Axes | list[Axes] | None:
         """
         Execute the plotting tree and display the final figure.
@@ -965,6 +966,12 @@ class PlotAccessor:
             Extra keyword arguments forwarded to :class:`matplotlib_scalebar.scalebar.ScaleBar`,
             e.g. ``{"location": "lower right", "color": "white", "length_fraction": 0.25}``.
             See the matplotlib-scalebar documentation for the full list of options.
+        legend_params : dict[str, Any] | None
+            Bundled legend options. Mirrors ``colorbar_params`` / ``scalebar_params``. Accepted keys:
+            ``loc``, ``fontsize``, ``fontweight``, ``fontoutline``, ``na_in_legend`` — all forwarded
+            to the corresponding flat ``legend_*`` mechanics. When a key is set both as a flat
+            kwarg (e.g. ``legend_fontsize=12``) and inside this dict, the dict value wins. Unknown
+            keys raise ``ValueError`` to surface typos early.
 
         Returns
         -------
@@ -1005,6 +1012,7 @@ class PlotAccessor:
             scalebar_dx,
             scalebar_units,
             scalebar_params,
+            legend_params,
         )
 
         if fig is not None and not isinstance(ax, Sequence):
@@ -1131,14 +1139,22 @@ class PlotAccessor:
             scalebar_units=scalebar_units,
             scalebar_kwargs=scalebar_params,
         )
-        legend_colorbar = colorbar
-        legend_params = LegendParams(
+        # Merge dict-form legend_params over the flat legend_* kwargs (dict wins). Unknown keys
+        # have already been rejected by _validate_show_parameters; treat the dict as authoritative.
+        if legend_params:
+            legend_fontsize = legend_params.get("fontsize", legend_fontsize)
+            legend_fontweight = legend_params.get("fontweight", legend_fontweight)
+            legend_loc = legend_params.get("loc", legend_loc)
+            legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
+            na_in_legend = legend_params.get("na_in_legend", na_in_legend)
+
+        legend_params_obj = LegendParams(
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,
             legend_loc=legend_loc,
             legend_fontoutline=legend_fontoutline,
             na_in_legend=na_in_legend,
-            colorbar=legend_colorbar,
+            colorbar=colorbar,
         )
 
         def _draw_colorbar(
@@ -1230,7 +1246,7 @@ class PlotAccessor:
             )
             ax = fig_params.ax if fig_params.axs is None else fig_params.axs[i]
             assert isinstance(ax, Axes)
-            axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params.colorbar else None
+            axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params_obj.colorbar else None
             axis_channel_legend_entries: list[ChannelLegendEntry] = []
 
             wants_images = False
@@ -1259,7 +1275,7 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            legend_params=legend_params,
+                            legend_params=legend_params_obj,
                             colorbar_requests=axis_colorbar_requests,
                             channel_legend_entries=axis_channel_legend_entries,
                             rasterize=rasterize,
@@ -1277,7 +1293,7 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            legend_params=legend_params,
+                            legend_params=legend_params_obj,
                             colorbar_requests=axis_colorbar_requests,
                         )
 
@@ -1293,7 +1309,7 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            legend_params=legend_params,
+                            legend_params=legend_params_obj,
                             colorbar_requests=axis_colorbar_requests,
                         )
 
@@ -1328,7 +1344,7 @@ class PlotAccessor:
                             coordinate_system=cs,
                             ax=ax,
                             fig_params=fig_params,
-                            legend_params=legend_params,
+                            legend_params=legend_params_obj,
                             colorbar_requests=axis_colorbar_requests,
                             rasterize=rasterize,
                         )
@@ -1368,11 +1384,11 @@ class PlotAccessor:
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
-            if legend_params.colorbar and axis_colorbar_requests:
+            if legend_params_obj.colorbar and axis_colorbar_requests:
                 pending_colorbars.append((ax, axis_colorbar_requests))
 
             if axis_channel_legend_entries:
-                _draw_channel_legend(ax, axis_channel_legend_entries, legend_params, fig_params)
+                _draw_channel_legend(ax, axis_channel_legend_entries, legend_params_obj, fig_params)
 
             _draw_scalebar(ax, scalebar_params_obj, panel_idx=i)
 

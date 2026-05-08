@@ -2173,6 +2173,7 @@ def _validate_show_parameters(
     scalebar_dx: float | None,
     scalebar_units: str,
     scalebar_params: dict[str, Any] | None,
+    legend_params: dict[str, Any] | None,
 ) -> None:
     if coordinate_systems is not None and not isinstance(coordinate_systems, list | str):
         raise TypeError("Parameter 'coordinate_systems' must be a string or a list of strings.")
@@ -2272,6 +2273,16 @@ def _validate_show_parameters(
 
     if scalebar_params is not None and not isinstance(scalebar_params, dict):
         raise TypeError("Parameter 'scalebar_params' must be a dictionary or None.")
+
+    if legend_params is not None:
+        if not isinstance(legend_params, dict):
+            raise TypeError("Parameter 'legend_params' must be a dictionary or None.")
+        allowed_legend_keys = {"loc", "fontsize", "fontweight", "fontoutline", "na_in_legend"}
+        unknown = set(legend_params) - allowed_legend_keys
+        if unknown:
+            raise ValueError(
+                f"Unknown legend_params key(s): {sorted(unknown)}. Allowed keys: {sorted(allowed_legend_keys)}."
+            )
 
 
 def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
