@@ -136,14 +136,33 @@ def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData):
     plt.close("all")
 
 
-def test_fig_parameter_no_warning_with_ax_list(sdata_blobs: SpatialData):
-    """Passing fig= with a list of axes should not warn (fig is still required there)."""
+def test_fig_parameter_warns_with_ax_list(sdata_blobs: SpatialData):
+    """Passing fig= alongside a list of axes should also emit the deprecation (regression for #625)."""
     set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
     fig, axs = plt.subplots(1, 2)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)
+    with pytest.warns(DeprecationWarning, match="`fig` is being deprecated"):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(fig=fig, ax=list(axs), show=False)
     plt.close("all")
+
+
+def test_show_ax_list_infers_fig(sdata_blobs: SpatialData):
+    """show(ax=[...]) should infer fig from the axes without requiring fig= (regression for #625)."""
+    set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
+    fig, axs = plt.subplots(1, 2)
+    sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=list(axs), show=False)
+    for ax in axs:
+        assert ax.get_figure() is fig
+        assert len(ax.get_images()) > 0
+    plt.close(fig)
+
+
+def test_show_single_panel_accepts_ax_list(sdata_blobs: SpatialData):
+    """show(ax=[ax]) for a single coordinate system should be accepted (regression for #625)."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_images(element="blobs_image").pl.show(ax=[ax], show=False)
+    assert ax.get_figure() is fig
+    assert len(ax.get_images()) > 0
+    plt.close(fig)
 
 
 def test_frameon_false_multi_panel(sdata_blobs: SpatialData):

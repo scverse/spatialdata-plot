@@ -4,7 +4,7 @@ import contextlib
 import sys
 import warnings
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -1003,7 +1003,7 @@ class PlotAccessor:
             legend_params,
         )
 
-        if fig is not None and not isinstance(ax, Sequence):
+        if fig is not None:
             warnings.warn(
                 "`fig` is being deprecated as an argument to `PlotAccessor.show` in spatialdata-plot. "
                 "To use a custom figure, create axes from it and pass them via `ax` instead: "

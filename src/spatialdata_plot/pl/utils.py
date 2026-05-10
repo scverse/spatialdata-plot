@@ -294,14 +294,10 @@ def _prepare_params_plot(
     elif num_panels > 1:
         if not isinstance(ax, Sequence):
             raise TypeError(f"Expected `ax` to be a `Sequence`, but got {type(ax).__name__}")
-        if ax is not None and len(ax) != num_panels:
+        if len(ax) != num_panels:
             raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
         if fig is None:
-            # TODO(#579): infer fig from ax[0].get_figure() instead of requiring it
-            raise ValueError(
-                f"Invalid value of `fig`: {fig}. If a list of `Axes` is passed, a `Figure` must also be specified."
-            )
-        assert ax is None or isinstance(ax, Sequence), f"Invalid type of `ax`: {type(ax)}, expected `Sequence`."
+            fig = ax[0].get_figure()
         axs = ax
         if dpi is not None:
             fig.set_dpi(dpi)
@@ -309,7 +305,13 @@ def _prepare_params_plot(
         axs = None
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize, dpi=resolved_dpi, constrained_layout=True)
-        elif isinstance(ax, Axes):
+        else:
+            if isinstance(ax, Sequence):
+                if len(ax) != 1:
+                    raise ValueError(f"Len of `ax`: {len(ax)} is not equal to number of panels: {num_panels}.")
+                ax = ax[0]
+            if not isinstance(ax, Axes):
+                raise TypeError(f"Expected `ax` to be an `Axes` or a `Sequence` of `Axes`, but got {type(ax).__name__}")
             fig = ax.get_figure()
             if dpi is not None:
                 fig.set_dpi(dpi)
