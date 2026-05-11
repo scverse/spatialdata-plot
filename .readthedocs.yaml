@@ -15,3 +15,7 @@ build:
         # TODO: remove "--with=virtualenv<21" once hatch is compatible with virtualenv 21+ (pypa/hatch#2193)
         - uvx "--with=virtualenv<21" hatch run docs:build
         - mv docs/_build $READTHEDOCS_OUTPUT
+
+submodules:
+  include: all
+  recursive: false

@@ -24,3 +24,15 @@ jobs:
         run: uv build
       - name: Check package
         run: uvx twine check --strict dist/*.whl
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Build docs
+        run: uvx --with="virtualenv<21" hatch run docs:build
