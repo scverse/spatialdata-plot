@@ -56,6 +56,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "sphinx_design",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
@@ -114,10 +115,13 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     "**.ipynb_checkpoints",
-    "tutorials/notebooks/index.md",
-    "tutorials/notebooks/README.md",
-    "tutorials/notebooks/references.md",
-    "tutorials/notebooks/notebooks/paper_reproducibility/*",
+    # Submodule meta-files: these document the notebooks repo itself, not
+    # spatialdata-plot, and should not be rendered into our docs.
+    "notebooks/README.md",
+    "notebooks/CONTRIBUTING.md",
+    "notebooks/LICENSE",
+    "notebooks/.github/**",
+    "notebooks/pyproject.toml",
 ]
 
 
