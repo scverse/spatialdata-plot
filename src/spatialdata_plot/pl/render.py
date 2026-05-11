@@ -49,6 +49,7 @@ from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
     FigParams,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     LegendParams,
@@ -1834,3 +1835,222 @@ def _render_labels(
             col_for_color if isinstance(col_for_color, str) else None,
         ),
     )
+
+
+def _normalise_to_range(values: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """Min-max normalise a 1-D array into ``[lo, hi]``. Constant input → midpoint."""
+    if len(values) == 0:
+        return values
+    vmin = float(np.nanmin(values))
+    vmax = float(np.nanmax(values))
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax - vmin == 0.0:
+        return np.full_like(values, (lo + hi) / 2.0, dtype=float)
+    return lo + (values - vmin) * (hi - lo) / (vmax - vmin)
+
+
+def _render_graph(
+    sdata: sd.SpatialData,
+    render_params: GraphRenderParams,
+    coordinate_system: str,
+    ax: matplotlib.axes.SubplotBase,
+    legend_params: LegendParams | None = None,
+    colorbar_requests: list[ColorbarSpec] | None = None,
+) -> None:
+    """Render spatial graph edges as a LineCollection on the given axes."""
+    from matplotlib.collections import CircleCollection, LineCollection
+    from scipy.sparse import triu
+
+    _log_context.set("render_graph")
+    element_name = render_params.element
+    table_name = render_params.table_name
+
+    table = sdata[table_name]
+    adjacency_key = render_params.connectivity_obsp_key
+    if adjacency_key not in table.obsp:
+        logger.warning(f"Connectivity key '{adjacency_key}' not found in table obsp. Skipping graph rendering.")
+        return
+
+    adjacency = table.obsp[adjacency_key]
+    element = sdata[element_name]
+    centroids_df = sd.get_centroids(element, coordinate_system=coordinate_system)
+    if hasattr(centroids_df, "compute"):
+        centroids_df = centroids_df.compute()
+
+    centroid_coords = np.column_stack([centroids_df["x"].values, centroids_df["y"].values])
+
+    _, region_key, instance_key = get_table_keys(table)
+    element_mask = table.obs[region_key].values == element_name
+    instance_ids = table.obs[instance_key].values[element_mask]
+    table_subset_indices = np.where(element_mask)[0]
+
+    centroid_ids = np.asarray(centroids_df.index.values)
+    # Vectorised join: for each instance_id in the table subset, locate the
+    # matching row in centroid_ids. searchsorted requires a sorted index, which
+    # we can't assume, so fall back on isin + argsort for correctness.
+    order = np.argsort(centroid_ids)
+    sorted_ids = centroid_ids[order]
+    positions = np.searchsorted(sorted_ids, instance_ids)
+    positions = np.clip(positions, 0, len(sorted_ids) - 1)
+    found = sorted_ids[positions] == instance_ids
+    centroid_rows = order[positions]
+
+    has_coord = np.zeros(table.n_obs, dtype=bool)
+    coords = np.full((table.n_obs, 2), np.nan)
+    matched_table_rows = table_subset_indices[found]
+    has_coord[matched_table_rows] = True
+    coords[matched_table_rows] = centroid_coords[centroid_rows[found]]
+
+    groups = render_params.groups
+    group_key = render_params.group_key
+    if groups is not None and group_key is not None:
+        in_groups = np.isin(table.obs[group_key].values, groups)
+        has_coord &= in_groups
+
+    coords[~has_coord] = np.nan
+
+    # Per-edge attribute arrays are built in triu(adj, k=1).nonzero() order so
+    # the NaN-coord mask below subsets them consistently.
+    adj_upper = triu(adjacency, k=1)
+    all_rows, all_cols = adj_upper.nonzero()
+
+    edge_color_arg: Any = "grey"
+    cmap_for_render = None
+    norm_for_render = None
+    cmap_params = render_params.cmap_params
+
+    if render_params.color_source == "obsp":
+        value_matrix = table.obsp[render_params.obsp_key]
+        edge_color_arg = value_matrix[all_rows, all_cols].A1
+    elif render_params.color_source in {"obs_continuous", "obs_categorical"}:
+        obs_series = table.obs[render_params.obs_col]
+        na_hex = render_params.na_color.get_hex_with_alpha() if render_params.na_color is not None else "#00000000"
+        if obs_series.isna().all():
+            logger.warning(f"Column '{render_params.obs_col}' contains only NaN values; rendering edges with na_color.")
+            edge_color_arg = np.full(len(all_rows), na_hex, dtype=object)
+        elif render_params.color_source == "obs_continuous":
+            obs_values = np.asarray(obs_series.values, dtype=float)
+            edge_color_arg = 0.5 * (obs_values[all_rows] + obs_values[all_cols])
+        else:
+            obs_values = obs_series.values
+            row_vals = obs_values[all_rows]
+            col_vals = obs_values[all_cols]
+            # Pre-fill with na_hex, then look up palette colours only for shared-endpoint edges.
+            palette_map = render_params.palette_map or {}
+            same = row_vals == col_vals
+            per_edge_colors = np.full(len(row_vals), na_hex, dtype=object)
+            if same.any():
+                per_edge_colors[same] = [palette_map.get(v, na_hex) for v in row_vals[same]]
+            edge_color_arg = per_edge_colors
+    else:
+        edge_color_arg = (render_params.color or Color("grey")).get_hex()
+
+    if render_params.color_source in {"obsp", "obs_continuous"} and cmap_params is not None:
+        cmap_for_render = cmap_params.cmap
+        norm_for_render = cmap_params.norm
+
+    edge_width_arg: Any = render_params.edge_width
+    edge_alpha_arg: Any = render_params.edge_alpha
+    if render_params.edge_width == "weight" or render_params.edge_alpha == "weight":
+        weight_matrix = table.obsp[render_params.weight_key]
+        weights = weight_matrix[all_rows, all_cols].A1.astype(float)
+        if render_params.edge_width == "weight":
+            edge_width_arg = _normalise_to_range(weights, 0.5, 3.0)
+        if render_params.edge_alpha == "weight":
+            edge_alpha_arg = _normalise_to_range(weights, 0.2, 1.0)
+
+    # Drop edges touching nodes without valid coords, and align per-edge arrays.
+    edge_mask = has_coord[all_rows] & has_coord[all_cols]
+    rows = all_rows[edge_mask]
+    cols = all_cols[edge_mask]
+
+    def _maybe_subset(value: Any) -> Any:
+        if isinstance(value, np.ndarray) and value.ndim == 1 and len(value) == len(edge_mask):
+            return value[edge_mask]
+        return value
+
+    edge_color_arg = _maybe_subset(edge_color_arg)
+    edge_width_arg = _maybe_subset(edge_width_arg)
+    edge_alpha_arg = _maybe_subset(edge_alpha_arg)
+
+    if len(rows) == 0:
+        lc = LineCollection([])
+        ax.add_collection(lc)
+        return
+
+    segments = np.stack([coords[rows], coords[cols]], axis=1)
+
+    lc_kwargs: dict[str, Any] = {
+        "linewidths": edge_width_arg,
+        "alpha": edge_alpha_arg,
+        "linestyles": render_params.linestyle,
+        "zorder": render_params.zorder,
+    }
+
+    is_numeric_array = (
+        isinstance(edge_color_arg, np.ndarray)
+        and edge_color_arg.ndim == 1
+        and np.issubdtype(edge_color_arg.dtype, np.number)
+    )
+    lc = LineCollection(segments, **lc_kwargs)
+    if is_numeric_array:
+        lc.set_array(edge_color_arg)
+        if cmap_for_render is not None:
+            lc.set_cmap(cmap_for_render)
+        if norm_for_render is not None:
+            lc.set_norm(norm_for_render)
+    else:
+        lc.set_color(edge_color_arg)
+    lc.set_rasterized(render_params.rasterize)
+    ax.add_collection(lc)
+
+    if render_params.include_self_loops:
+        diag = np.asarray(adjacency.diagonal()).ravel()
+        sl_rows = np.where(diag != 0)[0]
+        sl_rows = sl_rows[has_coord[sl_rows]]
+        if len(sl_rows) > 0:
+            edge_lengths = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=1)
+            median_len = float(np.median(edge_lengths)) if len(edge_lengths) else 1.0
+            sl_color = edge_color_arg if isinstance(edge_color_arg, str) else "grey"
+            sl_alpha = edge_alpha_arg if isinstance(edge_alpha_arg, int | float) else 1.0
+            cc = CircleCollection(
+                sizes=[max(median_len * 2.0, 4.0)] * len(sl_rows),
+                offsets=coords[sl_rows],
+                transOffset=ax.transData,
+                facecolors=sl_color,
+                edgecolors="none",
+                alpha=sl_alpha,
+                zorder=render_params.zorder,
+            )
+            cc.set_rasterized(render_params.rasterize)
+            ax.add_collection(cc)
+
+    is_continuous = render_params.color_source in {"obsp", "obs_continuous"}
+    should_request = _should_request_colorbar(
+        render_params.colorbar,
+        has_mappable=render_params.cmap_params is not None,
+        is_continuous=is_continuous,
+    )
+    if (
+        should_request
+        and colorbar_requests is not None
+        and legend_params is not None
+        and legend_params.colorbar
+        and render_params.cmap_params is not None
+    ):
+        sm = plt.cm.ScalarMappable(
+            cmap=render_params.cmap_params.cmap,
+            norm=render_params.cmap_params.norm,
+        )
+        sm.set_array(lc.get_array())
+        label = _resolve_colorbar_label(
+            render_params.colorbar_params,
+            fallback=render_params.obs_col or render_params.obsp_key,
+        )
+        colorbar_requests.append(
+            ColorbarSpec(
+                ax=ax,
+                mappable=sm,
+                params=render_params.colorbar_params,
+                label=label,
+            )
+        )
