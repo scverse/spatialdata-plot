@@ -1,7 +1,7 @@
 # Gallery
 
-Curated, runnable examples demonstrating `spatialdata-plot` on real
-spatial-omics datasets and on the lightweight `blobs` dataset.
+Runnable examples demonstrating `spatialdata-plot` on real spatial-omics
+datasets and on the lightweight `blobs` dataset.
 
 Sources live in
 [`scverse/spatialdata-plot-notebooks`](https://github.com/scverse/spatialdata-plot-notebooks);
@@ -10,7 +10,7 @@ against the latest `spatialdata-plot` release.
 
 ## Tutorials
 
-End-to-end workflows on real datasets.
+Entry-point material for learning the API on synthetic data.
 
 ::::{grid} 1 2 2 2
 :gutter: 3
@@ -20,7 +20,7 @@ End-to-end workflows on real datasets.
 :link-type: doc
 :img-top: _static/gallery/getting_started.png
 
-The fluent `.pl` API, layering, and styling — on the in-memory `blobs`
+The fluent `.pl` API, layering, and styling on the in-memory `blobs`
 dataset. Ideal first read.
 :::
 
@@ -28,11 +28,21 @@ dataset. Ideal first read.
 
 ## Examples
 
-```{note}
-No focused examples yet — contributions welcome! See
-[CONTRIBUTING](https://github.com/scverse/spatialdata-plot-notebooks/blob/main/CONTRIBUTING.md)
-in the notebooks repo for how to add one.
-```
+Worked examples on real datasets you'd actually analyse.
+
+::::{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item-card} Visium mouse brain
+:link: notebooks/examples/visium_mouse_brain
+:link-type: doc
+:img-top: _static/gallery/visium_mouse_brain.png
+
+Render H&E tissue, overlay spots, color by gene expression and by cluster,
+and finish with a publication-style figure.
+:::
+
+::::
 
 ```{toctree}
 :hidden:
