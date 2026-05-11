@@ -251,7 +251,7 @@ This project uses [sphinx][] with the following features:
 
 - The [myst][] extension allows to write documentation in markdown/Markedly Structured Text
 - [Numpy-style docstrings][numpydoc] (through the [napoleon][numpydoc-napoleon] extension).
-- Jupyter notebooks as tutorials through [myst-nb][] (See [Tutorials with myst-nb](#tutorials-with-myst-nb-and-jupyter-notebooks))
+- Jupyter notebooks as tutorials through [myst-nb][] (See [Gallery notebooks (submodule)](#gallery-notebooks-submodule))
 - [sphinx-autodoc-typehints][], to automatically reference annotated input and output types
 - Citations (like {cite:p}`Virshup_2023`) can be included with [sphinxcontrib-bibtex](https://sphinxcontrib-bibtex.readthedocs.io/)
 
@@ -264,16 +264,48 @@ See scanpy's {doc}`scanpy:dev/documentation` for more information on how to writ
 [numpydoc]: https://numpydoc.readthedocs.io/en/latest/format.html
 [sphinx-autodoc-typehints]: https://github.com/tox-dev/sphinx-autodoc-typehints
 
-### Tutorials with myst-nb and jupyter notebooks
+### Gallery notebooks (submodule)
 
-The documentation is set-up to render jupyter notebooks stored in the `docs/notebooks` directory using [myst-nb][].
-Currently, only notebooks in `.ipynb` format are supported that will be included with both their input and output cells.
-It is your responsibility to update and re-run the notebook whenever necessary.
+The gallery rendered into the docs lives in a separate repository,
+[`scverse/spatialdata-plot-notebooks`][notebooks-repo], mounted here as a git
+submodule at `docs/notebooks/`. This follows the scverse convention used by
+`anndata`, `spatialdata`, `scvi-tools`, and `squidpy`.
 
-If you are interested in automatically running notebooks as part of the continuous integration,
-please check out [this feature request][issue-render-notebooks] in the `cookiecutter-scverse` repository.
+Notebooks are pre-executed by humans and committed with their outputs; the
+docs build performs no execution and pulls no data. A scheduled CI job in the
+notebooks repo re-executes every notebook against the latest
+`spatialdata-plot` release and fails on output drift.
 
-[issue-render-notebooks]: https://github.com/scverse/cookiecutter-scverse/issues/40
+#### Working with the gallery locally
+
+```bash
+# First-time clone — pull this repo with submodules
+git clone --recurse-submodules https://github.com/scverse/spatialdata-plot.git
+
+# Already cloned without submodules — initialise after the fact
+git submodule update --init --recursive
+
+# Pull the latest gallery content from the notebooks repo's main branch
+git submodule update --remote docs/notebooks
+```
+
+ReadTheDocs is configured (`submodules: include: all` in `.readthedocs.yaml`)
+to fetch the submodule on every build, so PR previews always render the
+current pinned gallery content.
+
+#### Adding or editing a notebook
+
+Notebook changes are made in the [notebooks repo][notebooks-repo], not here.
+See its `CONTRIBUTING.md` for the workflow. After your notebook PR merges
+there, open a small follow-up PR in this repo bumping the submodule pin:
+
+```bash
+git submodule update --remote docs/notebooks
+git add docs/notebooks
+git commit -m "Bump notebooks submodule"
+```
+
+[notebooks-repo]: https://github.com/scverse/spatialdata-plot-notebooks
 
 #### Hints
 
@@ -285,6 +317,17 @@ please check out [this feature request][issue-render-notebooks] in the `cookiecu
 (docs-building)=
 
 ### Building the docs locally
+
+:::{important}
+The docs include a git submodule (`docs/notebooks` → `spatialdata-plot-notebooks`).
+If you cloned this repo without `--recurse-submodules`, initialise it once before building:
+
+```bash
+git submodule update --init --recursive
+```
+
+Without the submodule, the gallery pages will be missing and sphinx will warn about broken toctree entries.
+:::
 
 :::::{tabs}
 ::::{group-tab} Hatch
