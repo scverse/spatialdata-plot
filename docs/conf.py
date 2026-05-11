@@ -56,6 +56,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "sphinx_design",
     "sphinxcontrib.bibtex",
     "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",

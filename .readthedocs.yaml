@@ -6,6 +6,12 @@ build:
     python: "3.13"
     nodejs: latest
   jobs:
+    post_checkout:
+      # Always render the latest notebooks-repo main, not the SHA pinned in
+      # this repo's index. Trade-off: docs at older lib tags are not bit-for-bit
+      # reproducible for the gallery — a re-build shows whatever the notebooks
+      # repo's main looked like at build time.
+      - git submodule update --init --remote --recursive
     create_environment:
       - asdf plugin add uv
       - asdf install uv latest

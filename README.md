@@ -30,8 +30,9 @@ In concordance with the general SpatialData philosophy, all modalities of the ma
 
 For more information on the `spatialdata-plot` library, please refer to the [documentation](https://spatialdata.scverse.org/projects/plot/en/latest/index.html). In particular, the
 
+- [Gallery][link-gallery] — executable example notebooks demonstrating the plotting capabilities.
 - [API documentation][link-api].
-- [Example notebooks][link-notebooks] (section "Visiualizations")
+- [SpatialData example notebooks][link-notebooks] (section "Visualizations") for plotting in the context of broader analyses.
 
 ## Installation
 
@@ -65,6 +66,7 @@ Marconato, L., Palla, G., Yamauchi, K.A. et al. SpatialData: an open and univers
 [issue-tracker]: https://github.com/scverse/spatialdata-plot/issues
 [link-docs]: https://spatialdata-plot.readthedocs.io
 [link-api]: https://spatialdata.scverse.org/projects/plot/en/stable/api.html
+[link-gallery]: https://spatialdata.scverse.org/projects/plot/en/stable/gallery.html
 [link-design-doc]: https://spatialdata.scverse.org/en/stable/design_doc.html
 [link-notebooks]: https://spatialdata.scverse.org/en/stable/tutorials/notebooks/notebooks.html
 [//]: # "numfocus-fiscal-sponsor-attribution"
