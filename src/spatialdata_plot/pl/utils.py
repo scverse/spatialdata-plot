@@ -75,6 +75,7 @@ from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
     FigParams,
+    GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
     OutlineParams,
@@ -2098,7 +2099,7 @@ def _get_elements_to_be_rendered(
     render_cmds: list[
         tuple[
             str,
-            ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams,
+            ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams | GraphRenderParams,
         ]
     ],
     cs_index: pd.DataFrame,
@@ -2125,9 +2126,14 @@ def _get_elements_to_be_rendered(
     cs_row = cs_index.loc[cs] if cs in cs_index.index else None
 
     for cmd, params in render_cmds:
-        key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
-        if key and cs_row is not None and cs_row[key]:
+        if cmd == "render_graph":
+            # Graph doesn't have its own CS flag; include its element so
+            # _get_valid_cs keeps the coordinate system alive.
             elements_to_be_rendered.append(params.element)
+        else:
+            key = _RENDER_CMD_TO_CS_FLAG.get(cmd)
+            if key and cs_row is not None and cs_row[key]:
+                elements_to_be_rendered.append(params.element)
 
     return elements_to_be_rendered
 
@@ -2319,29 +2325,29 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         "shapes",
         "points",
         "labels",
+        "graph",
     }:
         if not isinstance(color, str | tuple | list):
             raise TypeError("Parameter 'color' must be a string or a tuple/list of floats.")
-        if element_type in {"shapes", "points", "labels"}:
-            if _is_color_like(color):
-                logger.info("Value for parameter 'color' appears to be a color, using it as such.")
-                param_dict["col_for_color"] = None
-                param_dict["color"] = Color(color)
-                if param_dict["color"].alpha_is_user_defined():
-                    if element_type == "points" and param_dict.get("alpha") is None:
-                        param_dict["alpha"] = param_dict["color"].get_alpha_as_float()
-                    elif element_type in {"shapes", "labels"} and param_dict.get("fill_alpha") is None:
-                        param_dict["fill_alpha"] = param_dict["color"].get_alpha_as_float()
-                    else:
-                        logger.info(
-                            f"Alpha implied by color '{color}' is ignored since the parameter 'alpha' or 'fill_alpha' "
-                            "is set and its value takes precedence."
-                        )
-            elif isinstance(color, str):
-                param_dict["col_for_color"] = color
-                param_dict["color"] = None
-            else:
-                raise ValueError(f"{color} is not a valid RGB(A) array and therefore can't be used as 'color' value.")
+        if _is_color_like(color):
+            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+            param_dict["col_for_color"] = None
+            param_dict["color"] = Color(color)
+            if param_dict["color"].alpha_is_user_defined():
+                if element_type == "points" and param_dict.get("alpha") is None:
+                    param_dict["alpha"] = param_dict["color"].get_alpha_as_float()
+                elif element_type in {"shapes", "labels"} and param_dict.get("fill_alpha") is None:
+                    param_dict["fill_alpha"] = param_dict["color"].get_alpha_as_float()
+                else:
+                    logger.info(
+                        f"Alpha implied by color '{color}' is ignored since the parameter 'alpha' or 'fill_alpha' "
+                        "is set and its value takes precedence."
+                    )
+        elif isinstance(color, str):
+            param_dict["col_for_color"] = color
+            param_dict["color"] = None
+        else:
+            raise ValueError(f"{color} is not a valid RGB(A) array and therefore can't be used as 'color' value.")
     elif "color" in param_dict and element_type != "images":
         param_dict["col_for_color"] = None
 
@@ -2467,7 +2473,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     elif isinstance(palette, list):
         if not all(isinstance(p, str) for p in palette):
             raise ValueError("If specified, parameter 'palette' must contain only strings.")
-    elif isinstance(palette, str | type(None)) and "palette" in param_dict:
+    elif isinstance(palette, str | type(None)) and "palette" in param_dict and element_type != "graph":
         param_dict["palette"] = [palette] if palette is not None else None
 
     palette_group = param_dict.get("palette")
@@ -2485,7 +2491,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if not all(isinstance(c, Colormap | str) for c in cmap):
             raise TypeError("Each item in 'cmap' list must be a string or a Colormap.")
     elif isinstance(cmap, Colormap | str | type(None)):
-        if "cmap" in param_dict:
+        if "cmap" in param_dict and element_type != "graph":
             param_dict["cmap"] = [cmap] if cmap is not None else None
     else:
         raise TypeError("Parameter 'cmap' must be a string, a Colormap, or a list of these types.")
@@ -2508,6 +2514,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Parameter 'norm' must be of type Normalize.")
         if element_type in {"shapes", "points"} and not isinstance(norm, bool | Normalize):
             raise TypeError("Parameter 'norm' must be a boolean or a mpl.Normalize.")
+        if element_type == "graph" and not isinstance(norm, Normalize):
+            raise TypeError("Parameter 'norm' must be a Normalize instance.")
 
     scale = param_dict.get("scale")
     if scale is not None:
@@ -2600,6 +2608,35 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     ds_reduction = param_dict.get("ds_reduction")
     if ds_reduction and (ds_reduction not in valid_ds_reduction_methods):
         raise ValueError(f"Parameter 'ds_reduction' must be one of the following: {valid_ds_reduction_methods}.")
+
+    if element_type == "graph":
+        for key in ("connectivity_key",):
+            val = param_dict.get(key)
+            if val is not None and not isinstance(val, str):
+                raise TypeError(f"Parameter '{key}' must be a string.")
+
+        for key in ("obsp_key", "weight_key", "group_key"):
+            val = param_dict.get(key)
+            if val is not None and not isinstance(val, str):
+                raise TypeError(f"Parameter '{key}' must be a string or None.")
+
+        for key in ("edge_width", "edge_alpha"):
+            val = param_dict.get(key)
+            if val == "weight":
+                continue
+            if not isinstance(val, float | int):
+                raise TypeError(f"Parameter '{key}' must be numeric or the literal string 'weight'.")
+            if val < 0:
+                raise ValueError(f"Parameter '{key}' cannot be negative.")
+
+        linestyle = param_dict.get("linestyle")
+        if linestyle is not None and not isinstance(linestyle, str | list | tuple):
+            raise TypeError("Parameter 'linestyle' must be a string or a sequence of strings.")
+
+        for key in ("include_self_loops", "rasterize"):
+            val = param_dict.get(key)
+            if val is not None and not isinstance(val, bool):
+                raise TypeError(f"Parameter '{key}' must be a boolean.")
 
     return param_dict
 
@@ -2855,6 +2892,237 @@ def _resolve_gene_symbols(
             f"Using the first match: '{adata.var.index[mask][0]}'."
         )
     return str(adata.var.index[mask][0])
+
+
+def _validate_graph_render_params(
+    sdata: SpatialData,
+    element: str | None,
+    connectivity_key: str,
+    table_name: str | None,
+    color: ColorLike | None,
+    edge_width: float | Literal["weight"],
+    edge_alpha: float | Literal["weight"],
+    groups: list[str] | str | None,
+    group_key: str | None,
+    obsp_key: str | None = None,
+    weight_key: str | None = None,
+    palette: dict[str, str] | list[str] | str | None = None,
+    na_color: ColorLike | None = "default",
+    cmap: Colormap | str | None = None,
+    norm: Normalize | None = None,
+    linestyle: str | Sequence[str] = "solid",
+    include_self_loops: bool = False,
+    rasterize: bool = True,
+) -> dict[str, Any]:
+    """Validate and resolve parameters for render_graph."""
+    param_dict: dict[str, Any] = {
+        "sdata": sdata,
+        "element": element,
+        "color": color,
+        "groups": groups,
+        "palette": palette,
+        "na_color": na_color,
+        "cmap": cmap,
+        "norm": norm if norm is not None else Normalize(clip=False),
+        "table_name": table_name,
+        "connectivity_key": connectivity_key,
+        "obsp_key": obsp_key,
+        "weight_key": weight_key,
+        "group_key": group_key,
+        "edge_width": edge_width,
+        "edge_alpha": edge_alpha,
+        "linestyle": linestyle,
+        "include_self_loops": include_self_loops,
+        "rasterize": rasterize,
+    }
+    param_dict = _type_check_params(param_dict, "graph")
+
+    if param_dict["table_name"] is None:
+        candidates = [tname for tname in sdata.tables if _resolve_obsp_key(sdata[tname], connectivity_key) is not None]
+        if len(candidates) == 0:
+            raise ValueError(
+                f"No table found with connectivity key '{connectivity_key}' in obsp. "
+                f"Available tables: {list(sdata.tables.keys())}."
+            )
+        if len(candidates) > 1:
+            raise ValueError(
+                f"Multiple tables contain connectivity key '{connectivity_key}': {candidates}. "
+                "Please specify `table_name` explicitly."
+            )
+        param_dict["table_name"] = candidates[0]
+
+    if param_dict["table_name"] not in sdata.tables:
+        raise KeyError(f"Table '{param_dict['table_name']}' not found. Available: {list(sdata.tables.keys())}.")
+
+    table = sdata[param_dict["table_name"]]
+    connectivity_obsp_key = _require_obsp_key(table, connectivity_key, param_name="connectivity_key")
+
+    _, region_key, _ = get_table_keys(table)
+    if region_key is None:
+        raise ValueError(
+            f"Table '{param_dict['table_name']}' has no `region_key`; cannot associate its observations "
+            "with a spatial element. Re-parse the table with `TableModel.parse(..., region_key=...)`."
+        )
+
+    if param_dict["element"] is None:
+        regions = table.obs[region_key].unique().tolist()
+        spatial_regions = [r for r in regions if r in sdata.shapes or r in sdata.points or r in sdata.labels]
+        if len(spatial_regions) == 0:
+            raise ValueError(
+                f"Table '{param_dict['table_name']}' does not annotate any spatial element. Region values: {regions}."
+            )
+        if len(spatial_regions) > 1:
+            raise ValueError(
+                f"Table '{param_dict['table_name']}' annotates multiple spatial elements: {spatial_regions}. "
+                "Please specify `element` explicitly."
+            )
+        param_dict["element"] = spatial_regions[0]
+    elif not (
+        param_dict["element"] in sdata.shapes
+        or param_dict["element"] in sdata.points
+        or param_dict["element"] in sdata.labels
+    ):
+        raise KeyError(
+            f"Element '{param_dict['element']}' not found in shapes, points, or labels. "
+            f"Available: shapes={list(sdata.shapes.keys())}, "
+            f"points={list(sdata.points.keys())}, labels={list(sdata.labels.keys())}."
+        )
+
+    # _type_check_params normalised string groups → list; renormalise the working set here.
+    if param_dict["groups"] is not None and param_dict["group_key"] is None:
+        raise ValueError("`groups` requires `group_key` to be specified.")
+    if param_dict["group_key"] is not None and param_dict["group_key"] not in table.obs.columns:
+        raise KeyError(
+            f"`group_key='{param_dict['group_key']}'` not found in table obs columns. "
+            f"Available: {list(table.obs.columns)}."
+        )
+    if param_dict["groups"] is not None and param_dict["group_key"] is not None:
+        groups_set: set[Any] = set(param_dict["groups"])
+        available_groups = set(table.obs[param_dict["group_key"]].dropna().unique())
+        missing_groups = groups_set - available_groups
+        if missing_groups:
+            try:
+                missing_str = str(sorted(missing_groups))
+            except TypeError:
+                missing_str = str(list(missing_groups))
+            if missing_groups == groups_set:
+                logger.warning(
+                    f"None of the requested groups {missing_str} were found in column "
+                    f"'{param_dict['group_key']}'. Resulting plot will contain no edges."
+                )
+            else:
+                logger.warning(
+                    f"Groups {missing_str} not found in column '{param_dict['group_key']}' and will be ignored."
+                )
+
+    # After _type_check_params: col_for_color is the non-color string user passed via `color=`;
+    # color is either a Color (user gave a real color) or None (user gave a column name or nothing).
+    col_for_color = param_dict.get("col_for_color")
+    if col_for_color is not None and col_for_color not in table.obs.columns:
+        raise ValueError(
+            f"`color='{col_for_color}'` is not a matplotlib color and was not found in "
+            f"`table.obs` columns. Available obs columns: {list(table.obs.columns)}."
+        )
+
+    color_is_obs_col = col_for_color is not None
+    if obsp_key is not None and color_is_obs_col:
+        raise ValueError(
+            "Cannot set both `color` (as an obs column) and `obsp_key` for edge coloring. "
+            "Pick one source: scalar color, obs-column color, or obsp-matrix color."
+        )
+    if obsp_key is not None and param_dict["color"] is not None:
+        raise ValueError(
+            "Cannot set both `color` and `obsp_key` for edge coloring. "
+            "Use `obsp_key` for matrix-driven coloring with `cmap`/`norm`, "
+            "or `color` for a scalar / obs-column-driven coloring."
+        )
+
+    color_obsp_key: str | None = None
+    obs_col: str | None = None
+    color_source: str = "scalar"
+    cmap_params: CmapParams | None = None
+    palette_map: dict[str, str] | None = None
+
+    if obsp_key is not None:
+        color_obsp_key = _require_obsp_key(table, obsp_key, param_name="obsp_key")
+        color_source = "obsp"
+        cmap_params = _prepare_cmap_norm(cmap=cmap, norm=param_dict["norm"])
+    elif color_is_obs_col:
+        obs_col = col_for_color
+        obs_values = table.obs[obs_col]
+        if isinstance(obs_values.dtype, pd.CategoricalDtype) or obs_values.dtype == object:
+            color_source = "obs_categorical"
+            categories = (
+                obs_values.cat.categories.tolist()
+                if isinstance(obs_values.dtype, pd.CategoricalDtype)
+                else sorted(obs_values.dropna().unique().tolist())
+            )
+            if isinstance(palette, dict):
+                missing = [c for c in categories if c not in palette]
+                if missing:
+                    raise KeyError(
+                        f"Palette dict is missing entries for categories: {missing}. "
+                        f"Available categories: {categories}."
+                    )
+                palette_map = {c: palette[c] for c in categories}
+            else:
+                cat_colors = _get_colors_for_categorical_obs(categories=categories, palette=palette)
+                palette_map = dict(zip(categories, cat_colors, strict=True))
+        else:
+            color_source = "obs_continuous"
+            cmap_params = _prepare_cmap_norm(cmap=cmap, norm=param_dict["norm"])
+
+    # When edge_width/edge_alpha="weight" but weight_key isn't given, fall back to the
+    # connectivity matrix so binary graphs still produce a per-edge array.
+    resolved_weight_key: str | None = None
+    if edge_width == "weight" or edge_alpha == "weight":
+        resolved_weight_key = _require_obsp_key(
+            table, weight_key if weight_key is not None else connectivity_key, param_name="weight_key"
+        )
+
+    edge_color = param_dict["color"] if param_dict["color"] is not None else Color("grey")
+    parsed_na_color = param_dict["na_color"]
+
+    return {
+        "element": param_dict["element"],
+        "connectivity_key": connectivity_key,
+        "connectivity_obsp_key": connectivity_obsp_key,
+        "obsp_key": color_obsp_key,
+        "obs_col": obs_col,
+        "cmap_params": cmap_params,
+        "palette_map": palette_map,
+        "na_color": parsed_na_color,
+        "color_source": color_source,
+        "table_name": param_dict["table_name"],
+        "weight_key": resolved_weight_key,
+        "color": edge_color,
+        "edge_width": edge_width,
+        "edge_alpha": edge_alpha,
+        "groups": param_dict["groups"],
+        "group_key": param_dict["group_key"],
+    }
+
+
+def _resolve_obsp_key(table: AnnData, connectivity_key: str) -> str | None:
+    """Resolve connectivity_key to an actual obsp key. Accepts full key or prefix."""
+    if connectivity_key in table.obsp:
+        return connectivity_key
+    suffixed = f"{connectivity_key}_connectivities"
+    if suffixed in table.obsp:
+        return suffixed
+    return None
+
+
+def _require_obsp_key(table: AnnData, key: str, *, param_name: str) -> str:
+    """Resolve key (with prefix fallback) or raise KeyError."""
+    resolved = _resolve_obsp_key(table, key)
+    if resolved is None:
+        raise KeyError(
+            f"`{param_name}='{key}'` not found in `table.obsp`. "
+            f"Tried '{key}' and '{key}_connectivities'. "
+            f"Available obsp keys: {list(table.obsp.keys())}."
+        )
+    return resolved
 
 
 def _validate_col_for_column_table(

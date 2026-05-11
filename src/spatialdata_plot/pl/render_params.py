@@ -309,3 +309,30 @@ class LabelsRenderParams:
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+
+
+@dataclass
+class GraphRenderParams:
+    """Graph render parameters."""
+
+    element: str
+    connectivity_obsp_key: str = "spatial_connectivities"
+    table_name: str | None = None
+    color: Color | None = None
+    obs_col: str | None = None
+    obsp_key: str | None = None
+    cmap_params: CmapParams | None = None
+    palette_map: dict[str, str] | None = None
+    na_color: Color | None = None
+    color_source: Literal["scalar", "obsp", "obs_categorical", "obs_continuous"] = "scalar"
+    groups: list[str] | str | None = None
+    group_key: str | None = None
+    edge_width: float | Literal["weight"] = 1.0
+    edge_alpha: float | Literal["weight"] = 1.0
+    weight_key: str | None = None
+    linestyle: str | Sequence[str] = "solid"
+    rasterize: bool = True
+    include_self_loops: bool = False
+    zorder: int = 0
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
