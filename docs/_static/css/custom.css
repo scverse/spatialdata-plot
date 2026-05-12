@@ -7,7 +7,7 @@ div.cell_output table.dataframe {
    of the underlying image aspect ratio. Image is contained (not cropped)
    on a white background, centred in the slot. */
 .sd-card-img-top {
-    height: 240px;
+    height: 300px;
     width: 100%;
     object-fit: contain;
     background: #ffffff;
