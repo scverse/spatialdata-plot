@@ -275,6 +275,23 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             "blobs_polygons", color="cluster", groups=["c2", "c1"], palette=["green", "yellow"]
         ).pl.show()
 
+    def test_render_shapes_list_palette_without_groups(self, sdata_blobs: SpatialData):
+        # Regression test for #605: a list palette should map to categories in their natural order
+        # without requiring groups= to enumerate every category.
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = "c1"
+        sdata_blobs.shapes["blobs_polygons"].iloc[3:5, 1] = "c2"
+        sdata_blobs.shapes["blobs_polygons"]["cluster"] = sdata_blobs.shapes["blobs_polygons"]["cluster"].astype(
+            "category"
+        )
+
+        _, ax = plt.subplots()
+        sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", palette=["green", "yellow"]).pl.show(ax=ax)
+        legend = ax.get_legend()
+        assert legend is not None
+        assert {t.get_text() for t in legend.get_texts()} == {"c1", "c2"}
+
     def test_plot_colorbar_respects_input_limits(self, sdata_blobs: SpatialData):
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"

@@ -2479,9 +2479,7 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     palette_group = param_dict.get("palette")
     if element_type in ["shapes", "points", "labels"] and palette_group is not None and not isinstance(palette, dict):
         groups = param_dict.get("groups")
-        if groups is None:
-            raise ValueError("When specifying 'palette', 'groups' must also be specified.")
-        if len(groups) != len(palette_group):
+        if groups is not None and len(groups) != len(palette_group):
             raise ValueError(
                 f"The length of 'palette' and 'groups' must be the same, length is {len(palette_group)} and"
                 f"{len(groups)} respectively."
