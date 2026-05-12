@@ -1654,6 +1654,13 @@ def _render_labels(
         _, region_key, instance_key = get_table_keys(sdata[table_name])
         table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 
+        if (table.obs[instance_key] == 0).any():
+            raise ValueError(
+                f"Table '{table_name}' contains instance_id=0 for element '{element}'. Label value 0 is "
+                "reserved for background and must not appear in the annotation table. Remove the row with "
+                "instance_id=0 before plotting."
+            )
+
         # get instance id based on subsetted table
         instance_id = np.unique(table.obs[instance_key].values)
 
