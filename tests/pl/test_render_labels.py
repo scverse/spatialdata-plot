@@ -493,9 +493,8 @@ def test_render_labels_rejects_float_dtype(dtype):
 
 
 def test_render_labels_rejects_background_instance_id_in_table():
-    # Regression test for #607: a table row with instance_id=0 (background label)
-    # used to crash with `IndexError: Boolean index has wrong length` from deep
-    # inside the color-vector mask, with no mention of background label 0.
+    # Regression test for #607: table row with instance_id=0 (background)
+    # used to crash with obnscure error.
     labels_data = np.zeros((20, 20), dtype=np.int32)
     labels_data[3:8, 3:8] = 1
     labels_data[12:17, 12:17] = 2
