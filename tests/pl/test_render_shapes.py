@@ -1053,6 +1053,17 @@ def test_gene_symbols_missing_column_raises(sdata_blobs: SpatialData):
         ).pl.show()
 
 
+def test_gene_symbols_missing_column_raises_auto_detect(sdata_blobs: SpatialData):
+    """Typo in gene_symbols= must surface on the auto-detect path, not be swallowed."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
+    sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
+    with pytest.raises(KeyError, match="`gene_symbols=`"):
+        sdata_blobs.pl.render_shapes(
+            "blobs_circles", color="GeneA", gene_symbols="WRONGCOL"
+        ).pl.show()
+
+
 def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
     """When no elements match the groups, the plot should render without error."""
     sdata_blobs["blobs_polygons"]["cat_color"] = pd.Series(["a", "b", "a", "b", "a"], dtype="category")
