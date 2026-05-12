@@ -2893,6 +2893,13 @@ def _validate_col_for_column_table(
             )
         # Now check which tables contain the column
         resolved_var_name: str | None = None
+        if gene_symbols is not None and not any(gene_symbols in sdata[t].var.columns for t in tables):
+            available = sorted({c for t in tables for c in sdata[t].var.columns})
+            raise KeyError(
+                f"Column '{gene_symbols}' specified in `gene_symbols=` was not found in "
+                f"`adata.var` of any table annotating element '{element_name}'. "
+                f"Available var columns: {available}"
+            )
         for annotates in tables.copy():
             if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
                 if gene_symbols is not None:
