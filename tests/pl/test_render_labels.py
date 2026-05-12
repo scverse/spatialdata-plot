@@ -490,3 +490,35 @@ def test_render_labels_rejects_float_dtype(dtype):
             sdata.pl.render_labels("lbl").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def test_render_labels_rejects_background_instance_id_in_table():
+    # Regression test for #607: a table row with instance_id=0 (background label)
+    # used to crash with `IndexError: Boolean index has wrong length` from deep
+    # inside the color-vector mask, with no mention of background label 0.
+    labels_data = np.zeros((20, 20), dtype=np.int32)
+    labels_data[3:8, 3:8] = 1
+    labels_data[12:17, 12:17] = 2
+    labels = Labels2DModel.parse(labels_data, dims=["y", "x"])
+
+    obs = pd.DataFrame(
+        {
+            "region": pd.Categorical(["lbl"] * 3),
+            "instance_id": [0, 1, 2],
+            "score": [99.0, 1.0, 2.0],
+        }
+    )
+    table = TableModel.parse(
+        AnnData(X=np.zeros((3, 1)), obs=obs),
+        region="lbl",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(labels={"lbl": labels}, tables={"t": table})
+
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"instance_id=0.*background"):
+            sdata.pl.render_labels("lbl", color="score", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
