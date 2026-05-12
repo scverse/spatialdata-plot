@@ -311,6 +311,23 @@ def _add_legend_and_colorbar(
     )
 
 
+def _check_instance_ids_overlap(
+    sdata: sd.SpatialData,
+    table_name: str,
+    element_name: str,
+    element_index: abc.Iterable[Any],
+) -> None:
+    """Raise a clear error when a table annotates an element but no instance IDs overlap (#603)."""
+    _, region_key, instance_key = get_table_keys(sdata[table_name])
+    annotating = sdata[table_name].obs[sdata[table_name].obs[region_key].isin([element_name])]
+    if len(annotating) > 0 and set(annotating[instance_key]).isdisjoint(set(element_index)):
+        raise ValueError(
+            f"No instance IDs overlap between table '{table_name}' (instance_key='{instance_key}') "
+            f"and element '{element_name}'. Check that the table's '{instance_key}' column matches the "
+            f"element's index."
+        )
+
+
 def _render_shapes(
     sdata: sd.SpatialData,
     render_params: ShapesRenderParams,
@@ -336,6 +353,8 @@ def _render_shapes(
         table = None
         shapes = sdata_filt[element]
     else:
+        _check_instance_ids_overlap(sdata_filt, table_name, element, sdata_filt[element].index)
+
         # Workaround for upstream spatialdata bug (scverse/spatialdata#1099):
         # join_spatialelement_table calls table.obs.reset_index() which fails when
         # the obs index name matches an existing column (e.g. "EntityID" in Merfish data).
@@ -742,6 +761,9 @@ def _render_points(
 
     added_color_from_table = False
     if col_for_color is not None and col_for_color not in points.columns:
+        if table_name is not None:
+            # guard against disjoint instance IDs (#603) for a clearer error than KeyError: None
+            _check_instance_ids_overlap(sdata_filt, table_name, element, points.index)
         color_values = get_values(
             value_key=col_for_color,
             sdata=sdata_filt,
@@ -1651,6 +1673,7 @@ def _render_labels(
         instance_id = np.unique(label)
         table = None
     else:
+        _check_instance_ids_overlap(sdata_filt, table_name, element, np.unique(label.values))
         _, region_key, instance_key = get_table_keys(sdata[table_name])
         table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 

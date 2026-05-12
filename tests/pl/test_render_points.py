@@ -1004,3 +1004,30 @@ def test_no_table_fallback_warning_for_element_column(caplog):
     with logger_no_warns(caplog, logger, match="fallback for color mapping"):
         sdata.pl.render_points("pts", color="cell_type").pl.show()
     plt.close("all")
+
+
+def test_render_points_disjoint_instance_ids_clear_error():
+    # regression test for #603: disjoint instance_id values must raise a clear ValueError
+    points = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]}))
+    obs = pd.DataFrame(
+        {
+            "instance_id": [99, 100, 101],  # points index is 0, 1, 2 (no overlap)
+            "region": pd.Categorical(["pts"] * 3),
+            "cat": pd.Categorical(["A", "B", "C"]),
+        }
+    )
+    obs.index = obs.index.astype(str)
+    table = TableModel.parse(
+        AnnData(X=np.zeros((3, 1)), obs=obs),
+        region=["pts"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(points={"pts": points}, tables={"t": table})
+
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"No instance IDs overlap.*table 't'.*element 'pts'"):
+            sdata.pl.render_points("pts", color="cat", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)

@@ -521,3 +521,32 @@ def test_render_labels_rejects_background_instance_id_in_table():
             sdata.pl.render_labels("lbl", color="score", table_name="t").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def test_render_labels_disjoint_instance_ids_clear_error():
+    # regression test for #603: disjoint instance_id values must raise a clear ValueError
+    arr = np.zeros((20, 20), dtype=np.int32)
+    arr[3:8, 3:8] = 1
+    arr[12:17, 12:17] = 2
+    obs = pd.DataFrame(
+        {
+            "instance_id": [99, 100],  # label has IDs 1, 2 (no overlap)
+            "region": pd.Categorical(["lbl"] * 2),
+            "cat": pd.Categorical(["A", "B"]),
+        }
+    )
+    obs.index = obs.index.astype(str)
+    table = TableModel.parse(
+        AnnData(X=np.zeros((2, 1)), obs=obs),
+        region=["lbl"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(labels={"lbl": Labels2DModel.parse(arr, dims=["y", "x"])}, tables={"t": table})
+
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"No instance IDs overlap.*table 't'.*element 'lbl'"):
+            sdata.pl.render_labels("lbl", color="cat", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
