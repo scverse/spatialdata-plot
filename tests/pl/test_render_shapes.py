@@ -1076,9 +1076,7 @@ def test_gene_symbols_missing_column_raises_auto_detect(sdata_blobs: SpatialData
     sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_circles"
     sdata_blobs["table"].var["gene_symbol"] = ["GeneA", "GeneB", "GeneC"]
     with pytest.raises(KeyError, match="`gene_symbols=`"):
-        sdata_blobs.pl.render_shapes(
-            "blobs_circles", color="GeneA", gene_symbols="WRONGCOL"
-        ).pl.show()
+        sdata_blobs.pl.render_shapes("blobs_circles", color="GeneA", gene_symbols="WRONGCOL").pl.show()
 
 
 def test_groups_na_color_none_no_match_shapes(sdata_blobs: SpatialData):
@@ -1349,6 +1347,35 @@ def test_render_shapes_color_with_conflicting_index_name():
 
     # Should not raise ValueError: cannot insert EntityID, already exists
     sdata.pl.render_shapes("shapes", color="cell_type", table_name="table").pl.show()
+
+
+def test_render_shapes_disjoint_instance_ids_clear_error():
+    # regression test for #603: disjoint instance_id values must raise a clear ValueError
+    shapes = ShapesModel.parse(
+        gpd.GeoDataFrame({"geometry": [Point(5, 5), Point(15, 5), Point(25, 5)], "radius": [2.0] * 3})
+    )
+    obs = pd.DataFrame(
+        {
+            "instance_id": [99, 100, 101],  # element has IDs 0, 1, 2 (no overlap)
+            "region": pd.Categorical(["s"] * 3),
+            "cat": pd.Categorical(["A", "B", "C"]),
+        }
+    )
+    obs.index = obs.index.astype(str)
+    table = TableModel.parse(
+        AnnData(X=np.zeros((3, 1)), obs=obs),
+        region=["s"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(shapes={"s": shapes}, tables={"t": table})
+
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"No instance IDs overlap.*table 't'.*element 's'"):
+            sdata.pl.render_shapes("s", color="cat", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
 
 
 def test_datashader_colorbar_range_matches_data(sdata_blobs: SpatialData):
