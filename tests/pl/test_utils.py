@@ -420,3 +420,41 @@ def test_color_column_collision_on_annotating_table_raises():
         sdata.pl.render_shapes("s", color="orange")
 
     sdata.pl.render_shapes("s", color="#ffa500")
+
+
+def test_explicit_table_name_honored_when_element_has_same_column():
+    # regression test for #620: explicit table_name= must not be silently
+    # discarded when the element has a same-named column with different values.
+    shapes = ShapesModel.parse(
+        gpd.GeoDataFrame(
+            {
+                "geometry": [Point(5, 5), Point(15, 5)],
+                "radius": [2.0, 2.0],
+                "cat": pd.Categorical(["X", "Y"]),
+            }
+        )
+    )
+    obs = pd.DataFrame(
+        {
+            "instance_id": [0, 1],
+            "region": pd.Categorical(["s1", "s1"]),
+            "cat": pd.Categorical(["A", "B"]),
+        }
+    )
+    table = TableModel.parse(
+        AnnData(X=np.zeros((2, 1)), obs=obs),
+        region=["s1"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(shapes={"s1": shapes}, tables={"t": table})
+
+    fig, ax = plt.subplots()
+    sdata.pl.render_shapes("s1", color="cat", table_name="t").pl.show(ax=ax)
+    assert sorted(t.get_text() for t in ax.get_legend().get_texts()) == ["A", "B"]
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    sdata.pl.render_shapes("s1", color="cat").pl.show(ax=ax)
+    assert sorted(t.get_text() for t in ax.get_legend().get_texts()) == ["X", "Y"]
+    plt.close(fig)

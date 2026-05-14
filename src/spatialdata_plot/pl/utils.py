@@ -1078,6 +1078,13 @@ def _set_color_source_vec(
         table_name=table_name,
     )
 
+    # When both the element's own dataframe and the chosen table contain a
+    # column with this name, an explicit `table_name=` resolves the ambiguity —
+    # keep only the table origin and skip the multi-origin error below.
+    explicit_table_shadows_df = table_name is not None and any(o.origin == "df" for o in origins)
+    if explicit_table_shadows_df:
+        origins = [o for o in origins if o.origin != "df"]
+
     if len(origins) > 1:
         raise ValueError(
             f"Color key '{value_to_plot}' for element '{element_name}' was found in multiple locations: {origins}. "
@@ -1094,6 +1101,15 @@ def _set_color_source_vec(
             )
         if preloaded_color_data is not None:
             color_source_vector = preloaded_color_data
+        elif explicit_table_shadows_df:
+            # Pass the table as `element` so upstream `get_values` skips the
+            # element-column lookup and avoids the multi-origin error.
+            color_source_vector = get_values(
+                value_key=value_to_plot,
+                element=sdata[table_name],
+                element_name=element_name,
+                table_layer=table_layer,
+            )[value_to_plot]
         else:
             color_source_vector = get_values(
                 value_key=value_to_plot,
@@ -3170,9 +3186,9 @@ def _validate_col_for_column_table(
     if col_for_color is None:
         return None, None
 
-    if not labels and col_for_color in sdata[element_name].columns:
-        table_name = None
-    elif table_name is not None:
+    if not labels and col_for_color in sdata[element_name].columns and table_name is None:
+        return col_for_color, None
+    if table_name is not None:
         tables = get_element_annotators(sdata, element_name)
         if table_name not in tables:
             logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
