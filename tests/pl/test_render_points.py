@@ -1031,3 +1031,16 @@ def test_render_points_disjoint_instance_ids_clear_error():
             sdata.pl.render_points("pts", color="cat", table_name="t").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def test_render_points_color_column_name_collision_raises():
+    # regression test for #619: color="orange" + element column "orange" must raise.
+    points = PointsModel.parse(
+        pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "y": [1.0, 2.0, 3.0, 4.0], "orange": [0.1, 0.2, 0.3, 0.4]})
+    )
+    sdata = SpatialData(points={"pts": points})
+
+    with pytest.raises(ValueError, match=r"color='orange'.*ambiguous.*column"):
+        sdata.pl.render_points("pts", color="orange")
+
+    sdata.pl.render_points("pts", color="#ffa500")

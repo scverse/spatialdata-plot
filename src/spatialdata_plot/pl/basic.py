@@ -293,7 +293,9 @@ class PlotAccessor:
         -----
         - Empty geometries will be removed at the time of plotting.
         - An `outline_width` of 0.0 leads to no border being plotted.
-        - When passing a color-like to 'color', this has precedence over the potential existence as a column name.
+        - If ``color`` is a string that is both a matplotlib color name and a column name in the
+          element or an annotating table, a ``ValueError`` is raised. Disambiguate by passing
+          a hex string (e.g. ``"#ffa500"``) or an RGB(A) tuple, or by renaming the column.
 
         Returns
         -------

@@ -1378,6 +1378,33 @@ def test_render_shapes_disjoint_instance_ids_clear_error():
         plt.close(fig)
 
 
+def test_render_shapes_color_column_name_collision_raises():
+    # regression test for #619: color="orange" + column "orange" must raise rather than silently
+    # treat the value as a literal color and shadow the column.
+    n = 4
+    shapes = ShapesModel.parse(gpd.GeoDataFrame({"geometry": [Point(i, 0) for i in range(n)], "radius": [0.5] * n}))
+    obs = pd.DataFrame(
+        {
+            "region": pd.Categorical(["s"] * n),
+            "instance_id": list(range(n)),
+            "orange": pd.Categorical(["A", "B", "A", "B"]),
+        }
+    )
+    table = TableModel.parse(
+        AnnData(X=np.zeros((n, 1)), obs=obs),
+        region="s",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(shapes={"s": shapes}, tables={"t": table})
+
+    with pytest.raises(ValueError, match=r"color='orange'.*ambiguous.*column"):
+        sdata.pl.render_shapes("s", color="orange")
+
+    sdata.pl.render_shapes("s", color="#ffa500")
+    sdata.pl.render_shapes("s", color=(1.0, 0.65, 0.0))
+
+
 def test_datashader_colorbar_range_matches_data(sdata_blobs: SpatialData):
     """Datashader colorbar range must not exceed the actual data range for shapes.
 

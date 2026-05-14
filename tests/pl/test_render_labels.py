@@ -550,3 +550,29 @@ def test_render_labels_disjoint_instance_ids_clear_error():
             sdata.pl.render_labels("lbl", color="cat", table_name="t").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def test_render_labels_color_column_name_collision_raises():
+    # regression test for #619: color="orange" + obs column "orange" must raise.
+    arr = np.zeros((10, 10), dtype=np.int32)
+    arr[2:5, 2:5] = 1
+    arr[6:9, 6:9] = 2
+    obs = pd.DataFrame(
+        {
+            "region": pd.Categorical(["lbl"] * 2),
+            "instance_id": [1, 2],
+            "orange": pd.Categorical(["A", "B"]),
+        }
+    )
+    table = TableModel.parse(
+        AnnData(X=np.zeros((2, 1)), obs=obs),
+        region="lbl",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(labels={"lbl": Labels2DModel.parse(arr, dims=["y", "x"])}, tables={"t": table})
+
+    with pytest.raises(ValueError, match=r"color='orange'.*ambiguous.*column"):
+        sdata.pl.render_labels("lbl", color="orange", table_name="t")
+
+    sdata.pl.render_labels("lbl", color="#ffa500", table_name="t")
