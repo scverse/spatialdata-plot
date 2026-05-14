@@ -1078,8 +1078,9 @@ def _set_color_source_vec(
         table_name=table_name,
     )
 
-    # When `table_name=` is explicit, an element column with the same name is
-    # shadowed by that choice (#620); drop the df origin so the table wins.
+    # Issue #620: when both the element's own dataframe and the chosen table
+    # contain a column with this name, an explicit `table_name=` resolves the
+    # ambiguity — keep only the table origin and skip the multi-origin error below.
     explicit_table_shadows_df = table_name is not None and any(o.origin == "df" for o in origins)
     if explicit_table_shadows_df:
         origins = [o for o in origins if o.origin != "df"]
