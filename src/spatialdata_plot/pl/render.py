@@ -317,7 +317,7 @@ def _check_instance_ids_overlap(
     element_name: str,
     element_index: abc.Iterable[Any],
 ) -> None:
-    """Raise a clear error when a table annotates an element but no instance IDs overlap (#603)."""
+    """Raise a clear error when a table annotates an element but no instance IDs overlap."""
     _, region_key, instance_key = get_table_keys(sdata[table_name])
     annotating = sdata[table_name].obs[sdata[table_name].obs[region_key].isin([element_name])]
     if len(annotating) > 0 and set(annotating[instance_key]).isdisjoint(set(element_index)):
@@ -762,7 +762,6 @@ def _render_points(
     added_color_from_table = False
     if col_for_color is not None and col_for_color not in points.columns:
         if table_name is not None:
-            # guard against disjoint instance IDs (#603) for a clearer error than KeyError: None
             _check_instance_ids_overlap(sdata_filt, table_name, element, points.index)
         color_values = get_values(
             value_key=col_for_color,
