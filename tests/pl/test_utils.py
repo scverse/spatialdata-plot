@@ -1,3 +1,4 @@
+import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -5,7 +6,10 @@ import pandas as pd
 import pytest
 import scanpy as sc
 import xarray as xr
+from anndata import AnnData
+from shapely.geometry import Point
 from spatialdata import SpatialData
+from spatialdata.models import PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
 from spatialdata_plot.pl.render_params import Color
@@ -380,3 +384,39 @@ class TestMultiscaleToSpatialImage:
         multiscale = self._make_multiscale((3, 500, 500), [2, 2])
         result = _multiscale_to_spatial_image(multiscale, dpi=100.0, width=2.5, height=2.5)
         assert result.sizes["x"] == 250
+
+
+def test_color_column_collision_on_element_columns_raises():
+    # regression test for #619, element-column path: points with an "orange" column + color="orange".
+    points = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "orange": [0.1, 0.2, 0.3]}))
+    sdata = SpatialData(points={"pts": points})
+
+    with pytest.raises(ValueError, match=r"color='orange'.*ambiguous.*element 'pts'"):
+        sdata.pl.render_points("pts", color="orange")
+
+    sdata.pl.render_points("pts", color="#ffa500")
+    sdata.pl.render_points("pts", color=(1.0, 0.65, 0.0))
+
+
+def test_color_column_collision_on_annotating_table_raises():
+    # regression test for #619, table path: element has no "orange" column but its annotating table does.
+    shapes = ShapesModel.parse(gpd.GeoDataFrame({"geometry": [Point(i, 0) for i in range(3)], "radius": [0.5] * 3}))
+    obs = pd.DataFrame(
+        {
+            "region": pd.Categorical(["s"] * 3),
+            "instance_id": list(range(3)),
+            "orange": pd.Categorical(["A", "B", "A"]),
+        }
+    )
+    table = TableModel.parse(
+        AnnData(X=np.zeros((3, 1)), obs=obs),
+        region="s",
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(shapes={"s": shapes}, tables={"t": table})
+
+    with pytest.raises(ValueError, match=r"color='orange'.*ambiguous.*table 't'"):
+        sdata.pl.render_shapes("s", color="orange")
+
+    sdata.pl.render_shapes("s", color="#ffa500")

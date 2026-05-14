@@ -2280,6 +2280,41 @@ def _validate_show_parameters(
             )
 
 
+def _check_color_column_collision(
+    sdata: SpatialData,
+    elements: list[str],
+    color: str,
+    element_type: str,
+) -> None:
+    """Raise if ``color`` is a color-like string that also names a column in the element or its tables."""
+    matches: list[str] = []
+    for el in elements:
+        if element_type in {"shapes", "points"}:
+            try:
+                el_cols = sdata[el].columns
+            except (KeyError, AttributeError):
+                el_cols = ()
+            if color in el_cols:
+                matches.append(f"element '{el}'")
+                continue
+        try:
+            tables = get_element_annotators(sdata, el)
+        except (KeyError, ValueError):
+            tables = set()
+        for t in tables:
+            adata = sdata[t]
+            if color in adata.obs.columns or color in adata.var_names:
+                matches.append(f"table '{t}' (annotating '{el}')")
+                break
+    if matches:
+        locations = ", ".join(matches)
+        raise ValueError(
+            f"`color={color!r}` is ambiguous: it is a valid matplotlib color name AND a column "
+            f"name in {locations}. Disambiguate by either passing an unambiguous color form "
+            f"(hex string like '#ffa500' or an RGB(A) tuple), or by renaming the column."
+        )
+
+
 def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[str, Any]:
     colorbar = param_dict.get("colorbar", "auto")
     if colorbar not in {True, False, None, "auto"}:
@@ -2330,7 +2365,8 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
         if not isinstance(color, str | tuple | list):
             raise TypeError("Parameter 'color' must be a string or a tuple/list of floats.")
         if _is_color_like(color):
-            logger.info("Value for parameter 'color' appears to be a color, using it as such.")
+            if isinstance(color, str):
+                _check_color_column_collision(param_dict["sdata"], param_dict["element"], color, element_type)
             param_dict["col_for_color"] = None
             param_dict["color"] = Color(color)
             if param_dict["color"].alpha_is_user_defined():
