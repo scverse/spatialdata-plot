@@ -2307,7 +2307,7 @@ def _check_color_column_collision(
                 matches.append(f"table '{t}' (annotating '{el}')")
                 break
     if matches:
-        locations = ", ".join(sorted(set(matches)))
+        locations = ", ".join(matches)
         raise ValueError(
             f"`color={color!r}` is ambiguous: it is a valid matplotlib color name AND a column "
             f"name in {locations}. Disambiguate by either passing an unambiguous color form "
