@@ -66,7 +66,8 @@ from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, get_table_keys
 from spatialdata.transformations.operations import get_transformation
-from spatialdata.transformations.transformations import Scale
+from spatialdata.transformations.transformations import Scale, Translation
+from spatialdata.transformations.transformations import Sequence as TransformSequence
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
@@ -2029,7 +2030,12 @@ def _rasterize_if_necessary(
 
     if do_rasterization:
         logger.info("Rasterizing image for faster rendering.")
-        target_unit_to_pixels = min(target_y_dims / y_dims, target_x_dims / x_dims)
+        # ``rasterize`` interprets ``target_unit_to_pixels`` in world units, not
+        # intrinsic pixels. Dividing by world extent keeps the result correct
+        # for any transformation (translation, scale, etc.).
+        world_x = float(extent["x"][1]) - float(extent["x"][0])
+        world_y = float(extent["y"][1]) - float(extent["y"][0])
+        target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)
         image = rasterize(
             image,
             ("y", "x"),
@@ -3378,42 +3384,20 @@ def _ax_show_and_transform(
     alpha: float | None = None,
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
-    extent: list[float] | None = None,
     norm: Normalize | None = None,
 ) -> matplotlib.image.AxesImage:
-    # default extent in mpl:
-    image_extent = [-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5]
-    if extent is not None:
-        # make sure extent is [x_min, x_max, y_min, y_max]
-        if extent[3] < extent[2]:
-            extent[2], extent[3] = extent[3], extent[2]
-        if extent[0] < 0:
-            x_factor = array.shape[1] / (extent[1] - extent[0])
-            image_extent[0] = image_extent[0] + (extent[0] * x_factor)
-            image_extent[1] = image_extent[1] + (extent[0] * x_factor)
-        if extent[2] < 0:
-            y_factor = array.shape[0] / (extent[3] - extent[2])
-            image_extent[2] = image_extent[2] + (extent[2] * y_factor)
-            image_extent[3] = image_extent[3] + (extent[2] * y_factor)
-
+    # ``extent`` uses mpl's pixel-grid convention; world placement happens via
+    # ``set_transform(trans_data)`` afterwards.
+    image_extent = (-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5)
+    # ``alpha`` is applied only when no cmap is set, so RGBA arrays already
+    # carrying per-pixel alpha (e.g. datashader output) are not double-attenuated.
+    imshow_kwargs: dict[str, Any] = {"zorder": zorder, "extent": image_extent, "norm": norm}
     if not cmap and alpha is not None:
-        im = ax.imshow(
-            array,
-            alpha=alpha,
-            zorder=zorder,
-            extent=tuple(image_extent),
-            norm=norm,
-        )
-        im.set_transform(trans_data)
+        imshow_kwargs["alpha"] = alpha
     else:
-        im = ax.imshow(
-            array,
-            cmap=cmap,
-            zorder=zorder,
-            extent=tuple(image_extent),
-            norm=norm,
-        )
-        im.set_transform(trans_data)
+        imshow_kwargs["cmap"] = cmap
+    im = ax.imshow(array, **imshow_kwargs)
+    im.set_transform(trans_data)
     return im
 
 
@@ -3442,30 +3426,12 @@ def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = No
 def _compute_datashader_canvas_params(
     x_ext: list[Any],
     y_ext: list[Any],
-    ax: Axes,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
     """Compute datashader canvas dimensions from spatial extents.
 
     Shared logic used by both the dask-based and pandas-based entry points.
     """
-    previous_xlim = ax.get_xlim()
-    previous_ylim = ax.get_ylim()
-    # increase range if sth larger was rendered on the axis before
-    if _mpl_ax_contains_elements(ax):
-        x_ext = [min(x_ext[0], previous_xlim[0]), max(x_ext[1], previous_xlim[1])]
-        y_ext = (
-            [
-                min(y_ext[0], previous_ylim[1]),
-                max(y_ext[1], previous_ylim[0]),
-            ]
-            if ax.yaxis_inverted()
-            else [
-                min(y_ext[0], previous_ylim[0]),
-                max(y_ext[1], previous_ylim[1]),
-            ]
-        )
-
     # Compute canvas size in pixels, capped at the figure's display resolution.
     # Using np.max ensures the canvas never exceeds display pixels on either axis,
     # preventing pixel-based operations (spread, line_width) from being downscaled
@@ -3485,18 +3451,16 @@ def _compute_datashader_canvas_params(
 def _get_extent_and_range_for_datashader_canvas(
     spatial_element: SpatialElement,
     coordinate_system: str,
-    ax: Axes,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
     extent = get_extent(spatial_element, coordinate_system=coordinate_system)
-    x_ext = [min(0, extent["x"][0]), extent["x"][1]]
-    y_ext = [min(0, extent["y"][0]), extent["y"][1]]
-    return _compute_datashader_canvas_params(x_ext, y_ext, ax, fig_params)
+    x_ext = [float(extent["x"][0]), float(extent["x"][1])]
+    y_ext = [float(extent["y"][0]), float(extent["y"][1])]
+    return _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
 
 
 def _datashader_canvas_from_dataframe(
     df: pd.DataFrame,
-    ax: Axes,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
     """Compute datashader canvas params directly from a pandas DataFrame.
@@ -3504,23 +3468,35 @@ def _datashader_canvas_from_dataframe(
     Avoids the overhead of ``get_extent()`` (which requires a dask-backed
     SpatialElement) by reading min/max from the already-materialised data.
     """
-    x_ext = [min(0, float(df["x"].min())), float(df["x"].max())]
-    y_ext = [min(0, float(df["y"].min())), float(df["y"].max())]
-    return _compute_datashader_canvas_params(x_ext, y_ext, ax, fig_params)
+    if len(df) == 0:
+        # Empty input (e.g., a bounding_box_query with no overlap) — caller
+        # should short-circuit; return zero-sized canvas params as a sentinel.
+        return 0, 0, [0.0, 0.0], [0.0, 0.0], 1.0
+    x_ext = [float(df["x"].min()), float(df["x"].max())]
+    y_ext = [float(df["y"].min()), float(df["y"].max())]
+    return _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
 
 
 def _create_image_from_datashader_result(
     ds_result: ds.transfer_functions.Image | np.ndarray[Any, np.dtype[np.uint8]],
     factor: float,
     ax: Axes,
+    x_min: float = 0.0,
+    y_min: float = 0.0,
 ) -> tuple[MaskedArray[tuple[int, ...], Any], matplotlib.transforms.Transform]:
     # create SpatialImage from datashader output to get it back to original size
     rgba_image_data = ds_result.copy() if isinstance(ds_result, np.ndarray) else ds_result.to_numpy().base
     rgba_image_data = np.transpose(rgba_image_data, (2, 0, 1))
+    transformation: Scale | TransformSequence = Scale([1, factor, factor], ("c", "y", "x"))
+    if x_min != 0.0 or y_min != 0.0:
+        # Canvas pixel (0, 0) corresponds to world (x_min, y_min). Without this
+        # translation the rgba would render at the world origin instead of at
+        # the element's actual position.
+        transformation = TransformSequence([transformation, Translation([x_min, y_min], ("x", "y"))])
     rgba_image = Image2DModel.parse(
         rgba_image_data,
         dims=("c", "y", "x"),
-        transformations={"global": Scale([1, factor, factor], ("c", "y", "x"))},
+        transformations={"global": transformation},
     )
 
     _, trans_data = _prepare_transformation(rgba_image, "global", ax)

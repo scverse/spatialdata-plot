@@ -1065,3 +1065,104 @@ def test_render_points_disjoint_instance_ids_clear_error():
             sdata.pl.render_points("pts", color="cat", table_name="t").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def _make_offset_points_sdata(offset: tuple[float, float] = (10000.0, 18000.0), n: int = 100) -> SpatialData:
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "x": rng.uniform(0, 200, size=n),
+            "y": rng.uniform(0, 200, size=n),
+        }
+    )
+    pts = PointsModel.parse(df, transformations={"global": Translation(list(offset), axes=("x", "y"))})
+    return SpatialData(points={"pts": pts})
+
+
+def test_datashader_canvas_preserves_resolution_under_bbox_query():
+    # regression test for #668: bounding_box_query on a translated SpatialData
+    # must not collapse the datashader canvas resolution. The factor (world
+    # units per canvas pixel) at offset must match the no-offset baseline.
+    from spatialdata import bounding_box_query
+
+    from spatialdata_plot.pl.render_params import FigParams
+    from spatialdata_plot.pl.utils import _datashader_canvas_from_dataframe
+
+    baseline_sdata = _make_offset_points_sdata(offset=(0.0, 0.0))
+    offset_sdata = _make_offset_points_sdata(offset=(10000.0, 18000.0))
+
+    baseline_crop = bounding_box_query(
+        baseline_sdata["pts"],
+        axes=("x", "y"),
+        min_coordinate=[50, 50],
+        max_coordinate=[150, 150],
+        target_coordinate_system="global",
+    )
+    offset_crop = bounding_box_query(
+        offset_sdata["pts"],
+        axes=("x", "y"),
+        min_coordinate=[10050, 18050],
+        max_coordinate=[10150, 18150],
+        target_coordinate_system="global",
+    )
+
+    fig = plt.figure(figsize=(6, 6), dpi=100)
+    fig_params = FigParams(fig=fig, ax=fig.gca(), num_panels=1)
+    try:
+        # Compare canvas params on the post-transform world-coord frame, which
+        # is what _render_points feeds to _datashader_canvas_from_dataframe.
+        base_df = baseline_crop.compute()
+        offset_df = offset_crop.compute()
+        offset_df_world = offset_df.copy()
+        offset_df_world["x"] = offset_df_world["x"] + 10000.0
+        offset_df_world["y"] = offset_df_world["y"] + 18000.0
+
+        _, _, _, _, factor_baseline = _datashader_canvas_from_dataframe(base_df, fig_params)
+        _, _, _, _, factor_offset = _datashader_canvas_from_dataframe(offset_df_world, fig_params)
+
+        # Without the fix factor_offset would be ~60x factor_baseline.
+        assert abs(factor_offset - factor_baseline) < 1e-6, (
+            f"datashader factor leaked offset: baseline={factor_baseline}, offset={factor_offset}"
+        )
+    finally:
+        plt.close(fig)
+
+
+def test_render_points_datashader_under_bbox_query_does_not_crash():
+    # regression test for #668: rendering a bbox_query result with datashader
+    # must produce a figure (previously: resolution collapse → effectively blank).
+    from spatialdata import bounding_box_query
+
+    sdata = _make_offset_points_sdata()
+    cropped = bounding_box_query(
+        sdata["pts"],
+        axes=("x", "y"),
+        min_coordinate=[10050, 18050],
+        max_coordinate=[10150, 18150],
+        target_coordinate_system="global",
+    )
+    cropped_sdata = SpatialData(points={"pts": cropped})
+
+    fig, ax = plt.subplots()
+    try:
+        cropped_sdata.pl.render_points("pts", method="datashader").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
+def test_datashader_canvas_from_empty_dataframe_does_not_crash():
+    # regression test for #668: _datashader_canvas_from_dataframe used to
+    # crash with ``ValueError: cannot convert float NaN to integer`` when fed
+    # an empty DataFrame (NaN min()/max() → int cast). The helper now returns
+    # a zero-sized sentinel so callers can short-circuit cleanly.
+    from spatialdata_plot.pl.render_params import FigParams
+    from spatialdata_plot.pl.utils import _datashader_canvas_from_dataframe
+
+    empty_df = pd.DataFrame({"x": pd.Series(dtype=float), "y": pd.Series(dtype=float)})
+    fig = plt.figure(figsize=(6, 6), dpi=100)
+    fig_params = FigParams(fig=fig, ax=fig.gca(), num_panels=1)
+    try:
+        plot_width, plot_height, _, _, _ = _datashader_canvas_from_dataframe(empty_df, fig_params)
+        assert plot_width == 0 and plot_height == 0
+    finally:
+        plt.close(fig)
