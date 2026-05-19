@@ -9,7 +9,7 @@ import pytest
 import scanpy as sc
 from matplotlib.colors import to_hex, to_rgb
 from spatialdata import SpatialData
-from spatialdata.models import PointsModel, ShapesModel, TableModel
+from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot  # noqa: F401 — registers accessor
 from spatialdata_plot.pl._palette import (
@@ -67,6 +67,32 @@ def _build_shapes_sdata(seed: int = 0) -> SpatialData:
     return SpatialData(shapes={"my_shapes": ShapesModel.parse(gdf)}, tables={"table": adata})
 
 
+def _build_labels_sdata(seed: int = 0) -> SpatialData:
+    """SpatialData with a labels element + linked table containing categorical labels."""
+    from anndata import AnnData
+
+    rng = np.random.default_rng(seed)
+    n = 10
+    arr = np.zeros((20, 20), dtype=np.int32)
+    for i in range(n):
+        y, x = divmod(i, 5)
+        arr[y * 4 : y * 4 + 3, x * 4 : x * 4 + 3] = i + 1
+
+    adata = AnnData(
+        np.zeros((n, 1)),
+        obs=pd.DataFrame(
+            {
+                "cell_type": pd.Categorical(rng.choice(["X", "Y", "Z"], size=n)),
+                "instance_id": np.arange(1, n + 1),
+                "region": ["my_labels"] * n,
+            },
+            index=pd.RangeIndex(n).astype(str),
+        ),
+    )
+    adata = TableModel.parse(adata=adata, region="my_labels", region_key="region", instance_key="instance_id")
+    return SpatialData(labels={"my_labels": Labels2DModel.parse(arr)}, tables={"table": adata})
+
+
 @pytest.fixture(scope="module")
 def clustered_sdata() -> SpatialData:
     return _build_clustered_points_sdata()
@@ -75,6 +101,11 @@ def clustered_sdata() -> SpatialData:
 @pytest.fixture(scope="module")
 def shapes_sdata() -> SpatialData:
     return _build_shapes_sdata()
+
+
+@pytest.fixture(scope="module")
+def labels_sdata() -> SpatialData:
+    return _build_labels_sdata()
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +255,13 @@ class TestMakePaletteFromData:
         assert isinstance(result, dict)
         assert set(result.keys()) == {"X", "Y", "Z"}
 
+    def test_labels_with_table(self, labels_sdata: SpatialData):
+        # Regression test for #662
+        result = make_palette_from_data(labels_sdata, "my_labels", "cell_type", seed=42)
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"X", "Y", "Z"}
+        assert all(v.startswith("#") for v in result.values())
+
 
 # ---------------------------------------------------------------------------
 # Error cases
@@ -242,6 +280,10 @@ class TestMakePaletteFromDataErrors:
     def test_missing_column(self, clustered_sdata: SpatialData):
         with pytest.raises(KeyError, match="not found"):
             make_palette_from_data(clustered_sdata, "cells", "nonexistent_col")
+
+    def test_missing_column_on_labels(self, labels_sdata: SpatialData):
+        with pytest.raises(KeyError, match="not found"):
+            make_palette_from_data(labels_sdata, "my_labels", "nonexistent_col")
 
     def test_unknown_method(self, clustered_sdata: SpatialData):
         with pytest.raises(ValueError, match="Unknown method"):
