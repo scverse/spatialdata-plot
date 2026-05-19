@@ -1006,6 +1006,45 @@ def test_no_table_fallback_warning_for_element_column(caplog):
     plt.close("all")
 
 
+def test_render_points_color_by_z_data_column():
+    # regression test for #615: a data column named "z" must remain usable
+    # for coloring. PointsModel.parse drops columns colliding with reserved
+    # coordinate names; _reparse_points must re-attach the requested color
+    # column when needed so color lookup does not crash.
+    pts = PointsModel.parse(
+        pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "z": [0.1, 0.5, 0.9]}),
+    )
+    assert "z" in pts.columns
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color="z").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
+def test_render_points_color_by_z_with_extra_columns():
+    # #615 follow-up: re-attaching the color column must not disturb other
+    # data columns. Color by a non-conflicting column on a frame that also
+    # carries a (dropped-by-parse) "z" column.
+    pts = PointsModel.parse(
+        pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0],
+                "y": [1.0, 2.0, 3.0],
+                "z": [0.1, 0.5, 0.9],
+                "score": [0.0, 0.5, 1.0],
+            }
+        ),
+    )
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color="score").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
 def test_render_points_disjoint_instance_ids_clear_error():
     # regression test for #603: disjoint instance_id values must raise a clear ValueError
     points = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]}))
