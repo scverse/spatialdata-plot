@@ -772,7 +772,8 @@ def _render_points(
     ):
         points = points[coords].compute()
     else:
-        coords += [col_for_color]
+        if col_for_color not in coords:
+            coords.append(col_for_color)
         points = points[coords].compute()
 
     added_color_from_table = False
