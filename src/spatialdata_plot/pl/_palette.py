@@ -284,7 +284,9 @@ def _resolve_element(
     """Extract categorical labels from a SpatialData element.
 
     Labels come from a column on the element itself, or from a linked
-    table (joined on the instance key to guarantee alignment).
+    table (joined on the instance key to guarantee alignment). Raster
+    (labels) elements have no per-pixel column, so the value always
+    comes from the linked table.
     """
     if element in sdata.shapes:
         gdf = sdata.shapes[element]
@@ -298,11 +300,13 @@ def _resolve_element(
             labels_series = ddf[[color]].compute()[color]
         else:
             labels_series = _get_labels_from_table(sdata, element, color, table_name)
+    elif element in sdata.labels:
+        labels_series = _get_labels_from_table(sdata, element, color, table_name)
     else:
-        available = list(sdata.shapes.keys()) + list(sdata.points.keys())
+        available = list(sdata.shapes.keys()) + list(sdata.points.keys()) + list(sdata.labels.keys())
         raise KeyError(
-            f"Element '{element}' not found in sdata.shapes or sdata.points. "
-            f"Available elements: {available}. Note: labels (raster) elements are not yet supported."
+            f"Element '{element}' not found in sdata.shapes, sdata.points, or sdata.labels. "
+            f"Available elements: {available}."
         )
 
     is_categorical = isinstance(getattr(labels_series, "dtype", None), pd.CategoricalDtype)
@@ -471,11 +475,12 @@ def make_palette_from_data(
     sdata
         A :class:`spatialdata.SpatialData` object.
     element
-        Name of a shapes or points element in *sdata*.
+        Name of a shapes, points, or labels element in *sdata*.
     color
-        Column name containing categorical labels.  The column is first
-        looked up directly on the element (both for shapes and points);
-        if not found there, it falls back to the linked AnnData table.
+        Column name containing categorical labels.  For shapes and points
+        the column is first looked up directly on the element and falls
+        back to the linked AnnData table.  For labels the column is
+        always read from the linked table.
     palette
         Source colours.  Accepts the same values as
         :func:`make_palette` (*None*, a list, a named palette, or a

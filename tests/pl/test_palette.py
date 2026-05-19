@@ -224,6 +224,15 @@ class TestMakePaletteFromData:
         assert isinstance(result, dict)
         assert set(result.keys()) == {"X", "Y", "Z"}
 
+    def test_labels_with_table(self, sdata_blobs: SpatialData):
+        # Regression test for #662
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["cell_type"] = pd.Categorical(np.random.default_rng(0).choice(["X", "Y", "Z"], size=n))
+        result = make_palette_from_data(sdata_blobs, "blobs_labels", "cell_type", seed=42)
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"X", "Y", "Z"}
+        assert all(v.startswith("#") for v in result.values())
+
 
 # ---------------------------------------------------------------------------
 # Error cases
@@ -242,6 +251,10 @@ class TestMakePaletteFromDataErrors:
     def test_missing_column(self, clustered_sdata: SpatialData):
         with pytest.raises(KeyError, match="not found"):
             make_palette_from_data(clustered_sdata, "cells", "nonexistent_col")
+
+    def test_missing_column_on_labels(self, sdata_blobs: SpatialData):
+        with pytest.raises(KeyError, match="not found"):
+            make_palette_from_data(sdata_blobs, "blobs_labels", "nonexistent_col")
 
     def test_unknown_method(self, clustered_sdata: SpatialData):
         with pytest.raises(ValueError, match="Unknown method"):
