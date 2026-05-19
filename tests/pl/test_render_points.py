@@ -1006,6 +1006,40 @@ def test_no_table_fallback_warning_for_element_column(caplog):
     plt.close("all")
 
 
+def test_render_points_color_by_z_data_column():
+    # regression test for #615
+    pts = PointsModel.parse(
+        pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "z": [0.1, 0.5, 0.9]}),
+    )
+    assert "z" in pts.columns
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color="z").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
+def test_render_points_color_by_z_with_extra_columns():
+    # regression test for #615
+    pts = PointsModel.parse(
+        pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0],
+                "y": [1.0, 2.0, 3.0],
+                "z": [0.1, 0.5, 0.9],
+                "score": [0.0, 0.5, 1.0],
+            }
+        ),
+    )
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color="score").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
 def test_render_points_disjoint_instance_ids_clear_error():
     # regression test for #603: disjoint instance_id values must raise a clear ValueError
     points = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]}))
