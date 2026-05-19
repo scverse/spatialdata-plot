@@ -458,3 +458,48 @@ def test_explicit_table_name_honored_when_element_has_same_column():
     sdata.pl.render_shapes("s1", color="cat").pl.show(ax=ax)
     assert sorted(t.get_text() for t in ax.get_legend().get_texts()) == ["X", "Y"]
     plt.close(fig)
+
+
+def test_rasterize_target_unit_to_pixels_uses_world_extent(monkeypatch):
+    # regression test for #668: _rasterize_if_necessary must compute
+    # target_unit_to_pixels in world units (target_px / world_unit), not in
+    # intrinsic pixels (target_px / source_px). For Scale=0.5 the two differ
+    # by a factor of 2.
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Scale, Sequence, Translation, set_transformation
+
+    from spatialdata_plot.pl import utils as plut
+
+    arr = np.zeros((3, 8000, 8000), dtype=np.uint8)  # large enough to trigger rasterization
+    img = Image2DModel.parse(arr, dims=("c", "y", "x"))
+    set_transformation(
+        img,
+        Sequence([Scale([0.5, 0.5], axes=("x", "y")), Translation([100.0, 200.0], axes=("x", "y"))]),
+        to_coordinate_system="global",
+    )
+
+    captured: dict[str, float] = {}
+
+    def fake_rasterize(*args, **kwargs):
+        captured["target_unit_to_pixels"] = kwargs["target_unit_to_pixels"]
+        return img  # return is unused for the assertion
+
+    monkeypatch.setattr(plut, "rasterize", fake_rasterize)
+
+    # Source intrinsic is 8000 px; Scale=0.5 → world extent 4000 wu.
+    # Display target = dpi*width = 100*6 = 600 px.
+    # Expected (world-unit basis): 600 / 4000 = 0.15
+    # Old (intrinsic basis):       600 / 8000 = 0.075  (wrong by 2x)
+    plut._rasterize_if_necessary(
+        image=img,
+        dpi=100,
+        width=6,
+        height=6,
+        coordinate_system="global",
+        extent={"x": (100.0, 4100.0), "y": (200.0, 4200.0)},
+    )
+
+    assert "target_unit_to_pixels" in captured, "rasterize was not called"
+    assert captured["target_unit_to_pixels"] == pytest.approx(0.15, rel=1e-6), (
+        f"Expected world-unit basis (0.15), got {captured['target_unit_to_pixels']}"
+    )

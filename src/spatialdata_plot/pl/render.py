@@ -517,8 +517,13 @@ def _render_shapes(
             )
         )
 
+        if len(transformed_element) == 0:
+            # Nothing to rasterize (e.g., a bounding_box_query that matched no
+            # shapes). Skip the datashader pipeline.
+            return
+
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            transformed_element, "global", ax, fig_params
+            transformed_element, "global", fig_params
         )
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
@@ -599,7 +604,8 @@ def _render_shapes(
             fig_params,
             ax,
             factor,
-            x_ext + y_ext,
+            x_min=x_ext[0],
+            y_min=y_ext[0],
         )
 
         _cax = _render_ds_image(
@@ -607,7 +613,8 @@ def _render_shapes(
             shaded,
             factor,
             render_params.zorder,
-            x_ext + y_ext,
+            x_min=x_ext[0],
+            y_min=y_ext[0],
             nan_result=nan_shaded,
         )
 
@@ -929,8 +936,14 @@ def _render_points(
             transformations={coordinate_system: Identity()},
         ).compute()
 
+        if len(transformed_element) == 0:
+            # Nothing to rasterize (e.g., a bounding_box_query that matched no
+            # points). Skip the datashader pipeline; rendering proceeds with
+            # any other elements on the axes.
+            return
+
         plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(
-            transformed_element, ax, fig_params
+            transformed_element, fig_params
         )
 
         # use datashader for the visualization of points
@@ -1026,7 +1039,8 @@ def _render_points(
             shaded,
             factor,
             render_params.zorder,
-            x_ext + y_ext,
+            x_min=x_ext[0],
+            y_min=y_ext[0],
             nan_result=nan_shaded,
         )
 

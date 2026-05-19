@@ -306,7 +306,8 @@ def _render_ds_image(
     shaded: Any,
     factor: float,
     zorder: int,
-    extent: list[float] | None,
+    x_min: float = 0.0,
+    y_min: float = 0.0,
     nan_result: Any | None = None,
 ) -> Any:
     """Render a shaded datashader image onto matplotlib axes, with optional NaN overlay.
@@ -316,10 +317,10 @@ def _render_ds_image(
     it again would apply transparency twice (see #367).
     """
     if nan_result is not None:
-        rgba_nan, trans_nan = _create_image_from_datashader_result(nan_result, factor, ax)
-        _ax_show_and_transform(rgba_nan, trans_nan, ax, zorder=zorder, extent=extent)
-    rgba_image, trans_data = _create_image_from_datashader_result(shaded, factor, ax)
-    return _ax_show_and_transform(rgba_image, trans_data, ax, zorder=zorder, extent=extent)
+        rgba_nan, trans_nan = _create_image_from_datashader_result(nan_result, factor, ax, x_min, y_min)
+        _ax_show_and_transform(rgba_nan, trans_nan, ax, zorder=zorder)
+    rgba_image, trans_data = _create_image_from_datashader_result(shaded, factor, ax, x_min, y_min)
+    return _ax_show_and_transform(rgba_image, trans_data, ax, zorder=zorder)
 
 
 def _render_ds_outlines(
@@ -329,7 +330,8 @@ def _render_ds_outlines(
     fig_params: FigParams,
     ax: matplotlib.axes.SubplotBase,
     factor: float,
-    extent: list[float],
+    x_min: float = 0.0,
+    y_min: float = 0.0,
 ) -> None:
     """Aggregate, shade, and render shape outlines (outer and inner) with datashader."""
     ds_lw_factor = fig_params.fig.dpi / 72
@@ -357,8 +359,8 @@ def _render_ds_outlines(
                 how="linear",
             )
             shaded = _apply_user_alpha(shaded, alpha)
-            rgba, trans = _create_image_from_datashader_result(shaded, factor, ax)
-            _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder, extent=extent)
+            rgba, trans = _create_image_from_datashader_result(shaded, factor, ax, x_min, y_min)
+            _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder)
 
 
 def _build_ds_colorbar(

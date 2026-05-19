@@ -1446,3 +1446,30 @@ def test_transfunc_is_applied_for_continuous_shapes(sdata_blobs_shapes_annotated
     plt.close(fig)
 
     assert called, "transfunc was not called for continuous shapes data"
+
+
+def test_render_shapes_datashader_under_bbox_query_does_not_crash():
+    # regression test for #668: bounding_box_query on a translated SpatialData
+    # used to collapse the shapes datashader canvas resolution and produce a
+    # broken figure.
+    from spatialdata import bounding_box_query
+
+    rng = np.random.default_rng(0)
+    geom = [Point(rng.uniform(0, 200), rng.uniform(0, 200)).buffer(5) for _ in range(20)]
+    gdf = gpd.GeoDataFrame({"geometry": geom})
+    shapes = ShapesModel.parse(gdf, transformations={"global": Translation([10000.0, 18000.0], axes=("x", "y"))})
+
+    cropped = bounding_box_query(
+        shapes,
+        axes=("x", "y"),
+        min_coordinate=[10050, 18050],
+        max_coordinate=[10150, 18150],
+        target_coordinate_system="global",
+    )
+    cropped_sdata = SpatialData(shapes={"shapes": cropped})
+
+    fig, ax = plt.subplots()
+    try:
+        cropped_sdata.pl.render_shapes("shapes", method="datashader").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
