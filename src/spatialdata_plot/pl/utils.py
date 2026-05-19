@@ -2032,7 +2032,7 @@ def _rasterize_if_necessary(
         logger.info("Rasterizing image for faster rendering.")
         # ``rasterize`` interprets ``target_unit_to_pixels`` in world units, not
         # intrinsic pixels. Dividing by world extent keeps the result correct
-        # for any transformation (translation, scale, etc.); see #668.
+        # for any transformation (translation, scale, etc.).
         world_x = float(extent["x"][1]) - float(extent["x"][0])
         world_y = float(extent["y"][1]) - float(extent["y"][0])
         target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)
@@ -3389,22 +3389,14 @@ def _ax_show_and_transform(
     # ``extent`` uses mpl's pixel-grid convention; world placement happens via
     # ``set_transform(trans_data)`` afterwards.
     image_extent = (-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5)
+    # ``alpha`` is applied only when no cmap is set, so RGBA arrays already
+    # carrying per-pixel alpha (e.g. datashader output) are not double-attenuated.
+    imshow_kwargs: dict[str, Any] = {"zorder": zorder, "extent": image_extent, "norm": norm}
     if not cmap and alpha is not None:
-        im = ax.imshow(
-            array,
-            alpha=alpha,
-            zorder=zorder,
-            extent=image_extent,
-            norm=norm,
-        )
+        imshow_kwargs["alpha"] = alpha
     else:
-        im = ax.imshow(
-            array,
-            cmap=cmap,
-            zorder=zorder,
-            extent=image_extent,
-            norm=norm,
-        )
+        imshow_kwargs["cmap"] = cmap
+    im = ax.imshow(array, **imshow_kwargs)
     im.set_transform(trans_data)
     return im
 
@@ -3499,7 +3491,7 @@ def _create_image_from_datashader_result(
     if x_min != 0.0 or y_min != 0.0:
         # Canvas pixel (0, 0) corresponds to world (x_min, y_min). Without this
         # translation the rgba would render at the world origin instead of at
-        # the element's actual position (#668).
+        # the element's actual position.
         transformation = TransformSequence([transformation, Translation([x_min, y_min], ("x", "y"))])
     rgba_image = Image2DModel.parse(
         rgba_image_data,
