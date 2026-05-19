@@ -1007,10 +1007,7 @@ def test_no_table_fallback_warning_for_element_column(caplog):
 
 
 def test_render_points_color_by_z_data_column():
-    # regression test for #615: a data column named "z" must remain usable
-    # for coloring. PointsModel.parse drops columns colliding with reserved
-    # coordinate names; _reparse_points must re-attach the requested color
-    # column when needed so color lookup does not crash.
+    # regression test for #615
     pts = PointsModel.parse(
         pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "z": [0.1, 0.5, 0.9]}),
     )
@@ -1024,9 +1021,7 @@ def test_render_points_color_by_z_data_column():
 
 
 def test_render_points_color_by_z_with_extra_columns():
-    # #615 follow-up: re-attaching the color column must not disturb other
-    # data columns. Color by a non-conflicting column on a frame that also
-    # carries a (dropped-by-parse) "z" column.
+    # regression test for #615
     pts = PointsModel.parse(
         pd.DataFrame(
             {

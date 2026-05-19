@@ -121,10 +121,9 @@ def _reparse_points(
 ) -> None:
     """Re-register a points DataFrame in *sdata_filt* with its transformation.
 
-    When ``color_column`` is provided and refers to a column that
-    ``PointsModel.parse`` would silently drop because it collides with a
-    reserved coordinate axis (e.g. a data column literally named ``"z"``),
-    re-attach it so downstream color lookup can find it as a ``"df"`` origin.
+    ``PointsModel.parse`` silently drops columns whose names collide with
+    reserved coordinate axes (currently only ``"z"``). When ``color_column``
+    names such a column, re-attach it so downstream color lookup can find it.
     """
     dd_frame = dask.dataframe.from_pandas(df, npartitions=1)
     parsed = PointsModel.parse(dd_frame, coordinates={"x": "x", "y": "y"})
