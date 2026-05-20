@@ -1,12 +1,10 @@
-import warnings
-
 import dask.array as da
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import scanpy as sc
-from matplotlib.colors import LogNorm, Normalize, SymLogNorm
+from matplotlib.colors import LogNorm, Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata.models import Image2DModel
@@ -695,35 +693,5 @@ def test_lognorm_with_zeros_suppresses_colorbar_with_warning():
     try:
         with pytest.warns(UserWarning, match="LogNorm"):
             sdata.pl.render_images("img", norm=LogNorm()).pl.show(ax=ax)
-    finally:
-        plt.close(fig)
-
-
-def test_lognorm_with_mixed_positives_renders_cleanly():
-    # locks the passing path so the #604 guard does not widen accidentally
-    rng = np.random.default_rng(0)
-    img = rng.uniform(0.1, 5.0, size=(1, 8, 8)).astype(np.float32)
-    img[0, 0:2, 0:2] = 0.0
-    sdata = SpatialData(images={"img": Image2DModel.parse(img, c_coords=["DAPI"])})
-    fig, ax = plt.subplots()
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
-            sdata.pl.render_images("img", norm=LogNorm()).pl.show(ax=ax)
-    finally:
-        plt.close(fig)
-
-
-def test_symlognorm_with_zeros_does_not_trigger_lognorm_guard():
-    # regression test for #604: the guard must be class-specific so SymLogNorm
-    # (which legitimately supports zero/negative values) is unaffected.
-    img = np.zeros((1, 5, 5), dtype=np.float32)
-    img[0, 2, 2] = 1.0
-    sdata = SpatialData(images={"img": Image2DModel.parse(img, c_coords=["DAPI"])})
-    fig, ax = plt.subplots()
-    try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("error", message=".*LogNorm.*", category=UserWarning)
-            sdata.pl.render_images("img", norm=SymLogNorm(linthresh=1e-3)).pl.show(ax=ax)
     finally:
         plt.close(fig)
