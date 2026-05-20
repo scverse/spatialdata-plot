@@ -17,7 +17,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
 
 from spatialdata_plot._logging import logger
-from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams
+from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams, _DsReduction
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _convert_alpha_to_datashader_range,
@@ -31,8 +31,6 @@ from spatialdata_plot.pl.utils import (
 # ---------------------------------------------------------------------------
 # Type aliases and constants
 # ---------------------------------------------------------------------------
-
-_DsReduction = Literal["sum", "mean", "any", "count", "std", "var", "max", "min"]
 
 # Sentinel category name used in datashader categorical paths to represent
 # missing (NaN) values.  Must not collide with realistic user category names.

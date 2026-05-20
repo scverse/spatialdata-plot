@@ -39,7 +39,6 @@ from spatialdata_plot.pl._datashader import (
     _ds_aggregate,
     _ds_shade_categorical,
     _ds_shade_continuous,
-    _DsReduction,
     _render_ds_image,
     _render_ds_outlines,
 )
@@ -55,6 +54,7 @@ from spatialdata_plot.pl.render_params import (
     LegendParams,
     PointsRenderParams,
     ShapesRenderParams,
+    _DsReduction,
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
@@ -73,6 +73,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_transformation,
     _rasterize_if_necessary,
+    _rasterize_if_necessary_datashader,
     _set_color_source_vec,
     _validate_polygons,
 )
@@ -1279,7 +1280,24 @@ def _render_images(
             scale=scale,
         )
     # rasterize spatial image if necessary to speed up performance
-    if rasterize:
+    use_datashader = render_params.method == "datashader"
+    if use_datashader:
+        downsample_method = render_params.ds_reduction or "max"
+        logger.info(
+            f"Using 'datashader' backend with '{downsample_method}' as downsample method. "
+            "Depending on the reduction, the value range of the plot might change. "
+            "Set method to 'matplotlib' to disable this behaviour."
+        )
+        img = _rasterize_if_necessary_datashader(
+            image=img,
+            dpi=fig_params.fig.dpi,
+            width=fig_params.fig.get_size_inches()[0],
+            height=fig_params.fig.get_size_inches()[1],
+            coordinate_system=coordinate_system,
+            extent=extent,
+            downsample_method=downsample_method,
+        )
+    elif rasterize:
         img = _rasterize_if_necessary(
             image=img,
             dpi=fig_params.fig.dpi,
@@ -1389,6 +1407,10 @@ def _render_images(
             "Consider using 'palette' instead."
         )
 
+    # Force nearest-neighbor at display time when the datashader reduction picked
+    # a non-mean aggregation; otherwise imshow's default interpolation would smear it.
+    _interp = "nearest" if use_datashader else None
+
     # Detect RGB(A) images by channel names — skip when user overrides with palette/cmap
     is_rgb, has_alpha = _is_rgb_image(channels)
     has_explicit_cmap = (
@@ -1430,7 +1452,7 @@ def _render_images(
                     render_params.alpha,
                 )
 
-        _ax_show_and_transform(stacked, trans_data, ax, **show_kwargs)
+        _ax_show_and_transform(stacked, trans_data, ax, interpolation=_interp, **show_kwargs)
         if render_params.channels_as_legend:
             logger.warning("channels_as_legend is not supported for true RGB images and will be ignored.")
         return
@@ -1457,6 +1479,7 @@ def _render_images(
             cmap=cmap,
             zorder=render_params.zorder,
             norm=render_params.cmap_params.norm,
+            interpolation=_interp,
         )
 
         wants_colorbar = _should_request_colorbar(
@@ -1549,6 +1572,7 @@ def _render_images(
                 ax,
                 render_params.alpha,
                 zorder=render_params.zorder,
+                interpolation=_interp,
             )
 
         # 2B) Image has n channels, no palette/cmap info -> sample n categorical colors
@@ -1613,6 +1637,7 @@ def _render_images(
                 ax,
                 render_params.alpha,
                 zorder=render_params.zorder,
+                interpolation=_interp,
             )
 
         # 2C) palette set; also covers `palette + norm=list` since synthesized
@@ -1633,6 +1658,7 @@ def _render_images(
                 ax,
                 render_params.alpha,
                 zorder=render_params.zorder,
+                interpolation=_interp,
             )
 
         elif palette is None and got_multiple_cmaps:
@@ -1654,6 +1680,7 @@ def _render_images(
                 ax,
                 render_params.alpha,
                 zorder=render_params.zorder,
+                interpolation=_interp,
             )
 
         # Collect channel legend entries (single point for all multi-channel paths)

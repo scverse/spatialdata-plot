@@ -7,7 +7,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -29,7 +29,7 @@ from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
-from spatialdata_plot._logging import _log_context
+from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl.render import (
     _draw_channel_legend,
     _render_graph,
@@ -52,8 +52,10 @@ from spatialdata_plot.pl.render_params import (
     LegendParams,
     PointsRenderParams,
     ShapesRenderParams,
+    _DsReduction,
     _FontSize,
     _FontWeight,
+    _ImageDsReduction,
 )
 from spatialdata_plot.pl.utils import (
     _RENDER_CMD_TO_CS_FLAG,
@@ -194,7 +196,7 @@ class PlotAccessor:
         shape: Literal["circle", "hex", "visium_hex", "square"] | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
-        datashader_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None,
+        datashader_reduction: _DsReduction | None = None,
         transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
@@ -384,7 +386,7 @@ class PlotAccessor:
         gene_symbols: str | None = None,
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
-        datashader_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None,
+        datashader_reduction: _DsReduction | None = None,
         transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
@@ -536,6 +538,8 @@ class PlotAccessor:
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         channels_as_legend: bool = False,
+        method: Literal["matplotlib", "datashader"] | None = None,
+        ds_reduction: _ImageDsReduction | None = None,
     ) -> sd.SpatialData:
         """
         Render image elements in SpatialData.
@@ -616,6 +620,21 @@ class PlotAccessor:
             Ignored for single-channel and RGB(A) images.  When multiple
             ``render_images`` calls use this flag on the same axes, all
             channel entries are combined into a single legend.
+        method : str | None, optional
+            Whether to use ``'matplotlib'`` (default) or ``'datashader'`` for
+            the downsampling step.  When ``'datashader'`` is selected, the
+            rasterization-to-canvas step uses
+            :meth:`datashader.Canvas.raster` with ``ds_reduction`` as the
+            downsample method (default ``'max'``), and ``imshow`` is rendered
+            with ``interpolation='nearest'`` so the chosen reduction is not
+            re-smoothed at display time.  Useful for very sparse images
+            (mostly zeros) where mean aggregation collapses the signal —
+            ``method='datashader'`` with ``ds_reduction='max'`` preserves the
+            rare non-zero pixels (``plt.spy``-style).
+        ds_reduction : {"max", "min", "mean", "mode", "first", "last", "var", "std"} | None, optional
+            Downsample reduction used by the datashader path.  Defaults to
+            ``'max'`` when ``method='datashader'``.  Ignored otherwise (a
+            warning is emitted if set without ``method='datashader'``).
 
         Notes
         -----
@@ -634,6 +653,20 @@ class PlotAccessor:
         """
         if grayscale and palette is not None:
             raise ValueError("Cannot combine grayscale=True with palette.")
+
+        if method is not None and not isinstance(method, str):
+            raise TypeError("Parameter 'method' must be a string.")
+        if method is not None and method not in ("matplotlib", "datashader"):
+            raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+        if ds_reduction is not None and not isinstance(ds_reduction, str):
+            raise TypeError("Parameter 'ds_reduction' must be a string.")
+        if ds_reduction is not None and ds_reduction not in get_args(_ImageDsReduction):
+            raise ValueError(
+                f"Parameter 'ds_reduction' must be one of {get_args(_ImageDsReduction)}, got {ds_reduction!r}."
+            )
+        if ds_reduction is not None and method != "datashader":
+            logger.warning("Parameter 'ds_reduction' has no effect unless method='datashader'; ignoring.")
+
         params_dict = _validate_image_render_params(
             self._sdata,
             element=element,
@@ -699,6 +732,8 @@ class PlotAccessor:
                 transfunc=transfunc,
                 grayscale=grayscale,
                 channels_as_legend=channels_as_legend,
+                method=method,
+                ds_reduction=ds_reduction,
             )
             n_steps += 1
 
