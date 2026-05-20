@@ -9,7 +9,7 @@ from anndata import AnnData
 from matplotlib.colors import Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
-from spatialdata.models import Labels2DModel, TableModel
+from spatialdata.models import Labels2DModel, Labels3DModel, TableModel
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot._logging import logger, logger_warns
@@ -548,5 +548,20 @@ def test_render_labels_disjoint_instance_ids_clear_error():
     try:
         with pytest.raises(ValueError, match=r"No instance IDs overlap.*table 't'.*element 'lbl'"):
             sdata.pl.render_labels("lbl", color="cat", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
+@pytest.mark.parametrize("scale_factors", [None, [2]])
+def test_render_labels_raises_on_3d(scale_factors):
+    # Regression test for #608: 3D labels must raise a clear ValueError, not crash
+    # deep in numpy with an opaque concatenation error.
+    arr = np.random.default_rng(0).integers(0, 5, size=(4, 16, 16), dtype=np.int32)
+    labels3d = Labels3DModel.parse(arr, dims=["z", "y", "x"], scale_factors=scale_factors)
+    sdata = SpatialData(labels={"lbl3d": labels3d})
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"render_labels does not support 3D.*lbl3d.*z.*4"):
+            sdata.pl.render_labels("lbl3d").pl.show(ax=ax)
     finally:
         plt.close(fig)

@@ -7,7 +7,7 @@ import scanpy as sc
 from matplotlib.colors import LogNorm, Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
-from spatialdata.models import Image2DModel
+from spatialdata.models import Image2DModel, Image3DModel
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot._logging import logger, logger_warns
@@ -718,6 +718,21 @@ class TestChannelsAsCategoriesNonVisual:
         assert "0" in labels
         assert "1" in labels
         plt.close("all")
+
+
+@pytest.mark.parametrize("scale_factors", [None, [2]])
+def test_render_images_raises_on_3d(scale_factors):
+    # Regression test for #608: 3D images must raise a clear ValueError, not crash
+    # deep in matplotlib with "Invalid shape" / opaque numpy errors.
+    img = np.random.default_rng(0).random((2, 4, 16, 16), dtype=np.float32)
+    image3d = Image3DModel.parse(img, dims=["c", "z", "y", "x"], c_coords=["DAPI", "GFP"], scale_factors=scale_factors)
+    sdata = SpatialData(images={"img3d": image3d})
+    fig, ax = plt.subplots()
+    try:
+        with pytest.raises(ValueError, match=r"render_images does not support 3D.*img3d.*z.*4"):
+            sdata.pl.render_images("img3d").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
 
 
 def test_lognorm_with_zeros_suppresses_colorbar_with_warning():
