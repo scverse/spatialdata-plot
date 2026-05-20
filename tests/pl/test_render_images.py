@@ -170,17 +170,21 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
         fig, axs = plt.subplots(1, 2, figsize=(8, 4))
         sdata.pl.render_images("img").pl.show(ax=axs[0], colorbar=False, title="default (mean)")
-        sdata.pl.render_images("img", method="datashader", ds_reduction="max").pl.show(
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max").pl.show(
             ax=axs[1], colorbar=False, title="datashader (max)"
         )
 
     def test_plot_method_datashader_reduction_grid(self):
-        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
-        arr[0, ::32, :] = 1.0
+        # Mid-grey background with sparse bright pixels: each reduction yields a
+        # visibly distinct panel — max preserves spots, min/mode show the
+        # background only, mean shows a slightly-lifted background.
+        rng = np.random.default_rng(0)
+        arr = np.full((1, 1024, 1024), 0.3, dtype=np.float32)
+        arr[0, rng.integers(0, 1024, 50), rng.integers(0, 1024, 50)] = 1.0
         sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
         fig, axs = plt.subplots(2, 2, figsize=(8, 8))
         for ax, red in zip(axs.flat, ("max", "min", "mean", "mode"), strict=True):
-            sdata.pl.render_images("img", method="datashader", ds_reduction=red).pl.show(
+            sdata.pl.render_images("img", method="datashader", datashader_reduction=red).pl.show(
                 ax=ax, colorbar=False, title=red
             )
 
@@ -785,7 +789,7 @@ def _render_sparse_image_max(**kwargs) -> float:
 def test_render_images_datashader_preserves_sparse_max():
     # Regression test for #449.
     default_max = _render_sparse_image_max()
-    datashader_max = _render_sparse_image_max(method="datashader", ds_reduction="max")
+    datashader_max = _render_sparse_image_max(method="datashader", datashader_reduction="max")
     assert default_max < 0.1, f"default path should collapse sparse signal, got max={default_max}"
     assert datashader_max == pytest.approx(1.0, abs=1e-6), (
         f"datashader should preserve sparse signal at 1.0, got {datashader_max}"
@@ -808,18 +812,18 @@ class TestRenderImagesDatashader:
         with pytest.raises(ValueError, match="matplotlib.*datashader"):
             sdata_blobs.pl.render_images("blobs_image", method="bogus")
 
-    def test_ds_reduction_invalid_type_raises(self, sdata_blobs: SpatialData):
+    def test_datashader_reduction_invalid_type_raises(self, sdata_blobs: SpatialData):
         with pytest.raises(TypeError, match="must be a string"):
-            sdata_blobs.pl.render_images("blobs_image", ds_reduction=42)  # type: ignore[arg-type]
+            sdata_blobs.pl.render_images("blobs_image", datashader_reduction=42)  # type: ignore[arg-type]
 
-    def test_ds_reduction_invalid_value_raises(self, sdata_blobs: SpatialData):
-        with pytest.raises(ValueError, match="ds_reduction"):
-            sdata_blobs.pl.render_images("blobs_image", method="datashader", ds_reduction="bogus")
+    def test_datashader_reduction_invalid_value_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="datashader_reduction"):
+            sdata_blobs.pl.render_images("blobs_image", method="datashader", datashader_reduction="bogus")
 
-    def test_ds_reduction_without_datashader_warns(self, sdata_blobs: SpatialData, caplog):
-        with logger_warns(caplog, logger, match="ds_reduction"):
+    def test_datashader_reduction_without_datashader_warns(self, sdata_blobs: SpatialData, caplog):
+        with logger_warns(caplog, logger, match="datashader_reduction"):
             _, ax = plt.subplots()
-            sdata_blobs.pl.render_images("blobs_image", ds_reduction="max").pl.show(ax=ax)
+            sdata_blobs.pl.render_images("blobs_image", datashader_reduction="max").pl.show(ax=ax)
 
     def test_datashader_basic_renders_single_image(self):
         arr = np.zeros((1, 512, 512), dtype=np.float32)
@@ -836,7 +840,7 @@ class TestRenderImagesDatashader:
         arr[2, 300, 300] = 1.0
         sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1", "c2", "c3"])})
         _, ax = plt.subplots(figsize=(2, 2), dpi=50)
-        sdata.pl.render_images("img", method="datashader", ds_reduction="max").pl.show(ax=ax)
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max").pl.show(ax=ax)
         assert len(ax.get_images()) == 1
 
     def test_datashader_rgb_passthrough(self):
@@ -854,12 +858,16 @@ class TestRenderImagesDatashader:
         arr[0, 100, 100] = 1.0
         sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
         _, ax = plt.subplots(figsize=(2, 2), dpi=50)
-        sdata.pl.render_images("img", method="datashader", ds_reduction="max", transfunc=np.log1p).pl.show(ax=ax)
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max", transfunc=np.log1p).pl.show(
+            ax=ax
+        )
         assert len(ax.get_images()) == 1
 
     def test_datashader_with_multiscale(self, sdata_blobs: SpatialData):
         _, ax = plt.subplots()
-        sdata_blobs.pl.render_images("blobs_multiscale_image", method="datashader", ds_reduction="max").pl.show(ax=ax)
+        sdata_blobs.pl.render_images("blobs_multiscale_image", method="datashader", datashader_reduction="max").pl.show(
+            ax=ax
+        )
         assert len(ax.get_images()) == 1
 
     def test_method_matplotlib_matches_default(self):

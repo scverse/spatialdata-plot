@@ -2075,6 +2075,9 @@ def _rasterize_if_necessary_datashader(
 
     # spatialdata.rasterize is invoked solely to inherit the output coords and
     # spatial transformation; its mean-aggregated values are overwritten below.
+    # TODO: this wastes a full per-channel resample pass. A future refactor can
+    # construct the target DataArray + transformation directly once spatialdata
+    # exposes a public geometry-only helper.
     world_x = float(extent["x"][1]) - float(extent["x"][0])
     world_y = float(extent["y"][1]) - float(extent["y"][0])
     target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)

@@ -539,7 +539,7 @@ class PlotAccessor:
         colorbar_params: dict[str, object] | None = None,
         channels_as_legend: bool = False,
         method: Literal["matplotlib", "datashader"] | None = None,
-        ds_reduction: _ImageDsReduction | None = None,
+        datashader_reduction: _ImageDsReduction | None = None,
     ) -> sd.SpatialData:
         """
         Render image elements in SpatialData.
@@ -624,14 +624,14 @@ class PlotAccessor:
             Whether to use ``'matplotlib'`` (default) or ``'datashader'`` for
             the downsampling step.  When ``'datashader'`` is selected, the
             rasterization-to-canvas step uses
-            :meth:`datashader.Canvas.raster` with ``ds_reduction`` as the
+            :meth:`datashader.Canvas.raster` with ``datashader_reduction`` as the
             downsample method (default ``'max'``), and ``imshow`` is rendered
             with ``interpolation='nearest'`` so the chosen reduction is not
             re-smoothed at display time.  Useful for very sparse images
             (mostly zeros) where mean aggregation collapses the signal —
-            ``method='datashader'`` with ``ds_reduction='max'`` preserves the
+            ``method='datashader'`` with ``datashader_reduction='max'`` preserves the
             rare non-zero pixels (``plt.spy``-style).
-        ds_reduction : {"max", "min", "mean", "mode", "first", "last", "var", "std"} | None, optional
+        datashader_reduction : {"max", "min", "mean", "mode", "first", "last", "var", "std"} | None, optional
             Downsample reduction used by the datashader path.  Defaults to
             ``'max'`` when ``method='datashader'``.  Ignored otherwise (a
             warning is emitted if set without ``method='datashader'``).
@@ -658,14 +658,16 @@ class PlotAccessor:
             raise TypeError("Parameter 'method' must be a string.")
         if method is not None and method not in ("matplotlib", "datashader"):
             raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
-        if ds_reduction is not None and not isinstance(ds_reduction, str):
-            raise TypeError("Parameter 'ds_reduction' must be a string.")
-        if ds_reduction is not None and ds_reduction not in get_args(_ImageDsReduction):
+        _valid_image_reductions = get_args(_ImageDsReduction)
+        if datashader_reduction is not None and not isinstance(datashader_reduction, str):
+            raise TypeError("Parameter 'datashader_reduction' must be a string.")
+        if datashader_reduction is not None and datashader_reduction not in _valid_image_reductions:
             raise ValueError(
-                f"Parameter 'ds_reduction' must be one of {get_args(_ImageDsReduction)}, got {ds_reduction!r}."
+                f"Parameter 'datashader_reduction' must be one of {_valid_image_reductions}, "
+                f"got {datashader_reduction!r}."
             )
-        if ds_reduction is not None and method != "datashader":
-            logger.warning("Parameter 'ds_reduction' has no effect unless method='datashader'; ignoring.")
+        if datashader_reduction is not None and method != "datashader":
+            logger.warning("Parameter 'datashader_reduction' has no effect unless method='datashader'; ignoring.")
 
         params_dict = _validate_image_render_params(
             self._sdata,
@@ -733,7 +735,7 @@ class PlotAccessor:
                 grayscale=grayscale,
                 channels_as_legend=channels_as_legend,
                 method=method,
-                ds_reduction=ds_reduction,
+                ds_reduction=datashader_reduction,
             )
             n_steps += 1
 
