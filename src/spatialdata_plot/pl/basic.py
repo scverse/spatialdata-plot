@@ -1302,7 +1302,7 @@ class PlotAccessor:
             norm = spec.mappable.norm
             if isinstance(norm, LogNorm):
                 vmin, vmax = norm.vmin, norm.vmax
-                if vmin is None or vmax is None or vmin <= 0 or vmax <= 0 or vmin >= vmax:
+                if vmin is None or vmax is None or vmin <= 0 or vmin >= vmax:
                     warnings.warn(
                         "Data contains zeros or non-positive values; colorbar suppressed for `LogNorm`. "
                         "Pass `colorbar=False` to silence this warning, or clip the data to positive values.",
