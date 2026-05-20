@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import scanpy as sc
-from matplotlib.colors import Normalize
+from matplotlib.colors import LogNorm, Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata.models import Image2DModel
@@ -682,3 +682,16 @@ class TestChannelsAsCategoriesNonVisual:
         assert "0" in labels
         assert "1" in labels
         plt.close("all")
+
+
+def test_lognorm_with_zeros_suppresses_colorbar_with_warning():
+    # regression test for #604: LogNorm + non-positive data must not raise an opaque
+    # matplotlib ValueError; instead suppress the colorbar with an actionable UserWarning.
+    img = np.zeros((1, 5, 5), dtype=np.float32)
+    sdata = SpatialData(images={"img": Image2DModel.parse(img, c_coords=["DAPI"])})
+    fig, ax = plt.subplots()
+    try:
+        with pytest.warns(UserWarning, match="LogNorm"):
+            sdata.pl.render_images("img", norm=LogNorm()).pl.show(ax=ax)
+    finally:
+        plt.close(fig)
