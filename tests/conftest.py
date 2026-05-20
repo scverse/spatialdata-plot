@@ -81,6 +81,34 @@ def sdata_blobs() -> SpatialData:
 
 
 @pytest.fixture()
+def sdata_dense_points() -> SpatialData:
+    """Dense (~20k) multi-cluster points dataset for density-rendering visual tests.
+
+    The blobs fixture is too sparse (~200 points across 500x500) for density to render
+    meaningfully without spreading; this fixture provides a Gaussian-cluster cloud with
+    a categorical ``gene`` column so the per-category density branch is exercised too.
+    """
+    rng = get_standard_RNG()
+    n_per_cluster = 20000
+    centers = [(120, 120), (380, 150), (250, 380)]
+    genes = ["gene_a", "gene_b", "gene_c"]
+    xs, ys, gs = [], [], []
+    for (cx, cy), gene in zip(centers, genes, strict=True):
+        xs.append(rng.normal(loc=cx, scale=18, size=n_per_cluster))
+        ys.append(rng.normal(loc=cy, scale=18, size=n_per_cluster))
+        gs.extend([gene] * n_per_cluster)
+    df = pd.DataFrame(
+        {
+            "x": np.concatenate(xs).clip(0, 500),
+            "y": np.concatenate(ys).clip(0, 500),
+            "gene": pd.Categorical(gs, categories=genes),
+        }
+    )
+    points = PointsModel.parse(df)
+    return SpatialData(points={"dense_points": points})
+
+
+@pytest.fixture()
 def sdata_blobs_str() -> SpatialData:
     return blobs(n_channels=5, c_coords=["c1", "c2", "c3", "c4", "c5"])
 

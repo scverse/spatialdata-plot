@@ -172,22 +172,22 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
-    def test_plot_density_plain(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points("blobs_points", density=True).pl.show()
+    def test_plot_density_plain(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", density=True).pl.show()
 
-    def test_plot_density_categorical(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points("blobs_points", color="genes", palette="tab20", density=True).pl.show()
+    def test_plot_density_categorical(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", color="gene", density=True).pl.show()
 
-    def test_plot_density_categorical_with_groups(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points(
-            "blobs_points", color="genes", groups=["gene_a"], palette="tab20", density=True
+    def test_plot_density_categorical_with_groups(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points(
+            "dense_points", color="gene", groups=["gene_a", "gene_b"], density=True
         ).pl.show()
 
-    def test_plot_density_how_log(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points("blobs_points", density=True, density_how="log").pl.show()
+    def test_plot_density_how_log(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", density=True, density_how="log").pl.show()
 
-    def test_plot_density_how_eq_hist(self, sdata_blobs: SpatialData):
-        sdata_blobs.pl.render_points("blobs_points", density=True, density_how="eq_hist").pl.show()
+    def test_plot_density_how_eq_hist(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", density=True, density_how="eq_hist").pl.show()
 
     def test_plot_points_categorical_color_column_matplotlib(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points("blobs_points", color="genes", method="matplotlib").pl.show()
