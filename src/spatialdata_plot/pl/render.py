@@ -1105,6 +1105,7 @@ def _render_points(
                 render_params.alpha,
                 spread_px=px,
                 how=shade_how,
+                density=render_params.density,
             )
         else:
             shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
