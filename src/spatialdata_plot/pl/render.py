@@ -1091,9 +1091,13 @@ def _render_points(
             color_vector = np.asarray([_hex_no_alpha(c) for c in color_vector])
 
         shade_how = render_params.density_how if render_params.density else "linear"
+        # Plain density (no color column) must use the user-facing cmap as a sequential
+        # gradient over counts; the categorical path collapses to a single color and only
+        # modulates alpha, which renders as a flat hue regardless of density.
+        plain_density = render_params.density and col_for_color is None
 
         nan_shaded = None
-        if color_by_categorical or col_for_color is None:
+        if not plain_density and (color_by_categorical or col_for_color is None):
             shaded = _ds_shade_categorical(
                 agg,
                 color_key,
