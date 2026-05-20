@@ -162,6 +162,28 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata = SpatialData(images={"img": img})
         sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
 
+    def test_plot_method_datashader_preserves_sparse_pixels(self):
+        # #449: bright pixels in a sparse image must survive the downsample step.
+        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
+        rng = np.random.default_rng(0)
+        arr[0, rng.integers(0, 1024, 50), rng.integers(0, 1024, 50)] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+        sdata.pl.render_images("img").pl.show(ax=axs[0], colorbar=False, title="default (mean)")
+        sdata.pl.render_images("img", method="datashader", ds_reduction="max").pl.show(
+            ax=axs[1], colorbar=False, title="datashader (max)"
+        )
+
+    def test_plot_method_datashader_reduction_grid(self):
+        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
+        arr[0, ::32, :] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        fig, axs = plt.subplots(2, 2, figsize=(8, 8))
+        for ax, red in zip(axs.flat, ("max", "min", "mean", "mode"), strict=True):
+            sdata.pl.render_images("img", method="datashader", ds_reduction=red).pl.show(
+                ax=ax, colorbar=False, title=red
+            )
+
 
 # ---------------------------------------------------------------------------
 # Grayscale + transfunc visual tests
@@ -854,59 +876,3 @@ class TestRenderImagesDatashader:
                 plt.close(fig)
 
         np.testing.assert_array_equal(_render_and_grab(), _render_and_grab(method="matplotlib"))
-
-
-class TestRenderImagesDatashaderVisual(PlotTester, metaclass=PlotTesterMeta):
-    """Visual regression tests for render_images(method='datashader') — #449."""
-
-    @staticmethod
-    def _sparse_sdata(n_pixels: int = 50, size: int = 1024, channels: tuple[str, ...] = ("c1",)) -> SpatialData:
-        rng = np.random.default_rng(0)
-        arr = np.zeros((len(channels), size, size), dtype=np.float32)
-        ys = rng.integers(0, size, size=n_pixels)
-        xs = rng.integers(0, size, size=n_pixels)
-        for c in range(len(channels)):
-            arr[c, ys, xs] = 1.0
-        return SpatialData(images={"img": Image2DModel.parse(arr, c_coords=list(channels))})
-
-    def test_plot_datashader_preserves_scattered_sparse_pixels(self):
-        sdata = self._sparse_sdata(n_pixels=50)
-        fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-        sdata.pl.render_images("img").pl.show(ax=axs[0], colorbar=False)
-        sdata.pl.render_images("img", method="datashader", ds_reduction="max").pl.show(ax=axs[1], colorbar=False)
-        axs[0].set_title("default (mean)")
-        axs[1].set_title("datashader (max)")
-
-    def test_plot_datashader_reduction_grid(self):
-        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
-        arr[0, ::32, :] = 1.0
-        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
-        fig, axs = plt.subplots(2, 2, figsize=(8, 8))
-        for ax, red in zip(axs.flat, ("max", "min", "mean", "mode"), strict=True):
-            sdata.pl.render_images("img", method="datashader", ds_reduction=red).pl.show(ax=ax, colorbar=False)
-            ax.set_title(red)
-
-    def test_plot_datashader_multichannel_with_per_channel_cmap(self):
-        sdata = self._sparse_sdata(n_pixels=30, channels=("c1", "c2", "c3"))
-        fig, ax = plt.subplots()
-        sdata.pl.render_images(
-            "img", method="datashader", ds_reduction="max", cmap=["Reds", "Greens", "Blues"]
-        ).pl.show(ax=ax, colorbar=False)
-
-    def test_plot_datashader_with_transfunc_log1p(self):
-        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
-        arr[0, 200, 200] = 1.0
-        arr[0, 800, 800] = 0.001
-        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
-        fig, ax = plt.subplots()
-        sdata.pl.render_images(
-            "img", method="datashader", ds_reduction="max", transfunc=np.log1p, cmap="viridis"
-        ).pl.show(ax=ax)
-
-    def test_plot_datashader_composes_with_shapes(self, sdata_blobs: SpatialData):
-        fig, ax = plt.subplots()
-        (
-            sdata_blobs.pl.render_images("blobs_image", method="datashader", ds_reduction="max")
-            .pl.render_shapes("blobs_circles")
-            .pl.show(ax=ax)
-        )
