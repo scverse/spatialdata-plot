@@ -58,6 +58,7 @@ from spatialdata_plot.pl.render_params import (
 )
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
+    _check_obs_var_shadow,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -369,6 +370,8 @@ def _render_shapes(
     col_for_color = render_params.col_for_color
     groups = render_params.groups
     table_layer = render_params.table_layer
+
+    _check_obs_var_shadow(sdata, element, col_for_color, render_params.table_name)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
@@ -765,6 +768,8 @@ def _render_points(
     color = render_params.color.get_hex() if render_params.color else None
     groups = render_params.groups
     palette = render_params.palette
+
+    _check_obs_var_shadow(sdata, element, col_for_color, table_name)
 
     if isinstance(groups, str):
         groups = [groups]
@@ -1686,6 +1691,8 @@ def _render_labels(
     col_for_color = render_params.col_for_color
     groups = render_params.groups
     scale = render_params.scale
+
+    _check_obs_var_shadow(sdata, element, col_for_color, table_name)
 
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
