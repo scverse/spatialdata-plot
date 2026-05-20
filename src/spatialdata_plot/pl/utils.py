@@ -64,7 +64,7 @@ from spatialdata import (
 )
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, TableModel, get_table_keys
+from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, get_table_keys
 from spatialdata.transformations.operations import get_transformation
 from spatialdata.transformations.transformations import Scale, Translation
 from spatialdata.transformations.transformations import Sequence as TransformSequence
@@ -110,26 +110,30 @@ def _check_obs_var_shadow(
     value_to_plot: str | None,
     table_name: str | None,
 ) -> None:
-    """Raise if `value_to_plot` exists in both `table.obs.columns` and `table.var_names`.
+    """Raise if ``value_to_plot`` exists in both ``table.obs.columns`` and ``table.var_names``.
 
-    Upstream `_get_table_origins` uses an `elif` chain, so a key that lives in both
-    locations is silently resolved to `obs` — masking the user's likely intent of
-    plotting gene expression. Catch this here before any value fetch.
+    Upstream ``_get_table_origins`` uses an ``elif`` chain, so a key that lives in
+    both locations is silently resolved to ``obs`` — masking the user's likely
+    intent of plotting gene expression. Catch this here before any value fetch.
+    Any ``None`` parameter short-circuits the check.
     """
-    if value_to_plot is None or table_name is None or sdata is None or table_name not in sdata.tables:
+    if (
+        value_to_plot is None
+        or table_name is None
+        or element_name is None
+        or sdata is None
+        or table_name not in sdata.tables
+    ):
+        return
+    if table_name not in get_element_annotators(sdata, element_name):
         return
     table = sdata.tables[table_name]
-    if value_to_plot not in table.obs.columns or value_to_plot not in table.var_names:
-        return
-    region = table.uns[TableModel.ATTRS_KEY][TableModel.REGION_KEY]
-    annotates_element = element_name in region if isinstance(region, list) else element_name == region
-    if not annotates_element:
-        return
-    raise ValueError(
-        f"Color key '{value_to_plot}' is ambiguous: it exists in both "
-        f"`table['{table_name}'].obs.columns` and `table['{table_name}'].var_names`. "
-        "Rename one of them (or drop the obs column) so the intended source is unambiguous."
-    )
+    if value_to_plot in table.obs.columns and value_to_plot in table.var_names:
+        raise ValueError(
+            f"`color={value_to_plot!r}` is ambiguous: it exists in both "
+            f"`table[{table_name!r}].obs.columns` and `table[{table_name!r}].var_names`. "
+            "Rename one of them (or drop the obs column) so the intended source is unambiguous."
+        )
 
 
 def _gate_palette_and_groups(
