@@ -1315,6 +1315,21 @@ def _render_images(
 
     n_channels = len(channels)
 
+    # Reject NaN early: silent substitution (na_color in 1ch, black in multi-channel)
+    # hides upstream data problems.
+    nan_channels: list[Any] = []
+    for ch in channels:
+        layer = img.sel(c=ch) if isinstance(ch, str) else img.isel(c=ch)
+        if np.issubdtype(layer.dtype, np.floating) and np.isnan(layer.values).any():
+            nan_channels.append(ch)
+    if nan_channels:
+        raise ValueError(
+            f"Image '{render_params.element}' contains NaN pixels in channel(s) {nan_channels}. "
+            "NaN is not supported by render_images. Replace NaN before plotting, e.g. "
+            f"`sdata.images['{render_params.element}'] = sdata.images['{render_params.element}'].fillna(0)`, "
+            "or mask the affected region."
+        )
+
     # When grayscale was applied and user didn't provide an explicit cmap,
     # default to "gray" for intuitive single-channel rendering.
     got_multiple_cmaps = isinstance(render_params.cmap_params, list)
