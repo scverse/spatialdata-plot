@@ -1525,6 +1525,18 @@ class PlotAccessor:
                 if fig_params.frameon is False:
                     ax.axis("off")
 
+            if has_shapes and wants_shapes:
+                empty_shape_elements = [
+                    name
+                    for name in wanted_elements
+                    if name in sdata.shapes and not sdata.shapes[name]["geometry"].apply(lambda g: not g.is_empty).any()
+                ]
+                if empty_shape_elements:
+                    raise ValueError(
+                        f"Cannot render shape element(s) {empty_shape_elements} in coordinate system {cs!r}: "
+                        "all geometries are empty. Drop the element or restore at least one non-empty geometry."
+                    )
+
             extent = get_extent(
                 sdata,
                 coordinate_system=cs,
