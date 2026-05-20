@@ -172,6 +172,23 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_plot_density_plain(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", density=True).pl.show()
+
+    def test_plot_density_categorical(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", color="genes", palette="tab20", density=True).pl.show()
+
+    def test_plot_density_categorical_with_groups(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points(
+            "blobs_points", color="genes", groups=["gene_a"], palette="tab20", density=True
+        ).pl.show()
+
+    def test_plot_density_how_log(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", density=True, density_how="log").pl.show()
+
+    def test_plot_density_how_eq_hist(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_points("blobs_points", density=True, density_how="eq_hist").pl.show()
+
     def test_plot_points_categorical_color_column_matplotlib(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points("blobs_points", color="genes", method="matplotlib").pl.show()
 
@@ -1178,3 +1195,75 @@ def test_datashader_canvas_from_empty_dataframe_does_not_crash():
         assert plot_width == 0 and plot_height == 0
     finally:
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Density mode (unit tests; visual tests live in the TestPoints class above)
+# ---------------------------------------------------------------------------
+
+
+def test_density_rejects_continuous_color(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="density=True is only supported"):
+        sdata_blobs.pl.render_points("blobs_points", color="instance_id", density=True).pl.show()
+    plt.close("all")
+
+
+def test_density_rejects_literal_color(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="literal color is ambiguous"):
+        sdata_blobs.pl.render_points("blobs_points", color="red", density=True)
+
+
+def test_density_rejects_matplotlib_method(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="datashader backend"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, method="matplotlib")
+
+
+def test_density_rejects_invalid_density_how(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="density_how"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, density_how="magic")
+
+
+def test_density_warns_on_ignored_size(sdata_blobs: SpatialData):
+    with pytest.warns(UserWarning, match="size is ignored when density=True"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, size=5.0)
+
+
+def test_density_warns_on_ignored_transfunc(sdata_blobs: SpatialData):
+    with pytest.warns(UserWarning, match="transfunc is ignored when density=True"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, transfunc=lambda x: x)
+
+
+def test_density_warns_on_ignored_norm(sdata_blobs: SpatialData):
+    with pytest.warns(UserWarning, match="norm.vmin/vmax are ignored when density=True"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, norm=Normalize(vmin=0, vmax=1))
+
+
+def test_density_warns_on_ignored_datashader_reduction(sdata_blobs: SpatialData):
+    with pytest.warns(UserWarning, match="datashader_reduction is ignored when density=True"):
+        sdata_blobs.pl.render_points("blobs_points", density=True, datashader_reduction="mean")
+
+
+def test_density_no_warnings_at_default_params(sdata_blobs: SpatialData, recwarn):
+    sdata_blobs.pl.render_points("blobs_points", density=True)
+    assert not any(("ignored when density=True" in str(w.message)) for w in recwarn.list)
+
+
+def test_density_forces_datashader_when_method_none(sdata_blobs: SpatialData):
+    out = sdata_blobs.pl.render_points("blobs_points", density=True)
+    last = list(out.plotting_tree.values())[-1]
+    assert last.method == "datashader"
+    assert last.density is True
+    assert last.density_how == "linear"
+
+
+def test_density_chaining_composes(sdata_blobs: SpatialData):
+    sdata_blobs.pl.render_points("blobs_points").pl.render_points("blobs_points", density=True).pl.show()
+    plt.close("all")
+
+
+def test_render_points_default_path_unchanged(sdata_blobs: SpatialData):
+    # smoke check: density=False (the default) must keep behaving as before
+    out = sdata_blobs.pl.render_points("blobs_points")
+    last = list(out.plotting_tree.values())[-1]
+    assert last.density is False
+    assert last.density_how == "linear"

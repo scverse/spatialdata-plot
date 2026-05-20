@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import os
+import warnings
 from collections import OrderedDict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from pathlib import Path
@@ -2820,7 +2821,17 @@ def _validate_points_render_params(
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
     gene_symbols: str | None = None,
+    density: bool = False,
+    density_how: Literal["linear", "log", "cbrt", "eq_hist"] = "linear",
+    transfunc: Callable[[float], float] | None = None,
+    method: str | None = None,
 ) -> dict[str, dict[str, Any]]:
+    if not isinstance(density, bool):
+        raise TypeError("Parameter 'density' must be a bool.")
+    allowed_how = ("linear", "log", "cbrt", "eq_hist")
+    if density_how not in allowed_how:
+        raise ValueError(f"Parameter 'density_how' must be one of {allowed_how}; got {density_how!r}.")
+
     param_dict: dict[str, Any] = {
         "sdata": sdata,
         "element": element,
@@ -2839,6 +2850,47 @@ def _validate_points_render_params(
         "colorbar_params": colorbar_params,
     }
     param_dict = _type_check_params(param_dict, "points")
+
+    if density:
+        if method == "matplotlib":
+            raise ValueError(
+                "density=True requires the datashader backend; got method='matplotlib'. "
+                "Either drop method= or set method='datashader'."
+            )
+        # Literal color (resolved into param_dict["color"] as a Color instance, with
+        # col_for_color set to None) is ambiguous with density: it could mean a
+        # single-hue cmap or a one-entry palette. Force the user to choose.
+        if param_dict["color"] is not None and param_dict["col_for_color"] is None:
+            raise ValueError(
+                "density=True with a literal color is ambiguous. Pass cmap= to recolor the "
+                "density, or palette= to assign a categorical color, but not color=<literal>."
+            )
+        # Warn-and-ignore: these parameters do not interact meaningfully with a
+        # count-based density and are silently dropped to keep the API consistent.
+        if size != 1.0:
+            warnings.warn(
+                "size is ignored when density=True; spreading would distort the count signal.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if transfunc is not None:
+            warnings.warn(
+                "transfunc is ignored when density=True (no continuous color vector to transform).",
+                UserWarning,
+                stacklevel=3,
+            )
+        if isinstance(norm, Normalize) and (norm.vmin is not None or norm.vmax is not None):
+            warnings.warn(
+                "norm.vmin/vmax are ignored when density=True; use density_how= to control intensity mapping.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if ds_reduction is not None:
+            warnings.warn(
+                "datashader_reduction is ignored when density=True; counts are forced.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     element_params: dict[str, dict[str, Any]] = {}
     for el in param_dict["element"]:
@@ -3715,11 +3767,17 @@ def _datashader_map_aggregate_to_color(
     min_alpha: float = 40,
     span: None | list[float] = None,
     clip: bool = True,
+    how: str = "linear",
 ) -> ds.tf.Image | np.ndarray[Any, np.dtype[np.uint8]]:
     """ds.tf.shade() part, ensuring correct clipping behavior.
 
     If necessary (norm.clip=False), split shading in 3 parts and in the end, stack results.
     This ensures the correct clipping behavior, because else datashader would always automatically clip.
+
+    ``how`` controls the count-to-color mapping passed to :func:`datashader.transfer_functions.shade`
+    (``"linear"`` by default; ``"log"``/``"cbrt"``/``"eq_hist"`` compress dynamic range). The split-shade
+    branch used for ``norm.clip=False`` always uses ``"linear"`` since per-segment shading would otherwise
+    interact poorly with rank-based mappings.
     """
     if not clip and isinstance(cmap, Colormap) and span is not None:
         # in case we use datashader together with a Normalize object where clip=False
@@ -3768,7 +3826,7 @@ def _datashader_map_aggregate_to_color(
         color_key=color_key,
         min_alpha=min_alpha,
         span=span,
-        how="linear",
+        how=how,
     )
     return _apply_cmap_alpha_to_datashader_result(result, agg, cmap, span)
 

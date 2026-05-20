@@ -227,6 +227,7 @@ def _ds_shade_continuous(
     na_color_hex: str,
     spread_px: int | None = None,
     ds_reduction: _DsReduction | None = None,
+    how: str = "linear",
 ) -> tuple[Any, Any | None, tuple[Any, Any] | None]:
     """Shade a continuous datashader aggregate, optionally applying spread and NaN coloring.
 
@@ -255,6 +256,7 @@ def _ds_shade_continuous(
         min_alpha=_convert_alpha_to_datashader_range(alpha),
         span=color_span,
         clip=norm.clip,
+        how=how,
     )
     shaded = _apply_user_alpha(shaded, alpha)
 
@@ -278,6 +280,7 @@ def _ds_shade_categorical(
     color_vector: Any,
     alpha: float,
     spread_px: int | None = None,
+    how: str = "linear",
 ) -> Any:
     """Shade a categorical or no-color datashader aggregate."""
     ds_cmap = None
@@ -292,6 +295,7 @@ def _ds_shade_categorical(
         cmap=ds_cmap,
         color_key=color_key,
         min_alpha=_convert_alpha_to_datashader_range(alpha),
+        how=how,
     )
     return _apply_user_alpha(shaded, alpha)
 
