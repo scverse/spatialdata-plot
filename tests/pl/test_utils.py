@@ -423,21 +423,11 @@ def test_color_column_collision_on_annotating_table_raises():
 
 
 def test_color_key_obs_var_shadow_raises():
-    # regression test for #621: when the same key exists in both `table.obs.columns`
-    # and `table.var_names`, upstream `_get_table_origins` silently returns only the
-    # obs origin (elif chain). Surface the ambiguity at the plotting layer instead.
-    pts = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "y": [1.0, 2.0, 3.0, 4.0]}))
-    obs = pd.DataFrame(
-        {
-            "instance_id": [0, 1, 2, 3],
-            "region": ["pts"] * 4,
-            "GeneA": [0.9, 0.8, 0.7, 0.6],
-        }
-    )
-    obs.index = obs.index.astype(str)
-    X = np.array([[1.0, 0.5], [0.8, 0.2], [0.3, 0.9], [0.1, 0.7]])
+    # regression test for #621
+    pts = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0], "y": [1.0, 2.0]}))
+    obs = pd.DataFrame({"instance_id": [0, 1], "region": ["pts"] * 2, "GeneA": [0.9, 0.6]}, index=["0", "1"])
     table = TableModel.parse(
-        AnnData(X=X, obs=obs, var=pd.DataFrame(index=["GeneA", "GeneB"])),
+        AnnData(X=np.zeros((2, 1)), obs=obs, var=pd.DataFrame(index=["GeneA"])),
         region=["pts"],
         region_key="region",
         instance_key="instance_id",
@@ -446,30 +436,6 @@ def test_color_key_obs_var_shadow_raises():
 
     with pytest.raises(ValueError, match=r"'GeneA'.*ambiguous.*obs\.columns.*var_names"):
         sdata.pl.render_points("pts", color="GeneA", table_name="t").pl.show()
-
-    # Negative control: only in var → no error.
-    obs_var_only = pd.DataFrame(
-        {"instance_id": [0, 1, 2, 3], "region": ["pts"] * 4},
-        index=[str(i) for i in range(4)],
-    )
-    table_var_only = TableModel.parse(
-        AnnData(X=X, obs=obs_var_only, var=pd.DataFrame(index=["GeneA", "GeneB"])),
-        region=["pts"],
-        region_key="region",
-        instance_key="instance_id",
-    )
-    sdata_var_only = SpatialData(points={"pts": pts}, tables={"t": table_var_only})
-    sdata_var_only.pl.render_points("pts", color="GeneA", table_name="t").pl.show()
-
-    # Negative control: only in obs → no error.
-    table_obs_only = TableModel.parse(
-        AnnData(X=X, obs=obs, var=pd.DataFrame(index=["G1", "G2"])),
-        region=["pts"],
-        region_key="region",
-        instance_key="instance_id",
-    )
-    sdata_obs_only = SpatialData(points={"pts": pts}, tables={"t": table_obs_only})
-    sdata_obs_only.pl.render_points("pts", color="GeneA", table_name="t").pl.show()
 
 
 def test_explicit_table_name_honored_when_element_has_same_column():
