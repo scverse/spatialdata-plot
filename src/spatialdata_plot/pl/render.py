@@ -4,7 +4,7 @@ import dataclasses
 from collections import abc
 from collections.abc import Sequence
 from copy import copy
-from typing import Any
+from typing import Any, Literal
 
 import dask
 import dask.dataframe as dd
@@ -78,6 +78,24 @@ from spatialdata_plot.pl.utils import (
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
+
+
+def _get_top_data_array(element: xr.DataArray | DataTree) -> xr.DataArray:
+    if isinstance(element, DataTree):
+        return next(iter(next(iter(element.values())).data_vars.values()))
+    return element
+
+
+def _guard_2d_only(element: xr.DataArray | DataTree, element_name: str, kind: Literal["images", "labels"]) -> None:
+    top = _get_top_data_array(element)
+    if "z" in top.dims:
+        z_size = top.sizes["z"]
+        raise ValueError(
+            f"render_{kind} does not support 3D {kind}. Element '{element_name}' has a 'z' dimension "
+            f"with {z_size} slices. Select a 2D slice before plotting:\n"
+            f"    sdata['{element_name}'].isel(z=0)\n"
+            "or use sd.bounding_box_query() to extract a 2D region."
+        )
 
 
 def _want_decorations(color_vector: Any, na_color: Color) -> bool:
@@ -1247,6 +1265,7 @@ def _render_images(
 
     palette = render_params.palette
     img = sdata_filt[render_params.element]
+    _guard_2d_only(img, render_params.element, "images")
     extent = get_extent(img, coordinate_system=coordinate_system)
     scale = render_params.scale
 
@@ -1674,6 +1693,7 @@ def _render_labels(
     )
 
     label = sdata_filt.labels[element]
+    _guard_2d_only(label, element, "labels")
     extent = get_extent(label, coordinate_system=coordinate_system)
 
     # get best scale out of multiscale label
