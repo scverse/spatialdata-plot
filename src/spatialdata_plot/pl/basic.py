@@ -20,7 +20,7 @@ from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
-from matplotlib.colors import Colormap, Normalize
+from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata import get_extent
@@ -1299,6 +1299,18 @@ class PlotAccessor:
             base_offsets_axes: dict[str, float],
             trackers_axes: dict[str, float],
         ) -> None:
+            norm = spec.mappable.norm
+            if isinstance(norm, LogNorm):
+                vmin, vmax = norm.vmin, norm.vmax
+                if vmin is None or vmax is None or vmin <= 0 or vmax <= 0 or vmin >= vmax:
+                    warnings.warn(
+                        "Data contains zeros or non-positive values; colorbar suppressed for `LogNorm`. "
+                        "Pass `colorbar=False` to silence this warning, or clip the data to positive values.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    return
+
             base_layout = {
                 "location": CBAR_DEFAULT_LOCATION,
                 "fraction": CBAR_DEFAULT_FRACTION,
