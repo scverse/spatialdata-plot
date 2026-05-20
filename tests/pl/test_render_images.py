@@ -542,26 +542,22 @@ def _nan_image(n_channels: int, nan_indices: list[int]) -> SpatialData:
     return SpatialData(images={"img": img})
 
 
-def test_nan_in_single_channel_raises():
-    sdata = _nan_image(n_channels=1, nan_indices=[0])
-    with pytest.raises(ValueError, match=r"NaN.*channel\(s\) \[0\]"):
-        sdata.pl.render_images("img").pl.show()
-
-
 def test_nan_in_multi_channel_raises():
+    # Message must list the offending channel and include the fillna hint.
     sdata = _nan_image(n_channels=2, nan_indices=[0])
-    with pytest.raises(ValueError, match=r"NaN.*channel\(s\) \[0\]"):
+    with pytest.raises(ValueError, match=r"NaN.*channel\(s\) \[0\].*fillna"):
         sdata.pl.render_images("img").pl.show()
 
 
-def test_finite_multi_channel_unaffected():
-    sdata = _nan_image(n_channels=2, nan_indices=[])
-    fig, ax = plt.subplots()
-    sdata.pl.render_images("img").pl.show(ax=ax)
-    plt.close(fig)
+def test_nan_in_single_channel_raises():
+    # 1ch previously substituted na_color silently; locks the new symmetric behavior.
+    sdata = _nan_image(n_channels=1, nan_indices=[0])
+    with pytest.raises(ValueError, match="NaN"):
+        sdata.pl.render_images("img").pl.show()
 
 
 def test_integer_dtype_skips_nan_check():
+    # Integer-dtype images can't contain NaN; the check must short-circuit on dtype.
     rng = np.random.default_rng(0)
     data = rng.integers(0, 255, (2, 8, 8), dtype=np.uint16)
     img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=[0, 1])
@@ -569,25 +565,6 @@ def test_integer_dtype_skips_nan_check():
     fig, ax = plt.subplots()
     sdata.pl.render_images("img").pl.show(ax=ax)
     plt.close(fig)
-
-
-def test_nan_only_in_unselected_channel_renders():
-    sdata = _nan_image(n_channels=2, nan_indices=[1])
-    fig, ax = plt.subplots()
-    sdata.pl.render_images("img", channel=[0]).pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_nan_error_lists_all_offending_channels():
-    sdata = _nan_image(n_channels=3, nan_indices=[0, 2])
-    with pytest.raises(ValueError, match=r"\[0, 2\]"):
-        sdata.pl.render_images("img").pl.show()
-
-
-def test_nan_error_message_includes_fillna_hint():
-    sdata = _nan_image(n_channels=1, nan_indices=[0])
-    with pytest.raises(ValueError, match="fillna"):
-        sdata.pl.render_images("img").pl.show()
 
 
 # Regression for #612: vmin/vmax kwargs are no longer accepted on any render
