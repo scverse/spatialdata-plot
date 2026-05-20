@@ -1040,6 +1040,18 @@ def test_render_points_color_by_z_with_extra_columns():
         plt.close(fig)
 
 
+@pytest.mark.parametrize("color", ["x", "y"])
+def test_render_points_color_by_coord_axis(color):
+    # regression test for #613
+    pts = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]}))
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color=color).pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
 def test_render_points_disjoint_instance_ids_clear_error():
     # regression test for #603: disjoint instance_id values must raise a clear ValueError
     points = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]}))
