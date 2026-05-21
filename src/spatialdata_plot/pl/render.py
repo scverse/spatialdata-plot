@@ -513,6 +513,13 @@ def _add_outline_legend(
     if fill_has_legend:
         fill_legend = ax.get_legend()
         if fill_legend is not None:
+            # Reposition the fill legend to the top of the right margin so the two
+            # stack contiguously. Scanpy's default `bbox_to_anchor=(1, 0.5)` centers
+            # the fill legend vertically, which looks unbalanced once a second legend
+            # is added below.
+            fill_legend.set_bbox_to_anchor((1.02, 1.0))
+            if hasattr(fill_legend, "set_loc"):
+                fill_legend.set_loc("upper left")
             ax.add_artist(fill_legend)  # keep fill legend on the axes
             # Force layout so get_window_extent returns the real (not stale) bbox.
             fig_params.fig.canvas.draw()
