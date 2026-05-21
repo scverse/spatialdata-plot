@@ -411,10 +411,8 @@ def _render_shapes(
 
     _check_obs_var_shadow(sdata, element, col_for_color, render_params.table_name)
 
-    # filter_tables=False: when table_name is set, the cs-level table copy is
-    # redundant — join_spatialelement_table below produces a per-element table
-    # that overwrites sdata_filt[table_name]. Skipping the upstream copy avoids
-    # materializing the full sparse .X for large consolidated tables.
+    # filter_tables=False: join_spatialelement_table below overwrites the table,
+    # so the cs-level sparse copy is wasted work.
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
@@ -437,11 +435,12 @@ def _render_shapes(
         _obs = sdata[table_name].obs
         _saved_index_name = _obs.index.name
         _saved_index: pd.Index | None = None
-        if _saved_index_name is not None and _saved_index_name in _obs.columns:
+        _name_collides = _saved_index_name is not None and _saved_index_name in _obs.columns
+        if _name_collides and not isinstance(_obs.index, pd.RangeIndex):
+            _saved_index = _obs.index
+            _obs.index = pd.RangeIndex(len(_obs))
+        elif _name_collides:
             _obs.index.name = None
-            if not isinstance(_obs.index, pd.RangeIndex):
-                _saved_index = _obs.index
-                _obs.index = pd.RangeIndex(len(_obs))
 
         try:
             element_dict, joined_table = join_spatialelement_table(
@@ -1761,9 +1760,8 @@ def _render_labels(
 
     _check_obs_var_shadow(sdata, element, col_for_color, table_name)
 
-    # filter_tables=False: see _render_shapes — match_table_to_element below
-    # (via _set_color_source_vec → get_values) already filters to the single
-    # element, so the upstream cs-level sparse copy is wasted work.
+    # filter_tables=False: match_table_to_element below already filters per
+    # element, so the cs-level sparse copy is wasted work.
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
