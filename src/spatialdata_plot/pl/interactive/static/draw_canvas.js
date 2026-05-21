@@ -53,10 +53,12 @@ function render({ model, el }) {
 
     let shapes = [];
     let drawing = null;
+    let drawingNode = null;  // SVG node for the in-progress shape; updated in mousemove
     let pendingPoly = null;
     let hoverIndex = -1;
     let vbox = { x: 0, y: 0, w: W, h: H };
     const SNAP_PX = 10;
+    const LASSO_MIN_PX = 1;  // viewbox-px gate on lasso vert push
 
     function applyViewbox() {
         const sx = W / vbox.w;
@@ -68,9 +70,16 @@ function render({ model, el }) {
     applyViewbox();
 
     function setShapes(next) {
+        if (next === shapes) return;
+        if (next.length === 0 && shapes.length === 0) return;
         shapes = next;
         model.set('shapes', shapes);
         model.save_changes();
+    }
+
+    function popLastShape() {
+        if (shapes.length === 0) return;
+        setShapes(shapes.slice(0, -1));
     }
 
     function getXY(e) {
@@ -90,40 +99,54 @@ function render({ model, el }) {
         return n;
     }
 
+    function pointsAttr(verts) {
+        return verts.map(v => v.join(',')).join(' ');
+    }
+
     function shapeNode(s, color, opts) {
         opts = opts || {};
-        const sw = opts.lw || 2;
-        const dash = opts.dashed ? '6,4' : '';
+        const common = {
+            stroke: color,
+            'stroke-width': opts.lw || 2,
+            'vector-effect': 'non-scaling-stroke',
+            'stroke-dasharray': opts.dashed ? '6,4' : '',
+        };
         const fillOp = opts.fillOp == null ? 0.15 : opts.fillOp;
         if (s.type === 'rect') {
             const [x0, y0] = s.verts[0];
             const [x1, y1] = s.verts[2];
             return makeEl('rect', {
+                ...common,
                 x: Math.min(x0, x1), y: Math.min(y0, y1),
                 width: Math.abs(x1 - x0), height: Math.abs(y1 - y0),
-                stroke: color, 'stroke-width': sw,
-                'vector-effect': 'non-scaling-stroke',
                 fill: color, 'fill-opacity': fillOp,
-                'stroke-dasharray': dash,
-            });
-        } else if (s.type === 'polygon') {
-            return makeEl('polygon', {
-                points: s.verts.map(v => v.join(',')).join(' '),
-                stroke: color, 'stroke-width': sw,
-                'vector-effect': 'non-scaling-stroke',
-                fill: color, 'fill-opacity': fillOp,
-                'stroke-dasharray': dash,
-            });
-        } else if (s.type === 'polyline') {
-            return makeEl('polyline', {
-                points: s.verts.map(v => v.join(',')).join(' '),
-                stroke: color, 'stroke-width': sw,
-                'vector-effect': 'non-scaling-stroke',
-                fill: 'none',
-                'stroke-dasharray': dash,
             });
         }
+        if (s.type === 'polygon') {
+            return makeEl('polygon', {
+                ...common,
+                points: pointsAttr(s.verts),
+                fill: color, 'fill-opacity': fillOp,
+            });
+        }
+        if (s.type === 'polyline') {
+            return makeEl('polyline', { ...common, points: pointsAttr(s.verts), fill: 'none' });
+        }
         return null;
+    }
+
+    function updateDrawingNode() {
+        if (!drawing || !drawingNode) return;
+        if (drawing.type === 'rect') {
+            const [x0, y0] = drawing.verts[0];
+            const [x1, y1] = drawing.verts[2];
+            drawingNode.setAttribute('x', Math.min(x0, x1));
+            drawingNode.setAttribute('y', Math.min(y0, y1));
+            drawingNode.setAttribute('width', Math.abs(x1 - x0));
+            drawingNode.setAttribute('height', Math.abs(y1 - y0));
+        } else {
+            drawingNode.setAttribute('points', pointsAttr(drawing.verts));
+        }
     }
 
     function distPx(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
@@ -138,35 +161,42 @@ function render({ model, el }) {
         return distPx([e.clientX, e.clientY], [cx, cy]) <= SNAP_PX;
     }
 
+    function attachShapeListeners(n, i) {
+        n.style.cursor = 'pointer';
+        n.dataset.idx = String(i);
+        n.addEventListener('mouseenter', () => { hoverIndex = i; redraw(); });
+        n.addEventListener('mouseleave', () => {
+            if (hoverIndex === i) { hoverIndex = -1; redraw(); }
+        });
+        n.addEventListener('click', (ev) => {
+            if (ev.altKey) {
+                const next = shapes.slice(); next.splice(i, 1);
+                hoverIndex = -1;
+                setShapes(next);
+                ev.stopPropagation();
+            }
+        });
+    }
+
     function redraw() {
         while (svg.firstChild) svg.removeChild(svg.firstChild);
+        drawingNode = null;
         shapes.forEach((s, i) => {
             const isHover = i === hoverIndex;
             const n = shapeNode(s, isHover ? '#fb923c' : '#22d3ee',
                 { lw: isHover ? 3 : 2, fillOp: isHover ? 0.25 : 0.15 });
             if (n) {
-                n.style.cursor = 'pointer';
-                n.dataset.idx = String(i);
-                n.addEventListener('mouseenter', () => {
-                    hoverIndex = i; redraw();
-                });
-                n.addEventListener('mouseleave', () => {
-                    if (hoverIndex === i) { hoverIndex = -1; redraw(); }
-                });
-                n.addEventListener('click', (ev) => {
-                    if (ev.altKey) {
-                        const next = shapes.slice(); next.splice(i, 1);
-                        hoverIndex = -1;
-                        setShapes(next);
-                        ev.stopPropagation();
-                    }
-                });
+                attachShapeListeners(n, i);
                 svg.appendChild(n);
             }
         });
         if (drawing) {
             const n = shapeNode(drawing, '#ec4899', { dashed: true });
-            if (n) { n.style.pointerEvents = 'none'; svg.appendChild(n); }
+            if (n) {
+                n.style.pointerEvents = 'none';
+                svg.appendChild(n);
+                drawingNode = n;
+            }
         }
         if (pendingPoly && pendingPoly.verts.length > 0) {
             const px = vboxScalePerSvgPx();
@@ -193,6 +223,10 @@ function render({ model, el }) {
         redraw();
     }
 
+    function vboxEq(a, b) {
+        return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+    }
+
     function zoomAt(clientX, clientY, factor) {
         const r = svg.getBoundingClientRect();
         const fx = (clientX - r.left) / r.width;
@@ -206,35 +240,41 @@ function render({ model, el }) {
         if (newW < minW) newW = minW;
         if (newH < minH) newH = minH;
         if (newW > W) { newW = W; newH = H; }
-        vbox.x = px - fx * newW;
-        vbox.y = py - fy * newH;
-        vbox.w = newW; vbox.h = newH;
-        clampVbox();
+        const next = { x: px - fx * newW, y: py - fy * newH, w: newW, h: newH };
+        clampVboxObj(next);
+        if (vboxEq(vbox, next)) return;
+        vbox = next;
         applyViewbox();
         redraw();
     }
     function panBy(dxClient, dyClient) {
         const r = svg.getBoundingClientRect();
-        vbox.x -= dxClient * (vbox.w / r.width);
-        vbox.y -= dyClient * (vbox.h / r.height);
-        clampVbox();
+        const next = {
+            x: vbox.x - dxClient * (vbox.w / r.width),
+            y: vbox.y - dyClient * (vbox.h / r.height),
+            w: vbox.w, h: vbox.h,
+        };
+        clampVboxObj(next);
+        if (vboxEq(vbox, next)) return;
+        vbox = next;
         applyViewbox();
         redraw();
     }
-    function clampVbox() {
-        if (vbox.x < 0) vbox.x = 0;
-        if (vbox.y < 0) vbox.y = 0;
-        if (vbox.x + vbox.w > W) vbox.x = W - vbox.w;
-        if (vbox.y + vbox.h > H) vbox.y = H - vbox.h;
+    function clampVboxObj(v) {
+        if (v.x < 0) v.x = 0;
+        if (v.y < 0) v.y = 0;
+        if (v.x + v.w > W) v.x = W - v.w;
+        if (v.y + v.h > H) v.y = H - v.h;
     }
     function fitView() {
-        vbox = { x: 0, y: 0, w: W, h: H };
+        const next = { x: 0, y: 0, w: W, h: H };
+        if (vboxEq(vbox, next)) return;
+        vbox = next;
         applyViewbox();
         redraw();
     }
 
-    let panning = false;
-    let panStart = null;
+    let panStart = null;  // panning iff panStart !== null
 
     function onWheel(e) {
         e.preventDefault();
@@ -244,7 +284,6 @@ function render({ model, el }) {
 
     function onMouseDown(e) {
         if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-            panning = true;
             panStart = [e.clientX, e.clientY];
             svg.style.cursor = 'grabbing';
             e.preventDefault();
@@ -268,14 +307,14 @@ function render({ model, el }) {
         } else if (tool === 'polygon') {
             if (!pendingPoly) pendingPoly = { type: 'polygon', verts: [] };
             pendingPoly.verts.push([x, y]);
-            drawing = { type: 'polyline', verts: [...pendingPoly.verts] };
+            drawing = { type: 'polyline', verts: pendingPoly.verts };
             redraw();
         }
         e.preventDefault();
     }
 
     function onMouseMove(e) {
-        if (panning) {
+        if (panStart !== null) {
             const dx = e.clientX - panStart[0];
             const dy = e.clientY - panStart[1];
             panStart = [e.clientX, e.clientY];
@@ -288,16 +327,19 @@ function render({ model, el }) {
         if (tool === 'rectangle') {
             const [x0, y0] = drawing.verts[0];
             drawing.verts = [[x0, y0], [x, y0], [x, y], [x0, y]];
-            redraw();
+            updateDrawingNode();
         } else if (tool === 'lasso') {
-            drawing.verts.push([x, y]);
-            redraw();
+            const last = drawing.verts[drawing.verts.length - 1];
+            if (distPx(last, [x, y]) >= LASSO_MIN_PX) {
+                drawing.verts.push([x, y]);
+                updateDrawingNode();
+            }
         }
     }
 
     function onMouseUp(e) {
-        if (panning) {
-            panning = false; panStart = null;
+        if (panStart !== null) {
+            panStart = null;
             svg.style.cursor = 'crosshair';
             return;
         }
@@ -333,12 +375,12 @@ function render({ model, el }) {
             return;
         }
         if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
-            if (shapes.length > 0) setShapes(shapes.slice(0, -1));
+            popLastShape();
             e.preventDefault();
             return;
         }
         if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (shapes.length > 0) setShapes(shapes.slice(0, -1));
+            popLastShape();
             e.preventDefault();
             return;
         }
@@ -349,7 +391,7 @@ function render({ model, el }) {
     svg.addEventListener('mousedown', onMouseDown);
     svg.addEventListener('mousemove', onMouseMove);
     svg.addEventListener('mouseup', onMouseUp);
-    svg.addEventListener('mouseleave', (e) => { if (!panning) onMouseUp(e); });
+    svg.addEventListener('mouseleave', (e) => { if (panStart === null) onMouseUp(e); });
     svg.addEventListener('keydown', onKeyDown);
     svg.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -360,20 +402,22 @@ function render({ model, el }) {
     updateCursor();
 
     model.on('change:tool', () => {
+        const hadInProgress = pendingPoly !== null || drawing !== null;
         pendingPoly = null;
         drawing = null;
         updateCursor();
-        redraw();
+        if (hadInProgress) redraw();
     });
     model.on('change:clear_trigger', () => {
-        shapes = []; drawing = null; pendingPoly = null;
-        model.set('shapes', []); model.save_changes();
+        const hadInProgress = drawing !== null || pendingPoly !== null;
+        drawing = null;
+        pendingPoly = null;
+        if (shapes.length === 0 && !hadInProgress) return;
+        setShapes([]);
         redraw();
     });
     model.on('change:close_poly_trigger', () => { commitPendingPolygon(); });
-    model.on('change:undo_trigger', () => {
-        if (shapes.length > 0) setShapes(shapes.slice(0, -1));
-    });
+    model.on('change:undo_trigger', () => { popLastShape(); });
     model.on('change:fit_trigger', () => { fitView(); });
 }
 

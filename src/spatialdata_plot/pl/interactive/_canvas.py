@@ -1,4 +1,3 @@
-"""anywidget wrapping a client-side SVG drawing canvas."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +6,8 @@ import anywidget
 import traitlets
 
 _ESM_PATH = Path(__file__).parent / "static" / "draw_canvas.js"
+
+TOOLS = ("rectangle", "polygon", "lasso")
 
 
 class DrawCanvas(anywidget.AnyWidget):
@@ -26,7 +27,7 @@ class DrawCanvas(anywidget.AnyWidget):
     image_width, image_height
         Pixel dimensions of the PNG (used to set the SVG ``viewBox``).
     tool
-        ``"rectangle"``, ``"polygon"``, or ``"lasso"``.
+        One of ``TOOLS``.
     shapes
         List of ``{"type": "rect"|"polygon", "verts": [[x, y], ...]}`` in
         image-pixel coordinates. JS pushes to this on commit.
@@ -41,7 +42,7 @@ class DrawCanvas(anywidget.AnyWidget):
     image_url = traitlets.Unicode("").tag(sync=True)
     image_width = traitlets.Int(720).tag(sync=True)
     image_height = traitlets.Int(720).tag(sync=True)
-    tool = traitlets.Unicode("rectangle").tag(sync=True)
+    tool = traitlets.Enum(TOOLS, default_value="rectangle").tag(sync=True)
     shapes = traitlets.List([]).tag(sync=True)
     clear_trigger = traitlets.Int(0).tag(sync=True)
     close_poly_trigger = traitlets.Int(0).tag(sync=True)

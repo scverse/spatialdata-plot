@@ -1,21 +1,28 @@
-"""ipywidgets-based session orchestrating the DrawCanvas.
-
-Internal class — users invoke :meth:`PlotAccessor.annotate`, which constructs
-a session and displays it.
-"""
+"""ipywidgets-based session orchestrating the DrawCanvas. Internal."""
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import Any, Literal
 
 import ipywidgets as W
 import spatialdata as sd
 from IPython.display import display
+from shapely.geometry import Polygon
+from spatialdata.transformations.operations import get_transformation
 
 from ._canvas import DrawCanvas
 from ._commit import build_shapes_model, pixel_shape_to_polygon
-from ._persist import commit_to_memory, persist_to_disk
-from ._render import render_to_png
+from ._persist import commit_to_memory
+from ._render import RenderExtent, render_to_png
+
+BannerKind = Literal["info", "success", "error", "hint"]
+
+_BANNER_CLASS = {
+    "info": "sdp-banner sdp-banner-info",
+    "success": "sdp-banner sdp-banner-success",
+    "error": "sdp-banner sdp-banner-error",
+    "hint": "sdp-banner sdp-banner-hint",
+}
 
 _CSS = """
 <style>
@@ -42,14 +49,8 @@ _CSS = """
 """
 
 
-def _fmt_banner(msg: str, kind: str = "info") -> str:
-    cls = {
-        "info": "sdp-banner sdp-banner-info",
-        "success": "sdp-banner sdp-banner-success",
-        "error": "sdp-banner sdp-banner-error",
-        "hint": "sdp-banner sdp-banner-hint",
-    }.get(kind, "sdp-banner sdp-banner-info")
-    return f"<div class='{cls}'>{msg}</div>"
+def _fmt_banner(msg: str, kind: BannerKind = "info") -> str:
+    return f"<div class='{_BANNER_CLASS[kind]}'>{msg}</div>"
 
 
 def _validate(sdata: sd.SpatialData, coordinate_system: str, element: str) -> None:
@@ -59,10 +60,8 @@ def _validate(sdata: sd.SpatialData, coordinate_system: str, element: str) -> No
             f"Available: {list(sdata.coordinate_systems)}"
         )
     if element not in sdata.images:
-        raise ValueError(
-            f"Unknown image element {element!r}. Available: {list(sdata.images)}"
-        )
-    transforms = sd.transformations.get_transformation(sdata.images[element], get_all=True)
+        raise ValueError(f"Unknown image element {element!r}. Available: {list(sdata.images)}")
+    transforms = get_transformation(sdata[element], get_all=True)
     if coordinate_system not in transforms:
         raise ValueError(
             f"Image {element!r} is not registered in coordinate system "
@@ -71,10 +70,7 @@ def _validate(sdata: sd.SpatialData, coordinate_system: str, element: str) -> No
 
 
 class _InteractiveSession:
-    """Internal session class driving the DrawCanvas widget.
-
-    Constructed by :meth:`PlotAccessor.annotate`. Not part of the public API.
-    """
+    """Drives the DrawCanvas widget. Constructed by :meth:`PlotAccessor.annotate`."""
 
     def __init__(
         self,
@@ -86,47 +82,49 @@ class _InteractiveSession:
     ) -> None:
         _validate(sdata, coordinate_system, element)
 
-        self.sdata = sdata
+        self._sdata = sdata
         self._cs = coordinate_system
         self._element = element
         self._persist_enabled = persist
         self.canvas: DrawCanvas | None = None
-        self._image_w: int | None = None
-        self._image_h: int | None = None
-        self._xlim: tuple[float, float] | None = None
-        self._ylim: tuple[float, float] | None = None
-        self.commits: list[str] = []
+        self._extent: RenderExtent | None = None
+        self._commits: list[str] = []
 
         self._style = W.HTML(value=_CSS)
 
-        # Tool toggle
         self.tool_tb = W.ToggleButtons(
             options=[("Rect", "rectangle"), ("Polygon", "polygon"), ("Lasso", "lasso")],
             value="rectangle",
             description="Tool:",
         )
         self.tool_tb.observe(self._on_tool_change, names="value")
-        self.close_poly_btn = W.Button(description="Close polygon", icon="check", tooltip="Enter")
-        self.close_poly_btn.on_click(self._on_close_polygon)
-        self.close_poly_btn.disabled = True
-        self.undo_btn = W.Button(description="Undo", icon="rotate-left", tooltip="Ctrl+Z")
-        self.undo_btn.on_click(self._on_undo)
-        self.undo_btn.disabled = True
-        self.clear_btn = W.Button(description="Clear", icon="trash", tooltip="Delete")
-        self.clear_btn.on_click(self._on_clear)
-        self.fit_btn = W.Button(description="Fit view", icon="compress", tooltip="F")
-        self.fit_btn.on_click(self._on_fit)
+        self.close_poly_btn = self._trigger_btn(
+            "Close polygon", "check", "close_poly_trigger", tooltip="Enter", disabled=True,
+        )
+        self.undo_btn = self._trigger_btn(
+            "Undo", "rotate-left", "undo_trigger", tooltip="Ctrl+Z", disabled=True,
+        )
+        self.clear_btn = self._trigger_btn(
+            "Clear", "trash", "clear_trigger", tooltip="Delete",
+            after=lambda: self._set_banner("Canvas cleared.", "info"),
+        )
+        self.fit_btn = self._trigger_btn("Fit view", "compress", "fit_trigger", tooltip="F")
         self.shape_count_lbl = W.Label(value="0 shape(s) on canvas")
 
-        # Save
         self.name_tx = W.Text(value="", placeholder="name…", description="Name:")
         self.save_btn = W.Button(description="Save", button_style="success", icon="save")
         self.save_btn.on_click(self._on_save)
-        self.persist_btn = W.Button(description="Write to disk", button_style="warning", icon="hdd-o")
-        self.persist_btn.on_click(self._on_persist)
-        self.persist_btn.disabled = True
 
-        # Banner + canvas holder
+        save_row_widgets: list[W.Widget] = [self.name_tx, self.save_btn]
+        self.persist_btn: W.Button | None = None
+        if persist:
+            self.persist_btn = W.Button(
+                description="Write to disk", button_style="warning", icon="hdd-o",
+            )
+            self.persist_btn.on_click(self._on_persist)
+            self.persist_btn.disabled = True
+            save_row_widgets.append(self.persist_btn)
+
         self.banner = W.HTML(value=_fmt_banner(
             f"Annotating <b>{element!r}</b> in coordinate system <b>{coordinate_system!r}</b>. "
             "Pick a tool and draw. Click canvas first so keyboard shortcuts work. "
@@ -138,10 +136,6 @@ class _InteractiveSession:
 
         def section(label: str) -> W.HTML:
             return W.HTML(value=f"<div class='sdp-section-title'>{label}</div>")
-
-        save_row_widgets = [self.name_tx, self.save_btn]
-        if persist:
-            save_row_widgets.append(self.persist_btn)
 
         controls_card = W.VBox([
             W.HTML(value=(
@@ -163,27 +157,44 @@ class _InteractiveSession:
         self.controls = W.VBox([self._style, controls_card, canvas_card])
 
     def show(self) -> None:
-        """Render the image and display the controls + canvas."""
         self._render()
         display(self.controls)
 
-    def _set_banner(self, msg: str, kind: str = "info") -> None:
+    def _set_banner(self, msg: str, kind: BannerKind = "info") -> None:
         self.banner.value = _fmt_banner(msg, kind)
 
-    # ----- render -----
+    def _trigger_btn(
+        self,
+        description: str,
+        icon: str,
+        trait_name: str,
+        *,
+        tooltip: str = "",
+        disabled: bool = False,
+        after: Any = None,
+    ) -> W.Button:
+        btn = W.Button(description=description, icon=icon, tooltip=tooltip)
+        btn.disabled = disabled
+
+        def _on_click(_b: W.Button) -> None:
+            if self.canvas is None:
+                return
+            setattr(self.canvas, trait_name, getattr(self.canvas, trait_name) + 1)
+            if after is not None:
+                after()
+
+        btn.on_click(_on_click)
+        return btn
 
     def _render(self) -> None:
-        png_bytes, image_w, image_h, xlim, ylim = render_to_png(
-            self.sdata, self._element, self._cs,
-        )
+        png_bytes, extent = render_to_png(self._sdata, self._element, self._cs)
         data_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
-        self._image_w, self._image_h = image_w, image_h
-        self._xlim, self._ylim = xlim, ylim
+        self._extent = extent
 
         self.canvas = DrawCanvas(
             image_url=data_url,
-            image_width=image_w,
-            image_height=image_h,
+            image_width=extent.image_w,
+            image_height=extent.image_h,
             tool=self.tool_tb.value,
         )
         self.canvas.observe(self._on_shapes_change, names="shapes")
@@ -195,8 +206,6 @@ class _InteractiveSession:
         self.shape_count_lbl.value = f"{len(shapes)} shape(s) on canvas"
         self.undo_btn.disabled = len(shapes) == 0
 
-    # ----- tool / clear / undo / fit / close -----
-
     def _on_tool_change(self, change: dict[str, Any]) -> None:
         if self.canvas is None:
             return
@@ -204,28 +213,25 @@ class _InteractiveSession:
         self.close_poly_btn.disabled = change["new"] != "polygon"
         self._set_banner(f"Tool: <b>{change['new']}</b>", "info")
 
-    def _on_close_polygon(self, _btn: W.Button) -> None:
-        if self.canvas is None:
-            return
-        self.canvas.close_poly_trigger += 1
+    def _collect_polygons(self) -> list[Polygon]:
+        assert self.canvas is not None and self._extent is not None
+        polys: list[Polygon] = []
+        for sh in self.canvas.shapes:
+            p = pixel_shape_to_polygon(sh, self._extent)
+            if p is not None:
+                polys.append(p)
+        return polys
 
-    def _on_undo(self, _btn: W.Button) -> None:
-        if self.canvas is None:
-            return
-        self.canvas.undo_trigger += 1
+    def _commit_polygons(self, polys: list[Polygon], name: str) -> tuple[str, bool]:
+        shapes_model = build_shapes_model(polys, self._cs)
+        target = commit_to_memory(self._sdata, shapes_model, name)
+        self._commits.append(target)
+        return target, target != name
 
-    def _on_clear(self, _btn: W.Button) -> None:
-        if self.canvas is None:
-            return
+    def _reset_canvas_state(self) -> None:
+        assert self.canvas is not None
         self.canvas.clear_trigger += 1
-        self._set_banner("Canvas cleared.", "info")
-
-    def _on_fit(self, _btn: W.Button) -> None:
-        if self.canvas is None:
-            return
-        self.canvas.fit_trigger += 1
-
-    # ----- save / persist -----
+        self.shape_count_lbl.value = "0 shape(s) on canvas"
 
     def _on_save(self, _btn: W.Button) -> None:
         name = self.name_tx.value.strip()
@@ -236,11 +242,7 @@ class _InteractiveSession:
             self._set_banner("No shapes drawn yet.", "error")
             return
 
-        polys = []
-        for sh in self.canvas.shapes:
-            p = pixel_shape_to_polygon(sh, self._image_w, self._image_h, self._xlim, self._ylim)
-            if p is not None:
-                polys.append(p)
+        polys = self._collect_polygons()
         if not polys:
             self._set_banner(
                 f"{len(self.canvas.shapes)} shape(s) on canvas but none parsed as valid polygons.",
@@ -248,28 +250,26 @@ class _InteractiveSession:
             )
             return
 
-        shapes_model = build_shapes_model(polys, self._cs)
-        target = commit_to_memory(self.sdata, shapes_model, name)
-        self.commits.append(target)
+        target, renamed = self._commit_polygons(polys, name)
+        self._reset_canvas_state()
 
-        self.canvas.clear_trigger += 1
-        self.shape_count_lbl.value = "0 shape(s) on canvas"
-        renamed = target != name
         msg = f"Saved <b>{target!r}</b> with {len(polys)} polygon(s)."
         if renamed:
             msg += " (name collided; renamed)"
         self._set_banner(msg, "success")
-        if self._persist_enabled:
-            self.persist_btn.disabled = self.sdata.path is None
+        if self.persist_btn is not None:
+            self.persist_btn.disabled = self._sdata.path is None
 
     def _on_persist(self, _btn: W.Button) -> None:
-        if not self.commits:
+        if not self._persist_enabled:
+            return
+        if not self._commits:
             self._set_banner("Nothing saved this session yet.", "error")
             return
-        target = self.commits[-1]
+        target = self._commits[-1]
         try:
-            persist_to_disk(self.sdata, target)
-        except ValueError as exc:
+            self._sdata.write_element(target, overwrite=True)
+        except (ValueError, OSError) as exc:
             self._set_banner(str(exc), "error")
             return
-        self._set_banner(f"Persisted <b>{target!r}</b> → {self.sdata.path}", "success")
+        self._set_banner(f"Persisted <b>{target!r}</b> → {self._sdata.path}", "success")
