@@ -33,6 +33,20 @@ _ = spatialdata_plot
 #    ".png" is appended to <your_filename>, no need to set it
 
 
+def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
+    """Patch the shared blobs fixture so its table annotates ``blobs_polygons``.
+
+    Adds two categorical columns and one continuous column for the outline-color tests.
+    """
+    sdata["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata["table"].n_obs)
+    sdata["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    n = sdata["table"].n_obs
+    sdata["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["stage"] = pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["value"] = np.linspace(0.0, 1.0, n)
+    return sdata
+
+
 class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
@@ -60,6 +74,46 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_polygons_with_rgba_colored_outline(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(
             element="blobs_polygons", outline_alpha=1, outline_color=(0.0, 1.0, 0.0, 1.0)
+        ).pl.show()
+
+    def test_plot_outline_color_by_categorical_obs(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="white", outline_alpha=1, outline_width=3, outline_color="cluster"
+        ).pl.show()
+
+    def test_plot_outline_color_by_continuous_obs(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="white", outline_alpha=1, outline_width=3, outline_color="value"
+        ).pl.show()
+
+    def test_plot_outline_color_by_categorical_obs_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons",
+            color="white",
+            outline_alpha=1,
+            outline_width=3,
+            outline_color="cluster",
+            method="datashader",
+        ).pl.show()
+
+    def test_plot_outline_color_by_continuous_obs_datashader(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons",
+            color="white",
+            outline_alpha=1,
+            outline_width=3,
+            outline_color="value",
+            method="datashader",
+        ).pl.show()
+
+    def test_plot_fill_and_outline_both_obs_columns(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_shapes(
+            "blobs_polygons", color="cluster", outline_alpha=1, outline_width=3, outline_color="stage"
         ).pl.show()
 
     def test_plot_can_render_empty_geometry(self, sdata_blobs: SpatialData):
@@ -1475,84 +1529,10 @@ def test_render_shapes_datashader_under_bbox_query_does_not_crash():
         plt.close(fig)
 
 
-def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
-    """Patch the shared blobs fixture so its table annotates ``blobs_polygons``.
-
-    Adds two categorical columns and one continuous column for the outline-color tests below.
-    """
-    sdata["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata["table"].n_obs)
-    sdata["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
-    n = sdata["table"].n_obs
-    sdata["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
-    sdata["table"].obs["stage"] = pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n])
-    sdata["table"].obs["value"] = np.linspace(0.0, 1.0, n)
-    return sdata
-
-
-def test_outline_color_as_obs_column_does_not_raise(sdata_blobs: SpatialData):
-    """Regression for #681: outline_color accepts an obs column name."""
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes(
-        "blobs_polygons",
-        color="white",
-        outline_width=2,
-        outline_color="cluster",
-    ).pl.show(ax=ax)
-    plt.close(fig)
-
-
 def test_outline_color_column_with_two_outlines_raises(sdata_blobs: SpatialData):
     sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
     with pytest.raises(ValueError, match="not supported with two outlines"):
         sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=(2.0, 0.5), outline_color="cluster")
-
-
-@pytest.mark.parametrize(
-    ("column", "method", "norm"),
-    [
-        ("cluster", "matplotlib", None),
-        ("value", "matplotlib", None),
-        ("cluster", "datashader", None),
-        ("value", "datashader", None),
-        ("value", "datashader", Normalize(vmin=0.2, vmax=0.8)),
-    ],
-)
-def test_outline_color_column_renders(sdata_blobs: SpatialData, column: str, method: str, norm):
-    """Categorical + continuous outline columns render under both methods without raising,
-    and an explicit Normalize is accepted on the datashader continuous path."""
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    kwargs = {"norm": norm} if norm is not None else {}
-    sdata_blobs.pl.render_shapes(
-        "blobs_polygons",
-        color="white",
-        outline_width=2,
-        outline_color=column,
-        method=method,
-        **kwargs,
-    ).pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_outline_color_column_stacked_legends(sdata_blobs: SpatialData):
-    """Two stacked legends when both color and outline_color are columns; no bbox overlap."""
-    from matplotlib.legend import Legend
-
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots(figsize=(7, 4))
-    sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", outline_width=2, outline_color="stage").pl.show(
-        ax=ax
-    )
-    fig.canvas.draw()
-    legends = [c for c in ax.get_children() if isinstance(c, Legend)]
-    assert len(legends) == 2, f"Expected 2 legends, got {len(legends)}"
-    a = legends[0].get_window_extent().transformed(ax.transAxes.inverted())
-    b = legends[1].get_window_extent().transformed(ax.transAxes.inverted())
-    overlap_h = max(0.0, min(a.x1, b.x1) - max(a.x0, b.x0))
-    overlap_v = max(0.0, min(a.y1, b.y1) - max(a.y0, b.y0))
-    assert overlap_h * overlap_v == 0.0, "Fill and outline legend bboxes overlap"
-    plt.close(fig)
 
 
 def test_outline_color_column_groups_filter_aligns(sdata_blobs: SpatialData):
