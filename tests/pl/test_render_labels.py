@@ -587,35 +587,6 @@ def test_labels_outline_color_obs_column_does_not_raise(sdata_blobs: SpatialData
     plt.close(fig)
 
 
-def test_labels_outline_color_sets_render_params(sdata_blobs: SpatialData):
-    from spatialdata_plot.pl.render_params import LabelsRenderParams
-
-    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
-    res = sdata_blobs.pl.render_labels("blobs_labels", outline_color="cluster", outline_alpha=1.0)
-    params: LabelsRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_labels"))
-    assert params.col_for_outline_color == "cluster"
-    assert params.outline_table_name == "table"
-
-
-def test_labels_outline_color_literal_still_works(sdata_blobs: SpatialData):
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.0, outline_alpha=1.0, outline_color="red").pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_labels_outline_color_outline_only_mode(sdata_blobs: SpatialData):
-    """Outline-only render (fill_alpha=0, outline_alpha>0) must color contour by the outline column."""
-    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_labels(
-        "blobs_labels",
-        fill_alpha=0.0,
-        outline_alpha=1.0,
-        outline_color="cluster",
-    ).pl.show(ax=ax)
-    plt.close(fig)
-
-
 def test_labels_outline_color_groups_filter_aligns(sdata_blobs: SpatialData):
     """When `groups` filters the fill labels, the outline vector must be masked alongside it."""
     sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)

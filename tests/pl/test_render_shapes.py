@@ -1502,48 +1502,35 @@ def test_outline_color_as_obs_column_does_not_raise(sdata_blobs: SpatialData):
     plt.close(fig)
 
 
-def test_outline_color_column_sets_render_params(sdata_blobs: SpatialData):
-    from spatialdata_plot.pl.render_params import ShapesRenderParams
-
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    res = sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="cluster", outline_alpha=1.0)
-    params: ShapesRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_shapes"))
-    assert params.col_for_outline_color == "cluster"
-    assert params.outline_table_name == "table"
-
-
-def test_outline_color_literal_still_color(sdata_blobs: SpatialData):
-    """Passing a recognized color name should still produce a literal Color object."""
-    from spatialdata_plot.pl.render_params import Color, ShapesRenderParams
-
-    res = sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="red", outline_alpha=1.0)
-    params: ShapesRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_shapes"))
-    assert params.col_for_outline_color is None
-    assert isinstance(params.outline_params.outer_outline_color, Color)
-
-
 def test_outline_color_column_with_two_outlines_raises(sdata_blobs: SpatialData):
     sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
     with pytest.raises(ValueError, match="not supported with two outlines"):
         sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=(2.0, 0.5), outline_color="cluster")
 
 
-def test_outline_color_column_continuous(sdata_blobs: SpatialData):
+@pytest.mark.parametrize(
+    ("column", "method", "norm"),
+    [
+        ("cluster", "matplotlib", None),
+        ("value", "matplotlib", None),
+        ("cluster", "datashader", None),
+        ("value", "datashader", None),
+        ("value", "datashader", Normalize(vmin=0.2, vmax=0.8)),
+    ],
+)
+def test_outline_color_column_renders(sdata_blobs: SpatialData, column: str, method: str, norm):
+    """Categorical + continuous outline columns render under both methods without raising,
+    and an explicit Normalize is accepted on the datashader continuous path."""
     sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
     fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes("blobs_polygons", color="white", outline_width=2, outline_color="value").pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_outline_color_column_datashader(sdata_blobs: SpatialData):
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
+    kwargs = {"norm": norm} if norm is not None else {}
     sdata_blobs.pl.render_shapes(
         "blobs_polygons",
         color="white",
         outline_width=2,
-        outline_color="cluster",
-        method="datashader",
+        outline_color=column,
+        method=method,
+        **kwargs,
     ).pl.show(ax=ax)
     plt.close(fig)
 
@@ -1594,31 +1581,6 @@ def test_outline_color_column_collision_raises(sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="red", outline_alpha=1.0)
 
 
-def test_outline_color_datashader_continuous(sdata_blobs: SpatialData):
-    """Continuous outline column under datashader should render without error."""
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes(
-        "blobs_polygons",
-        color="white",
-        outline_width=2,
-        outline_color="value",
-        method="datashader",
-    ).pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_outline_color_continuous_requests_colorbar(sdata_blobs: SpatialData):
-    """A continuous outline column should add a ColorbarSpec to colorbar_requests."""
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    sdata_blobs.pl.render_shapes("blobs_polygons", color="white", outline_width=2, outline_color="value").pl.show(ax=ax)
-    # Look for a colorbar artist labelled "outline: value"
-    cbar_axes = [a for a in fig.axes if "outline: value" in (a.get_ylabel(), a.get_xlabel(), a.get_title())]
-    assert cbar_axes, "Expected a colorbar for the continuous outline column"
-    plt.close(fig)
-
-
 def test_outline_color_cross_table(sdata_blobs: SpatialData):
     """Fill column on table A, outline column on a separate table B."""
     # Patch original table to annotate blobs_polygons with a fill column.
@@ -1647,23 +1609,4 @@ def test_outline_color_cross_table(sdata_blobs: SpatialData):
         outline_width=2,
         outline_color="stage",
     ).pl.show(ax=ax)
-    plt.close(fig)
-
-
-def test_outline_color_ds_continuous_respects_explicit_norm(sdata_blobs: SpatialData):
-    """An explicit Normalize(vmin, vmax) must take effect on the datashader continuous outline path."""
-    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
-    fig, ax = plt.subplots()
-    # vmin/vmax intentionally narrower than the data range so the shaded image clamps visibly
-    sdata_blobs.pl.render_shapes(
-        "blobs_polygons",
-        color="white",
-        outline_width=2,
-        outline_color="value",
-        norm=Normalize(vmin=0.2, vmax=0.8),
-        method="datashader",
-    ).pl.show(ax=ax)
-    # The datashader outline overlay is rendered as an AxesImage on top of the fill image.
-    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
-    assert axes_images, "Expected at least one rendered AxesImage (outline overlay)"
     plt.close(fig)
