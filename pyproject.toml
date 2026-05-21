@@ -61,6 +61,12 @@ doc = [
   "sphinxcontrib-katex",
   "sphinxext-opengraph",
 ]
+interactive = [
+  "ipykernel",
+  "ipympl",
+  "ipywidgets",
+  "squidpy",
+]
 
 [tool.hatch]
 build.hooks.vcs.version-file = "_version.py"
@@ -86,29 +92,43 @@ envs.hatch-test.scripts.cov-report = [ "coverage report", "coverage xml -o cover
 metadata.allow-direct-references = true
 version.source = "vcs"
 
-[tool.pixi]
-workspace.channels = [ "conda-forge" ]
-workspace.platforms = [ "linux-64", "osx-arm64" ]
-dependencies.python = ">=3.11"
-pypi-dependencies.spatialdata-plot = { path = ".", editable = true }
-tasks.format = "ruff format ."
-tasks.kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
-tasks.lab = "jupyter lab"
-tasks.lint = "ruff check ."
-tasks.pre-commit-install = "pre-commit install"
-tasks.pre-commit-run = "pre-commit run --all-files"
-tasks.test = "pytest -v --color=yes --tb=short --durations=10"
+[tool.pixi.workspace]
+channels = [ "conda-forge" ]
+platforms = [ "linux-64", "osx-arm64" ]
+
+[tool.pixi.dependencies]
+python = ">=3.11"
+
+[tool.pixi.pypi-dependencies]
+spatialdata-plot = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+format = "ruff format ."
+kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
+kernel-install-interactive = 'python -m ipykernel install --user --name sdata-plot-interactive --display-name "sdata-plot (interactive)"'
+lab = "jupyter lab"
+lint = "ruff check ."
+pre-commit-install = "pre-commit install"
+pre-commit-run = "pre-commit run --all-files"
+test = "pytest -v --color=yes --tb=short --durations=10"
+
 # for gh-actions
-feature.py311.dependencies.python = "3.11.*"
-feature.py313.dependencies.python = "3.13.*"
+[tool.pixi.feature.py311.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.py313.dependencies]
+python = "3.13.*"
+
+[tool.pixi.environments]
 # 3.13 lane
-environments.default = { features = [ "py313" ], solve-group = "py313" }
+default = { features = [ "py313" ], solve-group = "py313" }
 # 3.11 lane (for gh-actions)
-environments.dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
-environments.dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
-environments.docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
-environments.docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
-environments.test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
+dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
+dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
+dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
+docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
+docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
+test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
 
 [tool.ruff]
 line-length = 120
