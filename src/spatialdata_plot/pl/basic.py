@@ -385,6 +385,8 @@ class PlotAccessor:
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         datashader_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None,
+        density: bool = False,
+        density_how: Literal["linear", "log", "cbrt", "eq_hist"] = "linear",
         transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
@@ -455,6 +457,19 @@ class PlotAccessor:
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
             Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"sum"``.
+        density : bool, default False
+            Render the points as a 2-D count density via datashader instead of plotting individual markers.
+            When ``True``, ``method`` is forced to ``"datashader"`` (passing ``method="matplotlib"`` raises).
+            Density supports ``color=None`` (plain density) or a categorical ``color`` column (per-category
+            density via :func:`datashader.by`). A continuous ``color`` column or a literal color value
+            (e.g. ``"red"``) raises an error. Under ``density=True`` the following parameters are ignored
+            (with a warning if explicitly set): ``size``, ``transfunc``, ``norm.vmin/vmax``, and
+            ``datashader_reduction``.
+        density_how : Literal["linear", "log", "cbrt", "eq_hist"], default "linear"
+            How datashader maps aggregated counts to color intensity. ``"linear"`` (default) keeps the
+            colorbar axis as a count; ``"log"`` and ``"cbrt"`` compress dynamic range; ``"eq_hist"``
+            equalizes the histogram (rank-based, surfaces the most structure but the colorbar axis is
+            no longer a count). Ignored when ``density=False``.
         transfunc : Callable[[float], float] | None, optional
             Optional transformation applied to the continuous color vector before normalization and colormap mapping.
 
@@ -462,6 +477,18 @@ class PlotAccessor:
         -------
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
+
+        Examples
+        --------
+        Plain density of all transcripts:
+
+        >>> sdata.pl.render_points("transcripts", density=True).pl.show()
+
+        Per-gene density with a categorical palette:
+
+        >>> sdata.pl.render_points(
+        ...     "transcripts", color="gene", groups=["Gad1", "Slc17a7"], palette="tab20", density=True
+        ... ).pl.show()
         """
         params_dict = _validate_points_render_params(
             self._sdata,
@@ -480,6 +507,10 @@ class PlotAccessor:
             colorbar=colorbar,
             colorbar_params=colorbar_params,
             gene_symbols=gene_symbols,
+            density=density,
+            density_how=density_how,
+            transfunc=transfunc,
+            method=method,
         )
 
         if method is not None:
@@ -487,6 +518,9 @@ class PlotAccessor:
                 raise TypeError("Parameter 'method' must be a string.")
             if method not in ["matplotlib", "datashader"]:
                 raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
+        if density and method is None:
+            method = "datashader"
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -515,6 +549,8 @@ class PlotAccessor:
                 ds_reduction=param_values["ds_reduction"],
                 colorbar=param_values["colorbar"],
                 colorbar_params=param_values["colorbar_params"],
+                density=density,
+                density_how=density_how,
             )
             n_steps += 1
 

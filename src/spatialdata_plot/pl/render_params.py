@@ -268,6 +268,8 @@ class PointsRenderParams:
     ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+    density: bool = False
+    density_how: Literal["linear", "log", "cbrt", "eq_hist"] = "linear"
 
 
 @dataclass

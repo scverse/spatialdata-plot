@@ -170,6 +170,44 @@ def _warn_groups_ignored_continuous(
         )
 
 
+def _is_categorical_like_dtype(dtype: Any) -> bool:
+    return (
+        isinstance(dtype, pd.CategoricalDtype)
+        or pd.api.types.is_object_dtype(dtype)
+        or pd.api.types.is_string_dtype(dtype)
+    )
+
+
+def _reject_continuous_color_under_density(
+    sdata_filt: sd.SpatialData,
+    element: str,
+    col_for_color: str | None,
+    color_source_vector: Any,
+    color_vector: Any,
+) -> None:
+    """Raise before any materialization if density+continuous-color was requested.
+
+    ``color_source_vector`` is only populated by ``_set_color_source_vec`` for the categorical
+    branch, so a non-None value is sufficient to accept the call. Otherwise we read the dtype
+    from the dask source (points element column) or the pre-computed color vector — neither
+    forces a ``.compute()``.
+    """
+    if col_for_color is None or color_source_vector is not None:
+        return
+    points_columns = sdata_filt.points[element].columns
+    if col_for_color in points_columns:
+        dtype = sdata_filt.points[element][col_for_color].dtype
+    else:
+        dtype = getattr(color_vector, "dtype", None)
+    if dtype is None or _is_categorical_like_dtype(dtype):
+        return
+    raise ValueError(
+        f"density=True is only supported with no color or a categorical color column; "
+        f"got continuous column {col_for_color!r}. To color a density plot by a continuous "
+        f"variable, set density=False and use method='datashader' with datashader_reduction=."
+    )
+
+
 def _warn_missing_groups(
     groups: str | list[str],
     color_source_vector: pd.Categorical,
@@ -950,7 +988,10 @@ def _render_points(
 
     method = render_params.method
 
-    if method is None:
+    if render_params.density:
+        method = "datashader"
+        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, color_source_vector, color_vector)
+    elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
     _default_reduction: _DsReduction = "sum"
@@ -960,7 +1001,11 @@ def _render_points(
 
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
-        px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
+        # Under density, spreading would smear the count signal across pixels and
+        # distort apparent density at sparse edges, so disable it unconditionally.
+        px: int | None = (
+            None if render_params.density else int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
+        )
 
         # Apply transformations and materialize to pandas immediately so
         # datashader aggregates without dask scheduler overhead.  See #379.
@@ -1045,14 +1090,22 @@ def _render_points(
         ):
             color_vector = np.asarray([_hex_no_alpha(c) for c in color_vector])
 
+        shade_how = render_params.density_how if render_params.density else "linear"
+        # Plain density (no color column) must use the user-facing cmap as a sequential
+        # gradient over counts; the categorical path collapses to a single color and only
+        # modulates alpha, which renders as a flat hue regardless of density.
+        plain_density = render_params.density and col_for_color is None
+
         nan_shaded = None
-        if color_by_categorical or col_for_color is None:
+        if not plain_density and (color_by_categorical or col_for_color is None):
             shaded = _ds_shade_categorical(
                 agg,
                 color_key,
                 color_vector,
                 render_params.alpha,
                 spread_px=px,
+                how=shade_how,
+                density=render_params.density,
             )
         else:
             shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
@@ -1066,6 +1119,7 @@ def _render_points(
                 na_color_hex,
                 spread_px=px,
                 ds_reduction=render_params.ds_reduction,
+                how=shade_how,
             )
 
         _render_ds_image(

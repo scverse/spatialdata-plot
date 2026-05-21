@@ -227,6 +227,7 @@ def _ds_shade_continuous(
     na_color_hex: str,
     spread_px: int | None = None,
     ds_reduction: _DsReduction | None = None,
+    how: str = "linear",
 ) -> tuple[Any, Any | None, tuple[Any, Any] | None]:
     """Shade a continuous datashader aggregate, optionally applying spread and NaN coloring.
 
@@ -255,6 +256,7 @@ def _ds_shade_continuous(
         min_alpha=_convert_alpha_to_datashader_range(alpha),
         span=color_span,
         clip=norm.clip,
+        how=how,
     )
     shaded = _apply_user_alpha(shaded, alpha)
 
@@ -278,6 +280,8 @@ def _ds_shade_categorical(
     color_vector: Any,
     alpha: float,
     spread_px: int | None = None,
+    how: str = "linear",
+    density: bool = False,
 ) -> Any:
     """Shade a categorical or no-color datashader aggregate."""
     ds_cmap = None
@@ -286,12 +290,20 @@ def _ds_shade_categorical(
         if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
             ds_cmap = _hex_no_alpha(ds_cmap)
 
+    # The default min_alpha (~254) is a near-full-opacity floor — right for scatter
+    # plots, but it collapses the count-driven alpha range and makes categorical
+    # density read as a flat hue cloud. Drop the floor under density so per-pixel
+    # alpha can actually encode count. A small non-zero floor (~15%) keeps the
+    # sparse edges visible under density_how="linear" instead of vanishing.
+    min_alpha = 40.0 if density else _convert_alpha_to_datashader_range(alpha)
+
     agg_to_shade = ds.tf.spread(agg, px=spread_px) if spread_px is not None else agg
     shaded = _datashader_map_aggregate_to_color(
         agg_to_shade,
         cmap=ds_cmap,
         color_key=color_key,
-        min_alpha=_convert_alpha_to_datashader_range(alpha),
+        min_alpha=min_alpha,
+        how=how,
     )
     return _apply_user_alpha(shaded, alpha)
 
