@@ -433,15 +433,21 @@ def _render_ds_outline_by_column(
     color_by_categorical = outline_color_source_vector is not None
     na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
 
-    # Attach the outline vector under a private column name so a fill column with
-    # the same key never gets overwritten. Use .assign() to avoid mutating the
-    # caller's dataframe.
+    # Attach the outline vector under a private column name so a fill column with the
+    # same key never gets overwritten. Assign positionally (via a Series indexed to the
+    # element) — `.assign(col=series)` aligns by index, which silently inserts NaN when
+    # the element's index is non-contiguous (e.g. after an inner-join). The NaNs would
+    # then be lifted to the `ds_nan` sentinel and one polygon's outline would render as
+    # `na_color` instead of its real category.
+    transformed_element = transformed_element.copy()
     if color_by_categorical:
-        cat_series = pd.Categorical(outline_color_source_vector)
-        attach_value: Any = _inject_ds_nan_sentinel(pd.Series(cat_series))
+        cat = pd.Categorical(outline_color_source_vector)
+        attach_cat = _inject_ds_nan_sentinel(pd.Series(cat))
+        transformed_element[_OUTLINE_INTERNAL_COL] = pd.Categorical(
+            attach_cat.to_numpy(), categories=attach_cat.cat.categories
+        )
     else:
-        attach_value = np.asarray(outline_color_vector)
-    transformed_element = transformed_element.assign(**{_OUTLINE_INTERNAL_COL: attach_value})
+        transformed_element[_OUTLINE_INTERNAL_COL] = np.asarray(outline_color_vector)
 
     if color_by_categorical:
         agg_outline = cvs.line(
