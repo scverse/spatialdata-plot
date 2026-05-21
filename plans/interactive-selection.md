@@ -16,12 +16,28 @@ SLURM compute node. No napari, no desktop GUI.
 - Selector shapes in v0: rectangle, polygon (click vertices), lasso (freehand).
 - Scale handling: auto-downsample on the fly. Pyramid-aware when available;
   `dask.coarsen` fallback when not.
-- Layers beneath the selector in v0: images only. Selector attaches to the
-  `Axes` returned by the existing `sdata.pl.render_images().pl.show()` pipeline
-  — we reuse the existing canvas, no duplicate render path.
-- Backend: `%matplotlib widget` (ipympl) + `matplotlib.widgets.{Rectangle,
-  Polygon,Lasso}Selector`. Pure server-side render, PNG frames over websocket.
+- Layers in v0: images only. The image is rendered once via the existing
+  `sdata.pl.render_images().pl.show()` pipeline into a matplotlib figure,
+  exported to PNG, and laid under a client-side drawing canvas.
+- Backend: **custom anywidget** with HTML5/SVG drawing tools (rectangle,
+  polygon, freehand-lasso). All drawing happens in the browser; shape
+  geometry is reported back to Python via traitlet sync. Image is sent
+  once as a base64 data URL; mouse moves never round-trip the kernel.
   No bokeh/datashader.
+
+### Why anywidget, not ipympl or plotly
+
+The original spec called for `%matplotlib widget` (ipympl). The prototype
+revealed two showstoppers over SSH:
+1. **ipympl streams PNG frames per mouse-move** over websocket — every drag
+   incurs SSH round-trip latency, making freehand drawing unusable.
+2. **plotly's `FigureWidget`** has broken two-way shape sync in
+   VSCode-Remote-SSH (regardless of plotly 5 vs 6 — different bugs each).
+
+A small (~250-line) anywidget with traitlet-synced shape geometry was the
+only architecture that worked reliably in VSCode-Remote and produced
+responsive drawing. The image render still uses sdata-plot's matplotlib
+pipeline; we just don't drive interaction through it.
 
 ## Resolved questions (locked 2026-05-21, task #1)
 
@@ -43,42 +59,59 @@ SLURM compute node. No napari, no desktop GUI.
 import spatialdata_plot  # registers .pl
 
 session = sdata.pl.interactive(
-    element="he_image",
-    coordinate_system="global",
-    channel=[0, 1, 2],            # optional
-    clims=(0, 30000),             # optional
-    selector="polygon",           # 'rectangle' | 'polygon' | 'lasso'
-    name="tumor_region",
-    overwrite=False,
-    persist=True,
-    max_render_pixels=2_000_000,
+    coordinate_system=None,   # optional pre-selection; None = let user pick in UI
+    element=None,             # optional pre-selection; None = let user pick in UI
+    persist=True,             # show "Write to disk" button (False = memory only)
 )
-session.show()                    # returns the ipympl Figure
-# user draws on canvas, double-click / release to commit
-sdata["tumor_region"]             # ShapesModel
+session.show()                # renders the ipywidgets controls + draw canvas
+
+# User picks CS + image, clicks Render, draws shapes, names + Saves each set.
+# Each Save adds an entry to sdata.shapes (memory). Write to disk persists
+# the most recent commit via sdata.write_element.
+
+sdata["tumor_region"]         # ShapesModel
 sub = sdata.query.polygon(sdata, sdata["tumor_region"])
 ```
+
+Removed kwargs vs original spec:
+- `selector=` — UI has a tool toggle (rect/polygon/lasso); no need to bind one
+  selector at construction (Q3 resolution).
+- `name=` — typed in the UI before each Save (Q4 resolution).
+- `channel=`, `clims=` — deferred to v1 (Q1 resolution).
+- `max_render_pixels=` — render is fixed at `figsize=(7,7), dpi=120` ≈ 840×840
+  PNG; pyramid-aware downsampling deferred to v1.
+- `overwrite=` — collision handling is automatic: same name → append UTC
+  timestamp.
 
 ## Module layout
 
 ```
 src/spatialdata_plot/pl/interactive/
-  __init__.py        # exports InteractiveSession
-  _session.py        # InteractiveSession class, public entrypoint
-  _render.py         # thin wrapper around existing render_images
-  _downsample.py     # pyramid-aware scale picker; in-memory coarsen
-  _selectors.py      # RectangleAdapter, PolygonAdapter, LassoAdapter
-  _commit.py         # vertices → CS-correct shapely → ShapesModel
-  _persist.py        # write_element + overwrite/timestamp policy
+  __init__.py        # exports interactive, InteractiveSession, DrawCanvas
+  _session.py        # InteractiveSession class — ipywidgets controls
+  _canvas.py         # DrawCanvas anywidget + traitlets
+  _render.py         # render_to_png helper (sdata.pl → PNG + extent)
+  _commit.py         # pixel-shape → CS-correct shapely Polygon → ShapesModel
+  _persist.py        # write_element + collision/timestamp policy
+  static/
+    draw_canvas.js   # the ESM module; _esm = Path(...) reads at import
 
 tests/test_interactive/
-  test_commit.py
-  test_downsample.py
-  test_selectors_headless.py
+  test_commit.py     # pixel→CS conversion + ShapesModel correctness
+  test_render.py     # render_to_png returns valid PNG + extent
+  test_persist.py    # collision/timestamp policy
+  test_canvas.py     # smoke: instantiate widget, check traitlet defaults
 ```
 
-`sdata.pl.interactive(...)` becomes a method on `PlotAccessor` in
-`src/spatialdata_plot/_accessor.py`, returning an `InteractiveSession`.
+`sdata.pl.interactive(...)` is a method on `PlotAccessor` in
+`src/spatialdata_plot/_accessor.py`. It constructs an `InteractiveSession`
+and returns it; `session.show()` displays the controls + draw canvas.
+
+Dropped from the original spec:
+- `_downsample.py` — pyramid-aware downsampling deferred to v1; v0 renders
+  at a fixed dpi (`figsize=(7,7), dpi=120`).
+- `_selectors.py` — matplotlib selectors are replaced by the anywidget; the
+  three drawing tools (rect/polygon/lasso) live in `static/draw_canvas.js`.
 
 ## Coordinate-system rules (highest-risk surface)
 
@@ -92,25 +125,31 @@ tests/test_interactive/
 
 Avoids the classic double-applied-transform bug.
 
-## Downsampling
+## Rendering
 
-`_downsample.pick_scale(image, bbox, max_pixels) -> (level_or_factor, array)`
+`_render.render_to_png(sdata, element, coordinate_system) -> (png_bytes, image_w, image_h, xlim, ylim)`
 
-- `MultiscaleSpatialImage`: walk scales coarse→fine, pick finest within budget.
-- Single-scale: `dask.array.coarsen` with integer factor, warn once.
-- Static extent in v0. Auto-redraw on `xlim_changed` is v1.
-- Default `max_render_pixels ≈ 2M` (~1500×1500), tuned for ipympl PNG over SSH.
+- Uses `sdata.pl.render_images(element=...).pl.show(coordinate_systems=..., ax=...)`.
+- Axes fills the figure (`ax.add_axes([0,0,1,1])`, `set_axis_off()`) so PNG pixel
+  coordinates map exactly to data coordinates via `xlim`/`ylim`.
+- Fixed at `figsize=(7,7)` × `dpi=120` ≈ 840×840 PNG for v0. Pyramid-aware
+  downsampling deferred to v1.
+- 3D / z-stacks: refused by `render_images` itself (commit 3ebefe1) — we
+  propagate that error.
 
-## Selector adapters
+## Drawing tools (in `static/draw_canvas.js`)
 
-| kind        | matplotlib class      | commit trigger                |
-|-------------|-----------------------|-------------------------------|
-| rectangle   | `RectangleSelector`   | mouse release                 |
-| polygon     | `PolygonSelector`     | close (double-click / enter)  |
-| lasso       | `LassoSelector`       | mouse release                 |
+| kind        | gesture                                        | commit trigger                                |
+|-------------|------------------------------------------------|-----------------------------------------------|
+| rectangle   | left-drag corner → corner                      | mouse release                                 |
+| polygon     | click each vertex                              | snap-to-first-vertex (within 10 px) or Enter  |
+| lasso       | left-drag freehand                             | mouse release                                 |
 
-Lasso vertices simplified via `shapely.simplify(tolerance=0.5px)` before
-persist.
+Plus client-side: wheel-zoom, shift-drag-pan, alt-click-shape-to-delete,
+hover-highlight, Ctrl+Z undo, Delete clear, R/P/L tool shortcuts, F fit.
+
+Lasso vertices are simplified server-side via `shapely.simplify(tolerance=0.5)`
+in `_commit` before persisting.
 
 ## Persistence policy
 
@@ -133,22 +172,27 @@ persist.
 
 ## Test strategy
 
-- Unit: `_commit` (synthetic vertices → ShapesModel correctness).
-- Unit: `_downsample` (scale picker correctness on synthetic arrays).
-- Headless: `_selectors` via programmatic `_press`/`_onmove`/`_release`.
-- NO visual tests in v0. CI does not need a live canvas.
-- Manual checklist in PR description for the canvas itself.
+- Unit: `_commit` (synthetic pixel-coord shapes → CS-coord ShapesModel correctness).
+- Unit: `_render` (returns valid PNG bytes + extent matching the axis limits).
+- Unit: `_persist` (collision-rename + timestamp policy).
+- Smoke: `_canvas` (instantiate `DrawCanvas`, check traitlet defaults).
+- NO visual / live-canvas tests in v0 — the JS widget can't be driven from Python.
+  Manual checklist in PR description covers the canvas behaviour.
 
 ## Dependencies
 
-`[project.dependencies]`:
+Exposed as `[project.optional-dependencies].interactive` so the feature is
+opt-in (`pip install spatialdata-plot[interactive]`). Mirrors the pixi
+`interactive` dep-group.
 
-- `ipympl` (NEW)
-- `ipywidgets` (NEW or pin existing transitive)
-- `shapely` (already transitive via geopandas)
-- `geopandas` (already transitive via spatialdata)
+- `anywidget` (NEW) — the widget framework.
+- `ipywidgets` (NEW or pin existing transitive) — for the controls VBox.
+- `ipykernel` — needed by anywidget for comm channel.
+- `shapely`, `geopandas` — already transitive via spatialdata.
 
-Only `ipympl` is genuinely new.
+`ipympl` and `plotly` are NOT runtime deps of the new architecture (we tried
+both and rejected them). They remain in the prototype/pixi feature only for
+historical comparison and may be dropped from the interactive feature later.
 
 ## v1 roadmap (after v0 ships)
 

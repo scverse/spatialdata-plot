@@ -31,6 +31,11 @@ dependencies = [
   "scikit-learn",
   "spatialdata>=0.3",
 ]
+optional-dependencies.interactive = [
+  "anywidget",
+  "ipykernel",
+  "ipywidgets",
+]
 urls.Documentation = "https://spatialdata.scverse.org/projects/plot/en/latest/index.html"
 urls.Home-page = "https://github.com/scverse/spatialdata-plot.git"
 urls.Source = "https://github.com/scverse/spatialdata-plot.git"
@@ -61,11 +66,11 @@ doc = [
   "sphinxcontrib-katex",
   "sphinxext-opengraph",
 ]
-interactive = [
-  "anywidget",
-  "ipykernel",
+interactive-extras = [
+  # Prototype-only helpers used by Sandbox.ipynb. The published runtime extra
+  # is [project.optional-dependencies].interactive above (anywidget/ipykernel/
+  # ipywidgets only) — these are kept here for the dev-interactive-py313 env.
   "ipympl",
-  "ipywidgets",
   # pinned to 5.x: plotly 6's anywidget-backed FigureWidget doesn't relay
   # client-side draw events back to Python, so layout.shapes never syncs.
   "plotly>=5.20,<6",
@@ -106,6 +111,12 @@ python = ">=3.11"
 [tool.pixi.pypi-dependencies]
 spatialdata-plot = { path = ".", editable = true }
 
+# When the `interactive` feature is active, install the package with the
+# `interactive` PyPI extra (anywidget, ipykernel, ipywidgets) so the pixi
+# env mirrors what `pip install spatialdata-plot[interactive]` would give.
+[tool.pixi.feature.interactive.pypi-dependencies]
+spatialdata-plot = { path = ".", editable = true, extras = [ "interactive" ] }
+
 [tool.pixi.tasks]
 format = "ruff format ."
 kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
@@ -129,7 +140,7 @@ default = { features = [ "py313" ], solve-group = "py313" }
 # 3.11 lane (for gh-actions)
 dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
 dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
-dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
+dev-interactive-py313 = { features = [ "dev", "test", "interactive", "interactive-extras", "py313" ], solve-group = "py313" }
 docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
 docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
 test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }

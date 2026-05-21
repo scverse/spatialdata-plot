@@ -171,6 +171,74 @@ class PlotAccessor:
 
         return sdata
 
+    def annotate(
+        self,
+        coordinate_system: str,
+        element: str,
+        *,
+        persist: bool = True,
+    ) -> None:
+        """Draw and save regions interactively on an image element.
+
+        Renders the image element in the given coordinate system as a
+        client-side drawing canvas (rectangle / polygon / lasso tools).
+        Drawn shapes are saved into ``sdata.shapes`` under a user-typed name
+        on click of the *Save* button — each save creates one ShapesModel
+        with one row per drawn shape, registered with an ``Identity``
+        transformation in the chosen coordinate system.
+
+        Requires the ``interactive`` extra: ``pip install 'spatialdata-plot[interactive]'``.
+
+        Parameters
+        ----------
+        coordinate_system :
+            Coordinate system to render and resolve drawn shapes against.
+            Drawn polygons are stored with an ``Identity`` transformation
+            in this CS.
+        element :
+            Name of the image element to render.
+        persist :
+            If ``True`` (default), show a *Write to disk* button that calls
+            :meth:`SpatialData.write_element` for the most recent save.
+            Set to ``False`` to limit the session to in-memory commits.
+
+        Returns
+        -------
+        None
+            Displays the widget in the current notebook cell. Drawn and
+            saved shapes appear in ``sdata.shapes``; inspect them there.
+
+        Raises
+        ------
+        ValueError
+            If ``coordinate_system`` is unknown, ``element`` is unknown,
+            or ``element`` is not registered in ``coordinate_system``.
+        ImportError
+            If the ``interactive`` extra is not installed.
+
+        Examples
+        --------
+        >>> import spatialdata_plot  # noqa: F401  registers .pl
+        >>> sdata.pl.annotate("global", "he_image")
+        >>> # ... user draws and clicks Save with name "tumor" ...
+        >>> sdata.shapes["tumor"]
+        """
+        try:
+            from spatialdata_plot.pl.interactive._session import _InteractiveSession
+        except ImportError as exc:
+            raise ImportError(
+                "sdata.pl.annotate() requires the `interactive` extra. "
+                "Install with: pip install 'spatialdata-plot[interactive]'"
+            ) from exc
+
+        session = _InteractiveSession(
+            self._sdata,
+            coordinate_system=coordinate_system,
+            element=element,
+            persist=persist,
+        )
+        session.show()
+
     @_deprecation_alias(elements="element", version="0.3.0")
     def render_shapes(
         self,
