@@ -431,6 +431,35 @@ def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor
     pathpatch.get_path().vertices = scaled_vertices
 
 
+def _align_outline_vector_to_length(
+    outline_color_vector: Any,
+    outline_color_source_vector: pd.Series | None,
+    n: int,
+    na_color: Color,
+) -> tuple[Any, pd.Series | None]:
+    """Pad or truncate the outline color vector(s) to length ``n``.
+
+    Used when the outline column annotates a different row count than the rendered
+    element (cross-table case, or rasterize-induced label drop). Missing entries
+    are filled with ``na_color`` (categorical: a None category; continuous: na hex).
+    """
+    if outline_color_vector is None or len(outline_color_vector) == n:
+        return outline_color_vector, outline_color_source_vector
+    if len(outline_color_vector) > n:
+        if outline_color_source_vector is not None:
+            outline_color_source_vector = outline_color_source_vector[:n]
+        return outline_color_vector[:n], outline_color_source_vector
+    pad = n - len(outline_color_vector)
+    na_hex = na_color.get_hex_with_alpha()
+    padded_vec = np.concatenate([np.asarray(outline_color_vector), np.array([na_hex] * pad)])
+    if outline_color_source_vector is not None:
+        outline_color_source_vector = pd.Categorical(
+            list(outline_color_source_vector) + [None] * pad,
+            categories=outline_color_source_vector.categories,
+        )
+    return padded_vec, outline_color_source_vector
+
+
 def _color_vector_to_rgba(
     color_vector: Any | None,
     color_source_vector: pd.Series | None,
@@ -474,7 +503,7 @@ def _color_vector_to_rgba(
             rgba[finite_mask] = cmap_params.cmap(used_norm(arr[finite_mask]))
         return rgba
 
-    # Object dtype: mix of numerics and color-likes (mirrors _get_collection_shape Case C)
+    # Object dtype: mix of numerics and color-like specs (apply cmap to the numeric subset only)
     series = pd.Series(arr, copy=False)
     num = pd.to_numeric(series, errors="coerce").to_numpy()
     is_num = np.isfinite(num)
@@ -600,8 +629,9 @@ def _get_collection_shape(
     if outline_alpha and outline_alpha > 0.0:
         outline_arr = np.asarray(outline_color) if not isinstance(outline_color, str) else None
         if outline_arr is not None and outline_arr.ndim == 2 and outline_arr.shape == (len(shapes), 4):
-            # Per-shape RGBA array: use row-wise, applying outline_alpha to the alpha channel.
-            outline_c_array = outline_arr.astype(float, copy=True)
+            # Per-shape RGBA array. Mutate in place when already float so we don't allocate twice
+            # on the hot path; otherwise upcast to a fresh float buffer.
+            outline_c_array = outline_arr if outline_arr.dtype == float else outline_arr.astype(float)
         else:
             outline_c_array = _as_rgba_array(outline_color)
         outline_c_array[..., -1] = outline_alpha
@@ -3745,6 +3775,18 @@ def _create_image_from_datashader_result(
     return rgba_image, trans_data
 
 
+_DS_REDUCTION_FUNCS: dict[str, Any] = {
+    "sum": ds.sum,
+    "mean": ds.mean,
+    "any": ds.any,
+    "count": ds.count,
+    "std": ds.std,
+    "var": ds.var,
+    "max": ds.max,
+    "min": ds.min,
+}
+
+
 def _datashader_aggregate_with_function(
     reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
     cvs: Canvas,
@@ -3769,22 +3811,11 @@ def _datashader_aggregate_with_function(
     if reduction is None:
         reduction = "sum"
 
-    reduction_function_map = {
-        "sum": ds.sum,
-        "mean": ds.mean,
-        "any": ds.any,
-        "count": ds.count,
-        "std": ds.std,
-        "var": ds.var,
-        "max": ds.max,
-        "min": ds.min,
-    }
-
     try:
-        reduction_function = reduction_function_map[reduction](column=col_for_color)
+        reduction_function = _DS_REDUCTION_FUNCS[reduction](column=col_for_color)
     except KeyError as e:
         raise ValueError(
-            f"Reduction '{reduction}' is not supported. Please use one of: {', '.join(reduction_function_map.keys())}."
+            f"Reduction '{reduction}' is not supported. Please use one of: {', '.join(_DS_REDUCTION_FUNCS.keys())}."
         ) from e
 
     element_function_map = {

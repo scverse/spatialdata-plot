@@ -20,6 +20,7 @@ from matplotlib.colors import Normalize
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams
 from spatialdata_plot.pl.utils import (
+    _DS_REDUCTION_FUNCS,
     _ax_show_and_transform,
     _convert_alpha_to_datashader_range,
     _create_image_from_datashader_result,
@@ -38,6 +39,11 @@ _DsReduction = Literal["sum", "mean", "any", "count", "std", "var", "max", "min"
 # Sentinel category name used in datashader categorical paths to represent
 # missing (NaN) values.  Must not collide with realistic user category names.
 _DS_NAN_CATEGORY = "ds_nan"
+
+# Private column name under which the outline color vector is attached to the
+# datashader rasterizer element. Must not collide with a real user column;
+# the leading/trailing dunders are deliberate.
+_OUTLINE_INTERNAL_COL = "__sdp_outline_col__"
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
@@ -347,14 +353,13 @@ def _render_ds_outlines(
     y_min: float = 0.0,
     outline_color_vector: Any | None = None,
     outline_color_source_vector: pd.Series | None = None,
-    outline_col_name: str | None = None,
 ) -> None:
     """Aggregate, shade, and render shape outlines (outer and inner) with datashader.
 
-    When ``outline_col_name`` is provided, the outer outline is colored per-shape
-    using ``ds.by`` (categorical) or a numeric reduction (continuous) instead of
-    a single literal color. Column-based outline coloring is incompatible with
-    the two-outline form, so this path only affects the outer outline.
+    When ``outline_color_vector`` is provided, the outer outline is colored per-shape
+    via ``ds.by`` (categorical) or a numeric reduction (continuous) instead of a
+    single literal color. The two-outline form is rejected at validation, so this
+    only affects the outer outline.
     """
     ds_lw_factor = fig_params.fig.dpi / 72
     assert len(render_params.outline_alpha) == 2  # noqa: S101
@@ -368,11 +373,10 @@ def _render_ds_outlines(
         alpha = render_params.outline_alpha[idx]
         if alpha <= 0:
             continue
-        if idx == 0 and outline_col_name is not None:
+        if idx == 0 and outline_color_vector is not None:
             _render_ds_outline_by_column(
                 cvs=cvs,
                 transformed_element=transformed_element,
-                col_for_outline_color=outline_col_name,
                 outline_color_vector=outline_color_vector,
                 outline_color_source_vector=outline_color_source_vector,
                 cmap_params=render_params.cmap_params,
@@ -407,7 +411,6 @@ def _render_ds_outlines(
 def _render_ds_outline_by_column(
     cvs: Any,
     transformed_element: Any,
-    col_for_outline_color: str,
     outline_color_vector: Any | None,
     outline_color_source_vector: pd.Series | None,
     cmap_params: Any,
@@ -423,32 +426,31 @@ def _render_ds_outline_by_column(
 ) -> None:
     """Aggregate + shade an outline colored by an obs column via datashader.
 
-    Mirrors the fill pipeline but uses ``cvs.line`` so only the boundary is rasterized.
+    Two-outline form is not supported for column-driven outline coloring,
+    so this only renders the outer outline.
     """
     color_by_categorical = outline_color_source_vector is not None
     na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
 
-    # Caller (`_render_shapes` datashader branch) is responsible for attaching
-    # the outline column to ``transformed_element`` under a private internal name
-    # so we never overwrite the fill column when fill and outline share a key.
-    assert col_for_outline_color in transformed_element.columns, (  # noqa: S101
-        f"Outline column '{col_for_outline_color}' is not present on the rasterizer element. "
-        "This is a bug in the spatialdata-plot datashader pipeline."
-    )
+    # Attach the outline vector under a private column name so a fill column with
+    # the same key never gets overwritten. Use .assign() to avoid mutating the
+    # caller's dataframe.
+    if color_by_categorical:
+        cat_series = pd.Categorical(outline_color_source_vector)
+        attach_value: Any = _inject_ds_nan_sentinel(pd.Series(cat_series))
+    else:
+        attach_value = np.asarray(outline_color_vector)
+    transformed_element = transformed_element.assign(**{_OUTLINE_INTERNAL_COL: attach_value})
 
     if color_by_categorical:
-        cat_series = transformed_element[col_for_outline_color]
-        if not isinstance(cat_series.dtype, pd.CategoricalDtype):
-            cat_series = cat_series.astype("category")
-        transformed_element[col_for_outline_color] = _inject_ds_nan_sentinel(cat_series)
         agg_outline = cvs.line(
             transformed_element,
             geometry="geometry",
-            agg=ds.by(col_for_outline_color, ds.count()),
+            agg=ds.by(_OUTLINE_INTERNAL_COL, ds.count()),
             line_width=line_width,
         )
         color_key = _build_datashader_color_key(
-            _coerce_categorical_source(transformed_element[col_for_outline_color]),
+            _coerce_categorical_source(transformed_element[_OUTLINE_INTERNAL_COL]),
             outline_color_vector,
             na_color_hex,
         )
@@ -460,22 +462,11 @@ def _render_ds_outline_by_column(
         )
     else:
         reduction_name = ds_reduction if ds_reduction is not None else "max"
-        reduction_function_map = {
-            "sum": ds.sum,
-            "mean": ds.mean,
-            "any": ds.any,
-            "count": ds.count,
-            "std": ds.std,
-            "var": ds.var,
-            "max": ds.max,
-            "min": ds.min,
-        }
         try:
-            reduction_function = reduction_function_map[reduction_name](column=col_for_outline_color)
+            reduction_function = _DS_REDUCTION_FUNCS[reduction_name](column=_OUTLINE_INTERNAL_COL)
         except KeyError as e:
             raise ValueError(
-                f"Reduction '{reduction_name}' is not supported. "
-                f"Use one of: {', '.join(reduction_function_map.keys())}."
+                f"Reduction '{reduction_name}' is not supported. Use one of: {', '.join(_DS_REDUCTION_FUNCS.keys())}."
             ) from e
         agg_outline = cvs.line(
             transformed_element,
