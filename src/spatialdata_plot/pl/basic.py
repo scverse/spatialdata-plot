@@ -1058,6 +1058,8 @@ class PlotAccessor:
         na_in_legend: bool = True,
         colorbar: bool = True,
         colorbar_params: dict[str, object] | None = None,
+        legend_title: str | None = None,
+        outline_legend_title: str | None = None,
         wspace: float | None = None,
         hspace: float = 0.25,
         ncols: int = 4,
@@ -1102,6 +1104,12 @@ class PlotAccessor:
         colorbar_params : dict[str, object] | None
             Global overrides passed to colorbars for all axes. Accepts the same keys as per-layer ``colorbar_params``
             (e.g., ``loc``, ``width``, ``pad``, ``label``).
+        legend_title : str | None
+            Title for the fill categorical legend. When both fill and outline are colored by an obs column, the
+            two legends default to ``"fill"`` / ``"outline"`` to disambiguate; pass an explicit string to override
+            the fill title. Set to ``None`` (default) to keep the auto-title behavior.
+        outline_legend_title : str | None
+            Title for the outline categorical legend. Mirrors ``legend_title`` for the outline channel.
         wspace : float | None
             Horizontal spacing between panels (passed to :class:`matplotlib.gridspec.GridSpec`).
         hspace : float, default 0.25
@@ -1338,6 +1346,8 @@ class PlotAccessor:
             legend_fontoutline=legend_fontoutline,
             na_in_legend=na_in_legend,
             colorbar=colorbar,
+            legend_title=legend_title,
+            outline_legend_title=outline_legend_title,
         )
 
         def _draw_colorbar(

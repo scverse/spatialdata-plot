@@ -366,6 +366,14 @@ def _add_legend_and_colorbar(
     )
 
     if fill_has_decorations:
+        # Auto-title the fill legend only when an outline legend will also be drawn.
+        outline_legend_will_render = outline_has_decorations and outline_color_source_vector is not None
+        if legend_params.legend_title is not None:
+            fill_title: str | None = legend_params.legend_title or None
+        elif outline_legend_will_render and color_source_vector is not None:
+            fill_title = "fill"
+        else:
+            fill_title = None
         _decorate_axs(
             ax=ax,
             cax=cax,
@@ -389,6 +397,7 @@ def _add_legend_and_colorbar(
                 colorbar_params,
                 col_for_color if isinstance(col_for_color, str) else None,
             ),
+            legend_title=fill_title,
         )
 
     if outline_has_decorations and outline_cmap_params is not None:
@@ -470,7 +479,7 @@ def _append_outline_colorbar(
             ax=ax,
             mappable=_make_continuous_mappable(vmin, vmax, cmap_params.cmap),
             params=colorbar_params,
-            label=f"outline: {outline_col}",
+            label=outline_col,
             alpha=alpha,
         )
     )
@@ -520,9 +529,16 @@ def _add_outline_legend(
         loc = "lower left" if fill_has_legend else "center left"
         anchor = (1.02, 0.0) if fill_has_legend else (1.0, 0.5)
 
+    # Auto-title only when a fill legend is also present (so the user can tell which is which).
+    # User-provided `outline_legend_title` always wins; pass empty string to suppress.
+    if legend_params.outline_legend_title is not None:
+        title = legend_params.outline_legend_title or None
+    else:
+        title = "outline" if fill_has_legend else None
+
     ax.legend(
         handles=outline_handles,
-        title=f"outline: {outline_col}",
+        title=title,
         frameon=False,
         loc=loc,
         bbox_to_anchor=anchor,
@@ -2232,6 +2248,14 @@ def _render_labels(
         is_continuous=col_for_color is not None and color_source_vector is None and not categorical,
     )
 
+    # Auto-title the fill legend only when an outline legend will also be drawn.
+    outline_legend_will_render = col_for_outline_color is not None and outline_color_source_vector is not None
+    if legend_params.legend_title is not None:
+        fill_title: str | None = legend_params.legend_title or None
+    elif outline_legend_will_render and color_source_vector is not None:
+        fill_title = "fill"
+    else:
+        fill_title = None
     _ = _decorate_axs(
         ax=ax,
         cax=cax,
@@ -2255,6 +2279,7 @@ def _render_labels(
             render_params.colorbar_params,
             col_for_color if isinstance(col_for_color, str) else None,
         ),
+        legend_title=fill_title,
     )
 
     if col_for_outline_color is not None:

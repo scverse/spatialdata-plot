@@ -1977,6 +1977,7 @@ def _decorate_axs(
     colorbar_params: dict[str, object] | None = None,
     colorbar_requests: list[ColorbarSpec] | None = None,
     colorbar_label: str | None = None,
+    legend_title: str | None = None,
 ) -> Axes:
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
@@ -2012,6 +2013,10 @@ def _decorate_axs(
                 na_in_legend=na_in_legend,
                 multi_panel=fig_params.axs is not None,
             )
+            # scanpy's helper doesn't accept a title; set it post-hoc so the user can
+            # disambiguate fill vs outline when both legends are drawn.
+            if legend_title is not None and (legend := ax.get_legend()) is not None:
+                legend.set_title(legend_title)
         elif colorbar and colorbar_requests is not None and cax is not None:
             colorbar_requests.append(
                 ColorbarSpec(

@@ -188,6 +188,11 @@ class LegendParams:
     legend_fontoutline: int | None = None
     na_in_legend: bool = True
     colorbar: bool = True
+    # Optional explicit titles for the fill / outline categorical legends. When unset,
+    # both legends are untitled unless both fill and outline are colored by an obs
+    # column, in which case they default to "fill" / "outline" to disambiguate.
+    legend_title: str | None = None
+    outline_legend_title: str | None = None
 
 
 @dataclass
