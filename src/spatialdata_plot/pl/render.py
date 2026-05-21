@@ -4,7 +4,7 @@ import dataclasses
 from collections import abc
 from collections.abc import Sequence
 from copy import copy
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import dask
 import dask.dataframe as dd
@@ -389,12 +389,13 @@ def _add_legend_and_colorbar(
         )
 
     if outline_has_decorations:
-        assert outline_col_for_color is not None  # narrowed by outline_has_decorations  # noqa: S101
+        # `outline_has_decorations` ensures the column name is set.
+        outline_col = cast(str, outline_col_for_color)
         if outline_color_source_vector is not None:
             _add_outline_legend(
                 ax=ax,
                 fig_params=fig_params,
-                outline_col=outline_col_for_color,
+                outline_col=outline_col,
                 outline_color_source_vector=outline_color_source_vector,
                 outline_color_vector=outline_color_vector,
                 fill_has_legend=fill_has_decorations and color_source_vector is not None,
@@ -412,7 +413,7 @@ def _add_legend_and_colorbar(
                 outline_color_vector=outline_color_vector,
                 cmap_params=outline_cmap_params,
                 colorbar_params=colorbar_params,
-                outline_col=outline_col_for_color,
+                outline_col=outline_col,
                 alpha=alpha,
             )
 
@@ -482,13 +483,14 @@ def _add_outline_legend(
         fill_legend = ax.get_legend()
         if fill_legend is not None:
             ax.add_artist(fill_legend)  # keep fill legend on the axes
-            try:
-                fig_params.fig.canvas.draw()
-                bbox_axes = fill_legend.get_window_extent().transformed(ax.transAxes.inverted())
-                anchor_y = float(bbox_axes.y0) - 0.02
-            except (AttributeError, ValueError, RuntimeError):
-                anchor_y = None
+            # Force layout so get_window_extent returns the real (not stale) bbox.
+            fig_params.fig.canvas.draw()
+            bbox_axes = fill_legend.get_window_extent().transformed(ax.transAxes.inverted())
+            anchor_y = float(bbox_axes.y0) - 0.02
 
+    # If the measured extent is degenerate (no fill legend, or its bbox sits at/below
+    # the axes' bottom edge), fall back to an opposite-anchor layout that still avoids
+    # overlap regardless of legend height.
     if anchor_y is not None and anchor_y > 0:
         loc = "upper left"
         anchor = (1.02, anchor_y)
@@ -660,7 +662,6 @@ def _render_shapes(
                 outline_color_vector,
                 outline_color_source_vector,
                 _n_shapes,
-                render_params.cmap_params.na_color,
             )
 
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
@@ -683,11 +684,7 @@ def _render_shapes(
             _keep_arr = np.asarray(keep)
             if outline_color_source_vector is not None:
                 outline_color_source_vector = outline_color_source_vector[_keep_arr]
-            outline_color_vector = (
-                outline_color_vector[_keep_arr]
-                if hasattr(outline_color_vector, "__getitem__")
-                else outline_color_vector
-            )
+            outline_color_vector = outline_color_vector[_keep_arr]
 
     # color_source_vector is None when the values aren't categorical
     if not values_are_categorical and render_params.transfunc is not None:
@@ -2095,7 +2092,6 @@ def _render_labels(
             outline_color_vector,
             outline_color_source_vector,
             len(instance_id),
-            render_params.cmap_params.na_color,
         )
 
     # rasterize could have removed labels from label

@@ -435,13 +435,12 @@ def _align_outline_vector_to_length(
     outline_color_vector: Any,
     outline_color_source_vector: pd.Series | None,
     n: int,
-    na_color: Color,
 ) -> tuple[Any, pd.Series | None]:
     """Pad or truncate the outline color vector(s) to length ``n``.
 
     Used when the outline column annotates a different row count than the rendered
     element (cross-table case, or rasterize-induced label drop). Missing entries
-    are filled with ``na_color`` (categorical: a None category; continuous: na hex).
+    are padded with NaN so downstream code maps them to ``na_color``.
     """
     if outline_color_vector is None or len(outline_color_vector) == n:
         return outline_color_vector, outline_color_source_vector
@@ -450,13 +449,18 @@ def _align_outline_vector_to_length(
             outline_color_source_vector = outline_color_source_vector[:n]
         return outline_color_vector[:n], outline_color_source_vector
     pad = n - len(outline_color_vector)
-    na_hex = na_color.get_hex_with_alpha()
-    padded_vec = np.concatenate([np.asarray(outline_color_vector), np.array([na_hex] * pad)])
     if outline_color_source_vector is not None:
+        # Categorical: downstream picks one hex per category from rows that *have* a
+        # category. NaN-padded rows contribute no category, so the per-row hex pad is
+        # immaterial; pad with NaN to skip the allocation.
+        padded_vec = np.concatenate([np.asarray(outline_color_vector), np.full(pad, np.nan, dtype=object)])
         outline_color_source_vector = pd.Categorical(
             list(outline_color_source_vector) + [None] * pad,
             categories=outline_color_source_vector.categories,
         )
+    else:
+        # Continuous: numeric vector, pad with NaN so cmap maps padded rows to na_color.
+        padded_vec = np.concatenate([np.asarray(outline_color_vector, dtype=float), np.full(pad, np.nan)])
     return padded_vec, outline_color_source_vector
 
 
@@ -544,6 +548,11 @@ def _get_collection_shape(
       - a single color or a list of color specs.
 
     Only NaNs are painted with na_color; finite values are mapped via norm+cmap.
+
+    .. note::
+       When ``outline_color`` is passed as an ``(N, 4)`` RGBA array of dtype ``float``,
+       its alpha channel is mutated in place to apply ``outline_alpha``. Pass a copy
+       if you need to retain the original buffer.
     """
     cmap = kwargs["cmap"]
 

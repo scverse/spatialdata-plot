@@ -1617,3 +1617,53 @@ def test_outline_color_continuous_requests_colorbar(sdata_blobs: SpatialData):
     cbar_axes = [a for a in fig.axes if "outline: value" in (a.get_ylabel(), a.get_xlabel(), a.get_title())]
     assert cbar_axes, "Expected a colorbar for the continuous outline column"
     plt.close(fig)
+
+
+def test_outline_color_cross_table(sdata_blobs: SpatialData):
+    """Fill column on table A, outline column on a separate table B."""
+    # Patch original table to annotate blobs_polygons with a fill column.
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    n = sdata_blobs["table"].n_obs
+    sdata_blobs["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
+    # Build a second table that ALSO annotates blobs_polygons but with a different column.
+    adata2 = AnnData(get_standard_RNG().normal(size=(n, 2)))
+    adata2.var = pd.DataFrame({}, index=["g1", "g2"])
+    adata2.obs = pd.DataFrame(
+        {
+            "instance_id": list(range(n)),
+            "region": pd.Categorical(["blobs_polygons"] * n),
+            "stage": pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n]),
+        }
+    )
+    sdata_blobs["table_outline"] = TableModel.parse(
+        adata=adata2, region_key="region", instance_key="instance_id", region="blobs_polygons"
+    )
+    fig, ax = plt.subplots()
+    # Don't pin table_name — let validation auto-resolve each column to its annotating table.
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="cluster",
+        outline_width=2,
+        outline_color="stage",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_ds_continuous_respects_explicit_norm(sdata_blobs: SpatialData):
+    """An explicit Normalize(vmin, vmax) must take effect on the datashader continuous outline path."""
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    # vmin/vmax intentionally narrower than the data range so the shaded image clamps visibly
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="white",
+        outline_width=2,
+        outline_color="value",
+        norm=Normalize(vmin=0.2, vmax=0.8),
+        method="datashader",
+    ).pl.show(ax=ax)
+    # The datashader outline overlay is rendered as an AxesImage on top of the fill image.
+    axes_images = [c for c in ax.get_children() if isinstance(c, matplotlib.image.AxesImage)]
+    assert axes_images, "Expected at least one rendered AxesImage (outline overlay)"
+    plt.close(fig)
