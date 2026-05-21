@@ -565,3 +565,39 @@ def test_render_labels_raises_on_3d(scale_factors):
             sdata.pl.render_labels("lbl3d").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def _annotate_labels_with_outline_columns(sdata: SpatialData) -> SpatialData:
+    """Patch the shared blobs fixture so its table annotates blobs_labels with categorical columns."""
+    sdata["table"].obs["region"] = pd.Categorical(["blobs_labels"] * sdata["table"].n_obs)
+    sdata["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+    n = sdata["table"].n_obs
+    sdata["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["stage"] = pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n])
+    return sdata
+
+
+def test_labels_outline_color_obs_column_does_not_raise(sdata_blobs: SpatialData):
+    """Regression for #681 (labels variant): outline_color accepts an obs column name."""
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.0, outline_alpha=1.0, outline_color="cluster").pl.show(
+        ax=ax
+    )
+    plt.close(fig)
+
+
+def test_labels_outline_color_sets_render_params(sdata_blobs: SpatialData):
+    from spatialdata_plot.pl.render_params import LabelsRenderParams
+
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    res = sdata_blobs.pl.render_labels("blobs_labels", outline_color="cluster", outline_alpha=1.0)
+    params: LabelsRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_labels"))
+    assert params.col_for_outline_color == "cluster"
+    assert params.outline_table_name == "table"
+
+
+def test_labels_outline_color_literal_still_works(sdata_blobs: SpatialData):
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.0, outline_alpha=1.0, outline_color="red").pl.show(ax=ax)
+    plt.close(fig)

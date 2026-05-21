@@ -1473,3 +1473,96 @@ def test_render_shapes_datashader_under_bbox_query_does_not_crash():
         cropped_sdata.pl.render_shapes("shapes", method="datashader").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
+    """Patch the shared blobs fixture so its table annotates ``blobs_polygons``.
+
+    Adds two categorical columns and one continuous column for the outline-color tests below.
+    """
+    sdata["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata["table"].n_obs)
+    sdata["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    n = sdata["table"].n_obs
+    sdata["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["stage"] = pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["value"] = np.linspace(0.0, 1.0, n)
+    return sdata
+
+
+def test_outline_color_as_obs_column_does_not_raise(sdata_blobs: SpatialData):
+    """Regression for #681: outline_color accepts an obs column name."""
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="white",
+        outline_width=2,
+        outline_color="cluster",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_column_sets_render_params(sdata_blobs: SpatialData):
+    from spatialdata_plot.pl.render_params import ShapesRenderParams
+
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    res = sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="cluster", outline_alpha=1.0)
+    params: ShapesRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_shapes"))
+    assert params.col_for_outline_color == "cluster"
+    assert params.outline_table_name == "table"
+
+
+def test_outline_color_literal_still_color(sdata_blobs: SpatialData):
+    """Passing a recognized color name should still produce a literal Color object."""
+    from spatialdata_plot.pl.render_params import Color, ShapesRenderParams
+
+    res = sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="red", outline_alpha=1.0)
+    params: ShapesRenderParams = next(v for k, v in res.plotting_tree.items() if k.endswith("_render_shapes"))
+    assert params.col_for_outline_color is None
+    assert isinstance(params.outline_params.outer_outline_color, Color)
+
+
+def test_outline_color_column_with_two_outlines_raises(sdata_blobs: SpatialData):
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    with pytest.raises(ValueError, match="not supported with two outlines"):
+        sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=(2.0, 0.5), outline_color="cluster")
+
+
+def test_outline_color_column_continuous(sdata_blobs: SpatialData):
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="white", outline_width=2, outline_color="value").pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_column_datashader(sdata_blobs: SpatialData):
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="white",
+        outline_width=2,
+        outline_color="cluster",
+        method="datashader",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_column_stacked_legends(sdata_blobs: SpatialData):
+    """Two stacked legends when both color and outline_color are columns; no bbox overlap."""
+    from matplotlib.legend import Legend
+
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="cluster", outline_width=2, outline_color="stage").pl.show(
+        ax=ax
+    )
+    fig.canvas.draw()
+    legends = [c for c in ax.get_children() if isinstance(c, Legend)]
+    assert len(legends) == 2, f"Expected 2 legends, got {len(legends)}"
+    a = legends[0].get_window_extent().transformed(ax.transAxes.inverted())
+    b = legends[1].get_window_extent().transformed(ax.transAxes.inverted())
+    overlap_h = max(0.0, min(a.x1, b.x1) - max(a.x0, b.x0))
+    overlap_v = max(0.0, min(a.y1, b.y1) - max(a.y0, b.y0))
+    assert overlap_h * overlap_v == 0.0, "Fill and outline legend bboxes overlap"
+    plt.close(fig)

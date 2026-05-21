@@ -344,8 +344,17 @@ def _render_ds_outlines(
     factor: float,
     x_min: float = 0.0,
     y_min: float = 0.0,
+    outline_color_vector: Any | None = None,
+    outline_color_source_vector: pd.Series | None = None,
+    outline_col_name: str | None = None,
 ) -> None:
-    """Aggregate, shade, and render shape outlines (outer and inner) with datashader."""
+    """Aggregate, shade, and render shape outlines (outer and inner) with datashader.
+
+    When ``outline_col_name`` is provided, the outer outline is colored per-shape
+    using ``ds.by`` (categorical) or a numeric reduction (continuous) instead of
+    a single literal color. Column-based outline coloring is incompatible with
+    the two-outline form, so this path only affects the outer outline.
+    """
     ds_lw_factor = fig_params.fig.dpi / 72
     assert len(render_params.outline_alpha) == 2  # noqa: S101
 
@@ -357,6 +366,25 @@ def _render_ds_outlines(
     ):
         alpha = render_params.outline_alpha[idx]
         if alpha <= 0:
+            continue
+        if idx == 0 and outline_col_name is not None:
+            _render_ds_outline_by_column(
+                cvs=cvs,
+                transformed_element=transformed_element,
+                col_for_outline_color=outline_col_name,
+                outline_color_vector=outline_color_vector,
+                outline_color_source_vector=outline_color_source_vector,
+                cmap_params=render_params.cmap_params,
+                ds_reduction=render_params.ds_reduction,
+                line_width=linewidth * ds_lw_factor,
+                alpha=alpha,
+                fig_params=fig_params,
+                ax=ax,
+                factor=factor,
+                x_min=x_min,
+                y_min=y_min,
+                zorder=render_params.zorder,
+            )
             continue
         agg_outline = cvs.line(
             transformed_element,
@@ -373,6 +401,96 @@ def _render_ds_outlines(
             shaded = _apply_user_alpha(shaded, alpha)
             rgba, trans = _create_image_from_datashader_result(shaded, factor, ax, x_min, y_min)
             _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder)
+
+
+def _render_ds_outline_by_column(
+    cvs: Any,
+    transformed_element: Any,
+    col_for_outline_color: str,
+    outline_color_vector: Any | None,
+    outline_color_source_vector: pd.Series | None,
+    cmap_params: Any,
+    ds_reduction: _DsReduction | None,
+    line_width: float,
+    alpha: float,
+    fig_params: FigParams,
+    ax: matplotlib.axes.SubplotBase,
+    factor: float,
+    x_min: float,
+    y_min: float,
+    zorder: int,
+) -> None:
+    """Aggregate + shade an outline colored by an obs column via datashader.
+
+    Mirrors the fill pipeline but uses ``cvs.line`` so only the boundary is rasterized.
+    """
+    color_by_categorical = outline_color_source_vector is not None
+    na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
+
+    if col_for_outline_color not in transformed_element.columns:
+        # Ensure the column rides along with the geometry for ds.by / reductions.
+        if color_by_categorical and outline_color_source_vector is not None:
+            transformed_element[col_for_outline_color] = pd.Categorical(outline_color_source_vector)
+        else:
+            transformed_element[col_for_outline_color] = np.asarray(outline_color_vector)
+
+    if color_by_categorical:
+        cat_series = transformed_element[col_for_outline_color]
+        if not isinstance(cat_series.dtype, pd.CategoricalDtype):
+            cat_series = cat_series.astype("category")
+        transformed_element[col_for_outline_color] = _inject_ds_nan_sentinel(cat_series)
+        agg_outline = cvs.line(
+            transformed_element,
+            geometry="geometry",
+            agg=ds.by(col_for_outline_color, ds.count()),
+            line_width=line_width,
+        )
+        color_key = _build_datashader_color_key(
+            _coerce_categorical_source(transformed_element[col_for_outline_color]),
+            outline_color_vector,
+            na_color_hex,
+        )
+        shaded = ds.tf.shade(
+            agg_outline,
+            color_key=color_key,
+            min_alpha=_convert_alpha_to_datashader_range(alpha),
+            how="linear",
+        )
+    else:
+        reduction_name = ds_reduction if ds_reduction is not None else "max"
+        reduction_function_map = {
+            "sum": ds.sum,
+            "mean": ds.mean,
+            "any": ds.any,
+            "count": ds.count,
+            "std": ds.std,
+            "var": ds.var,
+            "max": ds.max,
+            "min": ds.min,
+        }
+        try:
+            reduction_function = reduction_function_map[reduction_name](column=col_for_outline_color)
+        except KeyError as e:
+            raise ValueError(
+                f"Reduction '{reduction_name}' is not supported. "
+                f"Use one of: {', '.join(reduction_function_map.keys())}."
+            ) from e
+        agg_outline = cvs.line(
+            transformed_element,
+            geometry="geometry",
+            agg=reduction_function,
+            line_width=line_width,
+        )
+        shaded = ds.tf.shade(
+            agg_outline,
+            cmap=cmap_params.cmap,
+            min_alpha=_convert_alpha_to_datashader_range(alpha),
+            how="linear",
+        )
+
+    shaded = _apply_user_alpha(shaded, alpha)
+    rgba, trans = _create_image_from_datashader_result(shaded, factor, ax, x_min, y_min)
+    _ax_show_and_transform(rgba, trans, ax, zorder=zorder)
 
 
 def _build_ds_colorbar(

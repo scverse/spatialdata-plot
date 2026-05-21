@@ -59,6 +59,7 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _ax_show_and_transform,
     _check_obs_var_shadow,
+    _color_vector_to_rgba,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -334,12 +335,18 @@ def _add_legend_and_colorbar(
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
+    outline_col_for_color: str | None = None,
+    outline_color_source_vector: pd.Series | None = None,
+    outline_color_vector: Any | None = None,
 ) -> None:
     """Add legend and colorbar decorations if the color vector warrants them."""
-    if not _want_decorations(color_vector, na_color):
+    fill_has_decorations = _want_decorations(color_vector, na_color) and col_for_color is not None
+    outline_has_decorations = outline_col_for_color is not None and outline_color_source_vector is not None
+
+    if not fill_has_decorations and not outline_has_decorations:
         return
 
-    if palette is None:
+    if palette is None and fill_has_decorations:
         palette = _make_palette(color_source_vector, color_vector)
 
     if color_source_vector is not None and hasattr(color_source_vector, "remove_unused_categories"):
@@ -351,29 +358,97 @@ def _add_legend_and_colorbar(
         is_continuous=col_for_color is not None and color_source_vector is None,
     )
 
-    _decorate_axs(
-        ax=ax,
-        cax=cax,
-        fig_params=fig_params,
-        adata=adata,
-        value_to_plot=col_for_color,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
-        palette=palette,
-        alpha=alpha,
-        na_color=na_color,
-        legend_fontsize=legend_params.legend_fontsize,
-        legend_fontweight=legend_params.legend_fontweight,
-        legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend,
-        colorbar=wants_colorbar and legend_params.colorbar,
-        colorbar_params=colorbar_params,
-        colorbar_requests=colorbar_requests,
-        colorbar_label=_resolve_colorbar_label(
-            colorbar_params,
-            col_for_color if isinstance(col_for_color, str) else None,
-        ),
+    if fill_has_decorations:
+        _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=adata,
+            value_to_plot=col_for_color,
+            color_source_vector=color_source_vector,
+            color_vector=color_vector,
+            palette=palette,
+            alpha=alpha,
+            na_color=na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=wants_colorbar and legend_params.colorbar,
+            colorbar_params=colorbar_params,
+            colorbar_requests=colorbar_requests,
+            colorbar_label=_resolve_colorbar_label(
+                colorbar_params,
+                col_for_color if isinstance(col_for_color, str) else None,
+            ),
+        )
+
+    if outline_has_decorations:
+        assert outline_col_for_color is not None  # narrowed by outline_has_decorations  # noqa: S101
+        assert outline_color_source_vector is not None  # noqa: S101
+        _add_outline_legend(
+            ax=ax,
+            fig_params=fig_params,
+            outline_col=outline_col_for_color,
+            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_vector,
+            fill_has_legend=fill_has_decorations and color_source_vector is not None,
+            legend_params=legend_params,
+        )
+
+
+def _add_outline_legend(
+    ax: matplotlib.axes.SubplotBase,
+    fig_params: FigParams,
+    outline_col: str,
+    outline_color_source_vector: pd.Series,
+    outline_color_vector: Any,
+    fill_has_legend: bool,
+    legend_params: LegendParams,
+) -> None:
+    """Add a second legend for outline-by-column, auto-positioned below the fill legend.
+
+    Uses the rendered fill legend's window extent to anchor the outline legend just
+    below it in axes-fraction coordinates. Falls back to anchoring at the bottom-right
+    of the axes when the measurement is unavailable.
+    """
+    cats = outline_color_source_vector.remove_unused_categories().unique()
+    cats = cats[~cats.isnull()]
+    mapping_df = pd.DataFrame(
+        {"cats": outline_color_source_vector.remove_unused_categories(), "color": outline_color_vector}
+    )
+    color_map = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
+
+    outline_handles = [ax.scatter([], [], c=color_map[c], label=str(c)) for c in cats]
+
+    anchor_y: float | None = None
+    if fill_has_legend:
+        fill_legend = ax.get_legend()
+        if fill_legend is not None:
+            ax.add_artist(fill_legend)  # keep fill legend on the axes
+            try:
+                fig_params.fig.canvas.draw()
+                bbox_axes = fill_legend.get_window_extent().transformed(ax.transAxes.inverted())
+                anchor_y = float(bbox_axes.y0) - 0.02
+            except (AttributeError, ValueError, RuntimeError):
+                anchor_y = None
+
+    if anchor_y is not None and anchor_y > 0:
+        loc = "upper left"
+        anchor = (1.02, anchor_y)
+    else:
+        loc = "lower left" if fill_has_legend else "center left"
+        anchor = (1.02, 0.0) if fill_has_legend else (1.0, 0.5)
+
+    ax.legend(
+        handles=outline_handles,
+        title=f"outline: {outline_col}",
+        frameon=False,
+        loc=loc,
+        bbox_to_anchor=anchor,
+        fontsize=legend_params.legend_fontsize,
+        ncol=(1 if len(outline_handles) <= 14 else 2 if len(outline_handles) <= 30 else 3),
     )
 
 
@@ -479,6 +554,43 @@ def _render_shapes(
 
     values_are_categorical = color_source_vector is not None
 
+    col_for_outline_color = render_params.col_for_outline_color
+    outline_table_name = render_params.outline_table_name
+    outline_color_source_vector: pd.Series | None = None
+    outline_color_vector: Any = None
+    if col_for_outline_color is not None:
+        # When the outline column lives in a table that hasn't been joined yet
+        # (no fill table, or a different table than fill's), inner-join it onto
+        # the element so the lookup is aligned and the element row count matches
+        # the outline vector length.
+        if outline_table_name is not None and outline_table_name != table_name:
+            _outline_dict, _joined_outline_table = join_spatialelement_table(
+                sdata, spatial_element_names=element, table_name=outline_table_name, how="inner"
+            )
+            _joined_outline_table.uns["spatialdata_attrs"]["region"] = (
+                _joined_outline_table.obs[_joined_outline_table.uns["spatialdata_attrs"]["region_key"]]
+                .unique()
+                .tolist()
+            )
+            sdata_filt[outline_table_name] = _joined_outline_table
+            # If no fill join happened, replace the element with the outline-joined version
+            # so the per-shape outline vector length matches the rendered shapes.
+            if table_name is None:
+                sdata_filt[element] = shapes = _outline_dict[element]
+        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=sdata_filt[element],
+            element_name=element,
+            value_to_plot=col_for_outline_color,
+            groups=None,
+            palette=render_params.palette,
+            na_color=render_params.cmap_params.na_color,
+            cmap_params=render_params.cmap_params,
+            table_name=outline_table_name,
+            table_layer=table_layer,
+            coordinate_system=coordinate_system,
+        )
+
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
     if groups is not None and color_source_vector is not None:
@@ -495,6 +607,15 @@ def _render_shapes(
         if len(shapes) == 0:
             return
         sdata_filt[element] = shapes
+        if outline_color_vector is not None:
+            _keep_arr = np.asarray(keep)
+            if outline_color_source_vector is not None:
+                outline_color_source_vector = outline_color_source_vector[_keep_arr]
+            outline_color_vector = (
+                outline_color_vector[_keep_arr]
+                if hasattr(outline_color_vector, "__getitem__")
+                else outline_color_vector
+            )
 
     # color_source_vector is None when the values aren't categorical
     if not values_are_categorical and render_params.transfunc is not None:
@@ -677,6 +798,11 @@ def _render_shapes(
                 na_color_hex,
             )
 
+        if col_for_outline_color is not None and col_for_outline_color not in transformed_element.columns:
+            if outline_color_source_vector is not None:
+                transformed_element[col_for_outline_color] = pd.Categorical(outline_color_source_vector)
+            else:
+                transformed_element[col_for_outline_color] = np.asarray(outline_color_vector)
         _render_ds_outlines(
             cvs,
             transformed_element,
@@ -686,6 +812,9 @@ def _render_shapes(
             factor,
             x_min=x_ext[0],
             y_min=y_ext[0],
+            outline_color_vector=outline_color_vector,
+            outline_color_source_vector=outline_color_source_vector,
+            outline_col_name=col_for_outline_color,
         )
 
         _cax = _render_ds_image(
@@ -702,7 +831,31 @@ def _render_shapes(
 
     elif method == "matplotlib":
         # render outlines separately to ensure they are always underneath the shape
-        if render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
+        if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
+            outline_rgba = _color_vector_to_rgba(
+                outline_color_vector,
+                outline_color_source_vector,
+                render_params.cmap_params,
+                n_rows=len(shapes),
+            )
+            _cax = _get_collection_shape(
+                shapes=shapes,
+                s=render_params.scale,
+                c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
+                render_params=render_params,
+                rasterized=sc_settings._vector_friendly,
+                cmap=None,
+                norm=None,
+                fill_alpha=0.0,
+                outline_alpha=render_params.outline_alpha[0],
+                outline_color=outline_rgba,
+                linewidth=render_params.outline_params.outer_outline_linewidth,
+                zorder=render_params.zorder,
+            )
+            ax.add_collection(_cax)
+            for path in _cax.get_paths():
+                path.vertices = trans.transform(path.vertices)
+        elif render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
@@ -798,6 +951,9 @@ def _render_shapes(
         colorbar=render_params.colorbar,
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
+        outline_col_for_color=col_for_outline_color,
+        outline_color_source_vector=outline_color_source_vector,
+        outline_color_vector=outline_color_vector,
     )
 
 
@@ -1886,6 +2042,41 @@ def _render_labels(
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
 
+    col_for_outline_color = render_params.col_for_outline_color
+    outline_table_name = render_params.outline_table_name
+    outline_color_source_vector: pd.Series | None = None
+    outline_color_vector: Any = None
+    if col_for_outline_color is not None:
+        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=label,
+            element_name=element,
+            value_to_plot=col_for_outline_color,
+            groups=None,
+            palette=palette,
+            na_color=render_params.cmap_params.na_color,
+            cmap_params=render_params.cmap_params,
+            table_name=outline_table_name,
+            table_layer=table_layer,
+            render_type="labels",
+            coordinate_system=coordinate_system,
+        )
+        # Apply the same fill groups-keep filter so outline vectors align with instance_id
+        if (
+            groups is not None
+            and categorical
+            and color_source_vector is not None
+            and (_na.default_color_set or _na.is_fully_transparent())
+        ):
+            _keep_arr = np.asarray(color_source_vector.isin(groups))
+            # color_source_vector was already masked above; we need the pre-mask version,
+            # which we can reconstruct via length matching. If lengths still match the
+            # post-mask vector, no filter is needed (no-op). Otherwise mask now.
+            if outline_color_vector is not None and len(outline_color_vector) > len(instance_id):
+                outline_color_vector = outline_color_vector[_keep_arr]
+                if outline_color_source_vector is not None:
+                    outline_color_source_vector = outline_color_source_vector[_keep_arr]
+
     def _draw_labels(
         seg_erosionpx: int | None,
         seg_boundaries: bool,
@@ -1902,6 +2093,8 @@ def _render_labels(
             seg_boundaries=seg_boundaries,
             na_color=na_color,
             outline_color=outline_color,
+            outline_color_vector=outline_color_vector if seg_boundaries else None,
+            outline_color_source_vector=outline_color_source_vector if seg_boundaries else None,
         )
 
         cax = ax.imshow(
@@ -1999,6 +2192,18 @@ def _render_labels(
             col_for_color if isinstance(col_for_color, str) else None,
         ),
     )
+
+    if col_for_outline_color is not None and outline_color_source_vector is not None:
+        fill_has_legend = col_for_color is not None and color_source_vector is not None
+        _add_outline_legend(
+            ax=ax,
+            fig_params=fig_params,
+            outline_col=col_for_outline_color,
+            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_vector,
+            fill_has_legend=fill_has_legend,
+            legend_params=legend_params,
+        )
 
 
 def _normalise_to_range(values: np.ndarray, lo: float, hi: float) -> np.ndarray:

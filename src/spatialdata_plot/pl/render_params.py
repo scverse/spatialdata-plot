@@ -232,6 +232,8 @@ class ShapesRenderParams:
     element: str
     color: Color | None = None
     col_for_color: str | None = None
+    col_for_outline_color: str | None = None
+    outline_table_name: str | None = None
     groups: str | list[str] | None = None
     palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: tuple[float, float] = (1.0, 1.0)
@@ -298,6 +300,8 @@ class LabelsRenderParams:
     element: str
     color: Color | None = None
     col_for_color: str | None = None
+    col_for_outline_color: str | None = None
+    outline_table_name: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
     palette: ListedColormap | dict[str, str] | list[str] | None = None

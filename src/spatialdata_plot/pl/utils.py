@@ -431,6 +431,70 @@ def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor
     pathpatch.get_path().vertices = scaled_vertices
 
 
+def _color_vector_to_rgba(
+    color_vector: Any,
+    color_source_vector: pd.Series | None,
+    cmap_params: CmapParams,
+    n_rows: int,
+) -> np.ndarray:
+    """Convert a fill/outline `color_vector` (categorical hex strings or continuous numerics) to (N, 4) RGBA.
+
+    Mirrors the per-row mapping done inside :func:`_get_collection_shape` so that
+    callers can pre-materialize an outline-color array. NaN/non-finite entries are
+    painted with ``cmap_params.na_color``.
+    """
+    na_rgba = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
+    if color_vector is None:
+        rgba = np.empty((n_rows, 4), dtype=float)
+        rgba[:] = na_rgba
+        return rgba
+
+    if color_source_vector is not None:
+        # Categorical: color_vector contains hex strings aligned to color_source_vector
+        return np.asarray(ColorConverter().to_rgba_array(list(color_vector)))
+
+    arr = np.asarray(color_vector)
+    if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
+        return np.asarray(ColorConverter().to_rgba_array(arr))
+
+    rgba = np.empty((len(arr), 4), dtype=float)
+    rgba[:] = na_rgba
+    if np.issubdtype(arr.dtype, np.number):
+        finite_mask = np.isfinite(arr)
+        if finite_mask.any():
+            norm = cmap_params.norm
+            if norm.vmin is None or norm.vmax is None:
+                vmin = float(np.nanmin(arr[finite_mask]))
+                vmax = float(np.nanmax(arr[finite_mask]))
+                if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
+                    vmin, vmax = 0.0, 1.0
+                used_norm = Normalize(vmin=vmin, vmax=vmax, clip=False)
+            else:
+                used_norm = norm
+            rgba[finite_mask] = cmap_params.cmap(used_norm(arr[finite_mask]))
+        return rgba
+
+    # Object dtype: mix of numerics and color-likes (mirrors _get_collection_shape Case C)
+    series = pd.Series(arr, copy=False)
+    num = pd.to_numeric(series, errors="coerce").to_numpy()
+    is_num = np.isfinite(num)
+    if is_num.any():
+        norm = cmap_params.norm
+        if norm.vmin is None or norm.vmax is None:
+            vmin = float(np.nanmin(num[is_num]))
+            vmax = float(np.nanmax(num[is_num]))
+            if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
+                vmin, vmax = 0.0, 1.0
+            used_norm = Normalize(vmin=vmin, vmax=vmax, clip=False)
+        else:
+            used_norm = norm
+        rgba[is_num] = cmap_params.cmap(used_norm(num[is_num]))
+    color_mask = (~is_num) & series.notna().to_numpy()
+    if color_mask.any():
+        rgba[color_mask] = ColorConverter().to_rgba_array(series[color_mask].tolist())
+    return rgba
+
+
 def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
@@ -439,7 +503,7 @@ def _get_collection_shape(
     render_params: ShapesRenderParams,
     fill_alpha: None | float = None,
     outline_alpha: None | float = None,
-    outline_color: None | str | list[float] = "white",
+    outline_color: None | str | list[float] | np.ndarray = "white",
     linewidth: float = 0.0,
     **kwargs: Any,
 ) -> PatchCollection:
@@ -534,7 +598,12 @@ def _get_collection_shape(
 
     # Outline handling
     if outline_alpha and outline_alpha > 0.0:
-        outline_c_array = _as_rgba_array(outline_color)
+        outline_arr = np.asarray(outline_color) if not isinstance(outline_color, str) else None
+        if outline_arr is not None and outline_arr.ndim == 2 and outline_arr.shape == (len(shapes), 4):
+            # Per-shape RGBA array: use row-wise, applying outline_alpha to the alpha channel.
+            outline_c_array = outline_arr.astype(float, copy=True)
+        else:
+            outline_c_array = _as_rgba_array(outline_color)
         outline_c_array[..., -1] = outline_alpha
         outline_c = outline_c_array.tolist()
     else:
@@ -1315,6 +1384,8 @@ def _map_color_seg(
     seg_erosionpx: int | None = None,
     seg_boundaries: bool = False,
     outline_color: Color | None = None,
+    outline_color_vector: ArrayLike | pd.Series[CategoricalDtype] | None = None,
+    outline_color_source_vector: pd.Series[CategoricalDtype] | None = None,
 ) -> ArrayLike:
     cell_id = np.array(cell_id)
 
@@ -1357,6 +1428,55 @@ def _map_color_seg(
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
+
+    if seg_boundaries and outline_color_vector is not None:
+        # Column-driven outline: build per-label colors from the outline vector and overlay
+        # on the eroded ring. Only Case A (categorical) and Case B (continuous) are reachable
+        # for this path, since a column was always specified by the user.
+        if outline_color_source_vector is not None and isinstance(
+            outline_color_vector.dtype if hasattr(outline_color_vector, "dtype") else None, pd.CategoricalDtype
+        ):
+            outline_val_im: ArrayLike = map_array(seg.copy(), cell_id, outline_color_vector.codes + 1)
+            outline_cols = colors.to_rgba_array(outline_color_vector.categories)
+        elif outline_color_source_vector is not None:
+            # Categorical column but color_vector is hex strings (most common case)
+            cat = pd.Categorical(outline_color_source_vector)
+            cat_codes = cat.codes
+            outline_val_im = map_array(seg.copy(), cell_id, cat_codes + 1)
+            # Use the actual color_vector (hex strings aligned to cells) deduped by category
+            color_arr = np.asarray(outline_color_vector, dtype=object)
+            cat_colors: list[Any] = []
+            for cat_idx in range(len(cat.categories)):
+                first_match = np.where(cat_codes == cat_idx)[0]
+                cat_colors.append(color_arr[first_match[0]] if len(first_match) else na_color.get_hex_with_alpha())
+            outline_cols = colors.to_rgba_array(cat_colors)
+        else:
+            # Continuous: numeric values normalized via cmap
+            ov = (
+                outline_color_vector.to_numpy()
+                if isinstance(outline_color_vector, pd.Series)
+                else np.asarray(outline_color_vector)
+            )
+            normed = ov.copy().astype(float)
+            finite = ~np.isnan(normed)
+            if finite.any():
+                normed[finite] = cmap_params.norm(normed[finite])
+            outline_cols = cmap_params.cmap(normed)
+            outline_val_im = map_array(seg.copy(), cell_id, cell_id)
+        if seg_erosionpx is not None:
+            outline_val_im[
+                outline_val_im == erosion(outline_val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))
+            ] = 0
+        outline_seg_im = label2rgb(
+            label=outline_val_im,
+            colors=outline_cols,
+            bg_label=0,
+            bg_color=(1, 1, 1),
+            image_alpha=0,
+        )
+        outline_mask = val_im > 0
+        alpha_channel = outline_mask.astype(float)
+        return np.dstack((outline_seg_im, alpha_channel))
 
     if seg_boundaries and outline_color is not None:
         # Uniform outline color requested: skip label2rgb, build RGBA directly
@@ -2486,9 +2606,11 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
             raise TypeError("Parameter 'outline_alpha' must be numeric and between 0 and 1.")
 
     outline_color = param_dict.get("outline_color")
+    if "outline_color" in param_dict and element_type in {"shapes", "labels"}:
+        param_dict["col_for_outline_color"] = None
     if outline_color:
         if not isinstance(outline_color, str | tuple | list):
-            raise TypeError("Parameter 'color' must be a string or a tuple/list of floats or colors.")
+            raise TypeError("Parameter 'outline_color' must be a string or a tuple/list of floats or colors.")
         if isinstance(outline_color, tuple | list):
             if len(outline_color) < 1:
                 raise ValueError("Empty tuple is not supported as input for outline_color!")
@@ -2505,6 +2627,18 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
                     f"Tuple/List of length {len(outline_color)} was passed for outline_color. Valid options would be: "
                     "tuple of 2 colors (for 2 outlines) or an RGB(A) array, aka a list/tuple of 3-4 floats."
                 )
+        elif isinstance(outline_color, str) and element_type in {"shapes", "labels"}:
+            if _is_color_like(outline_color):
+                _check_color_column_collision(param_dict["sdata"], param_dict["element"], outline_color, element_type)
+                param_dict["outline_color"] = Color(outline_color)
+            else:
+                if isinstance(param_dict.get("outline_width"), tuple):
+                    raise ValueError(
+                        "Coloring outlines by a column is not supported with two outlines. "
+                        "Pass a scalar `outline_width` or a literal color for `outline_color`."
+                    )
+                param_dict["col_for_outline_color"] = outline_color
+                param_dict["outline_color"] = None
         else:
             param_dict["outline_color"] = Color(outline_color)
 
@@ -2797,6 +2931,20 @@ def _validate_label_render_params(
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
 
+        element_params[el]["col_for_outline_color"] = None
+        element_params[el]["outline_table_name"] = None
+        if (col_for_outline_color := param_dict.get("col_for_outline_color")) is not None:
+            col_for_outline_color, outline_table_name = _validate_col_for_column_table(
+                sdata,
+                el,
+                col_for_outline_color,
+                param_dict["table_name"],
+                labels=True,
+                gene_symbols=gene_symbols,
+            )
+            element_params[el]["col_for_outline_color"] = col_for_outline_color
+            element_params[el]["outline_table_name"] = outline_table_name
+
         _gate_palette_and_groups(element_params[el], param_dict)
         element_params[el]["colorbar"] = param_dict["colorbar"]
         element_params[el]["colorbar_params"] = param_dict["colorbar_params"]
@@ -2999,6 +3147,16 @@ def _validate_shape_render_params(
             )
             element_params[el]["table_name"] = table_name
             element_params[el]["col_for_color"] = col_for_color
+
+        element_params[el]["col_for_outline_color"] = None
+        element_params[el]["outline_table_name"] = None
+        col_for_outline_color = param_dict.get("col_for_outline_color")
+        if col_for_outline_color is not None:
+            col_for_outline_color, outline_table_name = _validate_col_for_column_table(
+                sdata, el, col_for_outline_color, param_dict["table_name"], gene_symbols=gene_symbols
+            )
+            element_params[el]["col_for_outline_color"] = col_for_outline_color
+            element_params[el]["outline_table_name"] = outline_table_name
 
         _gate_palette_and_groups(element_params[el], param_dict)
         element_params[el]["method"] = param_dict["method"]

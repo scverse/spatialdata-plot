@@ -241,13 +241,18 @@ class PlotAccessor:
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
             If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
             default outline widths 1.5 and 0.5 are used for outer/only and inner outline respectively.
-        outline_color : ColorLike | tuple[ColorLike], optional
+        outline_color : ColorLike | tuple[ColorLike] | str, optional
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
             "#000000ff", and `outline_alpha` is not given, this value controls the opacity of the outline. If 2 values
             are given (tuple), 2 borders are shown with these colors (outer & inner). If `outline_width` and/or
             `outline_alpha` are used to indicate that one/two outlines should be drawn, the default outline colors
             "#000000" and "#ffffff are used for outer/only and inner outline respectively.
+            A string that is not a recognized color is interpreted as a column key (in `obs` of the annotating table
+            or in the element's own dataframe), mirroring how ``color`` is parsed. The outline is then colored
+            per-shape using the same ``palette`` / ``cmap`` / ``na_color`` as the fill. When both ``color`` and
+            ``outline_color`` resolve to columns, two stacked legends are drawn. Column-based outline coloring is
+            only supported for a single outline (not the 2-tuple form).
         outline_alpha : float | int | tuple[float | int, float | int] | None, optional
             Alpha value for the outline of shapes. Invisible by default, meaning outline_alpha=0.0 if both outline_color
             and outline_width are not specified. Else, outlines are rendered with the alpha implied by outline_color, or
@@ -344,6 +349,8 @@ class PlotAccessor:
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
+                col_for_outline_color=param_values["col_for_outline_color"],
+                outline_table_name=param_values["outline_table_name"],
                 groups=param_values["groups"],
                 scale=param_values["scale"],
                 outline_params=outline_params,
@@ -810,11 +817,14 @@ class PlotAccessor:
         fill_alpha : float | int | None, optional
             Alpha value for the fill of the labels. By default, it is set to 0.4 or, if a color is given that implies
             an alpha, that value is used for `fill_alpha`.
-        outline_color : ColorLike | None
+        outline_color : ColorLike | str | None
             Color of the outline of the labels. Can either be a named color ("red"), a hex representation
             ("#000000") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If ``None``,
             the outline inherits from the ``color`` parameter when it is a literal color, or uses data-driven
             per-label colors when ``color`` refers to a column.
+            A string that is not a recognized color is interpreted as a column key (in `obs` of the annotating
+            table), mirroring how ``color`` is parsed. The outline is then colored per-label using the same
+            ``palette`` / ``cmap`` / ``na_color`` as the fill.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -880,6 +890,8 @@ class PlotAccessor:
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
+                col_for_outline_color=param_values["col_for_outline_color"],
+                outline_table_name=param_values["outline_table_name"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
                 cmap_params=cmap_params,
