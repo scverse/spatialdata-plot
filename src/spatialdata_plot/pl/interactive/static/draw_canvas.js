@@ -338,7 +338,7 @@ function render({ model, el }) {
             return;
         }
         if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (shapes.length > 0) setShapes([]);
+            if (shapes.length > 0) setShapes(shapes.slice(0, -1));
             e.preventDefault();
             return;
         }

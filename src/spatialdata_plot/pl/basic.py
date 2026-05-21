@@ -185,7 +185,13 @@ class PlotAccessor:
         Drawn shapes are saved into ``sdata.shapes`` under a user-typed name
         on click of the *Save* button — each save creates one ShapesModel
         with one row per drawn shape, registered with an ``Identity``
-        transformation in the chosen coordinate system.
+        transformation in the chosen coordinate system. The canvas is
+        cleared on every Save so the next set of shapes can be drawn
+        independently.
+
+        In-memory name collisions are renamed to ``{name}_{UTC-ISO}``. The
+        on-disk *Write to disk* button calls ``SpatialData.write_element``,
+        which overwrites an existing on-disk element of the same name.
 
         Requires the ``interactive`` extra: ``pip install 'spatialdata-plot[interactive]'``.
 

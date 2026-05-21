@@ -36,14 +36,16 @@ def render_to_png(
         :func:`._commit.pixel_shape_to_polygon` for the conversion.
     """
     fig = plt.figure(figsize=_FIGSIZE, dpi=_DPI)
-    ax = fig.add_axes([0, 0, 1, 1])
-    sdata.pl.render_images(element=element).pl.show(coordinate_systems=coordinate_system, ax=ax)
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    ax.set_axis_off()
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=_DPI, pad_inches=0)
-    plt.close(fig)
+    try:
+        ax = fig.add_axes([0, 0, 1, 1])
+        sdata.pl.render_images(element=element).pl.show(coordinate_systems=coordinate_system, ax=ax)
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        ax.set_axis_off()
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        buf = BytesIO()
+        fig.savefig(buf, format="png", dpi=_DPI, pad_inches=0)
+    finally:
+        plt.close(fig)
     return buf.getvalue(), _IMAGE_W, _IMAGE_H, tuple(xlim), tuple(ylim)

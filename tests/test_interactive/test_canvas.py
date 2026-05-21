@@ -1,17 +1,20 @@
 """Smoke tests for the DrawCanvas anywidget class."""
 from __future__ import annotations
 
-from pathlib import Path
+import pytest
+
+pytest.importorskip("anywidget")
+pytest.importorskip("ipywidgets")
 
 
 def test_draw_canvas_imports():
-    from spatialdata_plot.pl.interactive import DrawCanvas
+    from spatialdata_plot.pl.interactive._canvas import DrawCanvas
 
     assert DrawCanvas is not None
 
 
 def test_draw_canvas_default_traitlets():
-    from spatialdata_plot.pl.interactive import DrawCanvas
+    from spatialdata_plot.pl.interactive._canvas import DrawCanvas
 
     c = DrawCanvas()
     assert c.tool == "rectangle"
@@ -35,7 +38,7 @@ def test_draw_canvas_esm_file_is_bundled():
 
 def test_draw_canvas_traitlet_assignment():
     """Setting traitlets from Python should work (Python → JS sync)."""
-    from spatialdata_plot.pl.interactive import DrawCanvas
+    from spatialdata_plot.pl.interactive._canvas import DrawCanvas
 
     c = DrawCanvas()
     c.tool = "polygon"

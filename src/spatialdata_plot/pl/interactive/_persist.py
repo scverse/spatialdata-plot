@@ -19,7 +19,7 @@ def commit_to_memory(
     """
     target = name
     if target in sdata.shapes:
-        ts = _dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         target = f"{name}_{ts}"
     sdata.shapes[target] = shapes_model
     return target
@@ -27,6 +27,11 @@ def commit_to_memory(
 
 def persist_to_disk(sdata: sd.SpatialData, name: str) -> None:
     """Persist ``sdata.shapes[name]`` to the backing zarr store.
+
+    ``sdata.write_element`` overwrites any existing on-disk element of the
+    same name. Disk-side collision handling differs from
+    :func:`commit_to_memory`, which renames in memory — call sites that
+    care should pass in the name returned by ``commit_to_memory``.
 
     Raises ValueError if ``sdata`` is not zarr-backed.
     """
