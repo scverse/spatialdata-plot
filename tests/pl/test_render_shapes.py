@@ -1566,3 +1566,54 @@ def test_outline_color_column_stacked_legends(sdata_blobs: SpatialData):
     overlap_v = max(0.0, min(a.y1, b.y1) - max(a.y0, b.y0))
     assert overlap_h * overlap_v == 0.0, "Fill and outline legend bboxes overlap"
     plt.close(fig)
+
+
+def test_outline_color_column_groups_filter_aligns(sdata_blobs: SpatialData):
+    """When `groups` filters the fill, the outline vector must be masked alongside it."""
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    # This used to raise IndexError when outline vector wasn't filtered with the fill mask
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="cluster",
+        groups=["c1"],
+        outline_width=2,
+        outline_color="stage",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_column_collision_raises(sdata_blobs: SpatialData):
+    """If `outline_color` is a string that is both a matplotlib color and an obs column, raise."""
+    sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_polygons"] * sdata_blobs["table"].n_obs)
+    sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_polygons"
+    n = sdata_blobs["table"].n_obs
+    # Add an obs column whose name shadows a real color
+    sdata_blobs["table"].obs["red"] = pd.Categorical((["a", "b"] * ((n + 1) // 2))[:n])
+    with pytest.raises(ValueError, match=r"ambiguous|matplotlib color name AND a column"):
+        sdata_blobs.pl.render_shapes("blobs_polygons", outline_width=2, outline_color="red", outline_alpha=1.0)
+
+
+def test_outline_color_datashader_continuous(sdata_blobs: SpatialData):
+    """Continuous outline column under datashader should render without error."""
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons",
+        color="white",
+        outline_width=2,
+        outline_color="value",
+        method="datashader",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_outline_color_continuous_requests_colorbar(sdata_blobs: SpatialData):
+    """A continuous outline column should add a ColorbarSpec to colorbar_requests."""
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_polygons", color="white", outline_width=2, outline_color="value").pl.show(ax=ax)
+    # Look for a colorbar artist labelled "outline: value"
+    cbar_axes = [a for a in fig.axes if "outline: value" in (a.get_ylabel(), a.get_xlabel(), a.get_title())]
+    assert cbar_axes, "Expected a colorbar for the continuous outline column"
+    plt.close(fig)

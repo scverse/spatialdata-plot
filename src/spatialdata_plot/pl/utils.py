@@ -432,7 +432,7 @@ def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor
 
 
 def _color_vector_to_rgba(
-    color_vector: Any,
+    color_vector: Any | None,
     color_source_vector: pd.Series | None,
     cmap_params: CmapParams,
     n_rows: int,
@@ -1431,24 +1431,20 @@ def _map_color_seg(
 
     if seg_boundaries and outline_color_vector is not None:
         # Column-driven outline: build per-label colors from the outline vector and overlay
-        # on the eroded ring. Only Case A (categorical) and Case B (continuous) are reachable
-        # for this path, since a column was always specified by the user.
-        if outline_color_source_vector is not None and isinstance(
-            outline_color_vector.dtype if hasattr(outline_color_vector, "dtype") else None, pd.CategoricalDtype
-        ):
-            outline_val_im: ArrayLike = map_array(seg.copy(), cell_id, outline_color_vector.codes + 1)
-            outline_cols = colors.to_rgba_array(outline_color_vector.categories)
-        elif outline_color_source_vector is not None:
-            # Categorical column but color_vector is hex strings (most common case)
+        # on the eroded ring. Two cases (mirroring _set_color_source_vec's return contract):
+        #  - categorical: outline_color_source_vector is the source Categorical; outline_color_vector
+        #    holds hex strings aligned to cells.
+        #  - continuous: outline_color_source_vector is None; outline_color_vector is numeric.
+        if outline_color_source_vector is not None:
             cat = pd.Categorical(outline_color_source_vector)
             cat_codes = cat.codes
-            outline_val_im = map_array(seg.copy(), cell_id, cat_codes + 1)
-            # Use the actual color_vector (hex strings aligned to cells) deduped by category
+            outline_val_im: ArrayLike = map_array(seg.copy(), cell_id, cat_codes + 1)
             color_arr = np.asarray(outline_color_vector, dtype=object)
-            cat_colors: list[Any] = []
+            cat_colors: list[Any] = [na_color.get_hex_with_alpha()] * len(cat.categories)
             for cat_idx in range(len(cat.categories)):
                 first_match = np.where(cat_codes == cat_idx)[0]
-                cat_colors.append(color_arr[first_match[0]] if len(first_match) else na_color.get_hex_with_alpha())
+                if len(first_match):
+                    cat_colors[cat_idx] = color_arr[first_match[0]]
             outline_cols = colors.to_rgba_array(cat_colors)
         else:
             # Continuous: numeric values normalized via cmap

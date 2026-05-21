@@ -5,6 +5,7 @@ Shared by ``_render_shapes`` and ``_render_points`` in ``render.py``.
 
 from __future__ import annotations
 
+from copy import copy
 from typing import Any, Literal
 
 import dask.dataframe as dd
@@ -427,12 +428,13 @@ def _render_ds_outline_by_column(
     color_by_categorical = outline_color_source_vector is not None
     na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
 
-    if col_for_outline_color not in transformed_element.columns:
-        # Ensure the column rides along with the geometry for ds.by / reductions.
-        if color_by_categorical and outline_color_source_vector is not None:
-            transformed_element[col_for_outline_color] = pd.Categorical(outline_color_source_vector)
-        else:
-            transformed_element[col_for_outline_color] = np.asarray(outline_color_vector)
+    # Caller (`_render_shapes` datashader branch) is responsible for attaching
+    # the outline column to ``transformed_element`` under a private internal name
+    # so we never overwrite the fill column when fill and outline share a key.
+    assert col_for_outline_color in transformed_element.columns, (  # noqa: S101
+        f"Outline column '{col_for_outline_color}' is not present on the rasterizer element. "
+        "This is a bug in the spatialdata-plot datashader pipeline."
+    )
 
     if color_by_categorical:
         cat_series = transformed_element[col_for_outline_color]
@@ -481,9 +483,14 @@ def _render_ds_outline_by_column(
             agg=reduction_function,
             line_width=line_width,
         )
+        # Apply the user-provided norm (vmin/vmax) the same way the fill path does so
+        # an explicit Normalize takes effect for the outline cmap.
+        norm = copy(cmap_params.norm)
+        agg_outline, color_span = _apply_ds_norm(agg_outline, norm)
         shaded = ds.tf.shade(
             agg_outline,
             cmap=cmap_params.cmap,
+            span=color_span,
             min_alpha=_convert_alpha_to_datashader_range(alpha),
             how="linear",
         )

@@ -601,3 +601,30 @@ def test_labels_outline_color_literal_still_works(sdata_blobs: SpatialData):
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_labels("blobs_labels", fill_alpha=0.0, outline_alpha=1.0, outline_color="red").pl.show(ax=ax)
     plt.close(fig)
+
+
+def test_labels_outline_color_outline_only_mode(sdata_blobs: SpatialData):
+    """Outline-only render (fill_alpha=0, outline_alpha>0) must color contour by the outline column."""
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(
+        "blobs_labels",
+        fill_alpha=0.0,
+        outline_alpha=1.0,
+        outline_color="cluster",
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_labels_outline_color_groups_filter_aligns(sdata_blobs: SpatialData):
+    """When `groups` filters the fill labels, the outline vector must be masked alongside it."""
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(
+        "blobs_labels",
+        color="cluster",
+        groups=["c1"],
+        outline_alpha=1.0,
+        outline_color="stage",
+    ).pl.show(ax=ax)
+    plt.close(fig)
