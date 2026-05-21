@@ -10,7 +10,7 @@ from spatialdata import SpatialData
 from spatialdata.models import Image2DModel, Image3DModel
 
 import spatialdata_plot  # noqa: F401
-from spatialdata_plot._logging import logger, logger_warns
+from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
 from spatialdata_plot.pl.render import _is_rgb_image
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
@@ -390,24 +390,42 @@ class TestRGBDivergentRangesWarning:
     """Regression tests for issue #610: warn when r/g/b channels have wildly different ranges."""
 
     @staticmethod
-    def _make_rgb_sdata(maxima: list[float]) -> SpatialData:
+    def _make_sdata(maxima: list[float], c_coords: list[str]) -> SpatialData:
         data = np.stack([np.full((10, 10), m, dtype=np.float32) for m in maxima], axis=0)
-        data[:, 0, 0] = 0.0  # force min=0 so range == max
-        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        data[:, 0, 0] = 0.0
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=c_coords)
         return SpatialData(images={"img": img})
 
-    def test_warns_when_ranges_differ_by_more_than_100x(self, caplog):
-        sdata = self._make_rgb_sdata([1.0, 100.0, 65535.0])
+    def test_warns_for_rgb_divergent_ranges(self, caplog):
+        sdata = self._make_sdata([1.0, 100.0, 65535.0], ["r", "g", "b"])
         with logger_warns(caplog, logger, match="differing by more than"):
             sdata.pl.render_images("img").pl.show()
         plt.close("all")
 
-    def test_does_not_warn_for_typical_rgb_ranges(self, caplog):
-        from spatialdata_plot._logging import logger_no_warns
+    def test_warns_for_rgba_divergent_ranges(self, caplog):
+        sdata = self._make_sdata([1.0, 100.0, 65535.0, 1.0], ["r", "g", "b", "a"])
+        with logger_warns(caplog, logger, match="differing by more than"):
+            sdata.pl.render_images("img").pl.show()
+        plt.close("all")
 
-        sdata = self._make_rgb_sdata([1.0, 0.8, 0.5])
+    def test_no_warning_for_typical_rgb_ranges(self, caplog):
+        sdata = self._make_sdata([1.0, 0.8, 0.5], ["r", "g", "b"])
         with logger_no_warns(caplog, logger, match="differing by more than"):
             sdata.pl.render_images("img").pl.show()
+        plt.close("all")
+
+    def test_no_warning_for_non_rgb_named_channels(self, caplog):
+        # Multichannel path normalizes per-channel; the divergent-range warning is RGB-specific.
+        sdata = self._make_sdata([1.0, 100.0, 65535.0], ["DAPI", "GFP", "RFP"])
+        with logger_no_warns(caplog, logger, match="differing by more than"):
+            sdata.pl.render_images("img").pl.show()
+        plt.close("all")
+
+    def test_no_warning_when_user_norm_supplied(self, caplog):
+        # Explicit norm bypasses global normalization, so the warning should not fire.
+        sdata = self._make_sdata([1.0, 100.0, 65535.0], ["r", "g", "b"])
+        with logger_no_warns(caplog, logger, match="differing by more than"):
+            sdata.pl.render_images("img", norm=Normalize(vmin=0.0, vmax=1.0)).pl.show()
         plt.close("all")
 
 

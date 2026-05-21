@@ -1251,8 +1251,7 @@ def _warn_if_rgb_channels_have_divergent_ranges(
     end up near zero. We can't tell intent from naming alone, so we warn and let the user
     decide whether to rename channels or supply explicit cmaps.
     """
-    flat = rgb_cyx.reshape(rgb_cyx.shape[0], -1).astype(np.float64)
-    ranges = flat.max(axis=1) - flat.min(axis=1)
+    ranges = (rgb_cyx.max(axis=(1, 2)) - rgb_cyx.min(axis=(1, 2))).astype(np.float64)
     positive = ranges[np.isfinite(ranges) & (ranges > 0)]
     if positive.size < 2:
         return
