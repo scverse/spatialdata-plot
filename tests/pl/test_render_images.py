@@ -386,6 +386,31 @@ class TestRGBARendering:
         plt.close("all")
 
 
+class TestRGBDivergentRangesWarning:
+    """Regression tests for issue #610: warn when r/g/b channels have wildly different ranges."""
+
+    @staticmethod
+    def _make_rgb_sdata(maxima: list[float]) -> SpatialData:
+        data = np.stack([np.full((10, 10), m, dtype=np.float32) for m in maxima], axis=0)
+        data[:, 0, 0] = 0.0  # force min=0 so range == max
+        img = Image2DModel.parse(data, dims=("c", "y", "x"), c_coords=["r", "g", "b"])
+        return SpatialData(images={"img": img})
+
+    def test_warns_when_ranges_differ_by_more_than_100x(self, caplog):
+        sdata = self._make_rgb_sdata([1.0, 100.0, 65535.0])
+        with logger_warns(caplog, logger, match="differing by more than"):
+            sdata.pl.render_images("img").pl.show()
+        plt.close("all")
+
+    def test_does_not_warn_for_typical_rgb_ranges(self, caplog):
+        from spatialdata_plot._logging import logger_no_warns
+
+        sdata = self._make_rgb_sdata([1.0, 0.8, 0.5])
+        with logger_no_warns(caplog, logger, match="differing by more than"):
+            sdata.pl.render_images("img").pl.show()
+        plt.close("all")
+
+
 class TestMultiChannelClipping:
     """Regression tests: multi-channel compositing should not produce clipping warnings."""
 
