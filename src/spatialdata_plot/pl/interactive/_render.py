@@ -1,4 +1,5 @@
 """Render an image element to a PNG suitable for the DrawCanvas background."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

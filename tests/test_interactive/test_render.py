@@ -1,4 +1,5 @@
 """Smoke test for the matplotlib → PNG render path."""
+
 from __future__ import annotations
 
 from io import BytesIO

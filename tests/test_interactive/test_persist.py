@@ -1,4 +1,5 @@
 """Tests for the in-memory commit policy."""
+
 from __future__ import annotations
 
 import geopandas as gpd
@@ -22,11 +23,11 @@ def test_commit_to_memory_stores_under_name():
     assert "tumor_region" in sdata.shapes
 
 
-def test_commit_to_memory_renames_on_collision():
+def test_commit_to_memory_overwrites_on_collision():
     sdata = sd.SpatialData()
-    sdata.shapes["tumor_region"] = _make_shape()
-    target = commit_to_memory(sdata, _make_shape(), "tumor_region")
-    assert "tumor_region" in sdata.shapes
-    assert target.startswith("tumor_region_")
-    assert target != "tumor_region"
-    assert target in sdata.shapes
+    first = _make_shape()
+    sdata.shapes["tumor_region"] = first
+    second = _make_shape()
+    target = commit_to_memory(sdata, second, "tumor_region")
+    assert target == "tumor_region"
+    assert sdata.shapes["tumor_region"] is second

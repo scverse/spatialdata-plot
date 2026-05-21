@@ -177,6 +177,7 @@ class PlotAccessor:
         element: str,
         *,
         persist: bool = True,
+        max_width: int = 880,
     ) -> None:
         """Draw and save regions interactively on an image element.
 
@@ -189,9 +190,8 @@ class PlotAccessor:
         cleared on every Save so the next set of shapes can be drawn
         independently.
 
-        In-memory name collisions are renamed to ``{name}_{UTC-ISO}``. The
-        on-disk *Write to disk* button calls ``SpatialData.write_element``,
-        which overwrites an existing on-disk element of the same name.
+        Same-name commits overwrite both in memory and (via
+        ``SpatialData.write_element``) on disk.
 
         Requires the ``interactive`` extra: ``pip install 'spatialdata-plot[interactive]'``.
 
@@ -207,6 +207,10 @@ class PlotAccessor:
             If ``True`` (default), show a *Write to disk* button that calls
             :meth:`SpatialData.write_element` for the most recent save.
             Set to ``False`` to limit the session to in-memory commits.
+        max_width :
+            Maximum display width in CSS pixels. The widget fills its
+            container width but never exceeds this. Display hint only;
+            the underlying render is always 840 × 840 px.
 
         Returns
         -------
@@ -242,6 +246,7 @@ class PlotAccessor:
             coordinate_system=coordinate_system,
             element=element,
             persist=persist,
+            max_width=max_width,
         )
         session.show()
 

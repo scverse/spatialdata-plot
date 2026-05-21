@@ -42,6 +42,7 @@ class DrawCanvas(anywidget.AnyWidget):
     image_url = traitlets.Unicode("").tag(sync=True)
     image_width = traitlets.Int(720).tag(sync=True)
     image_height = traitlets.Int(720).tag(sync=True)
+    max_display_width = traitlets.Int(880).tag(sync=True)
     tool = traitlets.Enum(TOOLS, default_value="rectangle").tag(sync=True)
     shapes = traitlets.List([]).tag(sync=True)
     clear_trigger = traitlets.Int(0).tag(sync=True)

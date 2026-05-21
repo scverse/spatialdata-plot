@@ -1,4 +1,5 @@
 """ipywidgets-based session orchestrating the DrawCanvas. Internal."""
+
 from __future__ import annotations
 
 import base64
@@ -56,8 +57,7 @@ def _fmt_banner(msg: str, kind: BannerKind = "info") -> str:
 def _validate(sdata: sd.SpatialData, coordinate_system: str, element: str) -> None:
     if coordinate_system not in sdata.coordinate_systems:
         raise ValueError(
-            f"Unknown coordinate system {coordinate_system!r}. "
-            f"Available: {list(sdata.coordinate_systems)}"
+            f"Unknown coordinate system {coordinate_system!r}. Available: {list(sdata.coordinate_systems)}"
         )
     if element not in sdata.images:
         raise ValueError(f"Unknown image element {element!r}. Available: {list(sdata.images)}")
@@ -79,6 +79,7 @@ class _InteractiveSession:
         element: str,
         *,
         persist: bool = True,
+        max_width: int = 880,
     ) -> None:
         _validate(sdata, coordinate_system, element)
 
@@ -86,72 +87,121 @@ class _InteractiveSession:
         self._cs = coordinate_system
         self._element = element
         self._persist_enabled = persist
+        self._max_width = max_width
         self.canvas: DrawCanvas | None = None
         self._extent: RenderExtent | None = None
         self._commits: list[str] = []
 
         self._style = W.HTML(value=_CSS)
 
+        icon_btn_layout = W.Layout(width="36px")
         self.tool_tb = W.ToggleButtons(
             options=[("Rect", "rectangle"), ("Polygon", "polygon"), ("Lasso", "lasso")],
             value="rectangle",
-            description="Tool:",
+            description="",
+            tooltips=["R", "P", "L"],
         )
         self.tool_tb.observe(self._on_tool_change, names="value")
         self.close_poly_btn = self._trigger_btn(
-            "Close polygon", "check", "close_poly_trigger", tooltip="Enter", disabled=True,
+            "",
+            "check",
+            "close_poly_trigger",
+            tooltip="Close polygon (Enter)",
+            disabled=True,
+            layout=icon_btn_layout,
         )
         self.undo_btn = self._trigger_btn(
-            "Undo", "rotate-left", "undo_trigger", tooltip="Ctrl+Z", disabled=True,
+            "",
+            "rotate-left",
+            "undo_trigger",
+            tooltip="Undo (Ctrl+Z)",
+            disabled=True,
+            layout=icon_btn_layout,
         )
         self.clear_btn = self._trigger_btn(
-            "Clear", "trash", "clear_trigger", tooltip="Delete",
+            "",
+            "trash",
+            "clear_trigger",
+            tooltip="Clear canvas",
             after=lambda: self._set_banner("Canvas cleared.", "info"),
+            layout=icon_btn_layout,
         )
-        self.fit_btn = self._trigger_btn("Fit view", "compress", "fit_trigger", tooltip="F")
-        self.shape_count_lbl = W.Label(value="0 shape(s) on canvas")
+        self.fit_btn = self._trigger_btn(
+            "",
+            "compress",
+            "fit_trigger",
+            tooltip="Fit view (F)",
+            layout=icon_btn_layout,
+        )
 
-        self.name_tx = W.Text(value="", placeholder="name…", description="Name:")
-        self.save_btn = W.Button(description="Save", button_style="success", icon="save")
+        self.name_tx = W.Text(
+            value="",
+            placeholder="name…",
+            layout=W.Layout(flex="1 1 140px", min_width="100px"),
+        )
+        self.save_btn = W.Button(
+            description="Save",
+            button_style="success",
+            icon="save",
+            tooltip="Save shapes to sdata.shapes[name]",
+        )
         self.save_btn.on_click(self._on_save)
 
         save_row_widgets: list[W.Widget] = [self.name_tx, self.save_btn]
         self.persist_btn: W.Button | None = None
         if persist:
             self.persist_btn = W.Button(
-                description="Write to disk", button_style="warning", icon="hdd-o",
+                description="",
+                icon="hdd-o",
+                button_style="warning",
+                tooltip="Write last save to disk",
+                layout=icon_btn_layout,
             )
             self.persist_btn.on_click(self._on_persist)
             self.persist_btn.disabled = True
             save_row_widgets.append(self.persist_btn)
 
-        self.banner = W.HTML(value=_fmt_banner(
-            f"Annotating <b>{element!r}</b> in coordinate system <b>{coordinate_system!r}</b>. "
-            "Pick a tool and draw. Click canvas first so keyboard shortcuts work. "
-            "<b>R/P/L</b> tools · <b>Wheel</b> zoom · <b>Shift+drag</b> pan · "
-            "<b>Alt+click</b> shape to delete · <b>Ctrl+Z</b> undo · <b>F</b> fit",
-            "hint",
-        ))
+        self.banner = W.HTML(
+            value=_fmt_banner(
+                f"Annotating <b>{element!r}</b> in coordinate system <b>{coordinate_system!r}</b>. "
+                "Pick a tool and draw. Click canvas first so keyboard shortcuts work. "
+                "<b>R/P/L</b> tools · <b>Wheel</b> zoom · <b>Shift+drag</b> pan · "
+                "<b>Alt+click</b> shape to delete · <b>Ctrl+Z</b> undo · <b>F</b> fit",
+                "hint",
+            )
+        )
         self.plot_box = W.VBox([])
 
-        def section(label: str) -> W.HTML:
-            return W.HTML(value=f"<div class='sdp-section-title'>{label}</div>")
+        row_layout = W.Layout(
+            display="flex",
+            flex_flow="row wrap",
+            align_items="center",
+            gap="6px",
+        )
+        card_layout = W.Layout(max_width=f"{max_width}px", width="100%")
+        toolbar = W.Box(
+            children=[self.tool_tb, self.close_poly_btn, self.undo_btn, self.clear_btn, self.fit_btn],
+            layout=row_layout,
+        )
+        save_row = W.Box(children=save_row_widgets, layout=row_layout)
 
-        controls_card = W.VBox([
-            W.HTML(value=(
-                f"<div class='sdp-title'>Annotate</div>"
-                f"<div class='sdp-context'>{element!r} · {coordinate_system!r}</div>"
-            )),
-            section("Draw"),
-            W.HBox([self.tool_tb, self.close_poly_btn, self.undo_btn, self.clear_btn, self.fit_btn]),
-            W.HBox([self.shape_count_lbl]),
-            section("Save"),
-            W.HBox(save_row_widgets),
-            self.banner,
-        ])
+        controls_card = W.VBox(
+            [
+                W.HTML(
+                    value=(
+                        f"<div class='sdp-title'>Annotate</div>"
+                        f"<div class='sdp-context'>{element!r} · {coordinate_system!r}</div>"
+                    )
+                ),
+                toolbar,
+                save_row,
+                self.banner,
+            ],
+            layout=card_layout,
+        )
         controls_card.add_class("sdp-card")
 
-        canvas_card = W.VBox([self.plot_box])
+        canvas_card = W.VBox([self.plot_box], layout=card_layout)
         canvas_card.add_class("sdp-card")
 
         self.controls = W.VBox([self._style, controls_card, canvas_card])
@@ -172,9 +222,12 @@ class _InteractiveSession:
         tooltip: str = "",
         disabled: bool = False,
         after: Any = None,
+        layout: W.Layout | None = None,
     ) -> W.Button:
         btn = W.Button(description=description, icon=icon, tooltip=tooltip)
         btn.disabled = disabled
+        if layout is not None:
+            btn.layout = layout
 
         def _on_click(_b: W.Button) -> None:
             if self.canvas is None:
@@ -195,15 +248,14 @@ class _InteractiveSession:
             image_url=data_url,
             image_width=extent.image_w,
             image_height=extent.image_h,
+            max_display_width=self._max_width,
             tool=self.tool_tb.value,
         )
         self.canvas.observe(self._on_shapes_change, names="shapes")
         self.plot_box.children = (self.canvas,)
-        self.shape_count_lbl.value = "0 shape(s) on canvas"
 
     def _on_shapes_change(self, change: dict[str, Any]) -> None:
         shapes = change["new"] or []
-        self.shape_count_lbl.value = f"{len(shapes)} shape(s) on canvas"
         self.undo_btn.disabled = len(shapes) == 0
 
     def _on_tool_change(self, change: dict[str, Any]) -> None:
@@ -214,7 +266,8 @@ class _InteractiveSession:
         self._set_banner(f"Tool: <b>{change['new']}</b>", "info")
 
     def _collect_polygons(self) -> list[Polygon]:
-        assert self.canvas is not None and self._extent is not None
+        assert self.canvas is not None
+        assert self._extent is not None
         polys: list[Polygon] = []
         for sh in self.canvas.shapes:
             p = pixel_shape_to_polygon(sh, self._extent)
@@ -222,16 +275,15 @@ class _InteractiveSession:
                 polys.append(p)
         return polys
 
-    def _commit_polygons(self, polys: list[Polygon], name: str) -> tuple[str, bool]:
+    def _commit_polygons(self, polys: list[Polygon], name: str) -> str:
         shapes_model = build_shapes_model(polys, self._cs)
         target = commit_to_memory(self._sdata, shapes_model, name)
         self._commits.append(target)
-        return target, target != name
+        return target
 
     def _reset_canvas_state(self) -> None:
         assert self.canvas is not None
         self.canvas.clear_trigger += 1
-        self.shape_count_lbl.value = "0 shape(s) on canvas"
 
     def _on_save(self, _btn: W.Button) -> None:
         name = self.name_tx.value.strip()
@@ -250,13 +302,10 @@ class _InteractiveSession:
             )
             return
 
-        target, renamed = self._commit_polygons(polys, name)
+        target = self._commit_polygons(polys, name)
         self._reset_canvas_state()
 
-        msg = f"Saved <b>{target!r}</b> with {len(polys)} polygon(s)."
-        if renamed:
-            msg += " (name collided; renamed)"
-        self._set_banner(msg, "success")
+        self._set_banner(f"Saved <b>{target!r}</b> with {len(polys)} polygon(s).", "success")
         if self.persist_btn is not None:
             self.persist_btn.disabled = self._sdata.path is None
 

@@ -1,4 +1,5 @@
 """Convert canvas pixel-coord shapes into a CS-coord ShapesModel."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,10 +29,7 @@ def pixel_shape_to_polygon(shape: dict[str, Any], extent: RenderExtent) -> Polyg
     y_lo, y_hi = sorted((float(extent.ylim[0]), float(extent.ylim[1])))
     w, h = extent.image_w, extent.image_h
 
-    cs_verts = [
-        (xmin + (v[0] / w) * (xmax - xmin), y_lo + (v[1] / h) * (y_hi - y_lo))
-        for v in verts
-    ]
+    cs_verts = [(xmin + (v[0] / w) * (xmax - xmin), y_lo + (v[1] / h) * (y_hi - y_lo)) for v in verts]
     if len(cs_verts) < 3:
         return None
     poly = Polygon(cs_verts)

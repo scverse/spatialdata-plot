@@ -1,4 +1,5 @@
 """Tests for pixel-coord → CS-coord conversion and ShapesModel construction."""
+
 from __future__ import annotations
 
 from shapely.geometry import Polygon

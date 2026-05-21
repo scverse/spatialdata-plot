@@ -1,4 +1,5 @@
 """Tests for the user-facing sdata.pl.annotate() validation paths."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -8,9 +9,10 @@ import spatialdata as sd
 pytest.importorskip("anywidget")
 pytest.importorskip("ipywidgets")
 
-import spatialdata_plot  # noqa: F401  registers .pl
 from spatialdata.models import Image2DModel
 from spatialdata.transformations.transformations import Identity
+
+import spatialdata_plot  # noqa: F401  registers .pl
 
 
 @pytest.fixture
@@ -43,7 +45,9 @@ def test_annotate_element_not_in_cs_raises(no_display):
     rng = np.random.default_rng(0)
     arr = rng.integers(0, 255, size=(3, 32, 32), dtype=np.uint8)
     img = Image2DModel.parse(
-        arr, dims=("c", "y", "x"), transformations={"other_cs": Identity()},
+        arr,
+        dims=("c", "y", "x"),
+        transformations={"other_cs": Identity()},
     )
     anchor = Image2DModel.parse(
         rng.integers(0, 255, size=(3, 32, 32), dtype=np.uint8),

@@ -1,4 +1,5 @@
 """Smoke tests for the DrawCanvas anywidget class."""
+
 from __future__ import annotations
 
 import pytest
@@ -21,6 +22,7 @@ def test_draw_canvas_default_traitlets():
     assert c.shapes == []
     assert c.image_width == 720
     assert c.image_height == 720
+    assert c.max_display_width == 880
     assert c.clear_trigger == 0
     assert c.close_poly_trigger == 0
     assert c.undo_trigger == 0
