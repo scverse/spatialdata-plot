@@ -1966,6 +1966,13 @@ def _render_labels(
     groups = render_params.groups
     scale = render_params.scale
 
+    # When fill is a literal (no `color=` column) but outline points to an obs column,
+    # promote the outline table to be the "active" table for instance_id derivation so
+    # the outline color vector aligns to label IDs by the table's instance_key rather
+    # than by positional index.
+    if table_name is None and render_params.outline_table_name is not None:
+        table_name = render_params.outline_table_name
+
     _check_obs_var_shadow(sdata, element, col_for_color, table_name)
 
     # filter_tables=False: match_table_to_element below already filters per
