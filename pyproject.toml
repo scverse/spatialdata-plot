@@ -62,9 +62,13 @@ doc = [
   "sphinxext-opengraph",
 ]
 interactive = [
+  "anywidget",
   "ipykernel",
   "ipympl",
   "ipywidgets",
+  # pinned to 5.x: plotly 6's anywidget-backed FigureWidget doesn't relay
+  # client-side draw events back to Python, so layout.shapes never syncs.
+  "plotly>=5.20,<6",
   "squidpy",
 ]
 
