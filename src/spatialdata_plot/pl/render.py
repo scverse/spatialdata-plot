@@ -1251,6 +1251,34 @@ def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
     return False, False
 
 
+def _warn_if_rgb_channels_have_divergent_ranges(
+    rgb_cyx: np.ndarray,
+    ratio_threshold: float = 100.0,
+) -> None:
+    """Warn when r/g/b channel ranges differ enough that global normalization will crush some.
+
+    The RGB path normalizes all channels with one scale (dtype max or global min/max) to
+    preserve hue balance. If per-channel native ranges differ by orders of magnitude — a
+    common sign of fluorescence channels aliased to r/g/b names — the low-range channels
+    end up near zero. We can't tell intent from naming alone, so we warn and let the user
+    decide whether to rename channels or supply explicit cmaps.
+    """
+    ranges = (rgb_cyx.max(axis=(1, 2)) - rgb_cyx.min(axis=(1, 2))).astype(np.float64)
+    positive = ranges[np.isfinite(ranges) & (ranges > 0)]
+    if positive.size < 2:
+        return
+    if positive.max() / positive.min() > ratio_threshold:
+        logger.warning(
+            "RGB channels have per-channel ranges differing by more than %.0fx (%s). "
+            "Global RGB normalization will make low-range channels nearly invisible. "
+            "If these are fluorescence channels aliased to 'r','g','b', rename them or "
+            "pass an explicit per-channel 'cmap'/'palette' so each channel is normalized "
+            "independently.",
+            ratio_threshold,
+            ", ".join(f"{r:.3g}" for r in ranges.tolist()),
+        )
+
+
 def _collect_channel_legend_entries(
     channels: Sequence[str | int],
     seed_colors: Sequence[str | tuple[float, ...]],
@@ -1485,7 +1513,9 @@ def _render_images(
                 rgb_layers.append(np.clip(ch_norm(img.sel(c=ch).values).astype(np.float64), 0, 1))
             stacked = np.stack(rgb_layers, axis=-1)
         else:
-            stacked = _normalize_dtype_to_float(np.moveaxis(img.sel(c=ordered).values, 0, -1))
+            rgb_cyx = img.sel(c=ordered).values
+            _warn_if_rgb_channels_have_divergent_ranges(rgb_cyx)
+            stacked = _normalize_dtype_to_float(np.moveaxis(rgb_cyx, 0, -1))
 
         show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
 
