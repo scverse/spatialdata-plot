@@ -30,6 +30,7 @@ from datashader.core import Canvas
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
+from matplotlib.cm import ScalarMappable
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import (
     ColorConverter,
@@ -61,6 +62,7 @@ from spatialdata import (
     get_element_annotators,
     get_extent,
     get_values,
+    join_spatialelement_table,
     rasterize,
 )
 from spatialdata._core.query.relational_query import _locate_value
@@ -429,6 +431,73 @@ def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor
     vertices = pathpatch.get_path().vertices
     scaled_vertices = np.array([centroid + (vertex - centroid) * scale_value for vertex in vertices])
     pathpatch.get_path().vertices = scaled_vertices
+
+
+def _join_table_for_element(
+    sdata: sd.SpatialData,
+    element: str,
+    table_name: str,
+) -> tuple[Any, AnnData]:
+    """Inner-join ``element`` with its annotating ``table_name``.
+
+    Wraps the workaround for scverse/spatialdata#1099: ``join_spatialelement_table``
+    calls ``table.obs.reset_index()`` which fails when the obs index name matches
+    an existing column (e.g. "EntityID" in Merfish data). When that collision is
+    present, the obs index may also be a non-RangeIndex of int dtype, which
+    AnnData's ``_normalize_index`` rejects when the join indexes back into the
+    table. Temporarily swap to a clean RangeIndex / drop the conflicting name;
+    restore on exit.
+
+    Also patches ``joined_table.uns["spatialdata_attrs"]["region"]`` to the
+    actual unique regions after the join so downstream lookups see consistent
+    metadata.
+    """
+    _obs = sdata[table_name].obs
+    _saved_index_name = _obs.index.name
+    _saved_index: pd.Index | None = None
+    _name_collides = _saved_index_name is not None and _saved_index_name in _obs.columns
+    if _name_collides and not isinstance(_obs.index, pd.RangeIndex):
+        _saved_index = _obs.index
+        _obs.index = pd.RangeIndex(len(_obs))
+    elif _name_collides:
+        _obs.index.name = None
+
+    try:
+        element_dict, joined_table = join_spatialelement_table(
+            sdata, spatial_element_names=element, table_name=table_name, how="inner"
+        )
+    finally:
+        if _saved_index is not None:
+            _obs.index = _saved_index
+        _obs.index.name = _saved_index_name
+
+    joined_table.uns["spatialdata_attrs"]["region"] = (
+        joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
+    )
+    return element_dict[element], joined_table
+
+
+def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMappable:
+    """Build a ``ScalarMappable`` for a continuous colorbar, with a ±0.5 fallback when ``vmin == vmax``."""
+    if vmin == vmax:
+        vmin, vmax = vmin - 0.5, vmax + 0.5
+    return ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
+
+
+def _apply_mask_to_outline_vectors(
+    outline_color_vector: Any,
+    outline_color_source_vector: pd.Series | None,
+    mask: Any,
+) -> tuple[Any, pd.Series | None]:
+    """Apply a boolean ``keep`` mask to outline color vector(s).
+
+    Used to keep outline data aligned with the fill data after a ``groups``
+    or rasterize-based filter is applied to the rendered element.
+    """
+    arr = np.asarray(mask)
+    if outline_color_source_vector is not None:
+        outline_color_source_vector = outline_color_source_vector[arr]
+    return outline_color_vector[arr], outline_color_source_vector
 
 
 def _align_outline_vector_to_length(
@@ -1479,11 +1548,13 @@ def _map_color_seg(
             cat_codes = cat.codes
             outline_val_im: ArrayLike = map_array(seg.copy(), cell_id, cat_codes + 1)
             color_arr = np.asarray(outline_color_vector, dtype=object)
+            # Pick the first per-cell hex for each category in one vectorized pass
+            # (avoids `K × O(N)` Python loops on large label sets).
             cat_colors: list[Any] = [na_color.get_hex_with_alpha()] * len(cat.categories)
-            for cat_idx in range(len(cat.categories)):
-                first_match = np.where(cat_codes == cat_idx)[0]
-                if len(first_match):
-                    cat_colors[cat_idx] = color_arr[first_match[0]]
+            unique_codes, first_indices = np.unique(cat_codes, return_index=True)
+            for code, idx in zip(unique_codes, first_indices, strict=True):
+                if code >= 0:
+                    cat_colors[code] = color_arr[idx]
             outline_cols = colors.to_rgba_array(cat_colors)
         else:
             # Continuous: numeric values normalized via cmap

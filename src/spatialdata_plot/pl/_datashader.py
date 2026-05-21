@@ -28,6 +28,7 @@ from spatialdata_plot.pl.utils import (
     _datashader_map_aggregate_to_color,
     _datshader_get_how_kw_for_spread,
     _hex_no_alpha,
+    _make_continuous_mappable,
 )
 
 # ---------------------------------------------------------------------------
@@ -504,12 +505,4 @@ def _build_ds_colorbar(
         return None
     vmin = reduction_bounds[0].values if norm.vmin is None else norm.vmin
     vmax = reduction_bounds[1].values if norm.vmax is None else norm.vmax
-    if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
-        assert norm.vmin is not None
-        assert norm.vmax is not None
-        vmin = norm.vmin - 0.5
-        vmax = norm.vmin + 0.5
-    return ScalarMappable(
-        norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
-        cmap=cmap,
-    )
+    return _make_continuous_mappable(vmin, vmax, cmap)
