@@ -32,6 +32,7 @@ dependencies = [
   "spatialdata>=0.3",
 ]
 optional-dependencies.interactive = [
+  "anybioimage>=0.3,<0.4",
   "anywidget",
   "ipykernel",
   "ipywidgets",
@@ -66,17 +67,6 @@ doc = [
   "sphinxcontrib-katex",
   "sphinxext-opengraph",
 ]
-interactive-extras = [
-  # Prototype-only helpers used by Sandbox.ipynb. The published runtime extra
-  # is [project.optional-dependencies].interactive above (anywidget/ipykernel/
-  # ipywidgets only) — these are kept here for the dev-interactive-py313 env.
-  "ipympl",
-  # pinned to 5.x: plotly 6's anywidget-backed FigureWidget doesn't relay
-  # client-side draw events back to Python, so layout.shapes never syncs.
-  "plotly>=5.20,<6",
-  "squidpy",
-]
-
 [tool.hatch]
 build.hooks.vcs.version-file = "_version.py"
 build.targets.wheel.packages = [ "src/spatialdata_plot" ]
@@ -140,7 +130,7 @@ default = { features = [ "py313" ], solve-group = "py313" }
 # 3.11 lane (for gh-actions)
 dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
 dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
-dev-interactive-py313 = { features = [ "dev", "test", "interactive", "interactive-extras", "py313" ], solve-group = "py313" }
+dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
 docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
 docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
 test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }

@@ -168,68 +168,76 @@ class PlotAccessor:
             tables=self._sdata.tables if tables is None else tables,
         )
         sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+        sdata._source_sdata = getattr(self._sdata, "_source_sdata", self._sdata)
 
         return sdata
 
     def annotate(
         self,
-        coordinate_system: str,
-        element: str,
         *,
-        persist: bool = True,
-        max_width: int = 880,
-    ) -> None:
-        """Draw and save regions interactively on an image element.
+        coordinate_systems: str | None = None,
+        point_radius_frac: float = 0.005,
+        figsize: tuple[float, float] = (7, 7),
+        dpi: int = 120,
+    ) -> Any:
+        """Terminal step on a render chain: drop the plot into an interactive annotator.
 
-        Renders the image element in the given coordinate system as a
-        client-side drawing canvas (rectangle / polygon / lasso tools).
-        Drawn shapes are saved into ``sdata.shapes`` under a user-typed name
-        on click of the *Save* button — each save creates one ShapesModel
-        with one row per drawn shape, registered with an ``Identity``
-        transformation in the chosen coordinate system. The canvas is
-        cleared on every Save so the next set of shapes can be drawn
-        independently.
+        Renders the accumulated ``plotting_tree`` (so any ``render_images`` /
+        ``render_shapes`` / ``render_points`` / ``render_labels`` overlays composed
+        upstream of this call appear in the annotation canvas), then hands the
+        rasterised figure to a ``BioImageViewer`` widget. The user draws
+        rectangles, polygons, and points on the canvas, types a name, and clicks
+        *Save* — the shapes are converted from canvas-pixel space to the chosen
+        coordinate system and stored in ``sdata.shapes[<name>]`` with an
+        ``Identity`` transformation in that CS. Points are stored as small
+        circle polygons (radius = ``point_radius_frac`` of the rendered image's
+        CS extent) so the resulting ``ShapesModel`` is uniform-type.
 
-        Same-name commits overwrite both in memory and (via
-        ``SpatialData.write_element``) on disk.
+        Single coordinate system only. If the chain spans more than one CS, or
+        none can be inferred, raises ``ValueError``.
 
         Requires the ``interactive`` extra: ``pip install 'spatialdata-plot[interactive]'``.
 
         Parameters
         ----------
-        coordinate_system :
+        coordinate_systems :
             Coordinate system to render and resolve drawn shapes against.
-            Drawn polygons are stored with an ``Identity`` transformation
-            in this CS.
-        element :
-            Name of the image element to render.
-        persist :
-            If ``True`` (default), show a *Write to disk* button that calls
-            :meth:`SpatialData.write_element` for the most recent save.
-            Set to ``False`` to limit the session to in-memory commits.
-        max_width :
-            Maximum display width in CSS pixels. The widget fills its
-            container width but never exceeds this. Display hint only;
-            the underlying render is always 840 × 840 px.
+            Drawn shapes are stored with an ``Identity`` transformation in this
+            CS. If ``None`` and the SpatialData has exactly one CS, that one is
+            used; otherwise this argument is required.
+        point_radius_frac :
+            Radius of the circle polygon used to store each point, expressed as
+            a fraction of the rendered image's CS extent. Default 0.005 (0.5%).
+        figsize :
+            Matplotlib figure size used for the underlying rasterisation. The
+            same value affects the canvas resolution alongside ``dpi``.
+        dpi :
+            DPI of the rasterised figure. Combined with ``figsize`` this sets
+            the pixel resolution the annotator works in.
 
         Returns
         -------
-        None
-            Displays the widget in the current notebook cell. Drawn and
-            saved shapes appear in ``sdata.shapes``; inspect them there.
+        InteractiveSession
+            The session object, with the widget already displayed. Holding the
+            reference keeps the underlying ``BioImageViewer`` alive across cell
+            re-runs; usually you can ignore the return value.
 
         Raises
         ------
         ValueError
-            If ``coordinate_system`` is unknown, ``element`` is unknown,
-            or ``element`` is not registered in ``coordinate_system``.
+            If no single coordinate system can be resolved.
         ImportError
             If the ``interactive`` extra is not installed.
 
         Examples
         --------
         >>> import spatialdata_plot  # noqa: F401  registers .pl
-        >>> sdata.pl.annotate("global", "he_image")
+        >>> (
+        ...     sdata.pl
+        ...     .render_images(element="he")
+        ...     .pl.render_shapes(element="cells", outline_color="red")
+        ...     .pl.annotate()
+        ... )
         >>> # ... user draws and clicks Save with name "tumor" ...
         >>> sdata.shapes["tumor"]
         """
@@ -241,14 +249,55 @@ class PlotAccessor:
                 "Install with: pip install 'spatialdata-plot[interactive]'"
             ) from exc
 
+        import io as _io
+
+        from PIL import Image as _Image
+
+        available_cs = list(self._sdata.coordinate_systems)
+        if coordinate_systems is None:
+            if len(available_cs) != 1:
+                raise ValueError(
+                    "annotate() needs exactly one coordinate system. "
+                    f"SpatialData has {len(available_cs)}: {available_cs!r}. "
+                    "Pass coordinate_systems=<name> explicitly."
+                )
+            cs = available_cs[0]
+        else:
+            if isinstance(coordinate_systems, list):
+                if len(coordinate_systems) != 1:
+                    raise ValueError(
+                        f"annotate() supports a single coordinate system; got {coordinate_systems!r}."
+                    )
+                cs = coordinate_systems[0]
+            else:
+                cs = coordinate_systems
+            if cs not in available_cs:
+                raise ValueError(f"Unknown coordinate system {cs!r}. Available: {available_cs!r}")
+
+        fig = plt.figure(figsize=figsize, dpi=dpi)
+        try:
+            ax = fig.add_axes([0, 0, 1, 1])
+            self.show(coordinate_systems=cs, ax=ax)
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+            ax.set_axis_off()
+            buf = _io.BytesIO()
+            fig.savefig(buf, format="png", dpi=dpi, pad_inches=0)
+        finally:
+            plt.close(fig)
+        rgb = np.asarray(_Image.open(buf).convert("RGB"))
+
+        target_sdata = getattr(self._sdata, "_source_sdata", self._sdata)
         session = _InteractiveSession(
-            self._sdata,
-            coordinate_system=coordinate_system,
-            element=element,
-            persist=persist,
-            max_width=max_width,
+            sdata=target_sdata,
+            coordinate_system=cs,
+            rgb=rgb,
+            xlim=tuple(xlim),
+            ylim=tuple(ylim),
+            point_radius_frac=point_radius_frac,
         )
         session.show()
+        return session
 
     @_deprecation_alias(elements="element", version="0.3.0")
     def render_shapes(
