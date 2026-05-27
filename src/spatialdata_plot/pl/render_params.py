@@ -188,6 +188,11 @@ class LegendParams:
     legend_fontoutline: int | None = None
     na_in_legend: bool = True
     colorbar: bool = True
+    # Optional explicit titles for the fill / outline categorical legends. When unset,
+    # both legends are untitled unless both fill and outline are colored by an obs
+    # column, in which case they default to "fill" / "outline" to disambiguate.
+    legend_title: str | None = None
+    outline_legend_title: str | None = None
 
 
 @dataclass
@@ -232,6 +237,8 @@ class ShapesRenderParams:
     element: str
     color: Color | None = None
     col_for_color: str | None = None
+    col_for_outline_color: str | None = None
+    outline_table_name: str | None = None
     groups: str | list[str] | None = None
     palette: ListedColormap | dict[str, str] | list[str] | None = None
     outline_alpha: tuple[float, float] = (1.0, 1.0)
@@ -298,6 +305,8 @@ class LabelsRenderParams:
     element: str
     color: Color | None = None
     col_for_color: str | None = None
+    col_for_outline_color: str | None = None
+    outline_table_name: str | None = None
     groups: str | list[str] | None = None
     contour_px: int | None = None
     palette: ListedColormap | dict[str, str] | list[str] | None = None

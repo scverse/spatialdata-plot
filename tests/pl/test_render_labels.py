@@ -28,6 +28,16 @@ _ = spatialdata_plot
 #    ".png" is appended to <your_filename>, no need to set it
 
 
+def _annotate_labels_with_outline_columns(sdata: SpatialData) -> SpatialData:
+    """Patch the shared blobs fixture so its table annotates ``blobs_labels`` with categorical columns."""
+    sdata["table"].obs["region"] = pd.Categorical(["blobs_labels"] * sdata["table"].n_obs)
+    sdata["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+    n = sdata["table"].n_obs
+    sdata["table"].obs["cluster"] = pd.Categorical((["c1", "c2"] * ((n + 1) // 2))[:n])
+    sdata["table"].obs["stage"] = pd.Categorical((["s1", "s2"] * ((n + 1) // 2))[:n])
+    return sdata
+
+
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_render_labels(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(element="blobs_labels").pl.show()
@@ -118,6 +128,12 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         """Data-driven color should produce per-label outline colors when outline_color is None."""
         sdata_blobs.pl.render_labels(
             "blobs_labels", color="channel_0_sum", outline_alpha=1, fill_alpha=0, contour_px=10
+        ).pl.show()
+
+    def test_plot_outline_color_by_categorical_obs_labels(self, sdata_blobs: SpatialData):
+        sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", fill_alpha=0, outline_alpha=1, outline_color="cluster", contour_px=10
         ).pl.show()
 
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
@@ -565,3 +581,17 @@ def test_render_labels_raises_on_3d(scale_factors):
             sdata.pl.render_labels("lbl3d").pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def test_labels_outline_color_groups_filter_aligns(sdata_blobs: SpatialData):
+    """When `groups` filters the fill labels, the outline vector must be masked alongside it."""
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(
+        "blobs_labels",
+        color="cluster",
+        groups=["c1"],
+        outline_alpha=1.0,
+        outline_color="stage",
+    ).pl.show(ax=ax)
+    plt.close(fig)
