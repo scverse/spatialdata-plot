@@ -265,9 +265,7 @@ class PlotAccessor:
         else:
             if isinstance(coordinate_systems, list):
                 if len(coordinate_systems) != 1:
-                    raise ValueError(
-                        f"annotate() supports a single coordinate system; got {coordinate_systems!r}."
-                    )
+                    raise ValueError(f"annotate() supports a single coordinate system; got {coordinate_systems!r}.")
                 cs = coordinate_systems[0]
             else:
                 cs = coordinate_systems
@@ -281,8 +279,14 @@ class PlotAccessor:
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
             ax.set_axis_off()
+            # set_aspect("equal") inside show() can shrink the axes box so the
+            # figure has blank padding around the data. Crop the saved PNG to
+            # the axes bbox so PNG pixels map 1:1 to (xlim, ylim) and the
+            # px→cs transform in _commit.py stays correct.
+            fig.canvas.draw()
+            bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             buf = _io.BytesIO()
-            fig.savefig(buf, format="png", dpi=dpi, pad_inches=0)
+            fig.savefig(buf, format="png", dpi=dpi, bbox_inches=bbox, pad_inches=0)
         finally:
             plt.close(fig)
         rgb = np.asarray(_Image.open(buf).convert("RGB"))

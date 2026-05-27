@@ -116,6 +116,40 @@ def test_clear_wipes_all_three_shape_stores(no_display):
     assert session.viewer._points_data == []
 
 
+def test_canvas_corners_map_to_cs_extent_for_non_square_image(no_display):
+    """Non-square image on square figure forces aspect padding; PNG must be
+    cropped to the axes box so canvas pixels map 1:1 to the CS extent.
+    """
+    rng = np.random.default_rng(0)
+    arr = rng.integers(0, 255, size=(3, 64, 32), dtype=np.uint8)  # 32 wide × 64 tall
+    img = Image2DModel.parse(arr, dims=("c", "y", "x"), transformations={"global": Identity()})
+    sdata = sd.SpatialData(images={"img": img})
+
+    session = sdata.pl.render_images(element="img").pl.annotate(figsize=(5, 5), dpi=120)
+
+    # Polygon at the four canvas corners.
+    session.viewer._polygons_data = [
+        {
+            "id": "p",
+            "points": [
+                {"x": 0, "y": 0},
+                {"x": session._W, "y": 0},
+                {"x": session._W, "y": session._H},
+                {"x": 0, "y": session._H},
+            ],
+        }
+    ]
+    session.name_tx.value = "corners"
+    session._on_save(None)
+
+    bounds = sdata.shapes["corners"].geometry.iloc[0].bounds
+    # Expected CS extent of the 32×64 image; tolerance ≤ 1 CS unit.
+    assert bounds[0] == pytest.approx(0.0, abs=1.0)
+    assert bounds[1] == pytest.approx(0.0, abs=1.0)
+    assert bounds[2] == pytest.approx(32.0, abs=1.0)
+    assert bounds[3] == pytest.approx(64.0, abs=1.0)
+
+
 def test_saved_shapes_carry_identity_in_chosen_cs(no_display):
     from spatialdata.transformations.operations import get_transformation
 

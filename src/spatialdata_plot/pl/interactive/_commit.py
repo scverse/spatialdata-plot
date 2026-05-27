@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from shapely.geometry import Point, Polygon, box
 
+PxToCs = Callable[[float, float], tuple[float, float]]
 
-def _make_px_to_cs(
-    xmin: float, xmax: float, y_lo: float, y_hi: float, image_w: int, image_h: int
-):
+
+def _make_px_to_cs(xmin: float, xmax: float, y_lo: float, y_hi: float, image_w: int, image_h: int) -> PxToCs:
     """Build an affine mapping (px_x, px_y) → (cs_x, cs_y).
 
     The y_lo/y_hi are the sorted ylim values; image_h pixels map linearly
@@ -25,7 +26,7 @@ def _make_px_to_cs(
     return px_to_cs
 
 
-def _roi_to_polygon(roi: dict[str, Any], px_to_cs) -> Polygon | None:
+def _roi_to_polygon(roi: dict[str, Any], px_to_cs: PxToCs) -> Polygon | None:
     """ROI dict ``{x, y, width, height}`` → axis-aligned rectangle Polygon."""
     try:
         x0, y0 = px_to_cs(float(roi["x"]), float(roi["y"]))
@@ -36,7 +37,7 @@ def _roi_to_polygon(roi: dict[str, Any], px_to_cs) -> Polygon | None:
     return poly if not poly.is_empty else None
 
 
-def _polygon_to_polygon(poly: dict[str, Any], px_to_cs) -> Polygon | None:
+def _polygon_to_polygon(poly: dict[str, Any], px_to_cs: PxToCs) -> Polygon | None:
     """Polygon dict ``{id, points: [{x, y}, ...]}`` → shapely Polygon (≥3 verts)."""
     pts = poly.get("points") or []
     try:
@@ -49,7 +50,7 @@ def _polygon_to_polygon(poly: dict[str, Any], px_to_cs) -> Polygon | None:
     return geom if not geom.is_empty else None
 
 
-def _point_to_circle(pt: dict[str, Any], px_to_cs, radius: float) -> Polygon | None:
+def _point_to_circle(pt: dict[str, Any], px_to_cs: PxToCs, radius: float) -> Polygon | None:
     """Point dict ``{x, y}`` → circle Polygon of the given CS-units radius.
 
     Stored as a polygon so the resulting ShapesModel is uniform-type and
