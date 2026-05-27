@@ -44,3 +44,11 @@ _version.py
 
 # pixi
 pixi.lock
+
+# Local sandbox data + historical prototype notebooks (Sandbox.ipynb is the
+# active one and is tracked; the others are kept locally for reference only).
+/sandbox_data/
+/Sandbox.anywidget-v0.ipynb
+/Sandbox.ipympl-v0.ipynb
+/verify_ssh_annotate.ipynb
+Sandbox.ipynb
