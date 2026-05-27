@@ -86,6 +86,7 @@ from spatialdata_plot.pl.render_params import (
     PointsRenderParams,
     ScalebarParams,
     ShapesRenderParams,
+    _DsReduction,
     _FontSize,
     _FontWeight,
 )
@@ -2312,6 +2313,61 @@ def _rasterize_if_necessary(
     return image
 
 
+def _rasterize_if_necessary_datashader(
+    image: DataArray,
+    dpi: float,
+    width: float,
+    height: float,
+    coordinate_system: str,
+    extent: dict[str, tuple[float, float]],
+    downsample_method: str,
+) -> DataArray:
+    """Downsample to canvas resolution with a configurable datashader reduction.
+
+    Used by ``render_images(method='datashader')`` so sparse images (mostly
+    zeros, rare non-zero pixels) survive the downsample step instead of
+    being averaged away by the default mean aggregation.
+    """
+    has_c_dim = len(image.shape) == 3
+    y_dims, x_dims = (image.shape[1], image.shape[2]) if has_c_dim else image.shape
+
+    target_y_dims = int(dpi * height)
+    target_x_dims = int(dpi * width)
+
+    if y_dims <= target_y_dims and x_dims <= target_x_dims:
+        return image
+
+    # spatialdata.rasterize is invoked solely to inherit the output coords and
+    # spatial transformation; its mean-aggregated values are overwritten below.
+    # TODO: this wastes a full per-channel resample pass. A future refactor can
+    # construct the target DataArray + transformation directly once spatialdata
+    # exposes a public geometry-only helper.
+    world_x = float(extent["x"][1]) - float(extent["x"][0])
+    world_y = float(extent["y"][1]) - float(extent["y"][0])
+    target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)
+    base = rasterize(
+        image,
+        ("y", "x"),
+        [extent["y"][0], extent["x"][0]],
+        [extent["y"][1], extent["x"][1]],
+        coordinate_system,
+        target_unit_to_pixels=target_unit_to_pixels,
+    )
+
+    out_y, out_x = (base.shape[1], base.shape[2]) if has_c_dim else base.shape
+    # Materialize once: per-chunk reductions across channels would otherwise
+    # trigger repeated dask graph evaluations on the same source array.
+    src = image.compute() if hasattr(image.data, "compute") else image
+    cvs = ds.Canvas(
+        plot_width=out_x,
+        plot_height=out_y,
+        x_range=(float(extent["x"][0]), float(extent["x"][1])),
+        y_range=(float(extent["y"][0]), float(extent["y"][1])),
+    )
+    base.values = np.asarray(cvs.raster(src, downsample_method=downsample_method).values).astype(base.dtype, copy=False)
+    return base
+
+
 def _multiscale_to_spatial_image(
     multiscale_image: DataTree,
     dpi: float,
@@ -3738,6 +3794,7 @@ def _ax_show_and_transform(
     cmap: ListedColormap | LinearSegmentedColormap | None = None,
     zorder: int = 0,
     norm: Normalize | None = None,
+    interpolation: str | None = None,
 ) -> matplotlib.image.AxesImage:
     # ``extent`` uses mpl's pixel-grid convention; world placement happens via
     # ``set_transform(trans_data)`` afterwards.
@@ -3749,6 +3806,8 @@ def _ax_show_and_transform(
         imshow_kwargs["alpha"] = alpha
     else:
         imshow_kwargs["cmap"] = cmap
+    if interpolation is not None:
+        imshow_kwargs["interpolation"] = interpolation
     im = ax.imshow(array, **imshow_kwargs)
     im.set_transform(trans_data)
     return im
@@ -3873,7 +3932,7 @@ _DS_REDUCTION_FUNCS: dict[str, Any] = {
 
 
 def _datashader_aggregate_with_function(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: _DsReduction | None,
     cvs: Canvas,
     spatial_element: GeoDataFrame | dask.dataframe.core.DataFrame,
     col_for_color: str | None,
@@ -3926,7 +3985,7 @@ def _datashader_aggregate_with_function(
 
 
 def _datshader_get_how_kw_for_spread(
-    reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None,
+    reduction: _DsReduction | None,
 ) -> str:
     # Get the best input for the how argument of ds.tf.spread(), needed for numerical values
     reduction = reduction or "sum"

@@ -162,6 +162,32 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata = SpatialData(images={"img": img})
         sdata.pl.render_images("img").pl.show(title="constant channel: mid-value (not black)")
 
+    def test_plot_method_datashader_preserves_sparse_pixels(self):
+        # #449: bright pixels in a sparse image must survive the downsample step.
+        arr = np.zeros((1, 1024, 1024), dtype=np.float32)
+        rng = np.random.default_rng(0)
+        arr[0, rng.integers(0, 1024, 50), rng.integers(0, 1024, 50)] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+        sdata.pl.render_images("img").pl.show(ax=axs[0], colorbar=False, title="default (mean)")
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max").pl.show(
+            ax=axs[1], colorbar=False, title="datashader (max)"
+        )
+
+    def test_plot_method_datashader_reduction_grid(self):
+        # Mid-grey background with sparse bright pixels: each reduction yields a
+        # visibly distinct panel — max preserves spots, min/mode show the
+        # background only, mean shows a slightly-lifted background.
+        rng = np.random.default_rng(0)
+        arr = np.full((1, 1024, 1024), 0.3, dtype=np.float32)
+        arr[0, rng.integers(0, 1024, 50), rng.integers(0, 1024, 50)] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        fig, axs = plt.subplots(2, 2, figsize=(8, 8))
+        for ax, red in zip(axs.flat, ("max", "min", "mean", "mode"), strict=True):
+            sdata.pl.render_images("img", method="datashader", datashader_reduction=red).pl.show(
+                ax=ax, colorbar=False, title=red
+            )
+
 
 # ---------------------------------------------------------------------------
 # Grayscale + transfunc visual tests
@@ -789,3 +815,115 @@ def test_lognorm_with_zeros_suppresses_colorbar_with_warning():
             sdata.pl.render_images("img", norm=LogNorm()).pl.show(ax=ax)
     finally:
         plt.close(fig)
+
+
+def _render_sparse_image_max(**kwargs) -> float:
+    arr = np.zeros((1, 1024, 1024), dtype=np.float32)
+    arr[0, 500, 500] = 1.0
+    sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+    fig, ax = plt.subplots(figsize=(2, 2), dpi=50)
+    try:
+        sdata.pl.render_images("img", **kwargs).pl.show(ax=ax)
+        return float(np.nanmax(ax.get_images()[0].get_array()))
+    finally:
+        plt.close(fig)
+
+
+def test_render_images_datashader_preserves_sparse_max():
+    # Regression test for #449.
+    default_max = _render_sparse_image_max()
+    datashader_max = _render_sparse_image_max(method="datashader", datashader_reduction="max")
+    assert default_max < 0.1, f"default path should collapse sparse signal, got max={default_max}"
+    assert datashader_max == pytest.approx(1.0, abs=1e-6), (
+        f"datashader should preserve sparse signal at 1.0, got {datashader_max}"
+    )
+
+
+class TestRenderImagesDatashader:
+    """Tests for the method='datashader' code path on render_images (issue #449)."""
+
+    @pytest.fixture(autouse=True)
+    def _cleanup(self):
+        yield
+        plt.close("all")
+
+    def test_method_invalid_type_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(TypeError, match="must be a string"):
+            sdata_blobs.pl.render_images("blobs_image", method=123)  # type: ignore[arg-type]
+
+    def test_method_invalid_value_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="matplotlib.*datashader"):
+            sdata_blobs.pl.render_images("blobs_image", method="bogus")
+
+    def test_datashader_reduction_invalid_type_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(TypeError, match="must be a string"):
+            sdata_blobs.pl.render_images("blobs_image", datashader_reduction=42)  # type: ignore[arg-type]
+
+    def test_datashader_reduction_invalid_value_raises(self, sdata_blobs: SpatialData):
+        with pytest.raises(ValueError, match="datashader_reduction"):
+            sdata_blobs.pl.render_images("blobs_image", method="datashader", datashader_reduction="bogus")
+
+    def test_datashader_reduction_without_datashader_warns(self, sdata_blobs: SpatialData, caplog):
+        with logger_warns(caplog, logger, match="datashader_reduction"):
+            _, ax = plt.subplots()
+            sdata_blobs.pl.render_images("blobs_image", datashader_reduction="max").pl.show(ax=ax)
+
+    def test_datashader_basic_renders_single_image(self):
+        arr = np.zeros((1, 512, 512), dtype=np.float32)
+        arr[0, 100, 100] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        _, ax = plt.subplots(figsize=(2, 2), dpi=50)
+        sdata.pl.render_images("img", method="datashader").pl.show(ax=ax)
+        assert len(ax.get_images()) == 1
+
+    def test_datashader_multichannel(self):
+        arr = np.zeros((3, 512, 512), dtype=np.float32)
+        arr[0, 100, 100] = 1.0
+        arr[1, 200, 200] = 1.0
+        arr[2, 300, 300] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1", "c2", "c3"])})
+        _, ax = plt.subplots(figsize=(2, 2), dpi=50)
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max").pl.show(ax=ax)
+        assert len(ax.get_images()) == 1
+
+    def test_datashader_rgb_passthrough(self):
+        arr = np.zeros((3, 256, 256), dtype=np.float32)
+        arr[0] = 0.8
+        arr[1] = 0.2
+        arr[2] = 0.1
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["r", "g", "b"])})
+        _, ax = plt.subplots(figsize=(2, 2), dpi=50)
+        sdata.pl.render_images("img", method="datashader").pl.show(ax=ax)
+        assert ax.get_images()[0].get_array().shape[-1] == 3
+
+    def test_datashader_with_transfunc(self):
+        arr = np.zeros((1, 512, 512), dtype=np.float32)
+        arr[0, 100, 100] = 1.0
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+        _, ax = plt.subplots(figsize=(2, 2), dpi=50)
+        sdata.pl.render_images("img", method="datashader", datashader_reduction="max", transfunc=np.log1p).pl.show(
+            ax=ax
+        )
+        assert len(ax.get_images()) == 1
+
+    def test_datashader_with_multiscale(self, sdata_blobs: SpatialData):
+        _, ax = plt.subplots()
+        sdata_blobs.pl.render_images("blobs_multiscale_image", method="datashader", datashader_reduction="max").pl.show(
+            ax=ax
+        )
+        assert len(ax.get_images()) == 1
+
+    def test_method_matplotlib_matches_default(self):
+        rng = np.random.default_rng(0)
+        arr = rng.random((1, 64, 64), dtype=np.float32)
+        sdata = SpatialData(images={"img": Image2DModel.parse(arr, c_coords=["c1"])})
+
+        def _render_and_grab(**kwargs):
+            fig, ax = plt.subplots(figsize=(2, 2), dpi=50)
+            try:
+                sdata.pl.render_images("img", **kwargs).pl.show(ax=ax)
+                return np.asarray(ax.get_images()[0].get_array())
+            finally:
+                plt.close(fig)
+
+        np.testing.assert_array_equal(_render_and_grab(), _render_and_grab(method="matplotlib"))

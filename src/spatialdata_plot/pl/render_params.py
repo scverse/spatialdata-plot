@@ -12,6 +12,8 @@ from matplotlib.figure import Figure
 
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
+_DsReduction = Literal["sum", "mean", "any", "count", "std", "var", "max", "min"]
+_ImageDsReduction = Literal["max", "min", "mean", "mode", "first", "last", "var", "std"]
 
 # replace with
 # from spatialdata._types import ColorLike
@@ -250,7 +252,7 @@ class ShapesRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     shape: Literal["circle", "hex", "visium_hex", "square"] | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: _DsReduction | None = None
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
 
@@ -272,7 +274,7 @@ class PointsRenderParams:
     zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
-    ds_reduction: Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None = None
+    ds_reduction: _DsReduction | None = None
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
     density: bool = False
@@ -295,6 +297,8 @@ class ImageRenderParams:
     transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
     grayscale: bool = False
     channels_as_legend: bool = False
+    method: Literal["matplotlib", "datashader"] | None = None
+    ds_reduction: _ImageDsReduction | None = None
 
 
 @dataclass
