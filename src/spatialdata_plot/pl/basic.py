@@ -243,13 +243,18 @@ class PlotAccessor:
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
             If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
             default outline widths 1.5 and 0.5 are used for outer/only and inner outline respectively.
-        outline_color : ColorLike | tuple[ColorLike], optional
+        outline_color : ColorLike | tuple[ColorLike] | str, optional
             Color of the border. Can either be a named color ("red"), a hex representation ("#000000") or a list of
             floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If the hex representation includes alpha, e.g.
             "#000000ff", and `outline_alpha` is not given, this value controls the opacity of the outline. If 2 values
             are given (tuple), 2 borders are shown with these colors (outer & inner). If `outline_width` and/or
             `outline_alpha` are used to indicate that one/two outlines should be drawn, the default outline colors
             "#000000" and "#ffffff are used for outer/only and inner outline respectively.
+            A string that is not a recognized color is interpreted as a column key (in `obs` of the annotating table
+            or in the element's own dataframe), mirroring how ``color`` is parsed. The outline is then colored
+            per-shape using the same ``palette`` / ``cmap`` / ``na_color`` as the fill. When both ``color`` and
+            ``outline_color`` resolve to columns, two stacked legends are drawn. Column-based outline coloring is
+            only supported for a single outline (not the 2-tuple form).
         outline_alpha : float | int | tuple[float | int, float | int] | None, optional
             Alpha value for the outline of shapes. Invisible by default, meaning outline_alpha=0.0 if both outline_color
             and outline_width are not specified. Else, outlines are rendered with the alpha implied by outline_color, or
@@ -346,6 +351,8 @@ class PlotAccessor:
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
+                col_for_outline_color=param_values["col_for_outline_color"],
+                outline_table_name=param_values["outline_table_name"],
                 groups=param_values["groups"],
                 scale=param_values["scale"],
                 outline_params=outline_params,
@@ -387,6 +394,8 @@ class PlotAccessor:
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         datashader_reduction: _DsReduction | None = None,
+        density: bool = False,
+        density_how: Literal["linear", "log", "cbrt", "eq_hist"] = "linear",
         transfunc: Callable[[float], float] | None = None,
     ) -> sd.SpatialData:
         """
@@ -457,6 +466,19 @@ class PlotAccessor:
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
             Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"sum"``.
+        density : bool, default False
+            Render the points as a 2-D count density via datashader instead of plotting individual markers.
+            When ``True``, ``method`` is forced to ``"datashader"`` (passing ``method="matplotlib"`` raises).
+            Density supports ``color=None`` (plain density) or a categorical ``color`` column (per-category
+            density via :func:`datashader.by`). A continuous ``color`` column or a literal color value
+            (e.g. ``"red"``) raises an error. Under ``density=True`` the following parameters are ignored
+            (with a warning if explicitly set): ``size``, ``transfunc``, ``norm.vmin/vmax``, and
+            ``datashader_reduction``.
+        density_how : Literal["linear", "log", "cbrt", "eq_hist"], default "linear"
+            How datashader maps aggregated counts to color intensity. ``"linear"`` (default) keeps the
+            colorbar axis as a count; ``"log"`` and ``"cbrt"`` compress dynamic range; ``"eq_hist"``
+            equalizes the histogram (rank-based, surfaces the most structure but the colorbar axis is
+            no longer a count). Ignored when ``density=False``.
         transfunc : Callable[[float], float] | None, optional
             Optional transformation applied to the continuous color vector before normalization and colormap mapping.
 
@@ -464,6 +486,18 @@ class PlotAccessor:
         -------
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
+
+        Examples
+        --------
+        Plain density of all transcripts:
+
+        >>> sdata.pl.render_points("transcripts", density=True).pl.show()
+
+        Per-gene density with a categorical palette:
+
+        >>> sdata.pl.render_points(
+        ...     "transcripts", color="gene", groups=["Gad1", "Slc17a7"], palette="tab20", density=True
+        ... ).pl.show()
         """
         params_dict = _validate_points_render_params(
             self._sdata,
@@ -482,6 +516,10 @@ class PlotAccessor:
             colorbar=colorbar,
             colorbar_params=colorbar_params,
             gene_symbols=gene_symbols,
+            density=density,
+            density_how=density_how,
+            transfunc=transfunc,
+            method=method,
         )
 
         if method is not None:
@@ -489,6 +527,9 @@ class PlotAccessor:
                 raise TypeError("Parameter 'method' must be a string.")
             if method not in ["matplotlib", "datashader"]:
                 raise ValueError("Parameter 'method' must be either 'matplotlib' or 'datashader'.")
+
+        if density and method is None:
+            method = "datashader"
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
@@ -517,6 +558,8 @@ class PlotAccessor:
                 ds_reduction=param_values["ds_reduction"],
                 colorbar=param_values["colorbar"],
                 colorbar_params=param_values["colorbar_params"],
+                density=density,
+                density_how=density_how,
             )
             n_steps += 1
 
@@ -811,11 +854,14 @@ class PlotAccessor:
         fill_alpha : float | int | None, optional
             Alpha value for the fill of the labels. By default, it is set to 0.4 or, if a color is given that implies
             an alpha, that value is used for `fill_alpha`.
-        outline_color : ColorLike | None
+        outline_color : ColorLike | str | None
             Color of the outline of the labels. Can either be a named color ("red"), a hex representation
             ("#000000") or a list of floats that represent RGB/RGBA values (1.0, 0.0, 0.0, 1.0). If ``None``,
             the outline inherits from the ``color`` parameter when it is a literal color, or uses data-driven
             per-label colors when ``color`` refers to a column.
+            A string that is not a recognized color is interpreted as a column key (in `obs` of the annotating
+            table), mirroring how ``color`` is parsed. The outline is then colored per-label using the same
+            ``palette`` / ``cmap`` / ``na_color`` as the fill.
         scale :  str | None
             Influences the resolution of the rendering. Possibilities for setting this parameter:
                 1) None (default). The image is rasterized to fit the canvas size. For multiscale images, the best scale
@@ -881,6 +927,8 @@ class PlotAccessor:
                 element=element,
                 color=param_values["color"],
                 col_for_color=param_values["col_for_color"],
+                col_for_outline_color=param_values["col_for_outline_color"],
+                outline_table_name=param_values["outline_table_name"],
                 groups=param_values["groups"],
                 contour_px=param_values["contour_px"],
                 cmap_params=cmap_params,
@@ -1047,6 +1095,8 @@ class PlotAccessor:
         na_in_legend: bool = True,
         colorbar: bool = True,
         colorbar_params: dict[str, object] | None = None,
+        legend_title: str | None = None,
+        outline_legend_title: str | None = None,
         wspace: float | None = None,
         hspace: float = 0.25,
         ncols: int = 4,
@@ -1091,6 +1141,12 @@ class PlotAccessor:
         colorbar_params : dict[str, object] | None
             Global overrides passed to colorbars for all axes. Accepts the same keys as per-layer ``colorbar_params``
             (e.g., ``loc``, ``width``, ``pad``, ``label``).
+        legend_title : str | None
+            Title for the fill categorical legend. When both fill and outline are colored by an obs column, the
+            two legends default to ``"fill"`` / ``"outline"`` to disambiguate; pass an explicit string to override
+            the fill title. Set to ``None`` (default) to keep the auto-title behavior.
+        outline_legend_title : str | None
+            Title for the outline categorical legend. Mirrors ``legend_title`` for the outline channel.
         wspace : float | None
             Horizontal spacing between panels (passed to :class:`matplotlib.gridspec.GridSpec`).
         hspace : float, default 0.25
@@ -1327,6 +1383,8 @@ class PlotAccessor:
             legend_fontoutline=legend_fontoutline,
             na_in_legend=na_in_legend,
             colorbar=colorbar,
+            legend_title=legend_title,
+            outline_legend_title=outline_legend_title,
         )
 
         def _draw_colorbar(

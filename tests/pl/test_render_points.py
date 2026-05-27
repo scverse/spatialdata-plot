@@ -172,6 +172,15 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             method="datashader",
         ).pl.show()
 
+    def test_plot_density_plain(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", density=True).pl.show()
+
+    def test_plot_density_categorical(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", color="gene", density=True).pl.show()
+
+    def test_plot_density_how_eq_hist(self, sdata_dense_points: SpatialData):
+        sdata_dense_points.pl.render_points("dense_points", density=True, density_how="eq_hist").pl.show()
+
     def test_plot_points_categorical_color_column_matplotlib(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points("blobs_points", color="genes", method="matplotlib").pl.show()
 
@@ -1178,3 +1187,44 @@ def test_datashader_canvas_from_empty_dataframe_does_not_crash():
         assert plot_width == 0 and plot_height == 0
     finally:
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Density mode (unit tests; visual tests live in the TestPoints class above)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"color": "instance_id"}, "density=True is only supported"),
+        ({"color": "red"}, "literal color is ambiguous"),
+        ({"method": "matplotlib"}, "datashader backend"),
+        ({"density_how": "magic"}, "density_how"),
+    ],
+)
+def test_density_rejects_invalid_combinations(sdata_blobs: SpatialData, kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        sdata_blobs.pl.render_points("blobs_points", density=True, **kwargs).pl.show()
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"size": 5.0}, "size is ignored"),
+        ({"transfunc": lambda x: x}, "transfunc is ignored"),
+        ({"norm": Normalize(vmin=0, vmax=1)}, "norm.vmin/vmax are ignored"),
+        ({"datashader_reduction": "mean"}, "datashader_reduction is ignored"),
+    ],
+)
+def test_density_warns_on_ignored_params(sdata_blobs: SpatialData, kwargs, match):
+    with pytest.warns(UserWarning, match=match):
+        sdata_blobs.pl.render_points("blobs_points", density=True, **kwargs)
+
+
+def test_density_defaults_silent_and_force_datashader(sdata_blobs: SpatialData, recwarn):
+    out = sdata_blobs.pl.render_points("blobs_points", density=True)
+    last = list(out.plotting_tree.values())[-1]
+    assert (last.density, last.density_how, last.method) == (True, "linear", "datashader")
+    assert not any("ignored when density=True" in str(w.message) for w in recwarn.list)

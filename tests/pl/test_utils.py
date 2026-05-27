@@ -422,6 +422,22 @@ def test_color_column_collision_on_annotating_table_raises():
     sdata.pl.render_shapes("s", color="#ffa500")
 
 
+def test_color_key_obs_var_shadow_raises():
+    # regression test for #621
+    pts = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0], "y": [1.0, 2.0]}))
+    obs = pd.DataFrame({"instance_id": [0, 1], "region": ["pts"] * 2, "GeneA": [0.9, 0.6]}, index=["0", "1"])
+    table = TableModel.parse(
+        AnnData(X=np.zeros((2, 1)), obs=obs, var=pd.DataFrame(index=["GeneA"])),
+        region=["pts"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    sdata = SpatialData(points={"pts": pts}, tables={"t": table})
+
+    with pytest.raises(ValueError, match=r"'GeneA'.*ambiguous.*obs\.columns.*var_names"):
+        sdata.pl.render_points("pts", color="GeneA", table_name="t").pl.show()
+
+
 def test_explicit_table_name_honored_when_element_has_same_column():
     # regression test for #620: explicit table_name= must not be silently
     # discarded when the element has a same-named column with different values.

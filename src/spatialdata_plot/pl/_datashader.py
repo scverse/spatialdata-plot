@@ -5,6 +5,7 @@ Shared by ``_render_shapes`` and ``_render_points`` in ``render.py``.
 
 from __future__ import annotations
 
+from copy import copy
 from typing import Any, Literal
 
 import dask.dataframe as dd
@@ -19,6 +20,7 @@ from matplotlib.colors import Normalize
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams, _DsReduction
 from spatialdata_plot.pl.utils import (
+    _DS_REDUCTION_FUNCS,
     _ax_show_and_transform,
     _convert_alpha_to_datashader_range,
     _create_image_from_datashader_result,
@@ -26,6 +28,7 @@ from spatialdata_plot.pl.utils import (
     _datashader_map_aggregate_to_color,
     _datshader_get_how_kw_for_spread,
     _hex_no_alpha,
+    _make_continuous_mappable,
 )
 
 # ---------------------------------------------------------------------------
@@ -35,6 +38,11 @@ from spatialdata_plot.pl.utils import (
 # Sentinel category name used in datashader categorical paths to represent
 # missing (NaN) values.  Must not collide with realistic user category names.
 _DS_NAN_CATEGORY = "ds_nan"
+
+# Private column name under which the outline color vector is attached to the
+# datashader rasterizer element. Must not collide with a real user column;
+# the leading/trailing dunders are deliberate.
+_OUTLINE_INTERNAL_COL = "__sdp_outline_col__"
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
@@ -225,6 +233,7 @@ def _ds_shade_continuous(
     na_color_hex: str,
     spread_px: int | None = None,
     ds_reduction: _DsReduction | None = None,
+    how: str = "linear",
 ) -> tuple[Any, Any | None, tuple[Any, Any] | None]:
     """Shade a continuous datashader aggregate, optionally applying spread and NaN coloring.
 
@@ -253,6 +262,7 @@ def _ds_shade_continuous(
         min_alpha=_convert_alpha_to_datashader_range(alpha),
         span=color_span,
         clip=norm.clip,
+        how=how,
     )
     shaded = _apply_user_alpha(shaded, alpha)
 
@@ -276,6 +286,8 @@ def _ds_shade_categorical(
     color_vector: Any,
     alpha: float,
     spread_px: int | None = None,
+    how: str = "linear",
+    density: bool = False,
 ) -> Any:
     """Shade a categorical or no-color datashader aggregate."""
     ds_cmap = None
@@ -284,12 +296,20 @@ def _ds_shade_categorical(
         if isinstance(ds_cmap, str) and ds_cmap[0] == "#":
             ds_cmap = _hex_no_alpha(ds_cmap)
 
+    # The default min_alpha (~254) is a near-full-opacity floor — right for scatter
+    # plots, but it collapses the count-driven alpha range and makes categorical
+    # density read as a flat hue cloud. Drop the floor under density so per-pixel
+    # alpha can actually encode count. A small non-zero floor (~15%) keeps the
+    # sparse edges visible under density_how="linear" instead of vanishing.
+    min_alpha = 40.0 if density else _convert_alpha_to_datashader_range(alpha)
+
     agg_to_shade = ds.tf.spread(agg, px=spread_px) if spread_px is not None else agg
     shaded = _datashader_map_aggregate_to_color(
         agg_to_shade,
         cmap=ds_cmap,
         color_key=color_key,
-        min_alpha=_convert_alpha_to_datashader_range(alpha),
+        min_alpha=min_alpha,
+        how=how,
     )
     return _apply_user_alpha(shaded, alpha)
 
@@ -330,8 +350,16 @@ def _render_ds_outlines(
     factor: float,
     x_min: float = 0.0,
     y_min: float = 0.0,
+    outline_color_vector: Any | None = None,
+    outline_color_source_vector: pd.Series | None = None,
 ) -> None:
-    """Aggregate, shade, and render shape outlines (outer and inner) with datashader."""
+    """Aggregate, shade, and render shape outlines (outer and inner) with datashader.
+
+    When ``outline_color_vector`` is provided, the outer outline is colored per-shape
+    via ``ds.by`` (categorical) or a numeric reduction (continuous) instead of a
+    single literal color. The two-outline form is rejected at validation, so this
+    only affects the outer outline.
+    """
     ds_lw_factor = fig_params.fig.dpi / 72
     assert len(render_params.outline_alpha) == 2  # noqa: S101
 
@@ -343,6 +371,24 @@ def _render_ds_outlines(
     ):
         alpha = render_params.outline_alpha[idx]
         if alpha <= 0:
+            continue
+        if idx == 0 and outline_color_vector is not None:
+            _render_ds_outline_by_column(
+                cvs=cvs,
+                transformed_element=transformed_element,
+                outline_color_vector=outline_color_vector,
+                outline_color_source_vector=outline_color_source_vector,
+                cmap_params=render_params.cmap_params,
+                ds_reduction=render_params.ds_reduction,
+                line_width=linewidth * ds_lw_factor,
+                alpha=alpha,
+                fig_params=fig_params,
+                ax=ax,
+                factor=factor,
+                x_min=x_min,
+                y_min=y_min,
+                zorder=render_params.zorder,
+            )
             continue
         agg_outline = cvs.line(
             transformed_element,
@@ -361,6 +407,95 @@ def _render_ds_outlines(
             _ax_show_and_transform(rgba, trans, ax, zorder=render_params.zorder)
 
 
+def _render_ds_outline_by_column(
+    cvs: Any,
+    transformed_element: Any,
+    outline_color_vector: Any | None,
+    outline_color_source_vector: pd.Series | None,
+    cmap_params: Any,
+    ds_reduction: _DsReduction | None,
+    line_width: float,
+    alpha: float,
+    fig_params: FigParams,
+    ax: matplotlib.axes.SubplotBase,
+    factor: float,
+    x_min: float,
+    y_min: float,
+    zorder: int,
+) -> None:
+    """Aggregate + shade an outline colored by an obs column via datashader.
+
+    Two-outline form is not supported for column-driven outline coloring,
+    so this only renders the outer outline.
+    """
+    color_by_categorical = outline_color_source_vector is not None
+    na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
+
+    # Attach the outline vector under a private column name so a fill column with the
+    # same key never gets overwritten. Assign positionally (via a Series indexed to the
+    # element) — `.assign(col=series)` aligns by index, which silently inserts NaN when
+    # the element's index is non-contiguous (e.g. after an inner-join). The NaNs would
+    # then be lifted to the `ds_nan` sentinel and one polygon's outline would render as
+    # `na_color` instead of its real category.
+    transformed_element = transformed_element.copy()
+    if color_by_categorical:
+        cat = pd.Categorical(outline_color_source_vector)
+        attach_cat = _inject_ds_nan_sentinel(pd.Series(cat))
+        transformed_element[_OUTLINE_INTERNAL_COL] = pd.Categorical(
+            attach_cat.to_numpy(), categories=attach_cat.cat.categories
+        )
+    else:
+        transformed_element[_OUTLINE_INTERNAL_COL] = np.asarray(outline_color_vector)
+
+    if color_by_categorical:
+        agg_outline = cvs.line(
+            transformed_element,
+            geometry="geometry",
+            agg=ds.by(_OUTLINE_INTERNAL_COL, ds.count()),
+            line_width=line_width,
+        )
+        color_key = _build_datashader_color_key(
+            _coerce_categorical_source(transformed_element[_OUTLINE_INTERNAL_COL]),
+            outline_color_vector,
+            na_color_hex,
+        )
+        shaded = ds.tf.shade(
+            agg_outline,
+            color_key=color_key,
+            min_alpha=_convert_alpha_to_datashader_range(alpha),
+            how="linear",
+        )
+    else:
+        reduction_name = ds_reduction if ds_reduction is not None else "max"
+        try:
+            reduction_function = _DS_REDUCTION_FUNCS[reduction_name](column=_OUTLINE_INTERNAL_COL)
+        except KeyError as e:
+            raise ValueError(
+                f"Reduction '{reduction_name}' is not supported. Use one of: {', '.join(_DS_REDUCTION_FUNCS.keys())}."
+            ) from e
+        agg_outline = cvs.line(
+            transformed_element,
+            geometry="geometry",
+            agg=reduction_function,
+            line_width=line_width,
+        )
+        # Apply the user-provided norm (vmin/vmax) the same way the fill path does so
+        # an explicit Normalize takes effect for the outline cmap.
+        norm = copy(cmap_params.norm)
+        agg_outline, color_span = _apply_ds_norm(agg_outline, norm)
+        shaded = ds.tf.shade(
+            agg_outline,
+            cmap=cmap_params.cmap,
+            span=color_span,
+            min_alpha=_convert_alpha_to_datashader_range(alpha),
+            how="linear",
+        )
+
+    shaded = _apply_user_alpha(shaded, alpha)
+    rgba, trans = _create_image_from_datashader_result(shaded, factor, ax, x_min, y_min)
+    _ax_show_and_transform(rgba, trans, ax, zorder=zorder)
+
+
 def _build_ds_colorbar(
     reduction_bounds: tuple[Any, Any] | None,
     norm: Normalize,
@@ -374,12 +509,4 @@ def _build_ds_colorbar(
         return None
     vmin = reduction_bounds[0].values if norm.vmin is None else norm.vmin
     vmax = reduction_bounds[1].values if norm.vmax is None else norm.vmax
-    if (norm.vmin is not None or norm.vmax is not None) and norm.vmin == norm.vmax:
-        assert norm.vmin is not None
-        assert norm.vmax is not None
-        vmin = norm.vmin - 0.5
-        vmax = norm.vmin + 0.5
-    return ScalarMappable(
-        norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax),
-        cmap=cmap,
-    )
+    return _make_continuous_mappable(vmin, vmax, cmap)

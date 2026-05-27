@@ -4,7 +4,7 @@ import dataclasses
 from collections import abc
 from collections.abc import Sequence
 from copy import copy
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import dask
 import dask.dataframe as dd
@@ -24,7 +24,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
-from spatialdata import get_extent, get_values, join_spatialelement_table
+from spatialdata import get_extent, get_values
 from spatialdata._core.query.relational_query import match_table_to_element
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
@@ -57,7 +57,11 @@ from spatialdata_plot.pl.render_params import (
     _DsReduction,
 )
 from spatialdata_plot.pl.utils import (
+    _align_outline_vector_to_length,
+    _apply_mask_to_outline_vectors,
     _ax_show_and_transform,
+    _check_obs_var_shadow,
+    _color_vector_to_rgba,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -66,6 +70,8 @@ from spatialdata_plot.pl.utils import (
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
     _hex_no_alpha,
+    _join_table_for_element,
+    _make_continuous_mappable,
     _map_color_seg,
     _maybe_set_colors,
     _mpl_ax_contains_elements,
@@ -168,6 +174,44 @@ def _warn_groups_ignored_continuous(
             "`groups` filters categories of the column specified via `color`; "
             "it has no effect on continuous data."
         )
+
+
+def _is_categorical_like_dtype(dtype: Any) -> bool:
+    return (
+        isinstance(dtype, pd.CategoricalDtype)
+        or pd.api.types.is_object_dtype(dtype)
+        or pd.api.types.is_string_dtype(dtype)
+    )
+
+
+def _reject_continuous_color_under_density(
+    sdata_filt: sd.SpatialData,
+    element: str,
+    col_for_color: str | None,
+    color_source_vector: Any,
+    color_vector: Any,
+) -> None:
+    """Raise before any materialization if density+continuous-color was requested.
+
+    ``color_source_vector`` is only populated by ``_set_color_source_vec`` for the categorical
+    branch, so a non-None value is sufficient to accept the call. Otherwise we read the dtype
+    from the dask source (points element column) or the pre-computed color vector — neither
+    forces a ``.compute()``.
+    """
+    if col_for_color is None or color_source_vector is not None:
+        return
+    points_columns = sdata_filt.points[element].columns
+    if col_for_color in points_columns:
+        dtype = sdata_filt.points[element][col_for_color].dtype
+    else:
+        dtype = getattr(color_vector, "dtype", None)
+    if dtype is None or _is_categorical_like_dtype(dtype):
+        return
+    raise ValueError(
+        f"density=True is only supported with no color or a categorical color column; "
+        f"got continuous column {col_for_color!r}. To color a density plot by a continuous "
+        f"variable, set density=False and use method='datashader' with datashader_reduction=."
+    )
 
 
 def _warn_missing_groups(
@@ -296,12 +340,21 @@ def _add_legend_and_colorbar(
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
+    outline_col_for_color: str | None = None,
+    outline_color_source_vector: pd.Series | None = None,
+    outline_color_vector: Any | None = None,
+    outline_cmap_params: CmapParams | None = None,
 ) -> None:
     """Add legend and colorbar decorations if the color vector warrants them."""
-    if not _want_decorations(color_vector, na_color):
+    fill_has_decorations = _want_decorations(color_vector, na_color) and col_for_color is not None
+    outline_has_decorations = outline_col_for_color is not None and (
+        outline_color_source_vector is not None or outline_color_vector is not None
+    )
+
+    if not fill_has_decorations and not outline_has_decorations:
         return
 
-    if palette is None:
+    if palette is None and fill_has_decorations:
         palette = _make_palette(color_source_vector, color_vector)
 
     if color_source_vector is not None and hasattr(color_source_vector, "remove_unused_categories"):
@@ -313,29 +366,192 @@ def _add_legend_and_colorbar(
         is_continuous=col_for_color is not None and color_source_vector is None,
     )
 
-    _decorate_axs(
-        ax=ax,
-        cax=cax,
-        fig_params=fig_params,
-        adata=adata,
-        value_to_plot=col_for_color,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
-        palette=palette,
-        alpha=alpha,
-        na_color=na_color,
-        legend_fontsize=legend_params.legend_fontsize,
-        legend_fontweight=legend_params.legend_fontweight,
-        legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=legend_params.na_in_legend,
-        colorbar=wants_colorbar and legend_params.colorbar,
-        colorbar_params=colorbar_params,
-        colorbar_requests=colorbar_requests,
-        colorbar_label=_resolve_colorbar_label(
-            colorbar_params,
-            col_for_color if isinstance(col_for_color, str) else None,
-        ),
+    if fill_has_decorations:
+        # Auto-title the fill legend only when an outline legend will also be drawn.
+        outline_legend_will_render = outline_has_decorations and outline_color_source_vector is not None
+        if legend_params.legend_title is not None:
+            fill_title: str | None = legend_params.legend_title or None
+        elif outline_legend_will_render and color_source_vector is not None:
+            fill_title = "fill"
+        else:
+            fill_title = None
+        _decorate_axs(
+            ax=ax,
+            cax=cax,
+            fig_params=fig_params,
+            adata=adata,
+            value_to_plot=col_for_color,
+            color_source_vector=color_source_vector,
+            color_vector=color_vector,
+            palette=palette,
+            alpha=alpha,
+            na_color=na_color,
+            legend_fontsize=legend_params.legend_fontsize,
+            legend_fontweight=legend_params.legend_fontweight,
+            legend_loc=legend_params.legend_loc,
+            legend_fontoutline=legend_params.legend_fontoutline,
+            na_in_legend=legend_params.na_in_legend,
+            colorbar=wants_colorbar and legend_params.colorbar,
+            colorbar_params=colorbar_params,
+            colorbar_requests=colorbar_requests,
+            colorbar_label=_resolve_colorbar_label(
+                colorbar_params,
+                col_for_color if isinstance(col_for_color, str) else None,
+            ),
+            legend_title=fill_title,
+        )
+
+    if outline_has_decorations and outline_cmap_params is not None:
+        _decorate_outline(
+            ax=ax,
+            fig_params=fig_params,
+            outline_col=cast(str, outline_col_for_color),
+            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_vector,
+            cmap_params=outline_cmap_params,
+            colorbar_params=colorbar_params,
+            colorbar_requests=colorbar_requests,
+            legend_params=legend_params,
+            fill_has_legend=fill_has_decorations and color_source_vector is not None,
+            alpha=alpha,
+        )
+
+
+def _decorate_outline(
+    ax: matplotlib.axes.SubplotBase,
+    fig_params: FigParams,
+    outline_col: str,
+    outline_color_source_vector: pd.Series | None,
+    outline_color_vector: Any,
+    cmap_params: CmapParams,
+    colorbar_params: dict[str, object] | None,
+    colorbar_requests: list[ColorbarSpec] | None,
+    legend_params: LegendParams,
+    fill_has_legend: bool,
+    alpha: float,
+) -> None:
+    """Dispatch a categorical legend or continuous colorbar for an outline column."""
+    if outline_color_source_vector is not None:
+        _add_outline_legend(
+            ax=ax,
+            fig_params=fig_params,
+            outline_col=outline_col,
+            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_vector,
+            fill_has_legend=fill_has_legend,
+            legend_params=legend_params,
+        )
+    elif colorbar_requests is not None and legend_params.colorbar and outline_color_vector is not None:
+        _append_outline_colorbar(
+            colorbar_requests=colorbar_requests,
+            ax=ax,
+            outline_color_vector=outline_color_vector,
+            cmap_params=cmap_params,
+            colorbar_params=colorbar_params,
+            outline_col=outline_col,
+            alpha=alpha,
+        )
+
+
+def _append_outline_colorbar(
+    colorbar_requests: list[ColorbarSpec],
+    ax: matplotlib.axes.SubplotBase,
+    outline_color_vector: Any,
+    cmap_params: CmapParams,
+    colorbar_params: dict[str, object] | None,
+    outline_col: str,
+    alpha: float,
+) -> None:
+    """Append a `ColorbarSpec` for a continuous outline column.
+
+    No-op when ``outline_color_vector`` has no finite values. Honors user-supplied
+    `vmin`/`vmax` on ``cmap_params.norm``; falls back to data range. Mirrors the
+    `vmin == vmax` ±0.5 expansion used by the fill colorbar.
+    """
+    arr = pd.to_numeric(pd.Series(np.asarray(outline_color_vector)), errors="coerce").to_numpy()
+    finite = np.isfinite(arr)
+    if not finite.any():
+        return
+    norm = cmap_params.norm
+    vmin = norm.vmin if norm.vmin is not None else float(np.nanmin(arr[finite]))
+    vmax = norm.vmax if norm.vmax is not None else float(np.nanmax(arr[finite]))
+    colorbar_requests.append(
+        ColorbarSpec(
+            ax=ax,
+            mappable=_make_continuous_mappable(vmin, vmax, cmap_params.cmap),
+            params=colorbar_params,
+            label=outline_col,
+            alpha=alpha,
+        )
+    )
+
+
+def _add_outline_legend(
+    ax: matplotlib.axes.SubplotBase,
+    fig_params: FigParams,
+    outline_col: str,
+    outline_color_source_vector: pd.Series,
+    outline_color_vector: Any,
+    fill_has_legend: bool,
+    legend_params: LegendParams,
+) -> None:
+    """Add a second legend for outline-by-column, auto-positioned below the fill legend.
+
+    Uses the rendered fill legend's window extent to anchor the outline legend just
+    below it in axes-fraction coordinates. Falls back to anchoring at the bottom-right
+    of the axes when the measurement is unavailable.
+    """
+    cats = outline_color_source_vector.remove_unused_categories().unique()
+    cats = cats[~cats.isnull()]
+    mapping_df = pd.DataFrame(
+        {"cats": outline_color_source_vector.remove_unused_categories(), "color": outline_color_vector}
+    )
+    color_map = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
+
+    outline_handles = [ax.scatter([], [], c=color_map[c], label=str(c)) for c in cats]
+
+    anchor_y: float | None = None
+    if fill_has_legend:
+        fill_legend = ax.get_legend()
+        if fill_legend is not None:
+            # Reposition the fill legend to the top of the right margin so the two
+            # stack contiguously. Scanpy's default `bbox_to_anchor=(1, 0.5)` centers
+            # the fill legend vertically, which looks unbalanced once a second legend
+            # is added below.
+            fill_legend.set_bbox_to_anchor((1.02, 1.0))
+            if hasattr(fill_legend, "set_loc"):
+                fill_legend.set_loc("upper left")
+            ax.add_artist(fill_legend)  # keep fill legend on the axes
+            # Force layout so get_window_extent returns the real (not stale) bbox.
+            fig_params.fig.canvas.draw()
+            bbox_axes = fill_legend.get_window_extent().transformed(ax.transAxes.inverted())
+            anchor_y = float(bbox_axes.y0) - 0.02
+
+    # If the measured extent is degenerate (no fill legend, or its bbox sits at/below
+    # the axes' bottom edge), fall back to an opposite-anchor layout that still avoids
+    # overlap regardless of legend height.
+    if anchor_y is not None and anchor_y > 0:
+        loc = "upper left"
+        anchor = (1.02, anchor_y)
+    else:
+        loc = "lower left" if fill_has_legend else "center left"
+        anchor = (1.02, 0.0) if fill_has_legend else (1.0, 0.5)
+
+    # Auto-title only when a fill legend is also present (so the user can tell which is which).
+    # User-provided `outline_legend_title` always wins; pass empty string to suppress.
+    if legend_params.outline_legend_title is not None:
+        title = legend_params.outline_legend_title or None
+    else:
+        title = "outline" if fill_has_legend else None
+
+    ax.legend(
+        handles=outline_handles,
+        title=title,
+        frameon=False,
+        loc=loc,
+        bbox_to_anchor=anchor,
+        fontsize=legend_params.legend_fontsize,
+        ncol=(1 if len(outline_handles) <= 14 else 2 if len(outline_handles) <= 30 else 3),
     )
 
 
@@ -371,9 +587,13 @@ def _render_shapes(
     groups = render_params.groups
     table_layer = render_params.table_layer
 
+    _check_obs_var_shadow(sdata, element, col_for_color, render_params.table_name)
+
+    # filter_tables=False: join_spatialelement_table below overwrites the table,
+    # so the cs-level sparse copy is wasted work.
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=bool(render_params.table_name),
+        filter_tables=False,
     )
 
     table_name = render_params.table_name
@@ -382,26 +602,8 @@ def _render_shapes(
         shapes = sdata_filt[element]
     else:
         _check_instance_ids_overlap(sdata_filt, table_name, element, sdata_filt[element].index)
-
-        # Workaround for upstream spatialdata bug (scverse/spatialdata#1099):
-        # join_spatialelement_table calls table.obs.reset_index() which fails when
-        # the obs index name matches an existing column (e.g. "EntityID" in Merfish data).
-        # Temporarily drop the conflicting index name for the join, then restore it.
-        _obs = sdata[table_name].obs
-        _saved_index_name = _obs.index.name
-        if _saved_index_name is not None and _saved_index_name in _obs.columns:
-            _obs.index.name = None
-
-        try:
-            element_dict, joined_table = join_spatialelement_table(
-                sdata, spatial_element_names=element, table_name=table_name, how="inner"
-            )
-        finally:
-            _obs.index.name = _saved_index_name
-        sdata_filt[element] = shapes = element_dict[element]
-        joined_table.uns["spatialdata_attrs"]["region"] = (
-            joined_table.obs[joined_table.uns["spatialdata_attrs"]["region_key"]].unique().tolist()
-        )
+        joined_element, joined_table = _join_table_for_element(sdata, element, table_name)
+        sdata_filt[element] = shapes = joined_element
         sdata_filt[table_name] = table = joined_table
 
     shapes = sdata_filt[element]
@@ -427,6 +629,54 @@ def _render_shapes(
 
     values_are_categorical = color_source_vector is not None
 
+    col_for_outline_color = render_params.col_for_outline_color
+    outline_table_name = render_params.outline_table_name
+    outline_color_source_vector: pd.Series | None = None
+    outline_color_vector: Any = None
+    if col_for_outline_color is not None:
+        # When the outline column lives in a table that hasn't been joined yet
+        # (no fill table, or a different table than fill's), inner-join it onto
+        # the element so the lookup is aligned and the element row count matches
+        # the outline vector length.
+        if outline_table_name is not None and outline_table_name != table_name:
+            joined_outline_element, joined_outline_table = _join_table_for_element(
+                sdata_filt, element, outline_table_name
+            )
+            sdata_filt[outline_table_name] = joined_outline_table
+            # If no fill join happened, replace the element with the outline-joined version
+            # so the per-shape outline vector length matches the rendered shapes.
+            if table_name is None:
+                sdata_filt[element] = shapes = joined_outline_element
+        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=sdata_filt[element],
+            element_name=element,
+            value_to_plot=col_for_outline_color,
+            groups=None,
+            palette=render_params.palette,
+            na_color=render_params.cmap_params.na_color,
+            cmap_params=render_params.cmap_params,
+            table_name=outline_table_name,
+            table_layer=table_layer,
+            coordinate_system=coordinate_system,
+        )
+        # Cross-table case: if fill and outline tables differ and the outline table does
+        # not annotate every row of the (fill-joined) element, the vector length will
+        # differ from the rendered element row count. Warn + align so per-shape lookup stays
+        # well-defined.
+        _n_shapes = len(sdata_filt[element])
+        if outline_color_vector is not None and len(outline_color_vector) != _n_shapes:
+            logger.warning(
+                f"Outline column '{col_for_outline_color}' does not fully annotate "
+                f"element '{element}' under its fill-joined alignment "
+                f"({len(outline_color_vector)} of {_n_shapes} rows). Missing rows will use na_color."
+            )
+            outline_color_vector, outline_color_source_vector = _align_outline_vector_to_length(
+                outline_color_vector,
+                outline_color_source_vector,
+                _n_shapes,
+            )
+
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
     if groups is not None and color_source_vector is not None:
@@ -443,6 +693,10 @@ def _render_shapes(
         if len(shapes) == 0:
             return
         sdata_filt[element] = shapes
+        if outline_color_vector is not None:
+            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
+                outline_color_vector, outline_color_source_vector, keep
+            )
 
     # color_source_vector is None when the values aren't categorical
     if not values_are_categorical and render_params.transfunc is not None:
@@ -634,6 +888,8 @@ def _render_shapes(
             factor,
             x_min=x_ext[0],
             y_min=y_ext[0],
+            outline_color_vector=outline_color_vector,
+            outline_color_source_vector=outline_color_source_vector,
         )
 
         _cax = _render_ds_image(
@@ -650,7 +906,31 @@ def _render_shapes(
 
     elif method == "matplotlib":
         # render outlines separately to ensure they are always underneath the shape
-        if render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
+        if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
+            outline_rgba = _color_vector_to_rgba(
+                outline_color_vector,
+                outline_color_source_vector,
+                render_params.cmap_params,
+                n_rows=len(shapes),
+            )
+            _cax = _get_collection_shape(
+                shapes=shapes,
+                s=render_params.scale,
+                c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
+                render_params=render_params,
+                rasterized=sc_settings._vector_friendly,
+                cmap=None,
+                norm=None,
+                fill_alpha=0.0,
+                outline_alpha=render_params.outline_alpha[0],
+                outline_color=outline_rgba,
+                linewidth=render_params.outline_params.outer_outline_linewidth,
+                zorder=render_params.zorder,
+            )
+            ax.add_collection(_cax)
+            for path in _cax.get_paths():
+                path.vertices = trans.transform(path.vertices)
+        elif render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
@@ -746,6 +1026,10 @@ def _render_shapes(
         colorbar=render_params.colorbar,
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
+        outline_col_for_color=col_for_outline_color,
+        outline_color_source_vector=outline_color_source_vector,
+        outline_color_vector=outline_color_vector,
+        outline_cmap_params=render_params.cmap_params,
     )
 
 
@@ -766,6 +1050,8 @@ def _render_points(
     color = render_params.color.get_hex() if render_params.color else None
     groups = render_params.groups
     palette = render_params.palette
+
+    _check_obs_var_shadow(sdata, element, col_for_color, table_name)
 
     if isinstance(groups, str):
         groups = [groups]
@@ -946,7 +1232,10 @@ def _render_points(
 
     method = render_params.method
 
-    if method is None:
+    if render_params.density:
+        method = "datashader"
+        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, color_source_vector, color_vector)
+    elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
     _default_reduction: _DsReduction = "sum"
@@ -956,7 +1245,11 @@ def _render_points(
 
         # NOTE: s in matplotlib is in units of points**2
         # use dpi/100 as a factor for cases where dpi!=100
-        px = int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
+        # Under density, spreading would smear the count signal across pixels and
+        # distort apparent density at sparse edges, so disable it unconditionally.
+        px: int | None = (
+            None if render_params.density else int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
+        )
 
         # Apply transformations and materialize to pandas immediately so
         # datashader aggregates without dask scheduler overhead.  See #379.
@@ -1041,14 +1334,22 @@ def _render_points(
         ):
             color_vector = np.asarray([_hex_no_alpha(c) for c in color_vector])
 
+        shade_how = render_params.density_how if render_params.density else "linear"
+        # Plain density (no color column) must use the user-facing cmap as a sequential
+        # gradient over counts; the categorical path collapses to a single color and only
+        # modulates alpha, which renders as a flat hue regardless of density.
+        plain_density = render_params.density and col_for_color is None
+
         nan_shaded = None
-        if color_by_categorical or col_for_color is None:
+        if not plain_density and (color_by_categorical or col_for_color is None):
             shaded = _ds_shade_categorical(
                 agg,
                 color_key,
                 color_vector,
                 render_params.alpha,
                 spread_px=px,
+                how=shade_how,
+                density=render_params.density,
             )
         else:
             shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
@@ -1062,6 +1363,7 @@ def _render_points(
                 na_color_hex,
                 spread_px=px,
                 ds_reduction=render_params.ds_reduction,
+                how=shade_how,
             )
 
         _render_ds_image(
@@ -1179,6 +1481,34 @@ def _is_rgb_image(channel_coords: list[Any]) -> tuple[bool, bool]:
     if names == {"r", "g", "b"} and len(channel_coords) == 3:
         return True, False
     return False, False
+
+
+def _warn_if_rgb_channels_have_divergent_ranges(
+    rgb_cyx: np.ndarray,
+    ratio_threshold: float = 100.0,
+) -> None:
+    """Warn when r/g/b channel ranges differ enough that global normalization will crush some.
+
+    The RGB path normalizes all channels with one scale (dtype max or global min/max) to
+    preserve hue balance. If per-channel native ranges differ by orders of magnitude — a
+    common sign of fluorescence channels aliased to r/g/b names — the low-range channels
+    end up near zero. We can't tell intent from naming alone, so we warn and let the user
+    decide whether to rename channels or supply explicit cmaps.
+    """
+    ranges = (rgb_cyx.max(axis=(1, 2)) - rgb_cyx.min(axis=(1, 2))).astype(np.float64)
+    positive = ranges[np.isfinite(ranges) & (ranges > 0)]
+    if positive.size < 2:
+        return
+    if positive.max() / positive.min() > ratio_threshold:
+        logger.warning(
+            "RGB channels have per-channel ranges differing by more than %.0fx (%s). "
+            "Global RGB normalization will make low-range channels nearly invisible. "
+            "If these are fluorescence channels aliased to 'r','g','b', rename them or "
+            "pass an explicit per-channel 'cmap'/'palette' so each channel is normalized "
+            "independently.",
+            ratio_threshold,
+            ", ".join(f"{r:.3g}" for r in ranges.tolist()),
+        )
 
 
 def _collect_channel_legend_entries(
@@ -1436,7 +1766,9 @@ def _render_images(
                 rgb_layers.append(np.clip(ch_norm(img.sel(c=ch).values).astype(np.float64), 0, 1))
             stacked = np.stack(rgb_layers, axis=-1)
         else:
-            stacked = _normalize_dtype_to_float(np.moveaxis(img.sel(c=ordered).values, 0, -1))
+            rgb_cyx = img.sel(c=ordered).values
+            _warn_if_rgb_channels_have_divergent_ranges(rgb_cyx)
+            stacked = _normalize_dtype_to_float(np.moveaxis(rgb_cyx, 0, -1))
 
         show_kwargs: dict[str, Any] = {"zorder": render_params.zorder}
 
@@ -1714,9 +2046,20 @@ def _render_labels(
     groups = render_params.groups
     scale = render_params.scale
 
+    # When fill is a literal (no `color=` column) but outline points to an obs column,
+    # promote the outline table to be the "active" table for instance_id derivation so
+    # the outline color vector aligns to label IDs by the table's instance_key rather
+    # than by positional index.
+    if table_name is None and render_params.outline_table_name is not None:
+        table_name = render_params.outline_table_name
+
+    _check_obs_var_shadow(sdata, element, col_for_color, table_name)
+
+    # filter_tables=False: match_table_to_element below already filters per
+    # element, so the cs-level sparse copy is wasted work.
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
-        filter_tables=bool(table_name),
+        filter_tables=False,
     )
 
     label = sdata_filt.labels[element]
@@ -1795,19 +2138,55 @@ def _render_labels(
         coordinate_system=coordinate_system,
     )
 
+    # Outline color lookup must run BEFORE any masking so the returned vector aligns to
+    # the original instance_id. The same masks applied to fill below are then applied
+    # to the outline vectors to keep lengths consistent.
+    col_for_outline_color = render_params.col_for_outline_color
+    outline_table_name = render_params.outline_table_name
+    outline_color_source_vector: pd.Series | None = None
+    outline_color_vector: Any = None
+    if col_for_outline_color is not None:
+        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+            sdata=sdata_filt,
+            element=label,
+            element_name=element,
+            value_to_plot=col_for_outline_color,
+            groups=None,
+            palette=palette,
+            na_color=render_params.cmap_params.na_color,
+            cmap_params=render_params.cmap_params,
+            table_name=outline_table_name,
+            table_layer=table_layer,
+            render_type="labels",
+            coordinate_system=coordinate_system,
+        )
+        # Align to instance_id so the rasterize/groups masks (computed against
+        # instance_id) can be applied without IndexError when the outline table
+        # annotates a subset of the labels.
+        outline_color_vector, outline_color_source_vector = _align_outline_vector_to_length(
+            outline_color_vector,
+            outline_color_source_vector,
+            len(instance_id),
+        )
+
     # rasterize could have removed labels from label
     # only problematic if color is specified
-    if rasterize and col_for_color is not None:
+    if rasterize and (col_for_color is not None or col_for_outline_color is not None):
         labels_in_rasterized_image = np.unique(label.values)
         mask = np.isin(instance_id, labels_in_rasterized_image)
         instance_id = instance_id[mask]
-        color_vector = color_vector[mask]
-        if isinstance(color_vector.dtype, pd.CategoricalDtype):
-            color_vector = color_vector.remove_unused_categories()
-            assert color_source_vector is not None
-            color_source_vector = color_source_vector[mask]
-        else:
-            assert color_source_vector is None
+        if col_for_color is not None:
+            color_vector = color_vector[mask]
+            if isinstance(color_vector.dtype, pd.CategoricalDtype):
+                color_vector = color_vector.remove_unused_categories()
+                assert color_source_vector is not None  # noqa: S101
+                color_source_vector = color_source_vector[mask]
+            else:
+                assert color_source_vector is None  # noqa: S101
+        if outline_color_vector is not None:
+            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
+                outline_color_vector, outline_color_source_vector, mask
+            )
 
     _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
 
@@ -1833,6 +2212,10 @@ def _render_labels(
         color_vector = color_vector[keep_vec]
         if isinstance(color_vector.dtype, pd.CategoricalDtype):
             color_vector = color_vector.remove_unused_categories()
+        if outline_color_vector is not None:
+            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
+                outline_color_vector, outline_color_source_vector, keep_vec
+            )
 
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
@@ -1854,6 +2237,8 @@ def _render_labels(
             seg_boundaries=seg_boundaries,
             na_color=na_color,
             outline_color=outline_color,
+            outline_color_vector=outline_color_vector if seg_boundaries else None,
+            outline_color_source_vector=outline_color_source_vector if seg_boundaries else None,
         )
 
         cax = ax.imshow(
@@ -1927,6 +2312,14 @@ def _render_labels(
         is_continuous=col_for_color is not None and color_source_vector is None and not categorical,
     )
 
+    # Auto-title the fill legend only when an outline legend will also be drawn.
+    outline_legend_will_render = col_for_outline_color is not None and outline_color_source_vector is not None
+    if legend_params.legend_title is not None:
+        fill_title: str | None = legend_params.legend_title or None
+    elif outline_legend_will_render and color_source_vector is not None:
+        fill_title = "fill"
+    else:
+        fill_title = None
     _ = _decorate_axs(
         ax=ax,
         cax=cax,
@@ -1950,7 +2343,23 @@ def _render_labels(
             render_params.colorbar_params,
             col_for_color if isinstance(col_for_color, str) else None,
         ),
+        legend_title=fill_title,
     )
+
+    if col_for_outline_color is not None:
+        _decorate_outline(
+            ax=ax,
+            fig_params=fig_params,
+            outline_col=col_for_outline_color,
+            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_vector,
+            cmap_params=render_params.cmap_params,
+            colorbar_params=render_params.colorbar_params,
+            colorbar_requests=colorbar_requests,
+            legend_params=legend_params,
+            fill_has_legend=col_for_color is not None and color_source_vector is not None,
+            alpha=alpha_to_decorate_ax,
+        )
 
 
 def _normalise_to_range(values: np.ndarray, lo: float, hi: float) -> np.ndarray:
