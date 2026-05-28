@@ -293,29 +293,6 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             color="value",
         ).pl.show()
 
-    def test_plot_color_list_multi_panel(self, sdata_blobs: SpatialData):
-        # scanpy-style color=[...] -> one panel per key (#611)
-        sdata_blobs.shapes["blobs_polygons"]["value1"] = [1, 10, 1, 20, 1]
-        sdata_blobs.shapes["blobs_polygons"]["value2"] = [20, 1, 15, 1, 5]
-        sdata_blobs.pl.render_shapes("blobs_polygons", color=["value1", "value2"]).pl.show()
-
-    def test_plot_color_list_with_image_background(self, sdata_blobs: SpatialData):
-        # a scalar render call (the image) is shared across every color panel; ncols wraps the grid (#611)
-        sdata_blobs.shapes["blobs_polygons"]["value1"] = [1, 10, 1, 20, 1]
-        sdata_blobs.shapes["blobs_polygons"]["value2"] = [20, 1, 15, 1, 5]
-        sdata_blobs.shapes["blobs_polygons"]["value3"] = [5, 5, 20, 1, 10]
-        (
-            sdata_blobs.pl.render_images("blobs_image")
-            .pl.render_shapes("blobs_polygons", color=["value1", "value2", "value3"])
-            .pl.show(ncols=2)
-        )
-
-    def test_plot_color_list_categorical(self, sdata_blobs: SpatialData):
-        # each categorical panel gets its own legend (#611)
-        sdata_blobs.shapes["blobs_polygons"]["catA"] = pd.Categorical(["a", "b", "a", "b", "a"])
-        sdata_blobs.shapes["blobs_polygons"]["catB"] = pd.Categorical(["x", "x", "y", "z", "y"])
-        sdata_blobs.pl.render_shapes("blobs_polygons", color=["catA", "catB"]).pl.show()
-
     def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", scale=0.5).pl.show()
 
@@ -1633,6 +1610,32 @@ def test_render_shapes_color_list_panel_structure(sdata_blobs: SpatialData):
     assert [ax.get_title() for ax in axs] == ["scoreA", "scoreB", "scoreC"]
     # 3 panels at ncols=2 -> a 2x2 grid
     assert axs[0].get_subplotspec().get_gridspec().get_geometry() == (2, 2)
+    plt.close("all")
+
+
+def test_render_shapes_color_list_per_panel_legends(sdata_blobs: SpatialData):
+    """Each categorical panel gets its own legend with only its own categories (#611)."""
+    gdf = sdata_blobs.shapes["blobs_circles"]  # 5 circles
+    gdf["catA"] = pd.Categorical(["a", "b", "a", "b", "a"])
+    gdf["catB"] = pd.Categorical(["x", "y", "z", "x", "y"])
+    axs = sdata_blobs.pl.render_shapes("blobs_circles", color=["catA", "catB"]).pl.show(return_ax=True)
+    legends = [ax.get_legend() for ax in axs]
+    assert all(leg is not None for leg in legends)
+    assert {t.get_text() for t in legends[0].get_texts()} == {"a", "b"}
+    assert {t.get_text() for t in legends[1].get_texts()} == {"x", "y", "z"}
+    plt.close("all")
+
+
+def test_render_shapes_color_list_shares_scalar_background(sdata_blobs: SpatialData):
+    """A scalar-colored render call is drawn into every color panel as a shared background (#611)."""
+    _add_score_columns(sdata_blobs)
+    axs = (
+        sdata_blobs.pl.render_images("blobs_image")
+        .pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"])
+        .pl.show(return_ax=True)
+    )
+    assert len(axs) == 2
+    assert all(len(ax.get_images()) >= 1 for ax in axs)
     plt.close("all")
 
 

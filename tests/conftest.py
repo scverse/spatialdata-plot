@@ -503,27 +503,18 @@ class PlotTester(ABC):  # noqa: B024
 
         width, height = CANVAS_WIDTH, CANVAS_HEIGHT  # base dimensions; actual PNG may grow/shrink
         fig = plt.gcf()
+        fig.set_size_inches(width / DPI, height / DPI)
+        fig.set_dpi(DPI)
 
-        # Count the real panels (gridspec-placed axes); colorbar/legend inset axes have no
-        # subplotspec. For single-panel figures we normalise size + layout as before. For
-        # multi-panel figures we keep the figure's own size and spacing, otherwise forcing the
-        # whole grid into a single-panel canvas squeezes each panel's colorbar/legend into the
-        # neighbouring panel. The small thumbnail is produced purely by the resize step below.
-        n_panels = sum(1 for sub_ax in fig.axes if sub_ax.get_subplotspec() is not None)
-
-        if n_panels <= 1:
-            fig.set_size_inches(width / DPI, height / DPI)
-            fig.set_dpi(DPI)
-
-            # Try to get a reasonable layout first (helps with axes/labels)
-            if not fig.get_constrained_layout():
+        # Try to get a reasonable layout first (helps with axes/labels)
+        if not fig.get_constrained_layout():
+            try:
+                fig.set_layout_engine("constrained")
+            except (ValueError, RuntimeError):
                 try:
-                    fig.set_layout_engine("constrained")
+                    fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
                 except (ValueError, RuntimeError):
-                    try:
-                        fig.tight_layout(pad=2.0, rect=[0.02, 0.02, 0.98, 0.98])
-                    except (ValueError, RuntimeError):
-                        fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+                    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
         plt.figure(fig.number)  # ensure this figure is current
 
