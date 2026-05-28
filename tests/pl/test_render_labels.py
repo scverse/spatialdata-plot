@@ -139,6 +139,10 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_can_color_labels_by_continuous_variable(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show()
 
+    def test_plot_color_list_multi_panel(self, sdata_blobs: SpatialData):
+        # scanpy-style color=[...] -> one panel per key (#611)
+        sdata_blobs.pl.render_labels("blobs_labels", color=["channel_0_sum", "channel_1_sum"]).pl.show()
+
     def test_plot_can_color_labels_by_categorical_variable(self, sdata_blobs: SpatialData):
         max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
         max_col = pd.Categorical(max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True)

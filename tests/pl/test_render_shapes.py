@@ -293,6 +293,29 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             color="value",
         ).pl.show()
 
+    def test_plot_color_list_multi_panel(self, sdata_blobs: SpatialData):
+        # scanpy-style color=[...] -> one panel per key (#611)
+        sdata_blobs.shapes["blobs_polygons"]["value1"] = [1, 10, 1, 20, 1]
+        sdata_blobs.shapes["blobs_polygons"]["value2"] = [20, 1, 15, 1, 5]
+        sdata_blobs.pl.render_shapes("blobs_polygons", color=["value1", "value2"]).pl.show()
+
+    def test_plot_color_list_with_image_background(self, sdata_blobs: SpatialData):
+        # a scalar render call (the image) is shared across every color panel; ncols wraps the grid (#611)
+        sdata_blobs.shapes["blobs_polygons"]["value1"] = [1, 10, 1, 20, 1]
+        sdata_blobs.shapes["blobs_polygons"]["value2"] = [20, 1, 15, 1, 5]
+        sdata_blobs.shapes["blobs_polygons"]["value3"] = [5, 5, 20, 1, 10]
+        (
+            sdata_blobs.pl.render_images("blobs_image")
+            .pl.render_shapes("blobs_polygons", color=["value1", "value2", "value3"])
+            .pl.show(ncols=2)
+        )
+
+    def test_plot_color_list_categorical(self, sdata_blobs: SpatialData):
+        # each categorical panel gets its own legend (#611)
+        sdata_blobs.shapes["blobs_polygons"]["catA"] = pd.Categorical(["a", "b", "a", "b", "a"])
+        sdata_blobs.shapes["blobs_polygons"]["catB"] = pd.Categorical(["x", "x", "y", "z", "y"])
+        sdata_blobs.pl.render_shapes("blobs_polygons", color=["catA", "catB"]).pl.show()
+
     def test_plot_can_scale_shapes(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles", scale=0.5).pl.show()
 
@@ -1601,91 +1624,48 @@ def _add_score_columns(sdata: SpatialData, element: str = "blobs_circles") -> Sp
     return sdata
 
 
-def test_render_shapes_color_list_creates_one_panel_per_key(sdata_blobs: SpatialData):
-    """A list of color keys produces one panel per key, titled by the key (#611)."""
-    _add_score_columns(sdata_blobs)
-    axs = sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB", "scoreC"]).pl.show(return_ax=True)
-    assert isinstance(axs, list)
-    assert len(axs) == 3
-    assert [ax.get_title() for ax in axs] == ["scoreA", "scoreB", "scoreC"]
-    plt.close("all")
-
-
-def test_render_shapes_color_list_respects_ncols(sdata_blobs: SpatialData):
-    """ncols controls the multi-panel grid width (#611)."""
+def test_render_shapes_color_list_panel_structure(sdata_blobs: SpatialData):
+    """A color list yields one panel per key, titled by the key and wrapped by ncols (#611)."""
     _add_score_columns(sdata_blobs)
     axs = sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB", "scoreC"]).pl.show(
         ncols=2, return_ax=True
     )
-    assert len(axs) == 3
-    # 3 panels at ncols=2 -> 2 rows; check the gridspec geometry of the first panel.
-    nrows, ncols = axs[0].get_subplotspec().get_gridspec().get_geometry()
-    assert (nrows, ncols) == (2, 2)
+    assert [ax.get_title() for ax in axs] == ["scoreA", "scoreB", "scoreC"]
+    # 3 panels at ncols=2 -> a 2x2 grid
+    assert axs[0].get_subplotspec().get_gridspec().get_geometry() == (2, 2)
     plt.close("all")
 
 
-def test_render_shapes_color_list_shares_scalar_background(sdata_blobs: SpatialData):
-    """A scalar-colored render call is drawn into every color panel as a shared background (#611)."""
+@pytest.mark.parametrize("color", [["scoreA"], [1.0, 0.0, 0.0]], ids=["length-1-key-list", "rgb-float-list"])
+def test_render_shapes_color_scalar_forms_stay_single_panel(sdata_blobs: SpatialData, color):
+    """A length-1 key list normalizes to a scalar, and an RGB(A) float list stays one color (#611)."""
     _add_score_columns(sdata_blobs)
-    axs = (
-        sdata_blobs.pl.render_images("blobs_image")
-        .pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"])
-        .pl.show(return_ax=True)
-    )
-    assert len(axs) == 2
-    # the shared image is present in both panels
-    assert all(len(ax.get_images()) >= 1 for ax in axs)
-    plt.close("all")
-
-
-def test_render_shapes_single_element_list_is_scalar(sdata_blobs: SpatialData):
-    """A length-1 list normalizes to a scalar color -> single panel (#611)."""
-    _add_score_columns(sdata_blobs)
-    ax = sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA"]).pl.show(return_ax=True)
+    ax = sdata_blobs.pl.render_shapes("blobs_circles", color=color).pl.show(return_ax=True)
     assert isinstance(ax, plt.Axes)
     plt.close("all")
 
 
-def test_render_shapes_rgba_list_stays_single_color(sdata_blobs: SpatialData):
-    """A list of floats is still a single RGB(A) color, not multi-panel (#611)."""
-    ax = sdata_blobs.pl.render_shapes("blobs_circles", color=[1.0, 0.0, 0.0]).pl.show(return_ax=True)
-    assert isinstance(ax, plt.Axes)
-    plt.close("all")
-
-
-def test_render_shapes_empty_color_list_raises(sdata_blobs: SpatialData):
-    with pytest.raises(ValueError, match="empty list"):
-        sdata_blobs.pl.render_shapes("blobs_circles", color=[])
-
-
-def test_render_shapes_duplicate_color_keys_raise(sdata_blobs: SpatialData):
-    _add_score_columns(sdata_blobs)
-    with pytest.raises(ValueError, match="duplicate keys"):
-        sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "scoreA"])
-
-
-def test_render_shapes_mixed_color_list_raises(sdata_blobs: SpatialData):
-    _add_score_columns(sdata_blobs)
-    with pytest.raises(ValueError, match="all column/key names"):
-        sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", 0.5])
-
-
-def test_render_shapes_bad_color_keys_aggregated_error(sdata_blobs: SpatialData):
-    """Invalid keys are reported together, before any drawing (#611)."""
-    _add_score_columns(sdata_blobs)
-    with pytest.raises(ValueError, match="Invalid color key"):
-        sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "does_not_exist"])
-
-
-def test_render_shapes_two_list_calls_raise(sdata_blobs: SpatialData):
-    """Only one render_* call per figure may use a color list (#611)."""
-    _add_score_columns(sdata_blobs)
-    with pytest.raises(ValueError, match="Only one `render_\\*` call"):
+@pytest.mark.parametrize(
+    ("make_chain", "match"),
+    [
+        (lambda s: s.pl.render_shapes("blobs_circles", color=[]), "empty list"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "scoreA"]), "duplicate keys"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", 0.5]), "all column/key names"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "nope"]), "Invalid color key"),
         (
-            sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"]).pl.render_shapes(
-                "blobs_circles", color=["scoreA", "scoreB"]
-            )
-        )
+            lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"]).pl.render_shapes(
+                "blobs_circles", color=["scoreA", "scoreC"]
+            ),
+            "Only one `render_\\*` call",
+        ),
+    ],
+    ids=["empty", "duplicate", "mixed", "bad-key", "two-lists"],
+)
+def test_render_shapes_color_list_invalid_raises(sdata_blobs: SpatialData, make_chain, match):
+    """All multi-panel color misuse raises a clear ValueError before any drawing (#611)."""
+    _add_score_columns(sdata_blobs)
+    with pytest.raises(ValueError, match=match):
+        make_chain(sdata_blobs)
 
 
 def test_render_shapes_color_list_branches_are_independent(sdata_blobs: SpatialData):
