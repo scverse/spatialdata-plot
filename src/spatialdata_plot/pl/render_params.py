@@ -219,6 +219,9 @@ class ChannelLegendEntry:
 CBAR_DEFAULT_LOCATION = "right"
 CBAR_DEFAULT_FRACTION = 0.075
 CBAR_DEFAULT_PAD = 0.015
+# Absolute pad (inches) between stacked colorbars on the same side, wide enough to clear the
+# inner colorbar's tick labels so they don't overlap the next colorbar.
+CBAR_STACK_PAD_INCHES = 0.5
 
 
 @dataclass

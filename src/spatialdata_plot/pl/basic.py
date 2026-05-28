@@ -19,10 +19,11 @@ from anndata import AnnData
 from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
-from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1.axes_divider import AxesDivider
+from mpl_toolkits.axes_grid1.axes_size import Fixed
 from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from spatialdata.transformations.operations import get_transformation
@@ -43,6 +44,7 @@ from spatialdata_plot.pl.render_params import (
     CBAR_DEFAULT_FRACTION,
     CBAR_DEFAULT_LOCATION,
     CBAR_DEFAULT_PAD,
+    CBAR_STACK_PAD_INCHES,
     ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
@@ -1519,13 +1521,7 @@ class PlotAccessor:
             outline_legend_title=outline_legend_title,
         )
 
-        def _draw_colorbar(
-            spec: ColorbarSpec,
-            fig: Figure,
-            renderer: RendererBase,
-            base_offsets_axes: dict[str, float],
-            trackers_axes: dict[str, float],
-        ) -> None:
+        def _draw_colorbar(spec: ColorbarSpec, fig: Figure, divider: AxesDivider, side_counts: dict[str, int]) -> None:
             norm = spec.mappable.norm
             if isinstance(norm, LogNorm):
                 vmin, vmax = norm.vmin, norm.vmax
@@ -1551,31 +1547,28 @@ class PlotAccessor:
             location = cast(str, layout.get("location", base_layout["location"]))
             if location not in {"left", "right", "top", "bottom"}:
                 location = CBAR_DEFAULT_LOCATION
-            default_orientation = "vertical" if location in {"right", "left"} else "horizontal"
-            cbar_kwargs.setdefault("orientation", default_orientation)
+            orientation = "vertical" if location in {"right", "left"} else "horizontal"
+            cbar_kwargs.pop("orientation", None)
 
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-            if location in {"left", "right"}:
-                pad_axes = pad + trackers_axes[location]
-                x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
-                bbox = (float(x0), 0.0, float(fraction), 1.0)
-            else:
-                pad_axes = pad + trackers_axes[location]
-                y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
-                bbox = (0.0, float(y0), 1.0, float(fraction))
-            cax = inset_axes(
-                spec.ax,
-                width="100%",
-                height="100%",
-                loc="center",
-                bbox_to_anchor=bbox,
-                bbox_transform=spec.ax.transAxes,
-                borderpad=0.0,
+            # Append the colorbar axes through the panel's shared divider. This steals space from the
+            # panel (so the colorbar matches the equal-aspect plot's extent) and keeps it inside the
+            # panel's grid cell, never overflowing into a neighbouring panel. Repeated appends on the
+            # same divider stack additional colorbars on that side; the first sits next to the plot
+            # with the requested (relative) pad, while each subsequent one uses an absolute pad wide
+            # enough to clear the previous colorbar's tick labels instead of overlapping them.
+            n_on_side = side_counts.get(location, 0)
+            pad_arg: str | Fixed = Fixed(CBAR_STACK_PAD_INCHES) if n_on_side else f"{max(pad, 0.0) * 100}%"
+            cax = divider.append_axes(
+                location,
+                size=f"{fraction * 100}%",
+                pad=pad_arg,
+                axes_class=Axes,
             )
-
-            cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
+            side_counts[location] = n_on_side + 1
+            cb = fig.colorbar(spec.mappable, cax=cax, orientation=orientation, **cbar_kwargs)
             if location == "left":
                 cb.ax.yaxis.set_ticks_position("left")
                 cb.ax.yaxis.set_label_position("left")
@@ -1599,15 +1592,6 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
-            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
-            if location == "left":
-                trackers_axes["left"] = pad_axes + bbox_axes.width
-            elif location == "right":
-                trackers_axes["right"] = pad_axes + bbox_axes.width
-            elif location == "bottom":
-                trackers_axes["bottom"] = pad_axes + bbox_axes.height
-            elif location == "top":
-                trackers_axes["top"] = pad_axes + bbox_axes.height
 
         # go through tree
 
@@ -1795,8 +1779,6 @@ class PlotAccessor:
 
         if pending_colorbars and fig_params.fig is not None:
             fig = fig_params.fig
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
             for axis, requests in pending_colorbars:
                 unique_specs: list[ColorbarSpec] = []
                 seen_mappables: set[int] = set()
@@ -1806,16 +1788,11 @@ class PlotAccessor:
                         continue
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
-                tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
-                base_offsets_axes = {
-                    "left": max(0.0, -tight_bbox.x0),
-                    "right": max(0.0, tight_bbox.x1 - 1),
-                    "bottom": max(0.0, -tight_bbox.y0),
-                    "top": max(0.0, tight_bbox.y1 - 1),
-                }
-                trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
+                # One divider per panel so multiple colorbars on the same panel stack via the divider.
+                divider = make_axes_locatable(axis)
+                side_counts: dict[str, int] = {}
                 for spec in unique_specs:
-                    _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes)
+                    _draw_colorbar(spec, fig, divider, side_counts)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
