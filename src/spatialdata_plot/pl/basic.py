@@ -1571,7 +1571,7 @@ class PlotAccessor:
             pad_in = CBAR_STACK_PAD_INCHES if n_on_side else clearance.get(location, 0.0) + max(pad, 0.0) * ref_in
             cax = divider.append_axes(
                 location,
-                size=Fixed(max(fraction, 0.0) * ref_in),
+                size=f"{max(fraction, 0.0) * 100}%",
                 pad=Fixed(pad_in),
                 axes_class=Axes,
             )
