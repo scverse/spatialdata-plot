@@ -86,6 +86,10 @@ from spatialdata_plot.pl.utils import (
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
 ColorLike = tuple[float, ...] | list[float] | str
 
+# Below this clearance (inches), a colorbar side is treated as having no axis decorations to clear,
+# so the colorbar keeps its relative pad (matching the historical placement) instead of an absolute one.
+_CBAR_DECORATION_EPS_INCHES = 0.05
+
 
 @register_spatial_data_accessor("pl")
 class PlotAccessor:
@@ -1566,13 +1570,23 @@ class PlotAccessor:
             # side is padded past the panel's own decorations (ticks/labels/title) plus the requested
             # pad; each subsequent one uses an absolute pad wide enough to clear the previous
             # colorbar's tick labels instead of overlapping them.
+            # Sides with no decorations to clear (typically "right") keep the relative pad, which
+            # matches the historical placement; sides whose ticks/labels/title must be cleared
+            # (left/top/bottom), and stacked colorbars, use an absolute pad in inches.
             n_on_side = side_counts.get(location, 0)
             ref_in = axes_size_in[0] if location in {"left", "right"} else axes_size_in[1]
-            pad_in = CBAR_STACK_PAD_INCHES if n_on_side else clearance.get(location, 0.0) + max(pad, 0.0) * ref_in
+            side_clearance = clearance.get(location, 0.0)
+            pad_spec: str | Fixed
+            if n_on_side:
+                pad_spec = Fixed(CBAR_STACK_PAD_INCHES)
+            elif side_clearance > _CBAR_DECORATION_EPS_INCHES:
+                pad_spec = Fixed(side_clearance + max(pad, 0.0) * ref_in)
+            else:
+                pad_spec = f"{max(pad, 0.0) * 100}%"
             cax = divider.append_axes(
                 location,
                 size=f"{max(fraction, 0.0) * 100}%",
-                pad=Fixed(pad_in),
+                pad=pad_spec,
                 axes_class=Axes,
             )
             side_counts[location] = n_on_side + 1
