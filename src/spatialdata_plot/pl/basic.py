@@ -1521,7 +1521,14 @@ class PlotAccessor:
             outline_legend_title=outline_legend_title,
         )
 
-        def _draw_colorbar(spec: ColorbarSpec, fig: Figure, divider: AxesDivider, side_counts: dict[str, int]) -> None:
+        def _draw_colorbar(
+            spec: ColorbarSpec,
+            fig: Figure,
+            divider: AxesDivider,
+            side_counts: dict[str, int],
+            clearance: dict[str, float],
+            axes_size_in: tuple[float, float],
+        ) -> None:
             norm = spec.mappable.norm
             if isinstance(norm, LogNorm):
                 vmin, vmax = norm.vmin, norm.vmax
@@ -1555,16 +1562,17 @@ class PlotAccessor:
 
             # Append the colorbar axes through the panel's shared divider. This steals space from the
             # panel (so the colorbar matches the equal-aspect plot's extent) and keeps it inside the
-            # panel's grid cell, never overflowing into a neighbouring panel. Repeated appends on the
-            # same divider stack additional colorbars on that side; the first sits next to the plot
-            # with the requested (relative) pad, while each subsequent one uses an absolute pad wide
-            # enough to clear the previous colorbar's tick labels instead of overlapping them.
+            # panel's grid cell, never overflowing into a neighbouring panel. The first colorbar on a
+            # side is padded past the panel's own decorations (ticks/labels/title) plus the requested
+            # pad; each subsequent one uses an absolute pad wide enough to clear the previous
+            # colorbar's tick labels instead of overlapping them.
             n_on_side = side_counts.get(location, 0)
-            pad_arg: str | Fixed = Fixed(CBAR_STACK_PAD_INCHES) if n_on_side else f"{max(pad, 0.0) * 100}%"
+            ref_in = axes_size_in[0] if location in {"left", "right"} else axes_size_in[1]
+            pad_in = CBAR_STACK_PAD_INCHES if n_on_side else clearance.get(location, 0.0) + max(pad, 0.0) * ref_in
             cax = divider.append_axes(
                 location,
-                size=f"{fraction * 100}%",
-                pad=pad_arg,
+                size=Fixed(max(fraction, 0.0) * ref_in),
+                pad=Fixed(pad_in),
                 axes_class=Axes,
             )
             side_counts[location] = n_on_side + 1
@@ -1779,6 +1787,9 @@ class PlotAccessor:
 
         if pending_colorbars and fig_params.fig is not None:
             fig = fig_params.fig
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            dpi = fig.get_dpi()
             for axis, requests in pending_colorbars:
                 unique_specs: list[ColorbarSpec] = []
                 seen_mappables: set[int] = set()
@@ -1788,11 +1799,24 @@ class PlotAccessor:
                         continue
                     seen_mappables.add(mappable_id)
                     unique_specs.append(spec)
+                # Clearance (inches) that the panel's own ticks, tick labels and title extend beyond
+                # the axes box on each side. The first colorbar on a side is padded past this so it
+                # clears those decorations instead of overlapping them (the divider only knows about
+                # the axes box, not its decorations).
+                box = axis.get_window_extent(renderer)
+                tight = axis.get_tightbbox(renderer)
+                clearance = {
+                    "left": max(0.0, (box.x0 - tight.x0) / dpi),
+                    "right": max(0.0, (tight.x1 - box.x1) / dpi),
+                    "bottom": max(0.0, (box.y0 - tight.y0) / dpi),
+                    "top": max(0.0, (tight.y1 - box.y1) / dpi),
+                }
+                axes_size_in = (box.width / dpi, box.height / dpi)
                 # One divider per panel so multiple colorbars on the same panel stack via the divider.
                 divider = make_axes_locatable(axis)
                 side_counts: dict[str, int] = {}
                 for spec in unique_specs:
-                    _draw_colorbar(spec, fig, divider, side_counts)
+                    _draw_colorbar(spec, fig, divider, side_counts, clearance, axes_size_in)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
