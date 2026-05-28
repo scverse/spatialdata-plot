@@ -3031,6 +3031,78 @@ def _type_check_params(param_dict: dict[str, Any], element_type: str) -> dict[st
     return param_dict
 
 
+def _resolve_color_panels(color: Any) -> tuple[Any, list[str] | None]:
+    """Split a ``color`` argument into a scalar color and an optional multi-panel key list.
+
+    Returns ``(scalar_color, panel_keys)``. When ``panel_keys`` is ``None`` the call is a
+    normal single-color render and ``scalar_color`` is the (unchanged) color to use. When
+    ``panel_keys`` is a list, the render must be expanded into one panel per key.
+
+    A list of all-strings is treated as multi-panel keys; a length-1 list normalizes to a
+    scalar color; an all-numeric list stays a single RGB(A) color. Empty, duplicate, or
+    mixed str/number lists raise ``ValueError``.
+    """
+    if not isinstance(color, list):
+        return color, None
+    if all(isinstance(c, str) for c in color):
+        if len(color) == 0:
+            raise ValueError("`color` was given an empty list; provide at least one column/key name.")
+        if len(color) != len(set(color)):
+            dups = sorted({c for c in color if color.count(c) > 1})
+            raise ValueError(f"`color` contains duplicate keys {dups}; each multi-panel key must be unique.")
+        if len(color) == 1:
+            return color[0], None
+        return None, list(color)
+    if any(isinstance(c, str) for c in color):
+        raise ValueError(
+            "`color` list must be either all column/key names (str) for a multi-panel plot, "
+            "or 3-4 floats for a single RGB(A) color, not a mix of both."
+        )
+    return color, None
+
+
+def _expand_color_panels(
+    sdata: SpatialData,
+    color: Any,
+    render_fn_name: str,
+    validate: Callable[[Any], dict[str, Any]],
+) -> list[tuple[str | None, dict[str, Any]]]:
+    """Resolve ``color`` into validated per-panel render params for the multi-panel ``color=[...]`` feature.
+
+    ``validate`` is a callback that runs the render function's own parameter validation for a single
+    color value and returns its per-element ``params_dict``. Returns a list of ``(panel_key, params_dict)``
+    pairs: a single ``(None, params_dict)`` for the scalar case, or one entry per key for a key list.
+
+    Enforces that only one ``render_*`` call per figure may pass a color list, and aggregates per-key
+    validation errors into a single message. Used by ``render_shapes`` and ``render_labels``.
+    """
+    color, panel_keys = _resolve_color_panels(color)
+    if panel_keys is not None and any(
+        getattr(params, "panel_key", None) is not None for params in getattr(sdata, "plotting_tree", {}).values()
+    ):
+        raise ValueError(
+            "Only one `render_*` call may use a list of color keys per figure. Other chained render "
+            "calls must use a single (scalar) color; they are drawn into every panel as a shared layer."
+        )
+
+    color_specs = [(None, color)] if panel_keys is None else [(key, key) for key in panel_keys]
+    panel_param_dicts: list[tuple[str | None, dict[str, Any]]] = []
+    key_errors: dict[str, str] = {}
+    for panel_key, color_value in color_specs:
+        try:
+            params_dict = validate(color_value)
+        except (KeyError, ValueError) as e:
+            if panel_keys is None:
+                raise
+            key_errors[panel_key] = str(e)  # type: ignore[index]
+            continue
+        panel_param_dicts.append((panel_key, params_dict))
+    if key_errors:
+        details = "\n".join(f"  - {key!r}: {msg}" for key, msg in key_errors.items())
+        raise ValueError(f"Invalid color key(s) for multi-panel `{render_fn_name}`:\n{details}")
+    return panel_param_dicts
+
+
 def _validate_label_render_params(
     sdata: sd.SpatialData,
     element: str | None,

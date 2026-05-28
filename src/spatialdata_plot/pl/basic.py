@@ -60,6 +60,7 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _RENDER_CMD_TO_CS_FLAG,
     _draw_scalebar,
+    _expand_color_panels,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_valid_cs,
@@ -169,7 +170,12 @@ class PlotAccessor:
             shapes=self._sdata.shapes if shapes is None else shapes,
             tables=self._sdata.tables if tables is None else tables,
         )
-        sdata.plotting_tree = self._sdata.plotting_tree if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+        # Shallow-copy the plotting tree so appending a render step to one chain does not mutate a
+        # sibling chain branched off the same object (the RenderParams values stay shared; `show()`
+        # deep-copies them before use).
+        sdata.plotting_tree = (
+            OrderedDict(self._sdata.plotting_tree) if hasattr(self._sdata, "plotting_tree") else OrderedDict()
+        )
         sdata._source_sdata = getattr(self._sdata, "_source_sdata", self._sdata)
 
         return sdata
@@ -309,7 +315,7 @@ class PlotAccessor:
     def render_shapes(
         self,
         element: str | None = None,
-        color: ColorLike | None = None,
+        color: ColorLike | list[str] | None = None,
         *,
         fill_alpha: float | int | None = None,
         groups: list[str] | str | None = None,
@@ -345,7 +351,7 @@ class PlotAccessor:
         element : str | None, optional
             The name of the shapes element to render. If `None`, all shapes elements in the `SpatialData` object will be
             used.
-        color : ColorLike | None, optional
+        color : ColorLike | list[str] | None, optional
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value is
             indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
@@ -353,6 +359,11 @@ class PlotAccessor:
             `element` is `None`, if possible the color will be broadcasted to all elements. For this, the table in which
             the color key is found must annotate the respective element (region must be set to the specific element). If
             the color column is found in multiple locations, please provide the table_name to be used for the elements.
+            A **list of column/key names** (e.g. ``["gene1", "gene2"]``) produces one panel per key, like
+            ``scanpy``'s ``color=[...]``. ``palette``/``cmap``/``norm``/``groups`` are applied to every panel,
+            each panel auto-scales independently, and ``show(ncols=...)`` controls the grid width. Multi-panel
+            color requires a single coordinate system and only one ``render_*`` call in the chain may pass a list
+            (other calls use a scalar color and are drawn into every panel as a shared background).
         fill_alpha : float | int | None, optional
             Alpha value for the fill of shapes. By default, it is set to 1.0 or, if a color is given that implies an
             alpha, that value is used for `fill_alpha`. If an alpha channel is present in a cmap passed by the user,
@@ -441,68 +452,76 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        params_dict = _validate_shape_render_params(
+        panel_param_dicts = _expand_color_panels(
             self._sdata,
-            element=element,
-            fill_alpha=fill_alpha,
-            groups=groups,
-            palette=palette,
-            color=color,
-            na_color=na_color,
-            outline_alpha=outline_alpha,
-            outline_color=outline_color,
-            outline_width=outline_width,
-            cmap=cmap,
-            norm=norm,
-            scale=scale,
-            table_name=table_name,
-            table_layer=table_layer,
-            shape=shape,
-            method=method,
-            ds_reduction=datashader_reduction,
-            colorbar=colorbar,
-            colorbar_params=colorbar_params,
-            gene_symbols=gene_symbols,
+            color,
+            "render_shapes",
+            lambda color_value: _validate_shape_render_params(
+                self._sdata,
+                element=element,
+                fill_alpha=fill_alpha,
+                groups=groups,
+                palette=palette,
+                color=color_value,
+                na_color=na_color,
+                outline_alpha=outline_alpha,
+                outline_color=outline_color,
+                outline_width=outline_width,
+                cmap=cmap,
+                norm=norm,
+                scale=scale,
+                table_name=table_name,
+                table_layer=table_layer,
+                shape=shape,
+                method=method,
+                ds_reduction=datashader_reduction,
+                colorbar=colorbar,
+                colorbar_params=colorbar_params,
+                gene_symbols=gene_symbols,
+            ),
         )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
+
         n_steps = len(sdata.plotting_tree.keys())
-        for element, param_values in params_dict.items():
-            final_outline_alpha, outline_params = _set_outline(
-                params_dict[element]["outline_alpha"],
-                params_dict[element]["outline_width"],
-                params_dict[element]["outline_color"],
-            )
-            cmap_params = _prepare_cmap_norm(
-                cmap=cmap,
-                norm=norm,
-                na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
-            )
-            sdata.plotting_tree[f"{n_steps + 1}_render_shapes"] = ShapesRenderParams(
-                element=element,
-                color=param_values["color"],
-                col_for_color=param_values["col_for_color"],
-                col_for_outline_color=param_values["col_for_outline_color"],
-                outline_table_name=param_values["outline_table_name"],
-                groups=param_values["groups"],
-                scale=param_values["scale"],
-                outline_params=outline_params,
-                cmap_params=cmap_params,
-                palette=param_values["palette"],
-                outline_alpha=final_outline_alpha,
-                fill_alpha=param_values["fill_alpha"],
-                transfunc=transfunc,
-                table_name=param_values["table_name"],
-                table_layer=param_values["table_layer"],
-                shape=param_values["shape"],
-                zorder=n_steps,
-                method=param_values["method"],
-                ds_reduction=param_values["ds_reduction"],
-                colorbar=param_values["colorbar"],
-                colorbar_params=param_values["colorbar_params"],
-            )
-            n_steps += 1
+        for panel_key, params_dict in panel_param_dicts:
+            for element, param_values in params_dict.items():
+                final_outline_alpha, outline_params = _set_outline(
+                    params_dict[element]["outline_alpha"],
+                    params_dict[element]["outline_width"],
+                    params_dict[element]["outline_color"],
+                )
+                cmap_params = _prepare_cmap_norm(
+                    cmap=cmap,
+                    norm=norm,
+                    na_color=params_dict[element]["na_color"],  # type: ignore[arg-type]
+                )
+                sdata.plotting_tree[f"{n_steps + 1}_render_shapes"] = ShapesRenderParams(
+                    element=element,
+                    color=param_values["color"],
+                    col_for_color=param_values["col_for_color"],
+                    col_for_outline_color=param_values["col_for_outline_color"],
+                    outline_table_name=param_values["outline_table_name"],
+                    groups=param_values["groups"],
+                    scale=param_values["scale"],
+                    outline_params=outline_params,
+                    cmap_params=cmap_params,
+                    palette=param_values["palette"],
+                    outline_alpha=final_outline_alpha,
+                    fill_alpha=param_values["fill_alpha"],
+                    transfunc=transfunc,
+                    table_name=param_values["table_name"],
+                    table_layer=param_values["table_layer"],
+                    shape=param_values["shape"],
+                    zorder=n_steps,
+                    method=param_values["method"],
+                    ds_reduction=param_values["ds_reduction"],
+                    colorbar=param_values["colorbar"],
+                    colorbar_params=param_values["colorbar_params"],
+                    panel_key=panel_key,
+                )
+                n_steps += 1
 
         return sdata
 
@@ -920,7 +939,7 @@ class PlotAccessor:
     def render_labels(
         self,
         element: str | None = None,
-        color: ColorLike | None = None,
+        color: ColorLike | list[str] | None = None,
         *,
         groups: list[str] | str | None = None,
         contour_px: int | None = 3,
@@ -953,13 +972,18 @@ class PlotAccessor:
         element : str | None
             The name of the labels element to render. If `None`, all label
             elements in the `SpatialData` object will be used and all parameters will be broadcasted if possible.
-        color : ColorLike | None
+        color : ColorLike | list[str] | None
             Can either be color-like (name of a color as string, e.g. "red", hex representation, e.g. "#000000" or
             "#000000ff", or an RGB(A) array as a tuple or list containing 3-4 floats within [0, 1]. If an alpha value
             is indicated, the value of `fill_alpha` takes precedence if given) or a string representing a key in
             :attr:`sdata.table.obs` or in the index of :attr:`sdata.table.var`. The latter can be used to color by
             categorical or continuous variables. If the color column is found in multiple locations, please provide the
             table_name to be used for the element if you would like a specific table to be used.
+            A **list of column/key names** (e.g. ``["gene1", "gene2"]``) produces one panel per key, like
+            ``scanpy``'s ``color=[...]``. ``palette``/``cmap``/``norm``/``groups`` are applied to every panel,
+            each panel auto-scales independently, and ``show(ncols=...)`` controls the grid width. Multi-panel
+            color requires a single coordinate system and only one ``render_*`` call in the chain may pass a list
+            (other calls use a scalar color and are drawn into every panel as a shared background).
         groups : list[str] | str | None
             When using `color` and the key represents discrete labels, `groups` can be used to show only a subset of
             them. By default, non-matching labels are hidden. To show non-matching labels, set ``na_color`` explicitly.
@@ -1024,59 +1048,66 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
-        params_dict = _validate_label_render_params(
+        panel_param_dicts = _expand_color_panels(
             self._sdata,
-            element=element,
-            cmap=cmap,
-            color=color,
-            contour_px=contour_px,
-            fill_alpha=fill_alpha,
-            groups=groups,
-            na_color=na_color,
-            norm=norm,
-            outline_alpha=outline_alpha,
-            outline_color=outline_color,
-            palette=palette,
-            scale=scale,
-            colorbar=colorbar,
-            colorbar_params=colorbar_params,
-            table_name=table_name,
-            table_layer=table_layer,
-            gene_symbols=gene_symbols,
+            color,
+            "render_labels",
+            lambda color_value: _validate_label_render_params(
+                self._sdata,
+                element=element,
+                cmap=cmap,
+                color=color_value,
+                contour_px=contour_px,
+                fill_alpha=fill_alpha,
+                groups=groups,
+                na_color=na_color,
+                norm=norm,
+                outline_alpha=outline_alpha,
+                outline_color=outline_color,
+                palette=palette,
+                scale=scale,
+                colorbar=colorbar,
+                colorbar_params=colorbar_params,
+                table_name=table_name,
+                table_layer=table_layer,
+                gene_symbols=gene_symbols,
+            ),
         )
 
         sdata = self._copy()
         sdata = _verify_plotting_tree(sdata)
         n_steps = len(sdata.plotting_tree.keys())
 
-        for element, param_values in params_dict.items():
-            cmap_params = _prepare_cmap_norm(
-                cmap=cmap,
-                norm=norm,
-                na_color=param_values["na_color"],  # type: ignore[arg-type]
-            )
-            sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
-                element=element,
-                color=param_values["color"],
-                col_for_color=param_values["col_for_color"],
-                col_for_outline_color=param_values["col_for_outline_color"],
-                outline_table_name=param_values["outline_table_name"],
-                groups=param_values["groups"],
-                contour_px=param_values["contour_px"],
-                cmap_params=cmap_params,
-                palette=param_values["palette"],
-                outline_alpha=param_values["outline_alpha"],
-                outline_color=param_values["outline_color"],
-                fill_alpha=param_values["fill_alpha"],
-                scale=param_values["scale"],
-                table_name=param_values["table_name"],
-                table_layer=param_values["table_layer"],
-                transfunc=transfunc,
-                zorder=n_steps,
-                colorbar=param_values["colorbar"],
-                colorbar_params=param_values["colorbar_params"],
-            )
-            n_steps += 1
+        for panel_key, params_dict in panel_param_dicts:
+            for element, param_values in params_dict.items():
+                cmap_params = _prepare_cmap_norm(
+                    cmap=cmap,
+                    norm=norm,
+                    na_color=param_values["na_color"],  # type: ignore[arg-type]
+                )
+                sdata.plotting_tree[f"{n_steps + 1}_render_labels"] = LabelsRenderParams(
+                    element=element,
+                    color=param_values["color"],
+                    col_for_color=param_values["col_for_color"],
+                    col_for_outline_color=param_values["col_for_outline_color"],
+                    outline_table_name=param_values["outline_table_name"],
+                    groups=param_values["groups"],
+                    contour_px=param_values["contour_px"],
+                    cmap_params=cmap_params,
+                    palette=param_values["palette"],
+                    outline_alpha=param_values["outline_alpha"],
+                    outline_color=param_values["outline_color"],
+                    fill_alpha=param_values["fill_alpha"],
+                    scale=param_values["scale"],
+                    table_name=param_values["table_name"],
+                    table_layer=param_values["table_layer"],
+                    transfunc=transfunc,
+                    zorder=n_steps,
+                    colorbar=param_values["colorbar"],
+                    colorbar_params=param_values["colorbar_params"],
+                    panel_key=panel_key,
+                )
+                n_steps += 1
         return sdata
 
     def render_graph(
@@ -1284,7 +1315,8 @@ class PlotAccessor:
         hspace : float, default 0.25
             Vertical spacing between panels (passed to :class:`matplotlib.gridspec.GridSpec`).
         ncols : int, default 4
-            Number of columns in the multi-panel grid.
+            Number of columns in the multi-panel grid. Panels are created one per coordinate system, or,
+            when a ``render_*`` call was given a list of color keys, one per key (scanpy-style ``color=[...]``).
         frameon : bool | None
             Whether to draw the axes frame. If ``None``, the frame is hidden automatically for multi-panel plots.
         figsize : tuple[float, float] | None
@@ -1297,7 +1329,8 @@ class PlotAccessor:
                 Pass axes created from your figure via ``ax`` instead.
         title : list[str] | str | None
             Title(s) for the plot. A single string is applied to all panels; a list must match the number
-            of coordinate systems. If ``None``, each panel is titled with its coordinate system name.
+            of panels. If ``None``, each panel is titled with its coordinate system name, or, in multi-panel
+            color mode, with its color key.
         pad_extent : int | float, default 0
             Padding added around the computed spatial extent on all sides.
         ax : list[Axes] | Axes | None
@@ -1457,9 +1490,9 @@ class PlotAccessor:
 
         # When CS was auto-detected and ax is provided, keep only CS that have
         # element types for ALL render commands (workaround for upstream #176).
-        if ax is not None:
+        if ax is not None and cs_was_auto:
             n_ax = 1 if isinstance(ax, Axes) else len(ax)
-            if cs_was_auto and len(coordinate_systems) > n_ax:
+            if len(coordinate_systems) > n_ax:
                 required_flags = [_RENDER_CMD_TO_CS_FLAG[cmd] for cmd in cmds if cmd in _RENDER_CMD_TO_CS_FLAG]
                 strict_cs = [
                     cs_name
@@ -1469,10 +1502,32 @@ class PlotAccessor:
                 if strict_cs:
                     coordinate_systems = strict_cs
 
-            if len(coordinate_systems) != n_ax:
+        # Determine the panel layout. Panels are normally one per coordinate system, but when a
+        # render_* call passed a list of color keys we instead lay out one panel per key within a
+        # single coordinate system (scanpy-style `color=[...]`). Render entries tagged with a
+        # `panel_key` belong to that key's panel; untagged entries are shared across all panels.
+        panel_keys: list[str] = []
+        for _cmd, _params in render_cmds:
+            pkey = getattr(_params, "panel_key", None)
+            if pkey is not None and pkey not in panel_keys:
+                panel_keys.append(pkey)
+        if panel_keys:
+            if len(coordinate_systems) != 1:
+                raise ValueError(
+                    "A list of color keys (multi-panel plotting) requires exactly one coordinate system, "
+                    f"but {len(coordinate_systems)} were selected: {coordinate_systems}. "
+                    "Pass `coordinate_systems=` to choose a single one."
+                )
+            panels: list[tuple[str, str | None]] = [(coordinate_systems[0], key) for key in panel_keys]
+        else:
+            panels = [(cs, None) for cs in coordinate_systems]
+        num_panels = len(panels)
+
+        if ax is not None:
+            n_ax = 1 if isinstance(ax, Axes) else len(ax)
+            if num_panels != n_ax:
                 msg = (
-                    f"Mismatch between number of matplotlib axes objects ({n_ax}) "
-                    f"and number of coordinate systems ({len(coordinate_systems)})."
+                    f"Mismatch between number of matplotlib axes objects ({n_ax}) and number of panels ({num_panels})."
                 )
                 if cs_was_auto:
                     msg += (
@@ -1484,7 +1539,7 @@ class PlotAccessor:
 
         # set up canvas
         fig_params, scalebar_params_obj = _prepare_params_plot(
-            num_panels=len(coordinate_systems),
+            num_panels=num_panels,
             figsize=figsize,
             dpi=dpi,
             fig=fig,
@@ -1611,7 +1666,7 @@ class PlotAccessor:
 
         # go through tree
 
-        for i, cs in enumerate(coordinate_systems):
+        for i, (cs, panel_key) in enumerate(panels):
             sdata = self._copy()
             cs_row = cs_index.loc[cs]
             has_images = cs_row["has_images"]
@@ -1630,6 +1685,11 @@ class PlotAccessor:
             wanted_elements: list[str] = []
 
             for cmd, params in render_cmds:
+                # Skip render entries that belong to a different color panel. Entries with no
+                # `panel_key` (None) are shared and drawn into every panel (e.g. a background image).
+                cmd_panel_key = getattr(params, "panel_key", None)
+                if panel_key is not None and cmd_panel_key is not None and cmd_panel_key != panel_key:
+                    continue
                 # We create a copy here as the wanted elements can change from one cs to another.
                 params_copy = deepcopy(params)
                 if cmd == "render_images" and has_images:
@@ -1739,14 +1799,14 @@ class PlotAccessor:
                         )
 
                 if title is None:
-                    t = cs
+                    t = panel_key if panel_key is not None else cs
                 elif len(title) == 1:
                     t = title[0]
                 else:
                     try:
                         t = title[i]
                     except IndexError as e:
-                        raise IndexError("The number of titles must match the number of coordinate systems.") from e
+                        raise IndexError("The number of titles must match the number of panels.") from e
                 ax.set_title(t)
                 ax.set_aspect("equal")
                 if fig_params.frameon is False:
