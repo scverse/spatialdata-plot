@@ -19,6 +19,7 @@ from anndata import AnnData
 from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
+from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -44,7 +45,7 @@ from spatialdata_plot.pl.render_params import (
     CBAR_DEFAULT_FRACTION,
     CBAR_DEFAULT_LOCATION,
     CBAR_DEFAULT_PAD,
-    CBAR_STACK_PAD_INCHES,
+    CBAR_STACK_GAP_INCHES,
     ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
@@ -1532,6 +1533,9 @@ class PlotAccessor:
             side_counts: dict[str, int],
             clearance: dict[str, float],
             axes_size_in: tuple[float, float],
+            prev_outer: dict[str, float],
+            renderer: RendererBase,
+            dpi: float,
         ) -> None:
             norm = spec.mappable.norm
             if isinstance(norm, LogNorm):
@@ -1566,19 +1570,18 @@ class PlotAccessor:
 
             # Append the colorbar axes through the panel's shared divider. This steals space from the
             # panel (so the colorbar matches the equal-aspect plot's extent) and keeps it inside the
-            # panel's grid cell, never overflowing into a neighbouring panel. The first colorbar on a
-            # side is padded past the panel's own decorations (ticks/labels/title) plus the requested
-            # pad; each subsequent one uses an absolute pad wide enough to clear the previous
-            # colorbar's tick labels instead of overlapping them.
-            # Sides with no decorations to clear (typically "right") keep the relative pad, which
-            # matches the historical placement; sides whose ticks/labels/title must be cleared
-            # (left/top/bottom), and stacked colorbars, use an absolute pad in inches.
+            # panel's grid cell, never overflowing into a neighbouring panel.
+            # Pad of the first colorbar on a side clears the panel's own decorations (ticks/labels/
+            # title); a side with negligible clearance (typically "right") keeps the relative pad to
+            # match the historical placement. Each subsequent (stacked) colorbar is padded past the
+            # *measured* outer extent of the previous one (its tick labels AND axis label) so it never
+            # overlaps it.
             n_on_side = side_counts.get(location, 0)
             ref_in = axes_size_in[0] if location in {"left", "right"} else axes_size_in[1]
             side_clearance = clearance.get(location, 0.0)
             pad_spec: str | Fixed
             if n_on_side:
-                pad_spec = Fixed(CBAR_STACK_PAD_INCHES)
+                pad_spec = Fixed(prev_outer.get(location, 0.0) + CBAR_STACK_GAP_INCHES)
             elif side_clearance > _CBAR_DECORATION_EPS_INCHES:
                 pad_spec = Fixed(side_clearance + max(pad, 0.0) * ref_in)
             else:
@@ -1614,6 +1617,21 @@ class PlotAccessor:
             if spec.alpha is not None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
+
+            # Measure how far this colorbar's own ticks/labels/axis-label extend beyond its box on
+            # the outer side, so the next stacked colorbar on this side can be padded clear of them.
+            fig.canvas.draw()
+            cb_box = cax.get_window_extent(renderer)
+            cb_tight = cax.get_tightbbox(renderer)
+            if location == "right":
+                outer = (cb_tight.x1 - cb_box.x1) / dpi
+            elif location == "left":
+                outer = (cb_box.x0 - cb_tight.x0) / dpi
+            elif location == "top":
+                outer = (cb_tight.y1 - cb_box.y1) / dpi
+            else:  # bottom
+                outer = (cb_box.y0 - cb_tight.y0) / dpi
+            prev_outer[location] = max(0.0, outer)
 
         # go through tree
 
@@ -1829,8 +1847,9 @@ class PlotAccessor:
                 # One divider per panel so multiple colorbars on the same panel stack via the divider.
                 divider = make_axes_locatable(axis)
                 side_counts: dict[str, int] = {}
+                prev_outer: dict[str, float] = {}
                 for spec in unique_specs:
-                    _draw_colorbar(spec, fig, divider, side_counts, clearance, axes_size_in)
+                    _draw_colorbar(spec, fig, divider, side_counts, clearance, axes_size_in, prev_outer, renderer, dpi)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
