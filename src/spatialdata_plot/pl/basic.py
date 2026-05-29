@@ -1637,7 +1637,11 @@ class PlotAccessor:
             final_label = global_label_override or layer_label_override or spec.label
             if final_label:
                 cb.set_label(final_label)
-            if spec.alpha is not None:
+            # `fig.colorbar(mappable)` already bakes the mappable's alpha into the colorbar's
+            # facecolors, so we only apply `spec.alpha` when the mappable carries no alpha of its own
+            # — otherwise we'd multiply alpha twice and the colorbar would render at alpha squared
+            # (much paler than the layer it represents).
+            if spec.alpha is not None and spec.mappable.get_alpha() is None:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
 
