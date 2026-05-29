@@ -22,6 +22,7 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
+from matplotlib.transforms import Bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.axes_divider import AxesDivider
 from mpl_toolkits.axes_grid1.axes_size import Fixed
@@ -90,6 +91,29 @@ ColorLike = tuple[float, ...] | list[float] | str
 # Below this clearance (inches), a colorbar side is treated as having no axis decorations to clear,
 # so the colorbar keeps its relative pad (matching the historical placement) instead of an absolute one.
 _CBAR_DECORATION_EPS_INCHES = 0.05
+
+# Per colorbar location: the axis ("x"/"y") its ticks live on, and the opposite side.
+_CBAR_TICK_SIDE = {"left": ("y", "right"), "right": ("y", "left"), "top": ("x", "bottom"), "bottom": ("x", "top")}
+
+
+def _extent_beyond_box_inches(box: Bbox, tight: Bbox | None, dpi: float, side: str) -> float:
+    """Inches that ``tight`` (an artist's full extent incl. ticks/labels) sticks out past ``box`` on ``side``.
+
+    Returns ``0.0`` when there is no overhang, when ``tight`` is ``None`` (an axes with nothing
+    drawable), or when ``dpi`` is non-positive. Used both to clear a panel's own decorations and to
+    clear a stacked colorbar's labels before placing the next one.
+    """
+    if tight is None or dpi <= 0:
+        return 0.0
+    if side == "left":
+        delta = box.x0 - tight.x0
+    elif side == "right":
+        delta = tight.x1 - box.x1
+    elif side == "bottom":
+        delta = box.y0 - tight.y0
+    else:  # top
+        delta = tight.y1 - box.y1
+    return max(0.0, float(delta) / dpi)
 
 
 @register_spatial_data_accessor("pl")
@@ -1563,7 +1587,17 @@ class PlotAccessor:
             if location not in {"left", "right", "top", "bottom"}:
                 location = CBAR_DEFAULT_LOCATION
             orientation = "vertical" if location in {"right", "left"} else "horizontal"
-            cbar_kwargs.pop("orientation", None)
+            # Orientation is fixed by the location (the divider places a left/right colorbar
+            # vertically and a top/bottom one horizontally); warn rather than silently ignore a
+            # conflicting user-supplied orientation.
+            user_orientation = cbar_kwargs.pop("orientation", None)
+            if user_orientation is not None and user_orientation != orientation:
+                warnings.warn(
+                    f"`orientation` is determined by the colorbar location ('{location}' -> '{orientation}'); "
+                    f"the requested '{user_orientation}' is ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
             fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
             pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
@@ -1594,22 +1628,11 @@ class PlotAccessor:
             )
             side_counts[location] = n_on_side + 1
             cb = fig.colorbar(spec.mappable, cax=cax, orientation=orientation, **cbar_kwargs)
-            if location == "left":
-                cb.ax.yaxis.set_ticks_position("left")
-                cb.ax.yaxis.set_label_position("left")
-                cb.ax.tick_params(labelleft=True, labelright=False)
-            elif location == "top":
-                cb.ax.xaxis.set_ticks_position("top")
-                cb.ax.xaxis.set_label_position("top")
-                cb.ax.tick_params(labeltop=True, labelbottom=False)
-            elif location == "right":
-                cb.ax.yaxis.set_ticks_position("right")
-                cb.ax.yaxis.set_label_position("right")
-                cb.ax.tick_params(labelright=True, labelleft=False)
-            elif location == "bottom":
-                cb.ax.xaxis.set_ticks_position("bottom")
-                cb.ax.xaxis.set_label_position("bottom")
-                cb.ax.tick_params(labelbottom=True, labeltop=False)
+            tick_axis, opposite = _CBAR_TICK_SIDE[location]
+            cb_axis = cb.ax.yaxis if tick_axis == "y" else cb.ax.xaxis
+            cb_axis.set_ticks_position(location)
+            cb_axis.set_label_position(location)
+            cb.ax.tick_params(**{f"label{location}": True, f"label{opposite}": False})
 
             final_label = global_label_override or layer_label_override or spec.label
             if final_label:
@@ -1618,20 +1641,14 @@ class PlotAccessor:
                 with contextlib.suppress(Exception):
                     cb.solids.set_alpha(spec.alpha)
 
-            # Measure how far this colorbar's own ticks/labels/axis-label extend beyond its box on
-            # the outer side, so the next stacked colorbar on this side can be padded clear of them.
+            # Measure how far this colorbar's ticks/labels/axis-label extend beyond its box, so the
+            # next stacked colorbar on this side clears them. The draw is kept unconditionally: it is
+            # also load-bearing for the layout engine (skipping it shifts wide colorbars), so it is not
+            # safe to skip even for the last colorbar on a side.
             fig.canvas.draw()
-            cb_box = cax.get_window_extent(renderer)
-            cb_tight = cax.get_tightbbox(renderer)
-            if location == "right":
-                outer = (cb_tight.x1 - cb_box.x1) / dpi
-            elif location == "left":
-                outer = (cb_box.x0 - cb_tight.x0) / dpi
-            elif location == "top":
-                outer = (cb_tight.y1 - cb_box.y1) / dpi
-            else:  # bottom
-                outer = (cb_box.y0 - cb_tight.y0) / dpi
-            prev_outer[location] = max(0.0, outer)
+            prev_outer[location] = _extent_beyond_box_inches(
+                cb.ax.get_window_extent(renderer), cb.ax.get_tightbbox(renderer), dpi, location
+            )
 
         # go through tree
 
@@ -1837,12 +1854,7 @@ class PlotAccessor:
                 # the axes box, not its decorations).
                 box = axis.get_window_extent(renderer)
                 tight = axis.get_tightbbox(renderer)
-                clearance = {
-                    "left": max(0.0, (box.x0 - tight.x0) / dpi),
-                    "right": max(0.0, (tight.x1 - box.x1) / dpi),
-                    "bottom": max(0.0, (box.y0 - tight.y0) / dpi),
-                    "top": max(0.0, (tight.y1 - box.y1) / dpi),
-                }
+                clearance = {side: _extent_beyond_box_inches(box, tight, dpi, side) for side in _CBAR_TICK_SIDE}
                 axes_size_in = (box.width / dpi, box.height / dpi)
                 # One divider per panel so multiple colorbars on the same panel stack via the divider.
                 divider = make_axes_locatable(axis)
