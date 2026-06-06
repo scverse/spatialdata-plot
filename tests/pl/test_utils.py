@@ -12,7 +12,7 @@ from spatialdata import SpatialData
 from spatialdata.models import PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
-from spatialdata_plot.pl.render_params import Color
+from spatialdata_plot.pl.render_params import Color, ColorLike
 from spatialdata_plot.pl.utils import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
@@ -32,11 +32,6 @@ _ = spatialdata_plot
 # 3. if the tolerance needs to be changed, don't prefix the function with `test_plot_`, but with something else
 #    the comp. function can be accessed as `self.compare(<your_filename>, tolerance=<your_tolerance>)`
 #    ".png" is appended to <your_filename>, no need to set it
-
-# replace with
-# from spatialdata._types import ColorLike
-# once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | str
 
 
 class TestUtils(PlotTester, metaclass=PlotTesterMeta):

@@ -1772,11 +1772,10 @@ def _extract_colors_from_table_uns(
             if col_to_colorby in adata.obs and hasattr(adata.obs[col_to_colorby], "cat")
             else categories
         )
-        # Map each category to its first index in O(1) instead of a per-category
-        # list scan (was O(K^2) via list.index for K categories).
-        cat_to_idx: dict[Any, int] = {}
-        for i, c in enumerate(all_cats):
-            cat_to_idx.setdefault(c, i)
+        # Map category -> index once (O(K)) instead of a per-category list scan
+        # (was O(K^2) via list.index). all_cats comes from pandas .categories,
+        # which is unique, so a plain dict comprehension is sufficient.
+        cat_to_idx: dict[Any, int] = {c: i for i, c in enumerate(all_cats)}
         for category in categories:
             idx = cat_to_idx.get(category)
             if idx is not None and idx < len(hex_colors) and hex_colors[idx] is not None:
