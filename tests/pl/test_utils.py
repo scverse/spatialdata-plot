@@ -12,11 +12,10 @@ from spatialdata import SpatialData
 from spatialdata.models import PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
-from spatialdata_plot.pl.render_params import Color
+from spatialdata_plot.pl.render_params import Color, ColorLike
 from spatialdata_plot.pl.utils import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
-    _get_subplots,
     _set_outline,
     set_zero_in_cmap_to_transparent,
 )
@@ -33,11 +32,6 @@ _ = spatialdata_plot
 # 3. if the tolerance needs to be changed, don't prefix the function with `test_plot_`, but with something else
 #    the comp. function can be accessed as `self.compare(<your_filename>, tolerance=<your_tolerance>)`
 #    ".png" is appended to <your_filename>, no need to set it
-
-# replace with
-# from spatialdata._types import ColorLike
-# once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | str
 
 
 class TestUtils(PlotTester, metaclass=PlotTesterMeta):
@@ -288,23 +282,6 @@ def test_plot_can_handle_rgba_color_specifications(sdata_blobs: SpatialData):
 
     # Test with string color
     sdata_blobs.pl.render_shapes(element="blobs_circles", color="blue").pl.show()
-
-
-@pytest.mark.parametrize(
-    "input_output",
-    [
-        (1, 4, 1, [True]),
-        (4, 4, 4, [True, True, True, True]),
-        (6, 4, 8, [True, True, True, True, True, True, False, False]),  # 2 rows with 4 columns
-    ],
-)
-def test_utils_get_subplots_produces_correct_axs_layout(input_output):
-    num_images, ncols, len_axs, axs_visible = input_output
-
-    _, axs = _get_subplots(num_images=num_images, ncols=ncols)
-
-    assert len_axs == len(axs.flatten())
-    assert axs_visible == [ax.axison for ax in axs.flatten()]
 
 
 class TestMultiscaleToSpatialImage:

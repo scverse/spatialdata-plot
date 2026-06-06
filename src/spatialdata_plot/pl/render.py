@@ -87,6 +87,16 @@ from spatialdata_plot.pl.utils import (
 
 _Normalize = Normalize | abc.Sequence[Normalize]
 
+# Shared body of the "blending multiple cmaps" warning. Emitted both when the user
+# supplies several cmaps and when a single cmap is broadcast across channels.
+_MULTI_CMAP_BLENDING_WARNING = (
+    "You're blending multiple cmaps. "
+    "If the plot doesn't look like you expect, it might be because your "
+    "cmaps go from a given color to 'white', and not to 'transparent'. "
+    "Therefore, the 'white' of higher layers will overlay the lower layers. "
+    "Consider using 'palette' instead."
+)
+
 
 def _get_top_data_array(element: xr.DataArray | DataTree) -> xr.DataArray:
     if isinstance(element, DataTree):
@@ -1136,9 +1146,9 @@ def _render_points(
         # if the points are colored by values in X (or a different layer), add the values to obs
         if col_for_color in matched_table.var_names:
             if table_layer is None:
-                adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten().copy()
+                adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten()
             else:
-                adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten().copy()
+                adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten()
         adata = AnnData(
             X=points[["x", "y"]].values,
             obs=adata_obs,
@@ -1742,13 +1752,7 @@ def _render_images(
         user_supplied_multi_cmaps = False
 
     if user_supplied_multi_cmaps:
-        logger.warning(
-            "You're blending multiple cmaps. "
-            "If the plot doesn't look like you expect, it might be because your "
-            "cmaps go from a given color to 'white', and not to 'transparent'. "
-            "Therefore, the 'white' of higher layers will overlay the lower layers. "
-            "Consider using 'palette' instead."
-        )
+        logger.warning(_MULTI_CMAP_BLENDING_WARNING)
 
     # Force nearest-neighbor at display time when the datashader reduction picked
     # a non-mean aggregation; otherwise imshow's default interpolation would smear it.
@@ -1864,7 +1868,9 @@ def _render_images(
             )
         layers = {}
         for ch_idx, ch in enumerate(channels):
-            layers[ch] = img.sel(c=ch).copy(deep=True).squeeze()
+            # No copy needed: this entry is only read (min/max) and then replaced
+            # by a fresh array (np.full or ch_norm(...)) below; img is never mutated.
+            layers[ch] = img.sel(c=ch).squeeze()
             if isinstance(render_params.cmap_params, list):
                 ch_norm = render_params.cmap_params[ch_idx].norm
             else:
@@ -1904,11 +1910,7 @@ def _render_images(
                 stacked = stacked[:, :, :3]
                 logger.warning(
                     "One cmap was given for multiple channels and is now used for each channel. "
-                    "You're blending multiple cmaps. "
-                    "If the plot doesn't look like you expect, it might be because your "
-                    "cmaps go from a given color to 'white', and not to 'transparent'. "
-                    "Therefore, the 'white' of higher layers will overlay the lower layers. "
-                    "Consider using 'palette' instead."
+                    + _MULTI_CMAP_BLENDING_WARNING
                 )
 
             _ax_show_and_transform(

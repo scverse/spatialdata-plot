@@ -46,6 +46,7 @@ from spatialdata_plot.pl.render_params import (
     ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
+    ColorLike,
     GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
@@ -79,11 +80,6 @@ from spatialdata_plot.pl.utils import (
     _verify_plotting_tree,
     save_fig,
 )
-
-# replace with
-# from spatialdata._types import ColorLike
-# once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | list[float] | str
 
 
 @register_spatial_data_accessor("pl")
