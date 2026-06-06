@@ -598,6 +598,89 @@ def _color_vector_to_rgba(
     return rgba
 
 
+def _normalize_geom(geom: Any) -> Any:
+    """Canonicalize ring orientation so matplotlib's fill rules render holes correctly.
+
+    ``shapely.normalize`` (shapely>=2) is preferred; falls back to ``geom.normalize()``.
+    None/empty geometries and geometries that fail to normalize are returned unchanged.
+    """
+    if geom is None or getattr(geom, "is_empty", False):
+        return geom
+    normalize_func = getattr(shapely, "normalize", None)
+    if callable(normalize_func):
+        try:
+            return normalize_func(geom)
+        except (GEOSException, TypeError, ValueError):
+            return geom
+    if hasattr(geom, "normalize"):
+        try:
+            return geom.normalize()
+        except (GEOSException, TypeError, ValueError):
+            return geom
+    return geom
+
+
+def _build_shape_patches(
+    shapes: GeoDataFrame,
+    scale: float,
+) -> tuple[list[mpatches.Patch], list[int], int]:
+    """Build matplotlib patches from shape geometries, once.
+
+    Patch geometry is independent of colour/alpha, so it can be built a single time and
+    shared across the fill and outline ``PatchCollection``s in :func:`_render_shapes`
+    instead of being rebuilt per layer (the dominant cost for shape elements).
+
+    Returns
+    -------
+    patches
+        The matplotlib patches (a MultiPolygon expands to several patches).
+    patch_row_idx
+        For each patch, the index into the empty-filtered, re-indexed shapes — used to
+        look up the per-shape colour.
+    n_shapes
+        Number of shapes after empty filtering (used for the single-colour broadcast rule).
+    """
+    df: GeoDataFrame | pd.DataFrame = shapes if isinstance(shapes, GeoDataFrame) else pd.DataFrame(shapes)
+    if "geometry" not in df.columns:
+        return [], [], 0
+
+    # Normalize ring orientation, then drop empty geometries (both vectorized; fall
+    # back to per-geometry normalization only if the bulk call rejects an input).
+    geom_array = df["geometry"].to_numpy()
+    try:
+        geom_array = shapely.normalize(geom_array)
+    except (GEOSException, TypeError, ValueError):
+        geom_array = np.array([_normalize_geom(g) for g in geom_array], dtype=object)
+    keep = ~shapely.is_empty(geom_array)
+    geoms = geom_array[keep]
+    radii = df["radius"].to_numpy()[keep] if "radius" in df.columns else None
+
+    # Resolve the scale scalar once instead of per shape.
+    scale_value = _extract_scalar_value(scale, default=1.0)
+
+    patches: list[mpatches.Patch] = []
+    patch_row_idx: list[int] = []
+    for i, geom in enumerate(geoms):
+        geom_type = geom.geom_type
+        if geom_type == "Polygon":
+            coords = np.asarray(geom.exterior.coords)
+            centroid = np.mean(coords, axis=0)
+            scaled = centroid + (coords - centroid) * scale_value
+            patches.append(mpatches.Polygon(scaled, closed=True))
+            patch_row_idx.append(i)
+        elif geom_type == "MultiPolygon":
+            for m in _make_patch_from_multipolygon(geom):
+                _scale_pathpatch_around_centroid(m, scale_value)
+                patches.append(m)
+                patch_row_idx.append(i)
+        elif geom_type == "Point":
+            radius_value = _extract_scalar_value(radii[i], default=0.0) if radii is not None else 0.0
+            patches.append(mpatches.Circle((geom.x, geom.y), radius=radius_value * scale_value))
+            patch_row_idx.append(i)
+
+    return patches, patch_row_idx, len(geoms)
+
+
 def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
@@ -608,6 +691,7 @@ def _get_collection_shape(
     outline_alpha: None | float = None,
     outline_color: None | str | list[float] | np.ndarray = "white",
     linewidth: float = 0.0,
+    prebuilt_patches: tuple[list[mpatches.Patch], list[int], int] | None = None,
     **kwargs: Any,
 ) -> PatchCollection:
     """
@@ -718,107 +802,26 @@ def _get_collection_shape(
     else:
         outline_c = [None] * fill_c.shape[0]
 
-    if isinstance(shapes, GeoDataFrame):
-        shapes_df: GeoDataFrame | pd.DataFrame = shapes.copy()
-    else:
-        shapes_df = pd.DataFrame(shapes, copy=True)
-
-    # Robustly normalise geometries to a canonical representation.
-    # This ensures consistent exterior/interior ring orientation so that
-    # matplotlib's fill rules handle holes correctly regardless of user input.
-    if "geometry" in shapes_df.columns:
-
-        def _normalize_geom(geom: Any) -> Any:
-            if geom is None or getattr(geom, "is_empty", False):
-                return geom
-            # shapely.normalize is available in shapely>=2; fall back to geom.normalize()
-            normalize_func = getattr(shapely, "normalize", None)
-            if callable(normalize_func):
-                try:
-                    return normalize_func(geom)
-                except (GEOSException, TypeError, ValueError):
-                    return geom
-            if hasattr(geom, "normalize"):
-                try:
-                    return geom.normalize()
-                except (GEOSException, TypeError, ValueError):
-                    return geom
-            return geom
-
-        shapes_df["geometry"] = shapes_df["geometry"].apply(_normalize_geom)
-
-    shapes_df = shapes_df[shapes_df["geometry"].apply(lambda geom: not geom.is_empty)]
-    shapes_df = shapes_df.reset_index(drop=True)
-
-    def _assign_fill_and_outline_to_row(
-        fill_colors: list[Any],
-        outline_colors: list[Any],
-        row: dict[str, Any],
-        idx: int,
-        is_multiple_shapes: bool,
-    ) -> None:
-        if is_multiple_shapes and len(fill_colors) == 1:
-            row["fill_c"] = fill_colors[0]
-            row["outline_c"] = outline_colors[0]
-        else:
-            row["fill_c"] = fill_colors[idx]
-            row["outline_c"] = outline_colors[idx]
-
-    def _process_polygon(row: pd.Series, scale: float) -> dict[str, Any]:
-        coords = np.array(row["geometry"].exterior.coords)
-        centroid = np.mean(coords, axis=0)
-        scale_value = _extract_scalar_value(scale, default=1.0)
-        scaled = (centroid + (coords - centroid) * scale_value).tolist()
-        return {**row.to_dict(), "geometry": mpatches.Polygon(scaled, closed=True)}
-
-    def _process_multipolygon(row: pd.Series, scale: float) -> list[dict[str, Any]]:
-        mp = _make_patch_from_multipolygon(row["geometry"])
-        row_dict = row.to_dict()
-        for m in mp:
-            _scale_pathpatch_around_centroid(m, scale)
-        return [{**row_dict, "geometry": m} for m in mp]
-
-    def _process_point(row: pd.Series, scale: float) -> dict[str, Any]:
-        radius_value = _extract_scalar_value(row["radius"], default=0.0)
-        scale_value = _extract_scalar_value(scale, default=1.0)
-        radius = radius_value * scale_value
-
-        return {
-            **row.to_dict(),
-            "geometry": mpatches.Circle((row["geometry"].x, row["geometry"].y), radius=radius),
-        }
-
-    def _create_patches(
-        shapes_df_: GeoDataFrame, fill_colors: list[Any], outline_colors: list[Any], scale: float
-    ) -> pd.DataFrame:
-        rows: list[dict[str, Any]] = []
-        is_multiple = len(shapes_df_) > 1
-        for idx, row in shapes_df_.iterrows():
-            geom_type = row["geometry"].geom_type
-            processed: list[dict[str, Any]] = []
-            if geom_type == "Polygon":
-                processed.append(_process_polygon(row, scale))
-            elif geom_type == "MultiPolygon":
-                processed.extend(_process_multipolygon(row, scale))
-            elif geom_type == "Point":
-                processed.append(_process_point(row, scale))
-            for pr in processed:
-                _assign_fill_and_outline_to_row(fill_colors, outline_colors, pr, idx, is_multiple)
-                rows.append(pr)
-        return pd.DataFrame(rows)
-
-    patches = _create_patches(
-        shapes_df, fill_c.tolist(), outline_c.tolist() if hasattr(outline_c, "tolist") else outline_c, s
+    # Build (or reuse) the matplotlib patches. Geometry is colour-independent, so the
+    # caller can build it once via `_build_shape_patches` and share it across the fill
+    # and outline collections instead of rebuilding it on every call.
+    patches, patch_row_idx, n_shapes = (
+        prebuilt_patches if prebuilt_patches is not None else _build_shape_patches(shapes, s)
     )
 
-    if patches.empty:
+    if not patches:
         return PatchCollection([])
 
+    # Expand the per-shape fill colours to per-patch (a MultiPolygon owns several
+    # patches). Preserve the single-colour broadcast used for multi-shape elements.
+    broadcast_single = n_shapes > 1 and len(fill_c) == 1
+    patch_fill = np.repeat(fill_c, len(patches), axis=0) if broadcast_single else fill_c[patch_row_idx]
+
     return PatchCollection(
-        patches["geometry"].values.tolist(),
+        patches,
         snap=False,
         lw=linewidth,
-        facecolor=patches["fill_c"],
+        facecolor=patch_fill,
         edgecolor=None if all(o is None for o in outline_c) else outline_c,
         **kwargs,
     )

@@ -60,6 +60,7 @@ from spatialdata_plot.pl.utils import (
     _align_outline_vector_to_length,
     _apply_mask_to_outline_vectors,
     _ax_show_and_transform,
+    _build_shape_patches,
     _check_obs_var_shadow,
     _color_vector_to_rgba,
     _convert_shapes,
@@ -905,6 +906,10 @@ def _render_shapes(
         cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
+        # Build the matplotlib patches once and share them across the fill and outline
+        # collections; the geometry is identical, only colours/alpha/linewidth differ.
+        prebuilt_patches = _build_shape_patches(shapes, render_params.scale)
+
         # render outlines separately to ensure they are always underneath the shape
         if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
             outline_rgba = _color_vector_to_rgba(
@@ -924,6 +929,7 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=outline_rgba,
+                prebuilt_patches=prebuilt_patches,
                 linewidth=render_params.outline_params.outer_outline_linewidth,
                 zorder=render_params.zorder,
             )
@@ -942,6 +948,7 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=render_params.outline_params.outer_outline_color.get_hex(),
+                prebuilt_patches=prebuilt_patches,
                 linewidth=render_params.outline_params.outer_outline_linewidth,
                 zorder=render_params.zorder,
                 # **kwargs,
@@ -962,6 +969,7 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[1],
                 outline_color=render_params.outline_params.inner_outline_color.get_hex(),
+                prebuilt_patches=prebuilt_patches,
                 linewidth=render_params.outline_params.inner_outline_linewidth,
                 zorder=render_params.zorder,
                 # **kwargs,
@@ -975,6 +983,7 @@ def _render_shapes(
             shapes=shapes,
             s=render_params.scale,
             c=color_vector.copy(),  # copy bc c is modified in _get_collection_shape
+            prebuilt_patches=prebuilt_patches,
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
