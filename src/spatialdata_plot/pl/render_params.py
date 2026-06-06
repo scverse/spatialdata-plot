@@ -15,10 +15,11 @@ _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large"
 _DsReduction = Literal["sum", "mean", "any", "count", "std", "var", "max", "min"]
 _ImageDsReduction = Literal["max", "min", "mean", "mode", "first", "last", "var", "std"]
 
+# Canonical definition for the package; imported by basic.py and utils.py.
 # replace with
 # from spatialdata._types import ColorLike
 # once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | str
+ColorLike = tuple[float, ...] | list[float] | str
 
 
 # NOTE: defined here instead of utils to avoid circular import

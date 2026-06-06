@@ -4,7 +4,7 @@ import math
 import os
 import warnings
 from collections import Counter, OrderedDict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from pathlib import Path
@@ -78,6 +78,7 @@ from spatialdata_plot.pl.render_params import (
     CmapParams,
     Color,
     ColorbarSpec,
+    ColorLike,
     FigParams,
     GraphRenderParams,
     ImageRenderParams,
@@ -92,11 +93,6 @@ from spatialdata_plot.pl.render_params import (
 )
 
 to_hex = partial(colors.to_hex, keep_alpha=True)
-
-# replace with
-# from spatialdata._types import ColorLike
-# once https://github.com/scverse/spatialdata/pull/689/ is in a release
-ColorLike = tuple[float, ...] | list[float] | str
 
 _GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
 
@@ -996,44 +992,6 @@ def _set_outline(
     )
 
 
-def _get_subplots(num_images: int, ncols: int = 4, width: int = 4, height: int = 3) -> plt.Figure | plt.Axes:
-    """Set up the axs objects.
-
-    Parameters
-    ----------
-    num_images
-        Number of images to plot. Must be greater than 1.
-    ncols
-        Number of columns in the subplot grid, by default 4
-    width
-        Width of each subplot, by default 4
-
-    Returns
-    -------
-    Union[plt.Figure, plt.Axes]
-        Matplotlib figure and axes object.
-    """
-    if num_images < ncols:
-        nrows = 1
-        ncols = num_images
-    else:
-        nrows, reminder = divmod(num_images, ncols)
-
-        if nrows == 0:
-            nrows = 1
-        if reminder > 0:
-            nrows += 1
-
-    fig, axes = plt.subplots(nrows, ncols, figsize=(width * ncols, height * nrows))
-
-    if not isinstance(axes, Iterable):
-        axes = np.array([axes])
-
-    # get rid of the empty axes
-    _ = [ax.axis("off") for ax in axes.flatten()[num_images:]]
-    return fig, axes
-
-
 def _get_colors_for_categorical_obs(
     categories: Sequence[str | int],
     palette: ListedColormap | str | list[str] | None = None,
@@ -1503,7 +1461,7 @@ def _map_color_seg(
 
     if isinstance(color_vector.dtype, pd.CategoricalDtype):
         # Case A: users wants to plot a categorical column
-        val_im: ArrayLike = map_array(seg.copy(), cell_id, color_vector.codes + 1)
+        val_im: ArrayLike = map_array(seg, cell_id, color_vector.codes + 1)
         cols = colors.to_rgba_array(color_vector.categories)
     elif pd.api.types.is_numeric_dtype(color_vector.dtype):
         # Case B: user wants to plot a continous column
@@ -1515,7 +1473,7 @@ def _map_color_seg(
             normed_color_vector[~np.isnan(normed_color_vector)]
         )
         cols = cmap_params.cmap(normed_color_vector)
-        val_im = map_array(seg.copy(), cell_id, cell_id)
+        val_im = map_array(seg, cell_id, cell_id)
     else:
         # Case C: User didn't specify any colors
         if color_source_vector is not None and (
@@ -1524,12 +1482,12 @@ def _map_color_seg(
             and set(color_vector) == {na_color.get_hex_with_alpha()}
             and not na_color.color_modified_by_user()
         ):
-            val_im = map_array(seg.copy(), cell_id, cell_id)
+            val_im = map_array(seg, cell_id, cell_id)
             RNG = default_rng(42)
             cols = RNG.random((len(color_vector), 3))
         else:
             # Case D: User didn't specify a column to color by, but modified the na_color
-            val_im = map_array(seg.copy(), cell_id, cell_id)
+            val_im = map_array(seg, cell_id, cell_id)
             first_value = color_vector.iloc[0] if isinstance(color_vector, pd.Series) else color_vector[0]
             if _is_color_like(first_value):
                 # we have color-like values (e.g., hex or named colors)
@@ -1550,7 +1508,7 @@ def _map_color_seg(
         if outline_color_source_vector is not None:
             cat = pd.Categorical(outline_color_source_vector)
             cat_codes = cat.codes
-            outline_val_im: ArrayLike = map_array(seg.copy(), cell_id, cat_codes + 1)
+            outline_val_im: ArrayLike = map_array(seg, cell_id, cat_codes + 1)
             color_arr = np.asarray(outline_color_vector, dtype=object)
             # Pick the first per-cell hex for each category in one vectorized pass
             # (avoids `K × O(N)` Python loops on large label sets).
@@ -1572,7 +1530,7 @@ def _map_color_seg(
             if finite.any():
                 normed[finite] = cmap_params.norm(normed[finite])
             outline_cols = cmap_params.cmap(normed)
-            outline_val_im = map_array(seg.copy(), cell_id, cell_id)
+            outline_val_im = map_array(seg, cell_id, cell_id)
         if seg_erosionpx is not None:
             outline_val_im[
                 outline_val_im == erosion(outline_val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))
@@ -1814,8 +1772,13 @@ def _extract_colors_from_table_uns(
             if col_to_colorby in adata.obs and hasattr(adata.obs[col_to_colorby], "cat")
             else categories
         )
+        # Map each category to its first index in O(1) instead of a per-category
+        # list scan (was O(K^2) via list.index for K categories).
+        cat_to_idx: dict[Any, int] = {}
+        for i, c in enumerate(all_cats):
+            cat_to_idx.setdefault(c, i)
         for category in categories:
-            idx = all_cats.index(category) if category in all_cats else None
+            idx = cat_to_idx.get(category)
             if idx is not None and idx < len(hex_colors) and hex_colors[idx] is not None:
                 hex_color = hex_colors[idx]
                 assert hex_color is not None  # type narrowing for mypy
