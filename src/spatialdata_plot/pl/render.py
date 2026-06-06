@@ -2111,11 +2111,15 @@ def _render_labels(
         # the above adds a useless c dimension of 1 (y, x) -> (1, y, x)
         label = label.squeeze()
 
+    # Unique label values are needed for the instance ids, the overlap check, and the
+    # rasterize mask below; compute them once over the (possibly rasterized) raster.
+    unique_labels = np.unique(label.values)
+
     if table_name is None:
-        instance_id = np.unique(label)
+        instance_id = unique_labels
         table = None
     else:
-        _check_instance_ids_overlap(sdata_filt, table_name, element, np.unique(label.values))
+        _check_instance_ids_overlap(sdata_filt, table_name, element, unique_labels)
         _, region_key, instance_key = get_table_keys(sdata[table_name])
         table = sdata[table_name][sdata[table_name].obs[region_key].isin([element])]
 
@@ -2185,8 +2189,7 @@ def _render_labels(
     # rasterize could have removed labels from label
     # only problematic if color is specified
     if rasterize and (col_for_color is not None or col_for_outline_color is not None):
-        labels_in_rasterized_image = np.unique(label.values)
-        mask = np.isin(instance_id, labels_in_rasterized_image)
+        mask = np.isin(instance_id, unique_labels)
         instance_id = instance_id[mask]
         if col_for_color is not None:
             color_vector = color_vector[mask]
