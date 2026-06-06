@@ -1590,3 +1590,104 @@ def test_outline_color_cross_table(sdata_blobs: SpatialData):
         outline_color="stage",
     ).pl.show(ax=ax)
     plt.close(fig)
+
+
+def _add_score_columns(sdata: SpatialData, element: str = "blobs_circles") -> SpatialData:
+    """Add three continuous columns to a shapes element so it can be colored by key."""
+    gdf = sdata.shapes[element]
+    rng = get_standard_RNG()
+    for name in ("scoreA", "scoreB", "scoreC"):
+        gdf[name] = rng.random(len(gdf))
+    return sdata
+
+
+def test_render_shapes_color_list_panel_structure(sdata_blobs: SpatialData):
+    """A color list yields one panel per key, titled by the key and wrapped by ncols (#611)."""
+    _add_score_columns(sdata_blobs)
+    axs = sdata_blobs.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB", "scoreC"]).pl.show(
+        ncols=2, return_ax=True
+    )
+    assert [ax.get_title() for ax in axs] == ["scoreA", "scoreB", "scoreC"]
+    # 3 panels at ncols=2 -> a 2x2 grid
+    assert axs[0].get_subplotspec().get_gridspec().get_geometry() == (2, 2)
+    plt.close("all")
+
+
+def test_render_shapes_color_list_per_panel_legends(sdata_blobs: SpatialData):
+    """Each categorical panel gets its own legend with only its own categories (#611)."""
+    gdf = sdata_blobs.shapes["blobs_circles"]  # 5 circles
+    gdf["catA"] = pd.Categorical(["a", "b", "a", "b", "a"])
+    gdf["catB"] = pd.Categorical(["x", "y", "z", "x", "y"])
+    axs = sdata_blobs.pl.render_shapes("blobs_circles", color=["catA", "catB"]).pl.show(return_ax=True)
+    legends = [ax.get_legend() for ax in axs]
+    assert all(leg is not None for leg in legends)
+    assert {t.get_text() for t in legends[0].get_texts()} == {"a", "b"}
+    assert {t.get_text() for t in legends[1].get_texts()} == {"x", "y", "z"}
+    plt.close("all")
+
+
+def test_render_shapes_color_list_shares_scalar_background(sdata_blobs: SpatialData):
+    """A scalar-colored render call is drawn into every color panel as a shared background (#611)."""
+    _add_score_columns(sdata_blobs)
+    axs = (
+        sdata_blobs.pl.render_images("blobs_image")
+        .pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"])
+        .pl.show(return_ax=True)
+    )
+    assert len(axs) == 2
+    assert all(len(ax.get_images()) >= 1 for ax in axs)
+    plt.close("all")
+
+
+@pytest.mark.parametrize("color", [["scoreA"], [1.0, 0.0, 0.0]], ids=["length-1-key-list", "rgb-float-list"])
+def test_render_shapes_color_scalar_forms_stay_single_panel(sdata_blobs: SpatialData, color):
+    """A length-1 key list normalizes to a scalar, and an RGB(A) float list stays one color (#611)."""
+    _add_score_columns(sdata_blobs)
+    ax = sdata_blobs.pl.render_shapes("blobs_circles", color=color).pl.show(return_ax=True)
+    assert isinstance(ax, plt.Axes)
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    ("make_chain", "match"),
+    [
+        (lambda s: s.pl.render_shapes("blobs_circles", color=[]), "empty list"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "scoreA"]), "duplicate keys"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", 0.5]), "all column/key names"),
+        (lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "nope"]), "Invalid color key"),
+        (
+            lambda s: s.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"]).pl.render_shapes(
+                "blobs_circles", color=["scoreA", "scoreC"]
+            ),
+            "Only one `render_\\*` call",
+        ),
+    ],
+    ids=["empty", "duplicate", "mixed", "bad-key", "two-lists"],
+)
+def test_render_shapes_color_list_invalid_raises(sdata_blobs: SpatialData, make_chain, match):
+    """All multi-panel color misuse raises a clear ValueError before any drawing (#611)."""
+    _add_score_columns(sdata_blobs)
+    with pytest.raises(ValueError, match=match):
+        make_chain(sdata_blobs)
+
+
+def test_render_shapes_color_list_branches_are_independent(sdata_blobs: SpatialData):
+    """Branching a render chain must not leak color-panel entries across branches (#611).
+
+    Appending a render step to one branch must not mutate the shared plotting tree of the
+    base object, otherwise a sibling branch wrongly trips the 'only one color list' guard.
+    """
+    _add_score_columns(sdata_blobs)
+    base = sdata_blobs.pl.render_images("blobs_image")
+    base_steps = len(base.plotting_tree)
+
+    branch1 = base.pl.render_shapes("blobs_circles", color=["scoreA", "scoreB"])
+    # the base chain must be untouched by building branch1
+    assert len(base.plotting_tree) == base_steps
+
+    # an independent second branch off the same base must not raise the multi-list guard
+    axs = base.pl.render_shapes("blobs_circles", color=["scoreA", "scoreC"]).pl.show(return_ax=True)
+    assert len(axs) == 2
+    # branch1 is still usable and unaffected
+    assert len(branch1.plotting_tree) == base_steps + 2
+    plt.close("all")

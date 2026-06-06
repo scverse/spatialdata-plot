@@ -255,6 +255,9 @@ class ShapesRenderParams:
     ds_reduction: _DsReduction | None = None
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+    # Multi-panel color: when set, this render entry belongs to the panel identified by this
+    # color key. ``None`` means the entry is shared across every panel (e.g. a background layer).
+    panel_key: str | None = None
 
 
 @dataclass
@@ -324,6 +327,9 @@ class LabelsRenderParams:
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+    # Multi-panel color: when set, this render entry belongs to the panel identified by this
+    # color key. ``None`` means the entry is shared across every panel (e.g. a background layer).
+    panel_key: str | None = None
 
 
 @dataclass

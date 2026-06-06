@@ -595,3 +595,13 @@ def test_labels_outline_color_groups_filter_aligns(sdata_blobs: SpatialData):
         outline_color="stage",
     ).pl.show(ax=ax)
     plt.close(fig)
+
+
+def test_render_labels_color_list_creates_one_panel_per_key(sdata_blobs: SpatialData):
+    """A list of color keys produces one panel per key, titled by the key (#611)."""
+    # the default blobs table annotates blobs_labels with channel_*_sum vars
+    axs = sdata_blobs.pl.render_labels("blobs_labels", color=["channel_0_sum", "channel_1_sum"]).pl.show(return_ax=True)
+    assert isinstance(axs, list)
+    assert len(axs) == 2
+    assert [ax.get_title() for ax in axs] == ["channel_0_sum", "channel_1_sum"]
+    plt.close("all")
