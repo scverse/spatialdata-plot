@@ -1345,7 +1345,7 @@ def _render_points(
             # category), so strip alpha on the unique values and map back rather than
             # calling the per-string parser once per point.
             unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-            color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse.reshape(-1)]
+            color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
 
         shade_how = render_params.density_how if render_params.density else "linear"
         # Plain density (no color column) must use the user-facing cmap as a sequential
