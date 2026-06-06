@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import os
 import warnings
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
@@ -3047,9 +3047,9 @@ def _resolve_color_panels(color: Any) -> tuple[Any, list[str] | None]:
     if all(isinstance(c, str) for c in color):
         if len(color) == 0:
             raise ValueError("`color` was given an empty list; provide at least one column/key name.")
-        if len(color) != len(set(color)):
-            dups = sorted({c for c in color if color.count(c) > 1})
-            raise ValueError(f"`color` contains duplicate keys {dups}; each multi-panel key must be unique.")
+        duplicate_keys = sorted(k for k, n in Counter(color).items() if n > 1)
+        if duplicate_keys:
+            raise ValueError(f"`color` contains duplicate keys {duplicate_keys}; each multi-panel key must be unique.")
         if len(color) == 1:
             return color[0], None
         return None, list(color)
