@@ -644,11 +644,16 @@ def _build_shape_patches(
     if "geometry" not in df.columns:
         return [], [], 0
 
-    # Normalize ring orientation, then drop empty geometries (vectorized).
-    geom_series = df["geometry"].apply(_normalize_geom)
-    keep = ~shapely.is_empty(geom_series.to_numpy())
-    geoms = geom_series[keep].to_numpy()
-    radii = df["radius"][keep].to_numpy() if "radius" in df.columns else None
+    # Normalize ring orientation, then drop empty geometries (both vectorized; fall
+    # back to per-geometry normalization only if the bulk call rejects an input).
+    geom_array = df["geometry"].to_numpy()
+    try:
+        geom_array = shapely.normalize(geom_array)
+    except (GEOSException, TypeError, ValueError):
+        geom_array = np.array([_normalize_geom(g) for g in geom_array], dtype=object)
+    keep = ~shapely.is_empty(geom_array)
+    geoms = geom_array[keep]
+    radii = df["radius"].to_numpy()[keep] if "radius" in df.columns else None
 
     # Resolve the scale scalar once instead of per shape.
     scale_value = _extract_scalar_value(scale, default=1.0)
@@ -665,7 +670,7 @@ def _build_shape_patches(
             patch_row_idx.append(i)
         elif geom_type == "MultiPolygon":
             for m in _make_patch_from_multipolygon(geom):
-                _scale_pathpatch_around_centroid(m, scale)
+                _scale_pathpatch_around_centroid(m, scale_value)
                 patches.append(m)
                 patch_row_idx.append(i)
         elif geom_type == "Point":
@@ -809,11 +814,8 @@ def _get_collection_shape(
 
     # Expand the per-shape fill colours to per-patch (a MultiPolygon owns several
     # patches). Preserve the single-colour broadcast used for multi-shape elements.
-    fill_list = fill_c.tolist() if hasattr(fill_c, "tolist") else list(fill_c)
-    if n_shapes > 1 and len(fill_list) == 1:
-        patch_fill = [fill_list[0]] * len(patches)
-    else:
-        patch_fill = [fill_list[i] for i in patch_row_idx]
+    broadcast_single = n_shapes > 1 and len(fill_c) == 1
+    patch_fill = np.repeat(fill_c, len(patches), axis=0) if broadcast_single else fill_c[patch_row_idx]
 
     return PatchCollection(
         patches,
