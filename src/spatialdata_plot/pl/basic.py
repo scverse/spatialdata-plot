@@ -1794,19 +1794,21 @@ class PlotAccessor:
                             colorbar_requests=axis_colorbar_requests,
                         )
 
-                if title is None:
-                    t = panel_key if panel_key is not None else cs
-                elif len(title) == 1:
-                    t = title[0]
-                else:
-                    try:
-                        t = title[i]
-                    except IndexError as e:
-                        raise IndexError("The number of titles must match the number of panels.") from e
-                ax.set_title(t)
-                ax.set_aspect("equal")
-                if fig_params.frameon is False:
-                    ax.axis("off")
+            # Title/aspect/frameon are panel-level: set once per panel, after the
+            # per-command loop above (not once per render command).
+            if title is None:
+                t = panel_key if panel_key is not None else cs
+            elif len(title) == 1:
+                t = title[0]
+            else:
+                try:
+                    t = title[i]
+                except IndexError as e:
+                    raise IndexError("The number of titles must match the number of panels.") from e
+            ax.set_title(t)
+            ax.set_aspect("equal")
+            if fig_params.frameon is False:
+                ax.axis("off")
 
             if has_shapes and wants_shapes:
                 empty_shape_elements = [
