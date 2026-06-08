@@ -70,6 +70,7 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
+    _get_or_compute_centroids,
     _hex_no_alpha,
     _join_table_for_element,
     _make_continuous_mappable,
@@ -751,6 +752,35 @@ def _render_shapes(
         color_source_vector = color_source_vector.remove_unused_categories()
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
+    if render_params.as_points:
+        # Fast mode: draw one dot per shape at its centroid instead of its geometry.
+        logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
+        centroids = shapes.geometry.centroid  # intrinsic coords, positionally aligned to color_vector
+        _render_centroids_as_points(
+            ax,
+            x=centroids.x.to_numpy(),
+            y=centroids.y.to_numpy(),
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            na_color=render_params.cmap_params.na_color,
+            size=render_params.size,
+            alpha=render_params.fill_alpha,
+            zorder=render_params.zorder,
+            transform=trans_data,  # intrinsic -> coordinate system -> display
+            adata=table,
+            col_for_color=col_for_color,
+            palette=palette,
+            fig_params=fig_params,
+            legend_params=legend_params,
+            colorbar=render_params.colorbar,
+            colorbar_params=render_params.colorbar_params,
+            colorbar_requests=colorbar_requests,
+        )
+        return
+
     # convert shapes if necessary
     if render_params.shape is not None:
         current_type = shapes["geometry"].type
@@ -1083,6 +1113,55 @@ def _scatter_points(
         transform=trans_data,
         zorder=zorder,
         plotnonfinite=True,  # nan points should be rendered as well
+    )
+
+
+def _render_centroids_as_points(
+    ax: matplotlib.axes.SubplotBase,
+    *,
+    x: Any,
+    y: Any,
+    color_vector: Any,
+    color_source_vector: pd.Series | None,
+    cmap: Colormap,
+    norm: Normalize | None,
+    na_color: Any,
+    size: float,
+    alpha: float,
+    zorder: int,
+    transform: Any,
+    adata: AnnData | None,
+    col_for_color: str | None,
+    palette: Any,
+    fig_params: FigParams,
+    legend_params: LegendParams,
+    colorbar: bool | str | None,
+    colorbar_params: dict[str, object] | None,
+    colorbar_requests: list[ColorbarSpec] | None,
+) -> None:
+    """Render one dot per cell at ``(x, y)`` colored like the fill, with legend/colorbar.
+
+    Shared "fast mode" draw for shapes/labels: ``color_vector`` is the same per-instance color
+    vector the geometry/raster path would use, so colors match the full rendering exactly.
+    """
+    cax = _scatter_points(
+        ax, x, y, color_vector, size=size, cmap=cmap, norm=norm, alpha=alpha, trans_data=transform, zorder=zorder
+    )
+    _add_legend_and_colorbar(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=adata,
+        col_for_color=col_for_color,
+        color_source_vector=color_source_vector,
+        color_vector=color_vector,
+        palette=palette,
+        alpha=alpha,
+        na_color=na_color,
+        legend_params=legend_params,
+        colorbar=colorbar,
+        colorbar_params=colorbar_params,
+        colorbar_requests=colorbar_requests,
     )
 
 
@@ -2271,6 +2350,38 @@ def _render_labels(
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
+
+    if render_params.as_points:
+        # Fast mode: draw one dot per label at its centroid instead of the mask. Centroids come
+        # from `regionprops` (orders of magnitude faster than rasterizing) in coordinate-system
+        # coords, aligned to `instance_id` (and thus to `color_vector`).
+        logger.info("`as_points=True`: rendering label centroids; `contour_px` and `outline_*` are ignored.")
+        centroids = _get_or_compute_centroids(
+            sdata_filt, element, coordinate_system=coordinate_system, table_name=table_name
+        ).reindex(instance_id)
+        _render_centroids_as_points(
+            ax,
+            x=centroids["x"].to_numpy(),
+            y=centroids["y"].to_numpy(),
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            cmap=render_params.cmap_params.cmap,
+            norm=render_params.cmap_params.norm,
+            na_color=na_color,
+            size=render_params.size,
+            alpha=render_params.fill_alpha,
+            zorder=render_params.zorder,
+            transform=ax.transData,  # centroids already in coordinate-system (= axes data) space
+            adata=table if table_name is not None else None,
+            col_for_color=col_for_color,
+            palette=palette,
+            fig_params=fig_params,
+            legend_params=legend_params,
+            colorbar=render_params.colorbar,
+            colorbar_params=render_params.colorbar_params,
+            colorbar_requests=colorbar_requests,
+        )
+        return
 
     def _draw_labels(
         seg_erosionpx: int | None,

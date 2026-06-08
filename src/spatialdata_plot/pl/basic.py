@@ -332,6 +332,8 @@ class PlotAccessor:
         colorbar_params: dict[str, object] | None = None,
         datashader_reduction: _DsReduction | None = None,
         transfunc: Callable[[float], float] | None = None,
+        as_points: bool = False,
+        size: float | int = 1.0,
     ) -> sd.SpatialData:
         """
         Render shapes elements in SpatialData.
@@ -515,6 +517,8 @@ class PlotAccessor:
                     ds_reduction=param_values["ds_reduction"],
                     colorbar=param_values["colorbar"],
                     colorbar_params=param_values["colorbar_params"],
+                    as_points=as_points,
+                    size=size,
                     panel_key=panel_key,
                 )
                 n_steps += 1
@@ -953,6 +957,8 @@ class PlotAccessor:
         table_layer: str | None = None,
         gene_symbols: str | None = None,
         transfunc: Callable[[float], float] | None = None,
+        as_points: bool = False,
+        size: float | int = 1.0,
     ) -> sd.SpatialData:
         """
         Render labels elements in SpatialData.
@@ -1101,6 +1107,8 @@ class PlotAccessor:
                     zorder=n_steps,
                     colorbar=param_values["colorbar"],
                     colorbar_params=param_values["colorbar_params"],
+                    as_points=as_points,
+                    size=size,
                     panel_key=panel_key,
                 )
                 n_steps += 1

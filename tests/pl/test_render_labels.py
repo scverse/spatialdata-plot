@@ -605,3 +605,17 @@ def test_render_labels_color_list_creates_one_panel_per_key(sdata_blobs: Spatial
     assert len(axs) == 2
     assert [ax.get_title() for ax in axs] == ["channel_0_sum", "channel_1_sum"]
     plt.close("all")
+
+
+def test_render_labels_as_points_renders_centroids(sdata_blobs: SpatialData):
+    """as_points draws one dot per label at its centroid instead of the rasterized mask."""
+    import spatialdata as sd
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=50).pl.show(ax=ax)
+    offsets = np.asarray(ax.collections[0].get_offsets())
+    ref = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()[["x", "y"]]
+    assert len(offsets) == len(ref)
+    assert np.allclose(np.sort(offsets[:, 0]), np.sort(ref["x"].to_numpy()), atol=1e-6)
+    assert np.allclose(np.sort(offsets[:, 1]), np.sort(ref["y"].to_numpy()), atol=1e-6)
+    plt.close(fig)

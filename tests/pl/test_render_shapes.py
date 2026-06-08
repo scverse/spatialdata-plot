@@ -1691,3 +1691,27 @@ def test_render_shapes_color_list_branches_are_independent(sdata_blobs: SpatialD
     # branch1 is still usable and unaffected
     assert len(branch1.plotting_tree) == base_steps + 2
     plt.close("all")
+
+
+def test_render_shapes_as_points_renders_centroids(sdata_blobs: SpatialData):
+    """as_points draws one dot per shape at its centroid (fast mode)."""
+    import spatialdata as sd
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=50).pl.show(ax=ax)
+    offsets = np.asarray(ax.collections[0].get_offsets())
+    ref = sd.get_centroids(sdata_blobs["blobs_circles"]).compute()[["x", "y"]]
+    assert len(offsets) == len(ref)
+    assert np.allclose(np.sort(offsets[:, 0]), np.sort(ref["x"].to_numpy()), atol=1e-6)
+    assert np.allclose(np.sort(offsets[:, 1]), np.sort(ref["y"].to_numpy()), atol=1e-6)
+    plt.close(fig)
+
+
+def test_render_shapes_as_points_ignores_outline_and_shape(sdata_blobs: SpatialData):
+    """outline_* and shape are ignored under as_points and must not error."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons", as_points=True, outline_alpha=1.0, outline_color="red", shape="square"
+    ).pl.show(ax=ax)
+    assert len(ax.collections) >= 1  # a scatter, not the patch collections of the geometry path
+    plt.close(fig)
