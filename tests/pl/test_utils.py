@@ -12,12 +12,12 @@ from spatialdata import SpatialData, get_centroids
 from spatialdata.models import PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
+from spatialdata_plot.pl import measure_obs
 from spatialdata_plot.pl.render_params import Color, ColorLike
 from spatialdata_plot.pl.utils import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
     _set_outline,
-    measure_obs,
     set_zero_in_cmap_to_transparent,
 )
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
