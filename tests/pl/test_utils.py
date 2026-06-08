@@ -518,6 +518,22 @@ class TestCentroids:
         assert list(mine.index) == list(ref.index)
         assert np.allclose(mine.values, ref.values, atol=1e-9)
 
+    def test_label_centroids_stream_out_of_core_and_chunk_exact(self, sdata_blobs: SpatialData):
+        import dask.array as da
+
+        from spatialdata_plot.pl.utils import _stream_label_centroid_stats
+
+        lab = np.asarray(sdata_blobs["blobs_labels"].data.compute())
+        l_np, x_np, y_np, a_np = _stream_label_centroid_stats(lab)
+        # many small chunks -> exercises block streaming + global offsets; must be exact.
+        l_da, x_da, y_da, a_da = _stream_label_centroid_stats(da.from_array(lab, chunks=(64, 64)))
+        assert np.array_equal(l_np, l_da)
+        assert np.allclose(x_np, x_da) and np.allclose(y_np, y_da)
+        assert np.array_equal(a_np, a_da)
+        # area is the per-label pixel count; background label 0 is excluded.
+        assert np.array_equal(a_np.astype(int), np.bincount(lab.ravel())[l_np])
+        assert 0 not in l_np
+
     def test_cache_is_coordinate_system_independent(self, sdata_blobs: SpatialData):
         # one intrinsic cache serves every coordinate system: add a second CS and confirm both
         # match get_centroids while only one obsm["spatial"] is written.

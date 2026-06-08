@@ -26,6 +26,7 @@ import shapely
 import spatialdata as sd
 from anndata import AnnData
 from cycler import Cycler, cycler
+from dask.array.core import slices_from_chunks
 from datashader.core import Canvas
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
@@ -55,7 +56,6 @@ from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 from skimage.color import label2rgb
-from skimage.measure import regionprops_table
 from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
@@ -4445,21 +4445,62 @@ def _transform_carrier(element: SpatialElement) -> Any:
     return element
 
 
-def _compute_label_centroids(element: DataArray | DataTree) -> pd.DataFrame:
-    """Per-label centroids in the element's *intrinsic* coordinates via skimage ``regionprops``.
+def _stream_label_centroid_stats(data: Any) -> tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    """Per-label ``(labels, mean_x_index, mean_y_index, area)`` via a streaming bincount aggregator.
 
-    ``regionprops`` does the per-label reduction in a single C pass, orders of magnitude
-    faster than ``spatialdata.get_centroids`` on labels (which scans the raster row/column-wise
-    and scales with raster area). Returns intrinsic coords; the caller maps them to a target
-    coordinate system on demand.
+    Streams the raster block by block — one chunk in memory at a time for a dask array, a
+    bounded row-block at a time for a numpy array — accumulating per-label ``count`` (= area),
+    ``sum_x`` and ``sum_y``. The reduction is additive, so it is exact across block boundaries
+    and uses only O(n_labels) memory regardless of raster size. Background label 0 is excluded.
+    """
+    n_rows, n_cols = data.shape
+    is_dask = hasattr(data, "chunks") and not isinstance(data, np.ndarray)
+    if is_dask:
+        n_labels = int(data.max().compute()) + 1
+        block_slices = slices_from_chunks(data.chunks)
+    else:
+        data = np.asarray(data)
+        n_labels = int(data.max()) + 1
+        # bound the per-block coordinate-weight arrays to ~8M pixels
+        step = max(1, min(n_rows, (8 << 20) // max(1, n_cols)))
+        block_slices = [(slice(r0, min(r0 + step, n_rows)), slice(0, n_cols)) for r0 in range(0, n_rows, step)]
+
+    count = np.zeros(n_labels, dtype=np.float64)
+    sum_x = np.zeros(n_labels, dtype=np.float64)
+    sum_y = np.zeros(n_labels, dtype=np.float64)
+    for row_sl, col_sl in block_slices:
+        block = data[row_sl, col_sl]
+        block = np.asarray(block.compute() if hasattr(block, "compute") else block)
+        block_rows, block_cols = block.shape
+        flat = block.reshape(-1)
+        cols = np.tile(np.arange(col_sl.start, col_sl.start + block_cols, dtype=np.float64), block_rows)
+        rows = np.repeat(np.arange(row_sl.start, row_sl.start + block_rows, dtype=np.float64), block_cols)
+        count += np.bincount(flat, minlength=n_labels)
+        sum_x += np.bincount(flat, weights=cols, minlength=n_labels)
+        sum_y += np.bincount(flat, weights=rows, minlength=n_labels)
+
+    labels = np.flatnonzero(count)
+    labels = labels[labels != 0]  # drop background and absent labels
+    return labels, sum_x[labels] / count[labels], sum_y[labels] / count[labels], count[labels]
+
+
+def _compute_label_centroids(element: DataArray | DataTree) -> pd.DataFrame:
+    """Per-label centroids in the element's *intrinsic* coordinates via a streaming bincount aggregator.
+
+    The centroid is the mean pixel coordinate per label, computed with an additive
+    ``bincount`` aggregator (``count``/``sum_x``/``sum_y`` per label). ``count`` is the cell
+    **area** — a free by-product. The aggregator streams the (possibly huge, dask-backed)
+    raster **block by block**, holding only one chunk plus O(n_labels) accumulators, so it
+    scales to Xenium-size masks with hundreds of thousands of cells where ``regionprops``
+    (whole-array, per-label table) would run out of memory. Returns intrinsic coords; the
+    caller maps them to a target coordinate system on demand.
     """
     raster = _transform_carrier(element)
-    values = np.asarray(raster.data)  # materialize the intrinsic pixel grid
-    props = regionprops_table(values, properties=("label", "centroid"))
+    labels, x_idx, y_idx, _area = _stream_label_centroid_stats(raster.data)
 
-    # regionprops excludes background (label 0); centroid-0 = row (y), centroid-1 = col (x)
-    # as 0-based fractional indices. Map them onto the raster's intrinsic coordinate arrays
-    # (spatialdata uses pixel-center coords 0.5, 1.5, ... and possibly non-unit spacing).
+    # bincount gives mean 0-based pixel indices; map them onto the raster's intrinsic
+    # coordinate arrays (spatialdata uses pixel-center coords 0.5, 1.5, ... and possibly
+    # non-unit spacing).
     def _index_to_coord(idx: ArrayLike, coord: ArrayLike) -> ArrayLike:
         spacing = (coord[1] - coord[0]) if len(coord) > 1 else 1.0
         return coord[0] + idx * spacing
@@ -4467,11 +4508,8 @@ def _compute_label_centroids(element: DataArray | DataTree) -> pd.DataFrame:
     xcoord = np.asarray(raster.coords["x"].values)
     ycoord = np.asarray(raster.coords["y"].values)
     return pd.DataFrame(
-        {
-            "x": _index_to_coord(props["centroid-1"], xcoord),
-            "y": _index_to_coord(props["centroid-0"], ycoord),
-        },
-        index=props["label"],
+        {"x": _index_to_coord(x_idx, xcoord), "y": _index_to_coord(y_idx, ycoord)},
+        index=labels,
     )
 
 
