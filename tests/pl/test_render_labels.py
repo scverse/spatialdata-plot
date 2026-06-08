@@ -619,3 +619,15 @@ def test_render_labels_as_points_renders_centroids(sdata_blobs: SpatialData):
     assert np.allclose(np.sort(offsets[:, 0]), np.sort(ref["x"].to_numpy()), atol=1e-6)
     assert np.allclose(np.sort(offsets[:, 1]), np.sort(ref["y"].to_numpy()), atol=1e-6)
     plt.close(fig)
+
+
+def test_render_labels_as_points_without_color(sdata_blobs: SpatialData):
+    """as_points must not crash without a color column; the background label (0) is excluded."""
+    import spatialdata as sd
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", as_points=True).pl.show(ax=ax)
+    offsets = np.asarray(ax.collections[0].get_offsets())
+    n_cells = len(sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute())
+    assert len(offsets) == n_cells  # one dot per cell, no spurious background point
+    plt.close(fig)

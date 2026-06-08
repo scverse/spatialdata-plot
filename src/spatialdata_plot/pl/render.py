@@ -2354,17 +2354,32 @@ def _render_labels(
     if render_params.as_points:
         # Fast mode: draw one dot per label at its centroid instead of the mask. Centroids come
         # from `regionprops` (orders of magnitude faster than rasterizing) in coordinate-system
-        # coords, aligned to `instance_id` (and thus to `color_vector`).
+        # coords.
         logger.info("`as_points=True`: rendering label centroids; `contour_px` and `outline_*` are ignored.")
+        # `instance_id` may include the background label 0 (which has no centroid); drop it.
+        keep = instance_id != 0
+        point_ids = instance_id[keep]
         centroids = _get_or_compute_centroids(
             sdata_filt, element, coordinate_system=coordinate_system, table_name=table_name
-        ).reindex(instance_id)
+        ).reindex(point_ids)
+        # Align the per-cell color to the rendered centroids. For data-driven color the vector is
+        # already per-instance (paired with `instance_id`); for the literal/no-color path it is
+        # not, so fall back to one na/literal color per centroid.
+        point_color_vector = np.asarray(color_vector)
+        point_color_source_vector = color_source_vector
+        if len(point_color_vector) == len(instance_id):
+            point_color_vector = point_color_vector[keep]
+            if point_color_source_vector is not None:
+                point_color_source_vector = point_color_source_vector[keep]
+        else:
+            point_color_vector = np.asarray([na_color.get_hex_with_alpha()] * len(point_ids))
+            point_color_source_vector = None
         _render_centroids_as_points(
             ax,
             x=centroids["x"].to_numpy(),
             y=centroids["y"].to_numpy(),
-            color_vector=color_vector,
-            color_source_vector=color_source_vector,
+            color_vector=point_color_vector,
+            color_source_vector=point_color_source_vector,
             cmap=render_params.cmap_params.cmap,
             norm=render_params.cmap_params.norm,
             na_color=na_color,
