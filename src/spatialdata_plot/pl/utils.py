@@ -4490,6 +4490,13 @@ def _compute_element_centroids(sdata: SpatialData, element_name: str, coordinate
     return centroids[["x", "y"]]
 
 
+def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, ArrayLike]:
+    """Return ``(instance_key, mask)`` for the rows of ``table`` that annotate ``element_name``."""
+    _, region_key, instance_key = get_table_keys(table)
+    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    return instance_key, mask
+
+
 def _read_cached_centroids(
     sdata: SpatialData, element_name: str, table_name: str, coordinate_system: str
 ) -> pd.DataFrame | None:
@@ -4502,14 +4509,13 @@ def _read_cached_centroids(
     table = sdata.tables[table_name]
     if _CENTROID_OBSM_KEY not in table.obsm:
         return None
-    coords = np.asarray(table.obsm[_CENTROID_OBSM_KEY], dtype=float)
+    coords = np.asarray(table.obsm[_CENTROID_OBSM_KEY])
     if coords.ndim != 2 or coords.shape[0] != table.n_obs or coords.shape[1] < 2:
         return None
-    _, region_key, instance_key = get_table_keys(table)
-    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    instance_key, mask = _region_mask_and_keys(table, element_name)
     if not mask.any():
         return None
-    region_coords = coords[mask][:, :2]
+    region_coords = coords[mask][:, :2].astype(float)
     if np.isnan(region_coords).any():
         return None  # not (fully) populated for this element
     prov_root = table.uns.get(_CENTROID_PROVENANCE_UNS_KEY)
@@ -4531,28 +4537,29 @@ def _write_cached_centroids(
     reused rather than overwritten.
     """
     table = sdata.tables[table_name]
-    _, region_key, instance_key = get_table_keys(table)
-    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    instance_key, mask = _region_mask_and_keys(table, element_name)
     if not mask.any():
         return
     if _CENTROID_OBSM_KEY in table.obsm:
-        existing = np.asarray(table.obsm[_CENTROID_OBSM_KEY], dtype=float)
+        existing = np.asarray(table.obsm[_CENTROID_OBSM_KEY])
         if existing.ndim != 2 or existing.shape != (table.n_obs, 2):
             return  # don't clobber an incompatible obsm["spatial"]
-        arr = existing.copy()
+        arr = existing.astype(float, copy=True)
     else:
         arr = np.full((table.n_obs, 2), np.nan, dtype=float)
     aligned = centroids.reindex(table.obs[instance_key].to_numpy()[mask])
     arr[mask, 0] = aligned["x"].to_numpy()
     arr[mask, 1] = aligned["y"].to_numpy()
     table.obsm[_CENTROID_OBSM_KEY] = arr
-    prov_root = table.uns.setdefault(_CENTROID_PROVENANCE_UNS_KEY, {})
+    # We own the `spatialdata_plot` uns namespace; coerce anything unexpected so obsm and
+    # the provenance marker are always written together (no half-write).
+    prov_root = table.uns.get(_CENTROID_PROVENANCE_UNS_KEY)
     if not isinstance(prov_root, dict):
-        return
+        prov_root = {}
+        table.uns[_CENTROID_PROVENANCE_UNS_KEY] = prov_root
     prov_root.setdefault("centroids", {})[element_name] = {
         "coordinate_system": coordinate_system,
         "n": int(mask.sum()),
-        "key": _CENTROID_OBSM_KEY,
     }
 
 
@@ -4573,12 +4580,12 @@ def _get_or_compute_centroids(
 
     Returns a DataFrame indexed by instance id with columns ``["x", "y"]``.
     """
-    table = table_name if (table_name is not None and table_name in sdata.tables) else None
-    if table is not None:
-        cached = _read_cached_centroids(sdata, element_name, table, coordinate_system)
+    resolved_table = table_name if (table_name is not None and table_name in sdata.tables) else None
+    if resolved_table is not None:
+        cached = _read_cached_centroids(sdata, element_name, resolved_table, coordinate_system)
         if cached is not None:
             return cached
     centroids = _compute_element_centroids(sdata, element_name, coordinate_system)
-    if cache and table is not None:
-        _write_cached_centroids(sdata, element_name, table, coordinate_system, centroids)
+    if cache and resolved_table is not None:
+        _write_cached_centroids(sdata, element_name, resolved_table, coordinate_system, centroids)
     return centroids
