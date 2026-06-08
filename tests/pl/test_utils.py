@@ -572,32 +572,26 @@ class TestMeasureObs:
         assert "spatial" in out["table"].obsm
         assert "spatial" not in sdata_blobs["table"].obsm  # original not mutated
 
-    def test_idempotent_trusts_existing_unless_forced(self, sdata_blobs: SpatialData) -> None:
+    def test_recompute_overwrites(self, sdata_blobs: SpatialData) -> None:
         measure_obs(sdata_blobs, "blobs_labels")
         table = sdata_blobs["table"]
-        # a user edit to a populated row is trusted (no recompute) on a second call...
-        table.obsm["spatial"][0] = [999.0, 999.0]
-        measure_obs(sdata_blobs, "blobs_labels")
-        assert tuple(table.obsm["spatial"][0]) == (999.0, 999.0)
-        # ...but force recomputes it
-        measure_obs(sdata_blobs, "blobs_labels", force=True)
+        table.obsm["spatial"][0] = [999.0, 999.0]  # corrupt one row
+        measure_obs(sdata_blobs, "blobs_labels")  # second call overwrites with the real centroid
         assert tuple(table.obsm["spatial"][0]) != (999.0, 999.0)
 
-    def test_preexisting_obsm_is_trusted(self, sdata_blobs: SpatialData) -> None:
+    def test_centroids_false_keeps_existing_obsm(self, sdata_blobs: SpatialData) -> None:
         table = sdata_blobs["table"]
         sentinel = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
         table.obsm["spatial"] = sentinel.copy()
-        measure_obs(sdata_blobs, "blobs_labels")  # centroids already present -> not overwritten
+        measure_obs(sdata_blobs, "blobs_labels", centroids=False)  # only area/diameter written
         np.testing.assert_array_equal(table.obsm["spatial"], sentinel)
+        assert "area" in table.obs
 
-    def test_stale_instance_count_triggers_recompute(self, sdata_blobs: SpatialData) -> None:
-        measure_obs(sdata_blobs, "blobs_labels")
+    def test_incompatible_obsm_shape_raises(self, sdata_blobs: SpatialData) -> None:
         table = sdata_blobs["table"]
-        table.obsm["spatial"][:] = -1.0  # corrupt all rows
-        # pretend the instance count changed since we wrote -> provenance mismatch
-        table.uns["spatialdata_plot"]["centroids"]["blobs_labels"]["n"] = table.n_obs + 1
-        measure_obs(sdata_blobs, "blobs_labels")  # stale -> recompute despite finite values
-        assert not np.any(table.obsm["spatial"] == -1.0)
+        table.obsm["spatial"] = np.zeros((table.n_obs, 3))  # e.g. xyz; cannot write 2D centroids over it
+        with pytest.raises(ValueError, match="Refusing to overwrite"):
+            measure_obs(sdata_blobs, "blobs_labels")
 
     def test_flags_select_outputs(self, sdata_blobs: SpatialData) -> None:
         measure_obs(sdata_blobs, "blobs_labels", area=False, diameter=False)
