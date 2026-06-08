@@ -26,6 +26,7 @@ import shapely
 import spatialdata as sd
 from anndata import AnnData
 from cycler import Cycler, cycler
+from dask.array.core import slices_from_chunks
 from datashader.core import Canvas
 from geopandas import GeoDataFrame
 from matplotlib import colors, patheffects, rcParams
@@ -59,6 +60,7 @@ from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
+    deepcopy as sd_deepcopy,
     get_element_annotators,
     get_extent,
     get_values,
@@ -67,7 +69,14 @@ from spatialdata import (
 )
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, get_table_keys
+from spatialdata.models import (
+    Image2DModel,
+    Labels2DModel,
+    ShapesModel,
+    SpatialElement,
+    get_model,
+    get_table_keys,
+)
 from spatialdata.transformations.operations import get_transformation
 from spatialdata.transformations.transformations import Scale, Translation
 from spatialdata.transformations.transformations import Sequence as TransformSequence
@@ -4417,3 +4426,356 @@ def _convert_alpha_to_datashader_range(alpha: float) -> float:
     """Convert alpha from the range [0, 1] to the range [0, 255] used in datashader."""
     # prevent a value of 255, bc that led to fully colored test plots instead of just colored points/shapes
     return min([254, alpha * 255])
+
+
+# --- Per-cell measurements into the annotating table (centroid / area / equivalent diameter) ---
+
+# squidpy/scanpy canonical key for per-cell coordinates: an N x 2 array, row-aligned to obs.
+_CENTROID_OBSM_KEY = "spatial"
+# Our provenance namespace in ``table.uns``. Measurements are stored in the element's *intrinsic*
+# coordinates/units (coordinate-system-independent), so the marker records the resolution level
+# and the instance count (to invalidate when cells are added), not a coordinate system.
+_CENTROID_PROVENANCE_UNS_KEY = "spatialdata_plot"
+_CENTROID_SCALE_LEVEL = "scale0"  # rasters are reduced at full resolution (decision: exact)
+
+
+def _transform_carrier(element: SpatialElement) -> Any:
+    """Return the object carrying ``element``'s data (the ``scale0`` level for multiscale rasters)."""
+    if isinstance(element, DataTree):
+        return next(iter(element[_CENTROID_SCALE_LEVEL].values()))
+    return element
+
+
+def _stream_label_centroid_stats(data: Any) -> tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]:
+    """Per-label ``(labels, mean_x_index, mean_y_index, area)`` via a streaming bincount aggregator.
+
+    Streams the raster block by block — one chunk in memory at a time for a dask array, a
+    bounded row-block at a time for a numpy array — accumulating per-label ``count`` (= area),
+    ``sum_x`` and ``sum_y``. The reduction is additive, so it is exact across block boundaries
+    and uses only O(n_labels) memory regardless of raster size. Background label 0 is excluded.
+    """
+    n_rows, n_cols = data.shape
+    is_dask = hasattr(data, "chunks") and not isinstance(data, np.ndarray)
+    if is_dask:
+        n_labels = int(data.max().compute()) + 1
+        block_slices = slices_from_chunks(data.chunks)
+    else:
+        data = np.asarray(data)
+        n_labels = int(data.max()) + 1
+        # bound the per-block coordinate-weight arrays to ~8M pixels
+        step = max(1, min(n_rows, (8 << 20) // max(1, n_cols)))
+        block_slices = [(slice(r0, min(r0 + step, n_rows)), slice(0, n_cols)) for r0 in range(0, n_rows, step)]
+
+    count = np.zeros(n_labels, dtype=np.float64)
+    sum_x = np.zeros(n_labels, dtype=np.float64)
+    sum_y = np.zeros(n_labels, dtype=np.float64)
+    for row_sl, col_sl in block_slices:
+        block = data[row_sl, col_sl]
+        block = np.asarray(block.compute() if hasattr(block, "compute") else block)
+        block_rows, block_cols = block.shape
+        flat = block.reshape(-1)
+        cols = np.tile(np.arange(col_sl.start, col_sl.start + block_cols, dtype=np.float64), block_rows)
+        rows = np.repeat(np.arange(row_sl.start, row_sl.start + block_rows, dtype=np.float64), block_cols)
+        count += np.bincount(flat, minlength=n_labels)
+        sum_x += np.bincount(flat, weights=cols, minlength=n_labels)
+        sum_y += np.bincount(flat, weights=rows, minlength=n_labels)
+
+    labels = np.flatnonzero(count)
+    labels = labels[labels != 0]  # drop background and absent labels
+    return labels, sum_x[labels] / count[labels], sum_y[labels] / count[labels], count[labels]
+
+
+def _compute_label_measurements(element: DataArray | DataTree) -> pd.DataFrame:
+    """Per-label intrinsic centroid + pixel area via the streaming bincount aggregator.
+
+    Returns a DataFrame indexed by label value with columns ``["x", "y", "area"]`` in the
+    element's *intrinsic* coordinates; ``area`` is the pixel count, a free by-product of the
+    aggregator. The aggregator streams the (possibly huge, dask-backed) raster block by block,
+    holding only one chunk plus O(n_labels) accumulators, so it scales to Xenium-size masks
+    where ``regionprops`` (whole-array, per-label table) would run out of memory.
+    """
+    raster = _transform_carrier(element)
+    labels, x_idx, y_idx, area = _stream_label_centroid_stats(raster.data)
+
+    # bincount gives mean 0-based pixel indices; map them onto the raster's intrinsic coordinate
+    # arrays (spatialdata uses pixel-center coords 0.5, 1.5, ... and possibly non-unit spacing).
+    def _index_to_coord(idx: ArrayLike, coord: ArrayLike) -> ArrayLike:
+        spacing = (coord[1] - coord[0]) if len(coord) > 1 else 1.0
+        return coord[0] + idx * spacing
+
+    xcoord = np.asarray(raster.coords["x"].values)
+    ycoord = np.asarray(raster.coords["y"].values)
+    return pd.DataFrame(
+        {
+            "x": _index_to_coord(x_idx, xcoord),
+            "y": _index_to_coord(y_idx, ycoord),
+            "area": np.asarray(area, dtype=float),
+        },
+        index=labels,
+    )
+
+
+def _compute_element_measurements(sdata: SpatialData, element_name: str) -> pd.DataFrame:
+    """One row per instance with intrinsic ``["x", "y", "area"]``, indexed by instance id.
+
+    Shapes use shapely's vectorized ``.centroid`` / ``.area`` (area in intrinsic squared units);
+    2D labels use the streaming bincount aggregator (area = pixel count). Other element types are
+    rejected explicitly. Area meaning therefore differs across element types but is consistent
+    within one element.
+    """
+    element = sdata[element_name]
+    model = get_model(element)
+    if model is ShapesModel:
+        centroids = element.geometry.centroid
+        return pd.DataFrame(
+            {
+                "x": centroids.x.to_numpy(),
+                "y": centroids.y.to_numpy(),
+                "area": element.geometry.area.to_numpy(),
+            },
+            index=element.index,
+        )
+    if model is Labels2DModel:
+        return _compute_label_measurements(element)
+    raise NotImplementedError(
+        f"Measurement is only supported for shapes and 2D labels; "
+        f"element {element_name!r} is a {model.__name__}."
+    )
+
+
+def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, ArrayLike]:
+    """Return ``(instance_key, mask)`` for the rows of ``table`` that annotate ``element_name``."""
+    _, region_key, instance_key = get_table_keys(table)
+    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    return instance_key, mask
+
+
+def _valid_spatial_obsm(arr: ArrayLike, n_obs: int) -> bool:
+    """Whether ``arr`` is a usable ``obsm["spatial"]``: a 2D ``(n_obs, 2)`` coordinate grid."""
+    return bool(arr.ndim == 2 and arr.shape == (n_obs, 2))
+
+
+def _measurement_provenance(table: AnnData, element_name: str) -> dict[str, Any] | None:
+    """Our measurement provenance marker for ``element_name``, or None if absent/malformed."""
+    root = table.uns.get(_CENTROID_PROVENANCE_UNS_KEY)
+    if not isinstance(root, dict):
+        return None
+    marker = root.get("centroids", {}).get(element_name)
+    return marker if isinstance(marker, dict) else None
+
+
+def _record_measurement_provenance(table: AnnData, element_name: str, n: int) -> None:
+    """Record ``(n, scale_level)`` for ``element_name`` so a later instance-count change invalidates."""
+    root = table.uns.get(_CENTROID_PROVENANCE_UNS_KEY)
+    if not isinstance(root, dict):
+        root = {}
+        table.uns[_CENTROID_PROVENANCE_UNS_KEY] = root
+    root.setdefault("centroids", {})[element_name] = {"n": int(n), "scale_level": _CENTROID_SCALE_LEVEL}
+
+
+def _obs_region_finite(table: AnnData, key: str, mask: ArrayLike) -> bool:
+    """Whether ``obs[key]`` exists and is finite for every row in ``mask`` (already populated)."""
+    if key not in table.obs:
+        return False
+    vals = np.asarray(table.obs[key].to_numpy(), dtype=float)[mask]
+    return bool(vals.size and np.isfinite(vals).all())
+
+
+def _obsm_region_finite(table: AnnData, key: str, mask: ArrayLike) -> bool:
+    """Whether ``obsm[key]`` is a valid ``(n_obs, 2)`` grid and finite for every row in ``mask``."""
+    if key not in table.obsm:
+        return False
+    arr = np.asarray(table.obsm[key])
+    if not _valid_spatial_obsm(arr, table.n_obs):
+        return False
+    region = arr[mask].astype(float)
+    return bool(region.size and np.isfinite(region).all())
+
+
+def _write_obs_region(table: AnnData, mask: ArrayLike, key: str, values: ArrayLike) -> None:
+    """Write ``values`` into ``obs[key]`` at ``mask`` rows; other rows stay/are NaN."""
+    if key in table.obs:
+        col = np.asarray(table.obs[key].to_numpy(), dtype=float)
+    else:
+        col = np.full(table.n_obs, np.nan, dtype=float)
+    col[mask] = np.asarray(values, dtype=float)
+    table.obs[key] = col
+
+
+def _write_obsm_region(table: AnnData, mask: ArrayLike, key: str, xy: ArrayLike) -> None:
+    """Write intrinsic centroids ``xy`` into ``obsm[key]`` at ``mask`` rows; other rows stay/are NaN.
+
+    Never reshapes an incompatible existing ``obsm[key]`` (e.g. a 3-column xyz array): that would
+    silently drop data, so it raises instead.
+    """
+    if key in table.obsm:
+        existing = np.asarray(table.obsm[key])
+        if not _valid_spatial_obsm(existing, table.n_obs):
+            raise ValueError(
+                f"Refusing to overwrite obsm[{key!r}] with shape {existing.shape}; expected "
+                f"({table.n_obs}, 2). Remove it first if you want it replaced."
+            )
+        arr = existing.astype(float, copy=True)
+    else:
+        arr = np.full((table.n_obs, 2), np.nan, dtype=float)
+    arr[mask] = np.asarray(xy, dtype=float)
+    table.obsm[key] = arr
+
+
+def _measure_into_table(
+    sdata: SpatialData,
+    element_name: str,
+    table_name: str,
+    *,
+    centroids: bool,
+    area: bool,
+    diameter: bool,
+    obsm_key: str,
+    area_key: str,
+    diameter_key: str,
+    force: bool,
+) -> None:
+    """Compute and persist the requested measurements for one element into its annotating table."""
+    table = sdata.tables[table_name]
+    instance_key, mask = _region_mask_and_keys(table, element_name)
+    if not mask.any():
+        raise ValueError(f"Table {table_name!r} does not annotate element {element_name!r} (no matching rows).")
+    n = int(mask.sum())
+
+    prov = _measurement_provenance(table, element_name)
+    stale = prov is not None and prov.get("n") != n  # cells added/removed since we last wrote
+    want_centroids = centroids and (force or stale or not _obsm_region_finite(table, obsm_key, mask))
+    want_area = area and (force or stale or not _obs_region_finite(table, area_key, mask))
+    want_diameter = diameter and (force or stale or not _obs_region_finite(table, diameter_key, mask))
+    if not (want_centroids or want_area or want_diameter):
+        return  # everything requested is already present and current
+
+    meas = _compute_element_measurements(sdata, element_name)  # intrinsic [x, y, area]
+    aligned = meas.reindex(table.obs[instance_key].to_numpy()[mask])
+    if want_centroids:
+        _write_obsm_region(table, mask, obsm_key, aligned[["x", "y"]].to_numpy())
+    if want_area:
+        _write_obs_region(table, mask, area_key, aligned["area"].to_numpy())
+    if want_diameter:
+        _write_obs_region(table, mask, diameter_key, 2.0 * np.sqrt(aligned["area"].to_numpy() / np.pi))
+    _record_measurement_provenance(table, element_name, n)
+
+
+def _measurable_elements(sdata: SpatialData) -> list[str]:
+    """Shapes / 2D-labels elements with exactly one annotating table (where measurements persist)."""
+    names: list[str] = []
+    for name in list(sdata.shapes.keys()) + list(sdata.labels.keys()):
+        if len(get_element_annotators(sdata, name)) != 1:
+            continue
+        if get_model(sdata[name]) in (ShapesModel, Labels2DModel):
+            names.append(name)
+    return names
+
+
+def _resolve_measure_table(sdata: SpatialData, element_name: str, table_name: str | None) -> str:
+    """Resolve the single annotating table for ``element_name`` (where measurements are written)."""
+    if table_name is not None:
+        if table_name not in sdata.tables:
+            raise KeyError(f"Table {table_name!r} not found in `sdata.tables`.")
+        return table_name
+    annotators = sorted(get_element_annotators(sdata, element_name))
+    if not annotators:
+        raise ValueError(
+            f"Element {element_name!r} has no annotating table; per-cell measurements need a table "
+            f"to write into. Pass `table_name=` or annotate the element first."
+        )
+    if len(annotators) > 1:
+        raise ValueError(
+            f"Element {element_name!r} is annotated by multiple tables ({', '.join(annotators)}); "
+            f"pass `table_name=` to pick one."
+        )
+    return annotators[0]
+
+
+def measure_obs(
+    sdata: SpatialData,
+    element: str | None = None,
+    *,
+    table_name: str | None = None,
+    centroids: bool = True,
+    area: bool = True,
+    diameter: bool = True,
+    obsm_key: str = _CENTROID_OBSM_KEY,
+    area_key: str = "area",
+    diameter_key: str = "equivalent_diameter",
+    force: bool = False,
+    inplace: bool = True,
+) -> SpatialData | None:
+    """Measure per-cell centroids, area and equivalent diameter into an element's annotating table.
+
+    Computes one centroid, area and equivalent diameter per instance of a shapes or 2D-labels
+    element and writes them, squidpy-style, into the annotating :class:`~anndata.AnnData` table:
+    centroids go to ``table.obsm[obsm_key]`` (an ``(n_obs, 2)`` array, the canonical
+    ``obsm["spatial"]``), area and diameter to ``table.obs``. Values are stored in the element's
+    *intrinsic* coordinates/units (coordinate-system independent). Labels area is the pixel count;
+    shapes area is ``geometry.area``; equivalent diameter is ``2 * sqrt(area / pi)``. Persisting
+    them once lets later renders (and downstream tools such as squidpy) reuse them instead of
+    recomputing.
+
+    The function is idempotent: outputs already present and current for an element are not
+    recomputed. A pre-existing ``obsm[obsm_key]`` (e.g. from a reader) is trusted and never
+    overwritten. Adding cells (which leaves new rows unmeasured) triggers a recompute; pass
+    ``force=True`` to recompute unconditionally.
+
+    Per-cell measurements need a table to write into, so an element without an annotating table
+    cannot be measured (this raises). The function never densifies the raster: the label path
+    streams it block by block, scaling to Xenium-size masks.
+
+    Parameters
+    ----------
+    sdata
+        The ``SpatialData`` object holding the element and its annotating table.
+    element
+        Name of the shapes/2D-labels element to measure. If ``None``, every shapes/2D-labels
+        element that has exactly one annotating table is measured.
+    table_name
+        Name of the annotating table to write into. If ``None``, it is inferred from the element's
+        annotators (an error is raised when there are zero or several).
+    centroids, area, diameter
+        Which measurements to compute/persist. At least one must be ``True``.
+    obsm_key
+        ``obsm`` key for the centroids (default ``"spatial"``, the squidpy convention).
+    area_key, diameter_key
+        ``obs`` column names for area and equivalent diameter.
+    force
+        Recompute and overwrite even when current values are already present.
+    inplace
+        If ``True`` (default), mutate ``sdata``'s table in place and return ``None``. If ``False``,
+        operate on a deep copy and return the modified ``SpatialData``.
+
+    Returns
+    -------
+    ``None`` if ``inplace`` is ``True``, otherwise the modified deep-copied ``SpatialData``.
+    """
+    if not (centroids or area or diameter):
+        raise ValueError("Nothing to measure: set at least one of `centroids`, `area`, `diameter` to True.")
+    target = sdata if inplace else sd_deepcopy(sdata)
+    if element is None:
+        names = _measurable_elements(target)
+        if not names:
+            raise ValueError(
+                "No shapes/2D-labels element with a single annotating table was found; nothing to "
+                "measure. Pass an explicit `element=` (and `table_name=` if ambiguous)."
+            )
+    else:
+        names = [element]
+    for name in names:
+        resolved_table = _resolve_measure_table(target, name, table_name)
+        _measure_into_table(
+            target,
+            name,
+            resolved_table,
+            centroids=centroids,
+            area=area,
+            diameter=diameter,
+            obsm_key=obsm_key,
+            area_key=area_key,
+            diameter_key=diameter_key,
+            force=force,
+        )
+    return None if inplace else target

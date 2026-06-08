@@ -8,7 +8,7 @@ import scanpy as sc
 import xarray as xr
 from anndata import AnnData
 from shapely.geometry import Point
-from spatialdata import SpatialData
+from spatialdata import SpatialData, get_centroids
 from spatialdata.models import PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
@@ -17,6 +17,7 @@ from spatialdata_plot.pl.utils import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
     _set_outline,
+    measure_obs,
     set_zero_in_cmap_to_transparent,
 )
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -496,3 +497,118 @@ def test_rasterize_target_unit_to_pixels_uses_world_extent(monkeypatch):
     assert captured["target_unit_to_pixels"] == pytest.approx(0.15, rel=1e-6), (
         f"Expected world-unit basis (0.15), got {captured['target_unit_to_pixels']}"
     )
+
+
+def _add_shapes_table(sdata: SpatialData, element: str = "blobs_polygons", name: str = "shapes_table") -> SpatialData:
+    """Add a table annotating a shapes element so it can be measured."""
+    gdf = sdata[element]
+    adata = AnnData(np.zeros((len(gdf), 1), dtype=np.float32))
+    adata.obs["instance_id"] = list(gdf.index)
+    adata.obs["region"] = element
+    sdata[name] = TableModel.parse(
+        adata, region_key="region", instance_key="instance_id", region=element
+    )
+    return sdata
+
+
+class TestMeasureObs:
+    """`measure_obs` materializes centroids/area/equivalent diameter into the annotating table."""
+
+    def test_writes_centroid_area_diameter_for_labels(self, sdata_blobs: SpatialData) -> None:
+        ret = measure_obs(sdata_blobs, "blobs_labels")
+        assert ret is None  # inplace default
+        table = sdata_blobs["table"]
+
+        assert "spatial" in table.obsm
+        coords = table.obsm["spatial"]
+        assert coords.shape == (table.n_obs, 2)
+        assert np.isfinite(coords).all()
+        assert "area" in table.obs and "equivalent_diameter" in table.obs
+
+        # centroids match spatialdata's get_centroids (blobs_labels has the identity transform,
+        # so global == intrinsic here)
+        gc = get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()
+        expected = gc.reindex(table.obs["instance_id"].to_numpy())[["x", "y"]].to_numpy()
+        np.testing.assert_allclose(coords, expected, rtol=1e-6)
+
+        # area is the pixel count (positive integers); diameter = 2*sqrt(area/pi)
+        area = table.obs["area"].to_numpy()
+        assert (area > 0).all()
+        np.testing.assert_allclose(
+            table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12
+        )
+
+    def test_writes_for_shapes(self, sdata_blobs: SpatialData) -> None:
+        _add_shapes_table(sdata_blobs, "blobs_polygons")
+        measure_obs(sdata_blobs, "blobs_polygons", table_name="shapes_table")
+        table = sdata_blobs["shapes_table"]
+
+        gdf = sdata_blobs["blobs_polygons"]
+        expected_xy = np.column_stack([gdf.geometry.centroid.x, gdf.geometry.centroid.y])
+        order = table.obs["instance_id"].to_numpy()
+        expected_xy = expected_xy[[list(gdf.index).index(i) for i in order]]
+        np.testing.assert_allclose(table.obsm["spatial"], expected_xy, rtol=1e-9)
+        np.testing.assert_allclose(
+            table.obs["area"].to_numpy(),
+            gdf.geometry.area.to_numpy()[[list(gdf.index).index(i) for i in order]],
+            rtol=1e-9,
+        )
+
+    def test_inplace_false_leaves_original_untouched(self, sdata_blobs: SpatialData) -> None:
+        out = measure_obs(sdata_blobs, "blobs_labels", inplace=False)
+        assert isinstance(out, SpatialData)
+        assert "spatial" in out["table"].obsm
+        assert "spatial" not in sdata_blobs["table"].obsm  # original not mutated
+
+    def test_idempotent_trusts_existing_unless_forced(self, sdata_blobs: SpatialData) -> None:
+        measure_obs(sdata_blobs, "blobs_labels")
+        table = sdata_blobs["table"]
+        # a user edit to a populated row is trusted (no recompute) on a second call...
+        table.obsm["spatial"][0] = [999.0, 999.0]
+        measure_obs(sdata_blobs, "blobs_labels")
+        assert tuple(table.obsm["spatial"][0]) == (999.0, 999.0)
+        # ...but force recomputes it
+        measure_obs(sdata_blobs, "blobs_labels", force=True)
+        assert tuple(table.obsm["spatial"][0]) != (999.0, 999.0)
+
+    def test_preexisting_obsm_is_trusted(self, sdata_blobs: SpatialData) -> None:
+        table = sdata_blobs["table"]
+        sentinel = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
+        table.obsm["spatial"] = sentinel.copy()
+        measure_obs(sdata_blobs, "blobs_labels")  # centroids already present -> not overwritten
+        np.testing.assert_array_equal(table.obsm["spatial"], sentinel)
+
+    def test_stale_instance_count_triggers_recompute(self, sdata_blobs: SpatialData) -> None:
+        measure_obs(sdata_blobs, "blobs_labels")
+        table = sdata_blobs["table"]
+        table.obsm["spatial"][:] = -1.0  # corrupt all rows
+        # pretend the instance count changed since we wrote -> provenance mismatch
+        table.uns["spatialdata_plot"]["centroids"]["blobs_labels"]["n"] = table.n_obs + 1
+        measure_obs(sdata_blobs, "blobs_labels")  # stale -> recompute despite finite values
+        assert not np.any(table.obsm["spatial"] == -1.0)
+
+    def test_flags_select_outputs(self, sdata_blobs: SpatialData) -> None:
+        measure_obs(sdata_blobs, "blobs_labels", area=False, diameter=False)
+        table = sdata_blobs["table"]
+        assert "spatial" in table.obsm
+        assert "area" not in table.obs and "equivalent_diameter" not in table.obs
+
+    def test_no_annotating_table_raises(self, sdata_blobs: SpatialData) -> None:
+        # blobs_circles is not annotated by any table
+        with pytest.raises(ValueError, match="no annotating table"):
+            measure_obs(sdata_blobs, "blobs_circles")
+
+    def test_ambiguous_table_raises(self, sdata_blobs: SpatialData) -> None:
+        _add_shapes_table(sdata_blobs, "blobs_polygons", name="table_a")
+        _add_shapes_table(sdata_blobs, "blobs_polygons", name="table_b")
+        with pytest.raises(ValueError, match="multiple tables"):
+            measure_obs(sdata_blobs, "blobs_polygons")
+
+    def test_nothing_to_measure_raises(self, sdata_blobs: SpatialData) -> None:
+        with pytest.raises(ValueError, match="at least one"):
+            measure_obs(sdata_blobs, "blobs_labels", centroids=False, area=False, diameter=False)
+
+    def test_element_none_measures_single_table_elements(self, sdata_blobs: SpatialData) -> None:
+        # default blobs: only blobs_labels has a single annotating table
+        measure_obs(sdata_blobs)
+        assert "spatial" in sdata_blobs["table"].obsm
