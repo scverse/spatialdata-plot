@@ -66,13 +66,11 @@ from spatialdata import (
     join_spatialelement_table,
     rasterize,
 )
-from spatialdata._core.operations.transform import transform as sd_transform
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
 from spatialdata.models import (
     Image2DModel,
     Labels2DModel,
-    PointsModel,
     ShapesModel,
     SpatialElement,
     get_model,
@@ -4440,8 +4438,8 @@ _CENTROID_PROVENANCE_UNS_KEY = "spatialdata_plot"
 _CENTROID_SCALE_LEVEL = "scale0"  # labels are reduced at full resolution (decision: exact)
 
 
-def _transformable_raster(element: DataArray | DataTree) -> DataArray:
-    """Return the raster level (``scale0`` for multiscale) carrying intrinsic coords + transforms."""
+def _transform_carrier(element: SpatialElement) -> Any:
+    """Return the object carrying ``element``'s transforms (the ``scale0`` level for multiscale rasters)."""
     if isinstance(element, DataTree):
         return next(iter(element[_CENTROID_SCALE_LEVEL].values()))
     return element
@@ -4455,7 +4453,7 @@ def _compute_label_centroids(element: DataArray | DataTree) -> pd.DataFrame:
     and scales with raster area). Returns intrinsic coords; the caller maps them to a target
     coordinate system on demand.
     """
-    raster = _transformable_raster(element)
+    raster = _transform_carrier(element)
     values = np.asarray(raster.data)  # materialize the intrinsic pixel grid
     props = regionprops_table(values, properties=("label", "centroid"))
 
@@ -4500,11 +4498,16 @@ def _compute_element_centroids(sdata: SpatialData, element_name: str) -> pd.Data
 def _centroids_to_coordinate_system(
     intrinsic: pd.DataFrame, element: SpatialElement, coordinate_system: str
 ) -> pd.DataFrame:
-    """Map intrinsic centroids to ``coordinate_system`` via the element's transform (preserves index)."""
-    target = _transformable_raster(element) if isinstance(element, DataArray | DataTree) else element
-    t = get_transformation(target, coordinate_system)
-    points = PointsModel.parse(intrinsic, transformations={coordinate_system: t})
-    return sd_transform(points, to_coordinate_system=coordinate_system).compute()[["x", "y"]]
+    """Map intrinsic centroids to ``coordinate_system`` via the element's affine transform.
+
+    Applies the transform as a plain numpy matmul rather than a ``PointsModel`` + dask round
+    trip — this runs on every render (including cache hits), so the dask overhead would defeat
+    the cache. Preserves the instance-id index.
+    """
+    t = get_transformation(_transform_carrier(element), coordinate_system)
+    matrix = t.to_affine_matrix(input_axes=("x", "y"), output_axes=("x", "y"))
+    xy = intrinsic[["x", "y"]].to_numpy() @ matrix[:2, :2].T + matrix[:2, 2]
+    return pd.DataFrame({"x": xy[:, 0], "y": xy[:, 1]}, index=intrinsic.index)
 
 
 def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, ArrayLike]:
@@ -4512,6 +4515,14 @@ def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, Array
     _, region_key, instance_key = get_table_keys(table)
     mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
     return instance_key, mask
+
+
+def _valid_spatial_obsm(arr: ArrayLike, n_obs: int) -> bool:
+    """Whether ``arr`` is a usable ``obsm["spatial"]``: a 2D ``(n_obs, 2)`` coordinate grid.
+
+    Read and write share this gate so they cannot drift on the obsm layout.
+    """
+    return bool(arr.ndim == 2 and arr.shape == (n_obs, 2))
 
 
 def _centroid_provenance(table: AnnData, element_name: str) -> dict[str, Any] | None:
@@ -4534,12 +4545,12 @@ def _read_cached_centroids(sdata: SpatialData, element_name: str, table_name: st
     if _CENTROID_OBSM_KEY not in table.obsm:
         return None
     coords = np.asarray(table.obsm[_CENTROID_OBSM_KEY])
-    if coords.ndim != 2 or coords.shape[0] != table.n_obs or coords.shape[1] < 2:
+    if not _valid_spatial_obsm(coords, table.n_obs):
         return None
     instance_key, mask = _region_mask_and_keys(table, element_name)
     if not mask.any():
         return None
-    region_coords = coords[mask][:, :2].astype(float)
+    region_coords = coords[mask].astype(float)
     if np.isnan(region_coords).any():
         return None  # not (fully) populated for this element
     prov = _centroid_provenance(table, element_name)
@@ -4562,7 +4573,7 @@ def _write_cached_centroids(sdata: SpatialData, element_name: str, table_name: s
         return
     if _CENTROID_OBSM_KEY in table.obsm:
         existing = np.asarray(table.obsm[_CENTROID_OBSM_KEY])
-        if existing.ndim != 2 or existing.shape != (table.n_obs, 2):
+        if not _valid_spatial_obsm(existing, table.n_obs):
             return  # don't clobber an incompatible obsm["spatial"]
         arr = existing.astype(float, copy=True)
     else:
