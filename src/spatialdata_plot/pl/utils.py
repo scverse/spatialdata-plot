@@ -4527,12 +4527,15 @@ def _compute_element_measurements(sdata: SpatialData, element_name: str) -> pd.D
     model = get_model(element)
     if model is ShapesModel:
         centroids = element.geometry.centroid
+        # Circles are stored as ``Point`` geometries with a ``radius`` column, for which
+        # shapely ``.area`` is 0; their area is ``pi * r**2``. Polygons/multipolygons use
+        # the true geometric area.
+        if "radius" in element.columns:
+            area = np.pi * np.asarray(element["radius"], dtype=float) ** 2
+        else:
+            area = element.geometry.area.to_numpy()
         return pd.DataFrame(
-            {
-                "x": centroids.x.to_numpy(),
-                "y": centroids.y.to_numpy(),
-                "area": element.geometry.area.to_numpy(),
-            },
+            {"x": centroids.x.to_numpy(), "y": centroids.y.to_numpy(), "area": area},
             index=element.index,
         )
     if model is Labels2DModel:

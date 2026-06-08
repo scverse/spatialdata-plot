@@ -554,6 +554,18 @@ class TestMeasureObs:
             rtol=1e-9,
         )
 
+    def test_circles_area_is_pi_r_squared(self, sdata_blobs: SpatialData) -> None:
+        # Circles are stored as Point geometries (radius column); shapely .area is 0 for them,
+        # so area must be pi * r**2 and equivalent diameter must equal the true diameter 2*r.
+        _add_shapes_table(sdata_blobs, "blobs_circles", name="circles_table")
+        measure_obs(sdata_blobs, "blobs_circles", table_name="circles_table")
+        table = sdata_blobs["circles_table"]
+        gdf = sdata_blobs["blobs_circles"]
+        order = table.obs["instance_id"].to_numpy()
+        r = gdf["radius"].to_numpy()[[list(gdf.index).index(i) for i in order]]
+        np.testing.assert_allclose(table.obs["area"].to_numpy(), np.pi * r**2, rtol=1e-9)
+        np.testing.assert_allclose(table.obs["equivalent_diameter"].to_numpy(), 2.0 * r, rtol=1e-9)
+
     def test_inplace_false_leaves_original_untouched(self, sdata_blobs: SpatialData) -> None:
         out = measure_obs(sdata_blobs, "blobs_labels", inplace=False)
         assert isinstance(out, SpatialData)
