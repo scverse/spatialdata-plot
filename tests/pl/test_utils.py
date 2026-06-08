@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
+import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from shapely.geometry import Point
@@ -14,8 +15,13 @@ from spatialdata.models import PointsModel, ShapesModel, TableModel
 import spatialdata_plot
 from spatialdata_plot.pl.render_params import Color, ColorLike
 from spatialdata_plot.pl.utils import (
+    _CENTROID_OBSM_KEY,
+    _CENTROID_PROVENANCE_UNS_KEY,
     _apply_cmap_alpha_to_datashader_result,
+    _compute_element_centroids,
     _datashader_map_aggregate_to_color,
+    _get_or_compute_centroids,
+    _read_cached_centroids,
     _set_outline,
     set_zero_in_cmap_to_transparent,
 )
@@ -496,3 +502,62 @@ def test_rasterize_target_unit_to_pixels_uses_world_extent(monkeypatch):
     assert captured["target_unit_to_pixels"] == pytest.approx(0.15, rel=1e-6), (
         f"Expected world-unit basis (0.15), got {captured['target_unit_to_pixels']}"
     )
+
+
+class TestCentroids:
+    """Centroid extraction + squidpy ``obsm['spatial']`` caching (no rendering)."""
+
+    def test_shapes_centroids_match_get_centroids(self, sdata_blobs: SpatialData):
+        mine = _compute_element_centroids(sdata_blobs, "blobs_circles", "global").sort_index()
+        ref = sd.get_centroids(sdata_blobs["blobs_circles"]).compute()[["x", "y"]].sort_index()
+        assert np.allclose(mine.values, ref.values)
+
+    def test_labels_centroids_match_get_centroids(self, sdata_blobs: SpatialData):
+        # regionprops path must reproduce spatialdata's exact center-of-mass (incl. the
+        # pixel-center 0.5 offset), just much faster.
+        mine = _compute_element_centroids(sdata_blobs, "blobs_labels", "global").sort_index()
+        ref = sd.get_centroids(sdata_blobs["blobs_labels"]).compute()[["x", "y"]].sort_index()
+        assert list(mine.index) == list(ref.index)
+        assert np.allclose(mine.values, ref.values, atol=1e-9)
+
+    def test_cache_round_trip_and_provenance(self, sdata_blobs: SpatialData):
+        table = sdata_blobs["table"]
+        assert _CENTROID_OBSM_KEY not in table.obsm
+        computed = _get_or_compute_centroids(
+            sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table"
+        )
+        assert _CENTROID_OBSM_KEY in table.obsm
+        prov = table.uns[_CENTROID_PROVENANCE_UNS_KEY]["centroids"]["blobs_labels"]
+        assert prov["coordinate_system"] == "global"
+        assert prov["n"] == len(computed)
+        cached = _read_cached_centroids(sdata_blobs, "blobs_labels", "table", "global")
+        assert cached is not None
+        assert np.allclose(cached.sort_index().values, computed.sort_index().values)
+
+    def test_cache_invalidated_on_coordinate_system_change(self, sdata_blobs: SpatialData):
+        _get_or_compute_centroids(sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table")
+        assert _read_cached_centroids(sdata_blobs, "blobs_labels", "table", "global") is not None
+        # cached for "global" must not be reused for a different coordinate system
+        assert _read_cached_centroids(sdata_blobs, "blobs_labels", "table", "other_cs") is None
+
+    def test_preexisting_obsm_spatial_is_trusted(self, sdata_blobs: SpatialData):
+        # a loader/user-provided obsm["spatial"] is used as the cells' locations (squidpy
+        # convention) without recomputation.
+        table = sdata_blobs["table"]
+        coords = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
+        table.obsm[_CENTROID_OBSM_KEY] = coords
+        got = _read_cached_centroids(sdata_blobs, "blobs_labels", "table", "global")
+        assert got is not None
+        assert len(got) == table.n_obs  # the whole table annotates this single region
+
+    def test_no_annotating_table_computes_without_caching(self, sdata_blobs: SpatialData):
+        # blobs_circles has no annotating table -> compute and return, no persistence.
+        centroids = _get_or_compute_centroids(sdata_blobs, "blobs_circles", coordinate_system="global", table_name=None)
+        assert list(centroids.columns) == ["x", "y"]
+        assert len(centroids) > 0
+
+    def test_cache_false_does_not_write(self, sdata_blobs: SpatialData):
+        _get_or_compute_centroids(
+            sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table", cache=False
+        )
+        assert _CENTROID_OBSM_KEY not in sdata_blobs["table"].obsm

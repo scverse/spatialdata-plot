@@ -55,19 +55,29 @@ from scanpy.plotting.palettes import default_20, default_28, default_102
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 from skimage.color import label2rgb
+from skimage.measure import regionprops_table
 from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
+    get_centroids,
     get_element_annotators,
     get_extent,
     get_values,
     join_spatialelement_table,
     rasterize,
 )
+from spatialdata._core.operations.transform import transform as sd_transform
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
-from spatialdata.models import Image2DModel, Labels2DModel, SpatialElement, get_table_keys
+from spatialdata.models import (
+    Image2DModel,
+    Labels2DModel,
+    PointsModel,
+    SpatialElement,
+    get_model,
+    get_table_keys,
+)
 from spatialdata.transformations.operations import get_transformation
 from spatialdata.transformations.transformations import Scale, Translation
 from spatialdata.transformations.transformations import Sequence as TransformSequence
@@ -4417,3 +4427,158 @@ def _convert_alpha_to_datashader_range(alpha: float) -> float:
     """Convert alpha from the range [0, 1] to the range [0, 255] used in datashader."""
     # prevent a value of 255, bc that led to fully colored test plots instead of just colored points/shapes
     return min([254, alpha * 255])
+
+
+# --- Cell-centroid extraction & caching (squidpy `obsm["spatial"]` convention) ---
+
+# squidpy/scanpy canonical key for per-cell coordinates: an N x 2 array, row-aligned to obs.
+_CENTROID_OBSM_KEY = "spatial"
+# Provenance marker so we know which element / coordinate system a cached `obsm["spatial"]`
+# was computed for, and can invalidate it when the requested coordinate system changes.
+_CENTROID_PROVENANCE_UNS_KEY = "spatialdata_plot"
+
+
+def _compute_label_centroids(element: DataArray | DataTree, coordinate_system: str) -> pd.DataFrame:
+    """Per-label centroids via skimage ``regionprops`` + the element's coordinate transform.
+
+    ``regionprops`` does the per-label reduction in a single C pass, which is orders of
+    magnitude faster than ``spatialdata.get_centroids`` on labels (that scans the raster
+    row/column-wise and scales with raster area). The intrinsic pixel centroids are then
+    mapped into ``coordinate_system`` with spatialdata's own transform machinery.
+    """
+    raster = element
+    if isinstance(element, DataTree):
+        # full-resolution level, matching spatialdata.get_centroids
+        raster = next(iter(element["scale0"].values()))
+    values = np.asarray(raster.data)  # materialize the intrinsic pixel grid
+    props = regionprops_table(values, properties=("label", "centroid"))
+
+    # regionprops excludes background (label 0); centroid-0 = row (y), centroid-1 = col (x)
+    # as 0-based fractional indices. Map them onto the raster's intrinsic coordinate arrays
+    # (spatialdata uses pixel-center coords 0.5, 1.5, ... and possibly non-unit spacing),
+    # which reproduces spatialdata.get_centroids exactly.
+    def _index_to_coord(idx: ArrayLike, coord: ArrayLike) -> ArrayLike:
+        spacing = (coord[1] - coord[0]) if len(coord) > 1 else 1.0
+        return coord[0] + idx * spacing
+
+    xcoord = np.asarray(raster.coords["x"].values)
+    ycoord = np.asarray(raster.coords["y"].values)
+    intrinsic = pd.DataFrame(
+        {
+            "x": _index_to_coord(props["centroid-1"], xcoord),
+            "y": _index_to_coord(props["centroid-0"], ycoord),
+        },
+        index=props["label"],
+    )
+    t = get_transformation(raster, coordinate_system)
+    points = PointsModel.parse(intrinsic, transformations={coordinate_system: t})
+    mapped = sd_transform(points, to_coordinate_system=coordinate_system).compute()
+    return mapped[["x", "y"]]
+
+
+def _compute_element_centroids(sdata: SpatialData, element_name: str, coordinate_system: str) -> pd.DataFrame:
+    """Compute one centroid per instance of a shapes/labels element.
+
+    Returns a DataFrame indexed by instance id (shape index / label value) with columns
+    ``["x", "y"]`` in ``coordinate_system``. Shapes use spatialdata's vectorized
+    ``get_centroids`` (already fast); labels use the regionprops path above.
+    """
+    element = sdata[element_name]
+    if get_model(element) is Labels2DModel:
+        return _compute_label_centroids(element, coordinate_system)
+    centroids = get_centroids(element, coordinate_system=coordinate_system).compute()
+    return centroids[["x", "y"]]
+
+
+def _read_cached_centroids(
+    sdata: SpatialData, element_name: str, table_name: str, coordinate_system: str
+) -> pd.DataFrame | None:
+    """Return centroids from the annotating table's ``obsm["spatial"]`` if usable, else None.
+
+    A pre-existing ``obsm["spatial"]`` (loader/user-provided) is trusted as the cells'
+    locations (squidpy convention). One that *we* wrote is reused only when our provenance
+    marker records the same coordinate system.
+    """
+    table = sdata.tables[table_name]
+    if _CENTROID_OBSM_KEY not in table.obsm:
+        return None
+    coords = np.asarray(table.obsm[_CENTROID_OBSM_KEY], dtype=float)
+    if coords.ndim != 2 or coords.shape[0] != table.n_obs or coords.shape[1] < 2:
+        return None
+    _, region_key, instance_key = get_table_keys(table)
+    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    if not mask.any():
+        return None
+    region_coords = coords[mask][:, :2]
+    if np.isnan(region_coords).any():
+        return None  # not (fully) populated for this element
+    prov_root = table.uns.get(_CENTROID_PROVENANCE_UNS_KEY)
+    prov = prov_root.get("centroids", {}).get(element_name) if isinstance(prov_root, dict) else None
+    if prov is not None and prov.get("coordinate_system") != coordinate_system:
+        return None  # we cached it for a different coordinate system -> recompute
+    idx = table.obs[instance_key].to_numpy()[mask]
+    return pd.DataFrame({"x": region_coords[:, 0], "y": region_coords[:, 1]}, index=idx)
+
+
+def _write_cached_centroids(
+    sdata: SpatialData, element_name: str, table_name: str, coordinate_system: str, centroids: pd.DataFrame
+) -> None:
+    """Persist centroids into the annotating table's ``obsm["spatial"]`` + a provenance marker.
+
+    Fills only the rows belonging to ``element_name`` (a table may annotate several
+    elements); other rows are left NaN. Never clobbers an incompatible existing
+    ``obsm["spatial"]``. Callers run the read path first, so a valid existing cache is
+    reused rather than overwritten.
+    """
+    table = sdata.tables[table_name]
+    _, region_key, instance_key = get_table_keys(table)
+    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
+    if not mask.any():
+        return
+    if _CENTROID_OBSM_KEY in table.obsm:
+        existing = np.asarray(table.obsm[_CENTROID_OBSM_KEY], dtype=float)
+        if existing.ndim != 2 or existing.shape != (table.n_obs, 2):
+            return  # don't clobber an incompatible obsm["spatial"]
+        arr = existing.copy()
+    else:
+        arr = np.full((table.n_obs, 2), np.nan, dtype=float)
+    aligned = centroids.reindex(table.obs[instance_key].to_numpy()[mask])
+    arr[mask, 0] = aligned["x"].to_numpy()
+    arr[mask, 1] = aligned["y"].to_numpy()
+    table.obsm[_CENTROID_OBSM_KEY] = arr
+    prov_root = table.uns.setdefault(_CENTROID_PROVENANCE_UNS_KEY, {})
+    if not isinstance(prov_root, dict):
+        return
+    prov_root.setdefault("centroids", {})[element_name] = {
+        "coordinate_system": coordinate_system,
+        "n": int(mask.sum()),
+        "key": _CENTROID_OBSM_KEY,
+    }
+
+
+def _get_or_compute_centroids(
+    sdata: SpatialData,
+    element_name: str,
+    *,
+    coordinate_system: str,
+    table_name: str | None = None,
+    cache: bool = True,
+) -> pd.DataFrame:
+    """Per-instance centroids, reusing/persisting them via the squidpy ``obsm["spatial"]`` convention.
+
+    If the annotating table already carries cell coordinates in ``obsm["spatial"]`` (loader-,
+    user-, or previously-cached for the same coordinate system), they are reused with no
+    recomputation. Otherwise centroids are computed and, when ``cache`` is True and an
+    annotating table exists, written back so later renders are instant.
+
+    Returns a DataFrame indexed by instance id with columns ``["x", "y"]``.
+    """
+    table = table_name if (table_name is not None and table_name in sdata.tables) else None
+    if table is not None:
+        cached = _read_cached_centroids(sdata, element_name, table, coordinate_system)
+        if cached is not None:
+            return cached
+    centroids = _compute_element_centroids(sdata, element_name, coordinate_system)
+    if cache and table is not None:
+        _write_cached_centroids(sdata, element_name, table, coordinate_system, centroids)
+    return centroids

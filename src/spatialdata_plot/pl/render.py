@@ -21,7 +21,7 @@ import xarray as xr
 from anndata import AnnData
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import ListedColormap, Normalize
+from matplotlib.colors import Colormap, ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values
@@ -1052,6 +1052,40 @@ def _render_shapes(
     )
 
 
+def _scatter_points(
+    ax: matplotlib.axes.SubplotBase,
+    x: Any,
+    y: Any,
+    color_vector: Any,
+    *,
+    size: float,
+    cmap: Colormap,
+    norm: Normalize | None,
+    alpha: float,
+    trans_data: Any,
+    zorder: int,
+) -> Any:
+    """Draw one marker per (x, y) colored by ``color_vector`` via ``ax.scatter``.
+
+    Shared matplotlib scatter primitive: used by ``_render_points`` and (later) by the
+    centroid-point "fast" rendering of shapes/labels. ``color_vector`` is per-point hex
+    strings (categorical) or numeric values mapped through ``cmap``/``norm`` (continuous).
+    """
+    return ax.scatter(
+        x,
+        y,
+        s=size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=cmap,
+        norm=norm,
+        alpha=alpha,
+        transform=trans_data,
+        zorder=zorder,
+        plotnonfinite=True,  # nan points should be rendered as well
+    )
+
+
 def _render_points(
     sdata: sd.SpatialData,
     render_params: PointsRenderParams,
@@ -1404,18 +1438,17 @@ def _render_points(
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
-        cax = ax.scatter(
+        cax = _scatter_points(
+            ax,
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
-            s=render_params.size,
-            c=color_vector,
-            rasterized=sc_settings._vector_friendly,
+            color_vector,
+            size=render_params.size,
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans_data,
+            trans_data=trans_data,
             zorder=render_params.zorder,
-            plotnonfinite=True,  # nan points should be rendered as well
         )
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
