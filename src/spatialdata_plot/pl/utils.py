@@ -4535,13 +4535,6 @@ def _compute_element_measurements(sdata: SpatialData, element_name: str) -> pd.D
     )
 
 
-def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, ArrayLike]:
-    """Return ``(instance_key, mask)`` for the rows of ``table`` that annotate ``element_name``."""
-    _, region_key, instance_key = get_table_keys(table)
-    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
-    return instance_key, mask
-
-
 def _valid_spatial_obsm(arr: ArrayLike, n_obs: int) -> bool:
     """Whether ``arr`` is a usable ``obsm["spatial"]``: a 2D ``(n_obs, 2)`` coordinate grid."""
     return bool(arr.ndim == 2 and arr.shape == (n_obs, 2))
@@ -4599,7 +4592,8 @@ def _measure_into_table(
     the first write, so a bad column never leaves the table half-written.
     """
     table = sdata.tables[table_name]
-    instance_key, mask = _region_mask_and_keys(table, element_name)
+    _, region_key, instance_key = get_table_keys(table)
+    mask = (table.obs[region_key].astype(str) == str(element_name)).to_numpy()
     if not mask.any():
         raise ValueError(f"Table {table_name!r} does not annotate element {element_name!r} (no matching rows).")
 
@@ -4642,17 +4636,6 @@ def _measure_into_table(
         _write_region(table, mask, _DIAMETER_OBS_KEY, 2.0 * np.sqrt(area_vals / np.pi), obsm=False)
 
 
-def _measurable_elements(sdata: SpatialData) -> list[str]:
-    """Shapes / 2D-labels elements with exactly one annotating table (where measurements persist)."""
-    names: list[str] = []
-    for name in list(sdata.shapes.keys()) + list(sdata.labels.keys()):
-        if len(get_element_annotators(sdata, name)) != 1:
-            continue
-        if get_model(sdata[name]) in (ShapesModel, Labels2DModel):
-            names.append(name)
-    return names
-
-
 def _resolve_measure_table(sdata: SpatialData, element_name: str, table_name: str | None) -> str:
     """Resolve the single annotating table for ``element_name`` (where measurements are written)."""
     if table_name is not None:
@@ -4688,8 +4671,9 @@ def measure_obs(
     Computes one centroid, area and equivalent diameter per instance of a shapes or 2D-labels
     element and writes them, squidpy-style, into the annotating :class:`~anndata.AnnData` table:
     centroids go to ``table.obsm["spatial"]`` (an ``(n_obs, 2)`` array, the squidpy convention),
-    area and diameter to ``table.obs["area"]`` and ``table.obs["equivalent_diameter"]``. Values are stored in the element's
-    *intrinsic* pixel coordinates/units (which align directly with the element's own raster/geometry).
+    area and diameter to ``table.obs["area"]`` and ``table.obs["equivalent_diameter"]``. Values are
+    stored in the element's *intrinsic* pixel coordinates/units (which align directly with the
+    element's own raster/geometry).
     Labels area is the pixel count; shapes area is ``geometry.area`` (``pi*r**2`` for circles);
     equivalent diameter is ``2 * sqrt(area / pi)``. Persisting them once lets later renders (and
     downstream tools such as squidpy) reuse them instead of recomputing.
@@ -4727,7 +4711,12 @@ def measure_obs(
         raise ValueError("Nothing to measure: set at least one of `centroids`, `area`, `diameter` to True.")
     target = sdata if inplace else sd_deepcopy(sdata)
     if element is None:
-        names = _measurable_elements(target)
+        # measure every shapes / 2D-labels element that has exactly one annotating table
+        names = [
+            n
+            for n in list(target.shapes) + list(target.labels)
+            if get_model(target[n]) in (ShapesModel, Labels2DModel) and len(get_element_annotators(target, n)) == 1
+        ]
         if not names:
             raise ValueError(
                 "No shapes/2D-labels element with a single annotating table was found; nothing to "
