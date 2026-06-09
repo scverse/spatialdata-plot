@@ -759,24 +759,19 @@ def _render_shapes(
         centroids = shapes.geometry.centroid  # intrinsic coords, positionally aligned to color_vector
         _render_centroids_as_points(
             ax,
+            render_params,
             x=centroids.x.to_numpy(),
             y=centroids.y.to_numpy(),
             color_vector=color_vector,
             color_source_vector=color_source_vector,
-            cmap=render_params.cmap_params.cmap,
             norm=norm,
             na_color=render_params.cmap_params.na_color,
-            size=render_params.size,
-            alpha=render_params.fill_alpha,
-            zorder=render_params.zorder,
             transform=trans_data,  # intrinsic -> coordinate system -> display
             adata=table,
             col_for_color=col_for_color,
             palette=palette,
             fig_params=fig_params,
             legend_params=legend_params,
-            colorbar=render_params.colorbar,
-            colorbar_params=render_params.colorbar_params,
             colorbar_requests=colorbar_requests,
         )
         return
@@ -1118,34 +1113,40 @@ def _scatter_points(
 
 def _render_centroids_as_points(
     ax: matplotlib.axes.SubplotBase,
+    render_params: ShapesRenderParams | LabelsRenderParams,
     *,
     x: Any,
     y: Any,
     color_vector: Any,
     color_source_vector: pd.Series | None,
-    cmap: Colormap,
     norm: Normalize | None,
     na_color: Any,
-    size: float,
-    alpha: float,
-    zorder: int,
     transform: Any,
     adata: AnnData | None,
     col_for_color: str | None,
     palette: Any,
     fig_params: FigParams,
     legend_params: LegendParams,
-    colorbar: bool | str | None,
-    colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
 ) -> None:
     """Render one dot per cell at ``(x, y)`` colored like the fill, with legend/colorbar.
 
-    Shared "fast mode" draw for shapes/labels: ``color_vector`` is the same per-instance color
-    vector the geometry/raster path would use, so colors match the full rendering exactly.
+    Shared "fast mode" draw for shapes/labels: cmap/size/alpha/zorder/colorbar come off
+    ``render_params``; ``color_vector`` is the same per-instance color vector the geometry/raster
+    path would use, so colors match the full rendering exactly. ``norm``/``na_color`` stay explicit
+    because they differ between the shapes (locally adjusted) and labels paths.
     """
     cax = _scatter_points(
-        ax, x, y, color_vector, size=size, cmap=cmap, norm=norm, alpha=alpha, trans_data=transform, zorder=zorder
+        ax,
+        x,
+        y,
+        color_vector,
+        size=render_params.size,
+        cmap=render_params.cmap_params.cmap,
+        norm=norm,
+        alpha=render_params.fill_alpha,
+        trans_data=transform,
+        zorder=render_params.zorder,
     )
     _add_legend_and_colorbar(
         ax=ax,
@@ -1156,11 +1157,11 @@ def _render_centroids_as_points(
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
-        alpha=alpha,
+        alpha=render_params.fill_alpha,
         na_color=na_color,
         legend_params=legend_params,
-        colorbar=colorbar,
-        colorbar_params=colorbar_params,
+        colorbar=render_params.colorbar,
+        colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
     )
 
@@ -2380,24 +2381,19 @@ def _render_labels(
             point_color_source_vector = None
         _render_centroids_as_points(
             ax,
+            render_params,
             x=centroids["x"].to_numpy(),
             y=centroids["y"].to_numpy(),
             color_vector=point_color_vector,
             color_source_vector=point_color_source_vector,
-            cmap=render_params.cmap_params.cmap,
             norm=render_params.cmap_params.norm,
             na_color=na_color,
-            size=render_params.size,
-            alpha=render_params.fill_alpha,
-            zorder=render_params.zorder,
             transform=centroid_trans,  # scale0 intrinsic coords -> coordinate system -> display
             adata=table if table_name is not None else None,
             col_for_color=col_for_color,
             palette=palette,
             fig_params=fig_params,
             legend_params=legend_params,
-            colorbar=render_params.colorbar,
-            colorbar_params=render_params.colorbar_params,
             colorbar_requests=colorbar_requests,
         )
         return
