@@ -78,6 +78,7 @@ from spatialdata_plot.pl.utils import (
     _validate_shape_render_params,
     _validate_show_parameters,
     _verify_plotting_tree,
+    get_extent_fast,
     save_fig,
 )
 
@@ -1828,7 +1829,10 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            extent = get_extent(
+            # `get_extent_fast` skips transforming every shapes/points geometry when the element's
+            # transform is axis-aligned (the common scale+translation case); identical result, but
+            # avoids the O(N-geometries) bottleneck for large shape collections.
+            extent = get_extent_fast(
                 sdata,
                 coordinate_system=cs,
                 has_images=has_images and wants_images,
