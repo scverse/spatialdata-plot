@@ -4453,57 +4453,72 @@ def _stream_label_centroid_stats(data: Any) -> tuple[ArrayLike, ArrayLike, Array
 
     Streams the raster block by block — one chunk in memory at a time for a dask array, a
     bounded row-block at a time for a numpy array — accumulating per-label ``count`` (= area),
-    ``sum_x`` and ``sum_y``. The reduction is additive, so it is exact across block boundaries
-    and uses only O(n_labels) memory regardless of raster size. Background label 0 is excluded.
+    ``sum_x`` and ``sum_y``. Labels are relabelled to a dense ``0..k-1`` range, so memory is
+    O(number of distinct labels), independent of the raster size *and* of the label-id magnitude
+    (sparse/global ids do not blow it up). The reduction is additive, so it is exact across block
+    boundaries. Background label 0 is excluded.
     """
     n_rows, n_cols = data.shape
-    is_dask = hasattr(data, "chunks") and not isinstance(data, np.ndarray)
-    if is_dask:
-        n_labels = int(data.max().compute()) + 1
+    if hasattr(data, "chunks"):  # dask
         block_slices = slices_from_chunks(data.chunks)
     else:
         data = np.asarray(data)
-        n_labels = int(data.max()) + 1
         # bound the per-block coordinate-weight arrays to ~8M pixels
         step = max(1, min(n_rows, (8 << 20) // max(1, n_cols)))
         block_slices = [(slice(r0, min(r0 + step, n_rows)), slice(0, n_cols)) for r0 in range(0, n_rows, step)]
 
-    count = np.zeros(n_labels, dtype=np.float64)
-    sum_x = np.zeros(n_labels, dtype=np.float64)
-    sum_y = np.zeros(n_labels, dtype=np.float64)
-    for row_sl, col_sl in block_slices:
+    def _load(row_sl: slice, col_sl: slice) -> np.ndarray:
         block = data[row_sl, col_sl]
         block = np.asarray(block.compute() if hasattr(block, "compute") else block)
+        # label rasters are integer-valued even when stored as float; cast so np.unique/searchsorted
+        # stay integer (and the dense bincount indices below are always int).
+        return block.astype(np.int64) if block.dtype.kind == "f" else block
+
+    # Pass 1: the sorted set of present label values -> dense relabelling (keeps memory O(n_labels)).
+    uniq = np.zeros(0, dtype=np.int64)
+    for row_sl, col_sl in block_slices:
+        uniq = np.union1d(uniq, np.unique(_load(row_sl, col_sl)))
+    k = uniq.size
+
+    # Pass 2: additive per-(dense-)label count / sum_x / sum_y.
+    count = np.zeros(k)
+    sum_x = np.zeros(k)
+    sum_y = np.zeros(k)
+    for row_sl, col_sl in block_slices:
+        block = _load(row_sl, col_sl)
         block_rows, block_cols = block.shape
-        flat = block.reshape(-1)
+        idx = np.searchsorted(uniq, block.reshape(-1))  # dense 0..k-1 indices (always int)
         cols = np.tile(np.arange(col_sl.start, col_sl.start + block_cols, dtype=np.float64), block_rows)
         rows = np.repeat(np.arange(row_sl.start, row_sl.start + block_rows, dtype=np.float64), block_cols)
-        count += np.bincount(flat, minlength=n_labels)
-        sum_x += np.bincount(flat, weights=cols, minlength=n_labels)
-        sum_y += np.bincount(flat, weights=rows, minlength=n_labels)
+        count += np.bincount(idx, minlength=k)
+        sum_x += np.bincount(idx, weights=cols, minlength=k)
+        sum_y += np.bincount(idx, weights=rows, minlength=k)
 
-    labels = np.flatnonzero(count)
-    labels = labels[labels != 0]  # drop background and absent labels
-    return labels, sum_x[labels] / count[labels], sum_y[labels] / count[labels], count[labels]
+    keep = uniq != 0  # drop background; every kept label has count >= 1
+    return uniq[keep], sum_x[keep] / count[keep], sum_y[keep] / count[keep], count[keep]
 
 
 def _compute_element_measurements(sdata: SpatialData, element_name: str) -> pd.DataFrame:
     """One row per instance with intrinsic ``["x", "y", "area"]``, indexed by instance id.
 
-    Shapes use shapely's vectorized centroid; circles (``Point`` + ``radius``) have ``area = pi*r**2``
-    (shapely ``.area`` is 0 for them), polygons use the geometric area. 2D labels use the streaming
-    bincount aggregator (``area`` = pixel count) — it holds one chunk plus O(n_labels) accumulators,
-    so it scales to Xenium-size masks where a whole-array ``regionprops`` table would run out of
-    memory. Area meaning differs across element types but is consistent within one element.
+    Shapes use shapely's vectorized centroid; circles (``Point`` geometry + ``radius``) have
+    ``area = pi*r**2`` (shapely ``.area`` is 0 for them), polygons use the geometric area. 2D labels
+    use the streaming bincount aggregator (``area`` = pixel count) — it holds one chunk plus
+    O(n_labels) accumulators, so it scales to Xenium-size masks where a whole-array ``regionprops``
+    table would run out of memory. Area meaning differs across element types but is consistent within
+    one element.
     """
     element = sdata[element_name]
     model = get_model(element)
     if model is ShapesModel:
-        centroids = element.geometry.centroid
-        if "radius" in element.columns:  # circles are Points; shapely .area is 0, so use pi * r**2
+        geometry = element.geometry
+        centroids = geometry.centroid
+        # Dispatch on geometry TYPE, not a column name: circles are Point geometries (shapely .area
+        # is 0 for them) with a radius -> pi*r**2; everything else uses the true geometric area.
+        if (geometry.geom_type == "Point").all():
             area = np.pi * np.asarray(element["radius"], dtype=float) ** 2
         else:
-            area = element.geometry.area.to_numpy()
+            area = geometry.area.to_numpy()
         xy = {"x": centroids.x.to_numpy(), "y": centroids.y.to_numpy(), "area": area}
         return pd.DataFrame(xy, index=element.index)
     if model is Labels2DModel:
@@ -4533,6 +4548,26 @@ def _region_mask_and_keys(table: AnnData, element_name: str) -> tuple[str, Array
 def _valid_spatial_obsm(arr: ArrayLike, n_obs: int) -> bool:
     """Whether ``arr`` is a usable ``obsm["spatial"]``: a 2D ``(n_obs, 2)`` coordinate grid."""
     return bool(arr.ndim == 2 and arr.shape == (n_obs, 2))
+
+
+def _obsm_region_finite(table: AnnData, key: str, mask: ArrayLike) -> bool:
+    """Whether ``obsm[key]`` already holds finite coords for every ``mask`` row (already populated)."""
+    if key not in table.obsm:
+        return False
+    arr = np.asarray(table.obsm[key])
+    if not _valid_spatial_obsm(arr, table.n_obs):
+        return False
+    region = arr[mask].astype(float)
+    return bool(region.size and np.isfinite(region).all())
+
+
+def _check_obs_numeric(table: AnnData, key: str) -> None:
+    """Raise if ``obs[key]`` exists but is non-numeric, before any mutation (avoids half-writes)."""
+    if key in table.obs and not is_numeric_dtype(table.obs[key]):
+        raise ValueError(
+            f"Cannot write measurements into obs[{key!r}]: the existing column is "
+            f"{table.obs[key].dtype} (not numeric). Pass a different key or drop the column first."
+        )
 
 
 def _write_obs_region(table: AnnData, mask: ArrayLike, key: str, values: ArrayLike) -> None:
@@ -4579,14 +4614,46 @@ def _measure_into_table(
 ) -> None:
     """Compute and write the requested measurements for one element into its annotating table.
 
-    Overwrites existing values for the element's rows. A table may annotate several elements, so
-    only the rows belonging to ``element_name`` are touched.
+    Only the rows belonging to ``element_name`` are touched (a table may annotate several elements).
+    Centroids already present for those rows (e.g. reader-provided ``obsm["spatial"]``) are not
+    overwritten; ``area``/``diameter`` overwrite our own columns. All targets are validated before
+    the first write, so a bad column never leaves the table half-written.
     """
     table = sdata.tables[table_name]
     instance_key, mask = _region_mask_and_keys(table, element_name)
     if not mask.any():
         raise ValueError(f"Table {table_name!r} does not annotate element {element_name!r} (no matching rows).")
-    meas = _compute_element_measurements(sdata, element_name).reindex(table.obs[instance_key].to_numpy()[mask])
+
+    # #1: never clobber centroids already populated for this element's rows (reader/prior-call coords).
+    if centroids and _obsm_region_finite(table, obsm_key, mask):
+        warnings.warn(
+            f"obsm[{obsm_key!r}] is already populated for element {element_name!r}; not overwriting "
+            f"its centroids. Remove it or use a different `obsm_key` to recompute.",
+            UserWarning,
+            stacklevel=3,
+        )
+        centroids = False
+    if not (centroids or area or diameter):
+        return
+
+    keys = table.obs[instance_key].to_numpy()[mask]
+    meas = _compute_element_measurements(sdata, element_name).reindex(keys)
+    # #2: instance ids annotated in the table but absent from the element reindex to NaN -> warn.
+    missing = int(meas[["x", "y"]].isna().any(axis=1).sum())
+    if missing:
+        warnings.warn(
+            f"{missing}/{len(keys)} instances annotated for {element_name!r} have no match in the "
+            f"element (instance-id dtype mismatch, e.g. str vs int?); writing NaN for them.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    # #4: validate every obs target up front so an existing non-numeric column raises before any write.
+    if area:
+        _check_obs_numeric(table, area_key)
+    if diameter:
+        _check_obs_numeric(table, diameter_key)
+
     if centroids:
         _write_obsm_region(table, mask, obsm_key, meas[["x", "y"]].to_numpy())
     if area:
@@ -4645,16 +4712,18 @@ def measure_obs(
     element and writes them, squidpy-style, into the annotating :class:`~anndata.AnnData` table:
     centroids go to ``table.obsm[obsm_key]`` (an ``(n_obs, 2)`` array, the canonical
     ``obsm["spatial"]``), area and diameter to ``table.obs``. Values are stored in the element's
-    *intrinsic* coordinates/units (coordinate-system independent). Labels area is the pixel count;
-    shapes area is ``geometry.area`` (``pi*r**2`` for circles); equivalent diameter is
-    ``2 * sqrt(area / pi)``. Persisting them once lets later renders (and downstream tools such as
-    squidpy) reuse them instead of recomputing.
+    *intrinsic* pixel coordinates/units (which align directly with the element's own raster/geometry).
+    Labels area is the pixel count; shapes area is ``geometry.area`` (``pi*r**2`` for circles);
+    equivalent diameter is ``2 * sqrt(area / pi)``. Persisting them once lets later renders (and
+    downstream tools such as squidpy) reuse them instead of recomputing.
 
-    Existing values for the measured rows are overwritten; pass ``centroids=False`` to keep a
-    pre-existing ``obsm[obsm_key]`` (e.g. from a reader). Per-cell measurements need a table to
-    write into, so an element without an annotating table cannot be measured (this raises). The
-    label path never densifies the raster — it streams it block by block, scaling to Xenium-size
-    masks.
+    Centroids already present for an element's rows (e.g. a reader-provided ``obsm[obsm_key]``) are
+    **not** overwritten — a warning is emitted and that element's centroid write is skipped (remove
+    the key or use a different ``obsm_key`` to recompute); ``area``/``diameter`` overwrite our own
+    columns. Instances annotated in the table but absent from the element are written as NaN with a
+    warning. Per-cell measurements need a table to write into, so an element without an annotating
+    table cannot be measured (this raises). The label path never densifies the raster — it streams
+    it block by block with memory O(n_labels), scaling to Xenium-size masks.
 
     Parameters
     ----------
