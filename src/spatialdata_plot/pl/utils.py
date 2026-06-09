@@ -4430,16 +4430,11 @@ def _convert_alpha_to_datashader_range(alpha: float) -> float:
 
 # --- Per-cell measurements into the annotating table (centroid / area / equivalent diameter) ---
 
-# squidpy/scanpy canonical key for per-cell coordinates: an N x 2 array, row-aligned to obs.
-# Measurements are stored intrinsic (coordinate-system independent).
+# Destination keys (measurements are stored intrinsic, coordinate-system independent).
+# obsm["spatial"] is the squidpy/scanpy convention for per-cell coordinates (an N x 2 array).
 _CENTROID_OBSM_KEY = "spatial"
-
-
-def _transform_carrier(element: SpatialElement) -> Any:
-    """Return the object carrying ``element``'s data (the ``scale0`` level for multiscale rasters)."""
-    if isinstance(element, DataTree):
-        return next(iter(element["scale0"].values()))
-    return element
+_AREA_OBS_KEY = "area"
+_DIAMETER_OBS_KEY = "equivalent_diameter"
 
 
 def _pixel_to_coord(idx: ArrayLike, coord: ArrayLike) -> ArrayLike:
@@ -4519,10 +4514,12 @@ def _compute_element_measurements(sdata: SpatialData, element_name: str) -> pd.D
             area = np.pi * np.asarray(element["radius"], dtype=float) ** 2
         else:
             area = geometry.area.to_numpy()
-        xy = {"x": centroids.x.to_numpy(), "y": centroids.y.to_numpy(), "area": area}
-        return pd.DataFrame(xy, index=element.index)
+        return pd.DataFrame(
+            {"x": centroids.x.to_numpy(), "y": centroids.y.to_numpy(), "area": area}, index=element.index
+        )
     if model is Labels2DModel:
-        raster = _transform_carrier(element)
+        # multiscale rasters carry their data on the scale0 level
+        raster = next(iter(element["scale0"].values())) if isinstance(element, DataTree) else element
         labels, x_idx, y_idx, area = _stream_label_centroid_stats(raster.data)
         # bincount gives mean 0-based pixel indices; map them onto the raster's intrinsic coords.
         return pd.DataFrame(
@@ -4566,51 +4563,33 @@ def _check_obs_numeric(table: AnnData, key: str) -> None:
     if key in table.obs and not is_numeric_dtype(table.obs[key]):
         raise ValueError(
             f"Cannot write measurements into obs[{key!r}]: the existing column is "
-            f"{table.obs[key].dtype} (not numeric). Pass a different key or drop the column first."
+            f"{table.obs[key].dtype} (not numeric). Drop or rename the column first."
         )
 
 
-def _write_obs_region(table: AnnData, mask: ArrayLike, key: str, values: ArrayLike) -> None:
-    """Write ``values`` into ``obs[key]`` at ``mask`` rows; other rows stay/are NaN."""
-    if key in table.obs:
-        col = np.asarray(table.obs[key].to_numpy(), dtype=float)
-    else:
-        col = np.full(table.n_obs, np.nan, dtype=float)
-    col[mask] = np.asarray(values, dtype=float)
-    table.obs[key] = col
+def _write_region(table: AnnData, mask: ArrayLike, key: str, values: ArrayLike, *, obsm: bool) -> None:
+    """Write ``values`` into ``obsm[key]`` (2D) or ``obs[key]`` (1D) at ``mask`` rows; others stay/NaN.
 
-
-def _write_obsm_region(table: AnnData, mask: ArrayLike, key: str, xy: ArrayLike) -> None:
-    """Write intrinsic centroids ``xy`` into ``obsm[key]`` at ``mask`` rows; other rows stay/are NaN.
-
-    Never reshapes an incompatible existing ``obsm[key]`` (e.g. a 3-column xyz array): that would
-    silently drop data, so it raises instead.
+    Refuses to overwrite an incompatible existing ``obsm[key]`` (e.g. a 3-column xyz array) rather
+    than silently dropping data.
     """
-    if key in table.obsm:
-        existing = np.asarray(table.obsm[key])
-        if not _valid_spatial_obsm(existing, table.n_obs):
+    store = table.obsm if obsm else table.obs
+    if key in store:
+        existing = np.asarray(store[key])
+        if obsm and not _valid_spatial_obsm(existing, table.n_obs):
             raise ValueError(
                 f"Refusing to overwrite obsm[{key!r}] with shape {existing.shape}; expected "
                 f"({table.n_obs}, 2). Remove it first if you want it replaced."
             )
         arr = existing.astype(float, copy=True)
     else:
-        arr = np.full((table.n_obs, 2), np.nan, dtype=float)
-    arr[mask] = np.asarray(xy, dtype=float)
-    table.obsm[key] = arr
+        arr = np.full((table.n_obs, 2) if obsm else table.n_obs, np.nan)
+    arr[mask] = np.asarray(values, dtype=float)
+    store[key] = arr
 
 
 def _measure_into_table(
-    sdata: SpatialData,
-    element_name: str,
-    table_name: str,
-    *,
-    centroids: bool,
-    area: bool,
-    diameter: bool,
-    obsm_key: str,
-    area_key: str,
-    diameter_key: str,
+    sdata: SpatialData, element_name: str, table_name: str, *, centroids: bool, area: bool, diameter: bool
 ) -> None:
     """Compute and write the requested measurements for one element into its annotating table.
 
@@ -4625,10 +4604,10 @@ def _measure_into_table(
         raise ValueError(f"Table {table_name!r} does not annotate element {element_name!r} (no matching rows).")
 
     # #1: never clobber centroids already populated for this element's rows (reader/prior-call coords).
-    if centroids and _obsm_region_finite(table, obsm_key, mask):
+    if centroids and _obsm_region_finite(table, _CENTROID_OBSM_KEY, mask):
         warnings.warn(
-            f"obsm[{obsm_key!r}] is already populated for element {element_name!r}; not overwriting "
-            f"its centroids. Remove it or use a different `obsm_key` to recompute.",
+            f"obsm[{_CENTROID_OBSM_KEY!r}] is already populated for element {element_name!r}; not "
+            f"overwriting its centroids (remove it to recompute).",
             UserWarning,
             stacklevel=3,
         )
@@ -4648,18 +4627,19 @@ def _measure_into_table(
             stacklevel=3,
         )
 
-    # #4: validate every obs target up front so an existing non-numeric column raises before any write.
+    # #4: validate obs targets up front so an existing non-numeric column raises before any write.
     if area:
-        _check_obs_numeric(table, area_key)
+        _check_obs_numeric(table, _AREA_OBS_KEY)
     if diameter:
-        _check_obs_numeric(table, diameter_key)
+        _check_obs_numeric(table, _DIAMETER_OBS_KEY)
 
+    area_vals = meas["area"].to_numpy()
     if centroids:
-        _write_obsm_region(table, mask, obsm_key, meas[["x", "y"]].to_numpy())
+        _write_region(table, mask, _CENTROID_OBSM_KEY, meas[["x", "y"]].to_numpy(), obsm=True)
     if area:
-        _write_obs_region(table, mask, area_key, meas["area"].to_numpy())
+        _write_region(table, mask, _AREA_OBS_KEY, area_vals, obsm=False)
     if diameter:
-        _write_obs_region(table, mask, diameter_key, 2.0 * np.sqrt(meas["area"].to_numpy() / np.pi))
+        _write_region(table, mask, _DIAMETER_OBS_KEY, 2.0 * np.sqrt(area_vals / np.pi), obsm=False)
 
 
 def _measurable_elements(sdata: SpatialData) -> list[str]:
@@ -4701,29 +4681,26 @@ def measure_obs(
     centroids: bool = True,
     area: bool = True,
     diameter: bool = True,
-    obsm_key: str = _CENTROID_OBSM_KEY,
-    area_key: str = "area",
-    diameter_key: str = "equivalent_diameter",
     inplace: bool = True,
 ) -> SpatialData | None:
     """Measure per-cell centroids, area and equivalent diameter into an element's annotating table.
 
     Computes one centroid, area and equivalent diameter per instance of a shapes or 2D-labels
     element and writes them, squidpy-style, into the annotating :class:`~anndata.AnnData` table:
-    centroids go to ``table.obsm[obsm_key]`` (an ``(n_obs, 2)`` array, the canonical
-    ``obsm["spatial"]``), area and diameter to ``table.obs``. Values are stored in the element's
+    centroids go to ``table.obsm["spatial"]`` (an ``(n_obs, 2)`` array, the squidpy convention),
+    area and diameter to ``table.obs["area"]`` and ``table.obs["equivalent_diameter"]``. Values are stored in the element's
     *intrinsic* pixel coordinates/units (which align directly with the element's own raster/geometry).
     Labels area is the pixel count; shapes area is ``geometry.area`` (``pi*r**2`` for circles);
     equivalent diameter is ``2 * sqrt(area / pi)``. Persisting them once lets later renders (and
     downstream tools such as squidpy) reuse them instead of recomputing.
 
-    Centroids already present for an element's rows (e.g. a reader-provided ``obsm[obsm_key]``) are
+    Centroids already present for an element's rows (e.g. a reader-provided ``obsm["spatial"]``) are
     **not** overwritten — a warning is emitted and that element's centroid write is skipped (remove
-    the key or use a different ``obsm_key`` to recompute); ``area``/``diameter`` overwrite our own
-    columns. Instances annotated in the table but absent from the element are written as NaN with a
-    warning. Per-cell measurements need a table to write into, so an element without an annotating
-    table cannot be measured (this raises). The label path never densifies the raster — it streams
-    it block by block with memory O(n_labels), scaling to Xenium-size masks.
+    the key to recompute); ``area``/``diameter`` overwrite our own columns. Instances annotated in
+    the table but absent from the element are written as NaN with a warning. Per-cell measurements
+    need a table to write into, so an element without an annotating table cannot be measured (this
+    raises). The label path never densifies the raster — it streams it block by block with memory
+    O(n_labels), scaling to Xenium-size masks.
 
     Parameters
     ----------
@@ -4736,11 +4713,8 @@ def measure_obs(
         Name of the annotating table to write into. If ``None``, it is inferred from the element's
         annotators (an error is raised when there are zero or several).
     centroids, area, diameter
-        Which measurements to compute/write. At least one must be ``True``.
-    obsm_key
-        ``obsm`` key for the centroids (default ``"spatial"``, the squidpy convention).
-    area_key, diameter_key
-        ``obs`` column names for area and equivalent diameter.
+        Which measurements to compute/write. At least one must be ``True``. They are written to
+        ``obsm["spatial"]``, ``obs["area"]`` and ``obs["equivalent_diameter"]`` respectively.
     inplace
         If ``True`` (default), mutate ``sdata``'s table in place and return ``None``. If ``False``,
         operate on a deep copy and return the modified ``SpatialData``.
@@ -4762,15 +4736,6 @@ def measure_obs(
     else:
         names = [element]
     for name in names:
-        _measure_into_table(
-            target,
-            name,
-            _resolve_measure_table(target, name, table_name),
-            centroids=centroids,
-            area=area,
-            diameter=diameter,
-            obsm_key=obsm_key,
-            area_key=area_key,
-            diameter_key=diameter_key,
-        )
+        table = _resolve_measure_table(target, name, table_name)
+        _measure_into_table(target, name, table, centroids=centroids, area=area, diameter=diameter)
     return None if inplace else target
