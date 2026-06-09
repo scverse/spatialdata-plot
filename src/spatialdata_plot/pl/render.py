@@ -2364,18 +2364,16 @@ def _render_labels(
         centroids = _compute_element_measurements(sdata_filt, element)  # scale0 intrinsic [x, y, area]
         # Coerce point_ids to the label-value dtype so str/object ids from `table.obs` (e.g. Xenium
         # readers) match the integer raster labels instead of silently reindexing to NaN.
-        centroids = centroids.reindex(np.asarray(point_ids).astype(centroids.index.dtype, copy=False))
+        centroids = centroids.reindex(point_ids.astype(centroids.index.dtype, copy=False))
         # Transform built from scale0 (matching the centroids), not the possibly-rasterized `label`.
         _, centroid_trans = _prepare_transformation(_get_top_data_array(sdata_filt[element]), coordinate_system, ax)
-        # Align the per-cell color to the rendered centroids. For data-driven color the vector is
-        # already per-instance (paired with `instance_id`); for the literal/no-color path it is
-        # not, so fall back to one na/literal color per centroid.
-        point_color_vector = np.asarray(color_vector)
-        point_color_source_vector = color_source_vector
-        if len(point_color_vector) == len(instance_id):
-            point_color_vector = point_color_vector[keep]
-            if point_color_source_vector is not None:
-                point_color_source_vector = point_color_source_vector[keep]
+        # Align the per-cell color to the rendered centroids. Data-driven color is already
+        # per-instance (paired with `instance_id`); the literal/no-color path is not, so fall back
+        # to one na/literal color per centroid.
+        color_vec = np.asarray(color_vector)
+        if len(color_vec) == len(instance_id):
+            point_color_vector = color_vec[keep]
+            point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
         else:
             point_color_vector = np.asarray([na_color.get_hex_with_alpha()] * len(point_ids))
             point_color_source_vector = None
