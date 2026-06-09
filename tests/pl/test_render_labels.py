@@ -608,16 +608,20 @@ def test_render_labels_color_list_creates_one_panel_per_key(sdata_blobs: Spatial
 
 
 def test_render_labels_as_points_renders_centroids(sdata_blobs: SpatialData):
-    """as_points draws one dot per label at its centroid instead of the rasterized mask."""
+    """as_points draws one dot per label near its centroid. Centroids are computed on the rendered
+    (possibly downsampled) raster, so positions are checked in display space within a few-pixel
+    rasterization tolerance rather than against the exact full-resolution centroid."""
     import spatialdata as sd
 
     fig, ax = plt.subplots()
     sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=50).pl.show(ax=ax)
-    offsets = np.asarray(ax.collections[0].get_offsets())
-    ref = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()[["x", "y"]]
-    assert len(offsets) == len(ref)
-    assert np.allclose(np.sort(offsets[:, 0]), np.sort(ref["x"].to_numpy()), atol=1e-6)
-    assert np.allclose(np.sort(offsets[:, 1]), np.sort(ref["y"].to_numpy()), atol=1e-6)
+    coll = ax.collections[0]
+    dots = coll.get_offset_transform().transform(np.asarray(coll.get_offsets()))  # display px
+    ref_world = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()[["x", "y"]]
+    ref = ax.transData.transform(ref_world.to_numpy())
+    assert len(dots) == len(ref)
+    od, oe = np.lexsort((dots[:, 1], dots[:, 0])), np.lexsort((ref[:, 1], ref[:, 0]))
+    assert np.allclose(dots[od], ref[oe], atol=3.0)  # within a few display px of the true centroid
     plt.close(fig)
 
 
@@ -634,9 +638,9 @@ def test_render_labels_as_points_without_color(sdata_blobs: SpatialData):
 
 
 def test_render_labels_as_points_applies_non_identity_transform(sdata_blobs: SpatialData):
-    """Regression guard: under a non-identity element->CS transform the dots must land at the
-    cells' coordinate-system positions. Offsets stay in scale0 space, so correctness lives in the
-    transform applied by the scatter; check it in display space."""
+    """Regression guard: under a non-identity element->CS transform the dots must land at the cells'
+    coordinate-system positions (in display space). A wrong transform would be off by the scale
+    factor (hundreds of px); the rendered-raster centroid is correct within a few px."""
     import spatialdata as sd
     from spatialdata.transformations import Scale, set_transformation
 
@@ -651,5 +655,5 @@ def test_render_labels_as_points_applies_non_identity_transform(sdata_blobs: Spa
     expected_display = ax.transData.transform(cs)  # where the cells truly are, in display pixels
     order_d = np.lexsort((dots_display[:, 1], dots_display[:, 0]))
     order_e = np.lexsort((expected_display[:, 1], expected_display[:, 0]))
-    assert np.allclose(dots_display[order_d], expected_display[order_e], atol=1e-2)
+    assert np.allclose(dots_display[order_d], expected_display[order_e], atol=3.0)
     plt.close(fig)
