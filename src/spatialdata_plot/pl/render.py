@@ -2353,23 +2353,16 @@ def _render_labels(
         color_vector = render_params.transfunc(color_vector)
 
     if render_params.as_points:
-        # Fast mode: draw one dot per label at its full-resolution (scale0) centroid instead of the
-        # rasterized mask. The streaming bincount aggregator computes the centroids; we then draw
-        # them with the scale0 element's own coordinate-system transform so they land where the cells
-        # actually are (independent of any rasterization applied to the rendered `label` above).
+        # Fast mode: one dot per label at its full-resolution (scale0) centroid, not the rasterized mask.
         logger.info("`as_points=True`: rendering label centroids; `contour_px` and `outline_*` are ignored.")
-        # `instance_id` may include the background label 0 (which has no centroid); drop it.
-        keep = instance_id != 0
+        keep = instance_id != 0  # background label 0 has no centroid
         point_ids = instance_id[keep]
         centroids = _compute_element_measurements(sdata_filt, element)  # scale0 intrinsic [x, y, area]
-        # Coerce point_ids to the label-value dtype so str/object ids from `table.obs` (e.g. Xenium
-        # readers) match the integer raster labels instead of silently reindexing to NaN.
+        # coerce so str/object table ids (e.g. Xenium) match the integer raster labels instead of NaN
         centroids = centroids.reindex(point_ids.astype(centroids.index.dtype, copy=False))
-        # Transform built from scale0 (matching the centroids), not the possibly-rasterized `label`.
+        # transform from scale0 (matching the centroids), NOT the possibly-rasterized `label`
         _, centroid_trans = _prepare_transformation(_get_top_data_array(sdata_filt[element]), coordinate_system, ax)
-        # Align the per-cell color to the rendered centroids. Data-driven color is already
-        # per-instance (paired with `instance_id`); the literal/no-color path is not, so fall back
-        # to one na/literal color per centroid.
+        # data-driven color is per-instance; literal/no-color is not -> one na color per centroid
         color_vec = np.asarray(color_vector)
         if len(color_vec) == len(instance_id):
             point_color_vector = color_vec[keep]
