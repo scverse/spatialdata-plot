@@ -94,7 +94,7 @@ jobs:
           path: tests/figures/*
       - name: Upload coverage
         if: matrix.env.name == 'hatch-test.py3.14-stable'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           fail_ci_if_error: true
           use_oidc: true

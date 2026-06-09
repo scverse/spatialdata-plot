@@ -63,6 +63,7 @@ from spatialdata_plot.pl.utils import (
     _build_shape_patches,
     _check_obs_var_shadow,
     _color_vector_to_rgba,
+    _compute_element_measurements,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -70,7 +71,6 @@ from spatialdata_plot.pl.utils import (
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
-    _get_or_compute_centroids,
     _hex_no_alpha,
     _join_table_for_element,
     _make_continuous_mappable,
@@ -2352,16 +2352,20 @@ def _render_labels(
         color_vector = render_params.transfunc(color_vector)
 
     if render_params.as_points:
-        # Fast mode: draw one dot per label at its centroid instead of the mask. Centroids come
-        # from `regionprops` (orders of magnitude faster than rasterizing) in coordinate-system
-        # coords.
+        # Fast mode: draw one dot per label at its full-resolution (scale0) centroid instead of the
+        # rasterized mask. The streaming bincount aggregator computes the centroids; we then draw
+        # them with the scale0 element's own coordinate-system transform so they land where the cells
+        # actually are (independent of any rasterization applied to the rendered `label` above).
         logger.info("`as_points=True`: rendering label centroids; `contour_px` and `outline_*` are ignored.")
         # `instance_id` may include the background label 0 (which has no centroid); drop it.
         keep = instance_id != 0
         point_ids = instance_id[keep]
-        centroids = _get_or_compute_centroids(
-            sdata_filt, element, coordinate_system=coordinate_system, table_name=table_name
-        ).reindex(point_ids)
+        centroids = _compute_element_measurements(sdata_filt, element)  # scale0 intrinsic [x, y, area]
+        # Coerce point_ids to the label-value dtype so str/object ids from `table.obs` (e.g. Xenium
+        # readers) match the integer raster labels instead of silently reindexing to NaN.
+        centroids = centroids.reindex(np.asarray(point_ids).astype(centroids.index.dtype, copy=False))
+        # Transform built from scale0 (matching the centroids), not the possibly-rasterized `label`.
+        _, centroid_trans = _prepare_transformation(_get_top_data_array(sdata_filt[element]), coordinate_system, ax)
         # Align the per-cell color to the rendered centroids. For data-driven color the vector is
         # already per-instance (paired with `instance_id`); for the literal/no-color path it is
         # not, so fall back to one na/literal color per centroid.
@@ -2386,7 +2390,7 @@ def _render_labels(
             size=render_params.size,
             alpha=render_params.fill_alpha,
             zorder=render_params.zorder,
-            transform=ax.transData,  # centroids already in coordinate-system (= axes data) space
+            transform=centroid_trans,  # scale0 intrinsic coords -> coordinate system -> display
             adata=table if table_name is not None else None,
             col_for_color=col_for_color,
             palette=palette,

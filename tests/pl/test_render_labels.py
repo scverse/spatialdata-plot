@@ -631,3 +631,25 @@ def test_render_labels_as_points_without_color(sdata_blobs: SpatialData):
     n_cells = len(sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute())
     assert len(offsets) == n_cells  # one dot per cell, no spurious background point
     plt.close(fig)
+
+
+def test_render_labels_as_points_applies_non_identity_transform(sdata_blobs: SpatialData):
+    """Regression guard: under a non-identity element->CS transform the dots must land at the
+    cells' coordinate-system positions. Offsets stay in scale0 space, so correctness lives in the
+    transform applied by the scatter; check it in display space."""
+    import spatialdata as sd
+    from spatialdata.transformations import Scale, set_transformation
+
+    set_transformation(sdata_blobs["blobs_labels"], Scale([2.0, 3.0], axes=("x", "y")), "scaled")
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=50).pl.show(
+        ax=ax, coordinate_systems="scaled"
+    )
+    coll = ax.collections[0]
+    dots_display = coll.get_offset_transform().transform(np.asarray(coll.get_offsets()))
+    cs = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="scaled").compute()[["x", "y"]].to_numpy()
+    expected_display = ax.transData.transform(cs)  # where the cells truly are, in display pixels
+    order_d = np.lexsort((dots_display[:, 1], dots_display[:, 0]))
+    order_e = np.lexsort((expected_display[:, 1], expected_display[:, 0]))
+    assert np.allclose(dots_display[order_d], expected_display[order_e], atol=1e-2)
+    plt.close(fig)

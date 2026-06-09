@@ -5,23 +5,18 @@ import numpy as np
 import pandas as pd
 import pytest
 import scanpy as sc
-import spatialdata as sd
 import xarray as xr
 from anndata import AnnData
 from shapely.geometry import Point
-from spatialdata import SpatialData
-from spatialdata.models import PointsModel, ShapesModel, TableModel
+from spatialdata import SpatialData, get_centroids
+from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableModel
 
 import spatialdata_plot
+from spatialdata_plot.pl import measure_obs
 from spatialdata_plot.pl.render_params import Color, ColorLike
 from spatialdata_plot.pl.utils import (
-    _CENTROID_OBSM_KEY,
-    _CENTROID_PROVENANCE_UNS_KEY,
     _apply_cmap_alpha_to_datashader_result,
-    _compute_element_centroids,
     _datashader_map_aggregate_to_color,
-    _get_or_compute_centroids,
-    _read_cached_centroids,
     _set_outline,
     set_zero_in_cmap_to_transparent,
 )
@@ -504,98 +499,183 @@ def test_rasterize_target_unit_to_pixels_uses_world_extent(monkeypatch):
     )
 
 
-class TestCentroids:
-    """Centroid extraction + squidpy ``obsm['spatial']`` caching (no rendering)."""
+def _add_shapes_table(sdata: SpatialData, element: str = "blobs_polygons", name: str = "shapes_table") -> SpatialData:
+    """Add a table annotating a shapes element so it can be measured."""
+    gdf = sdata[element]
+    adata = AnnData(np.zeros((len(gdf), 1), dtype=np.float32))
+    adata.obs["instance_id"] = list(gdf.index)
+    adata.obs["region"] = element
+    sdata[name] = TableModel.parse(
+        adata, region_key="region", instance_key="instance_id", region=element
+    )
+    return sdata
 
-    @pytest.mark.parametrize(("element", "table_name"), [("blobs_circles", None), ("blobs_labels", "table")])
-    def test_centroids_match_get_centroids(self, sdata_blobs: SpatialData, element: str, table_name: str | None):
-        # shapes via shapely .centroid, labels via regionprops (incl. the pixel-center 0.5
-        # offset) -> identical to spatialdata's exact centroids, just faster.
-        mine = _get_or_compute_centroids(
-            sdata_blobs, element, coordinate_system="global", table_name=table_name
-        ).sort_index()
-        ref = sd.get_centroids(sdata_blobs[element], coordinate_system="global").compute()[["x", "y"]].sort_index()
-        assert list(mine.index) == list(ref.index)
-        assert np.allclose(mine.values, ref.values, atol=1e-9)
 
-    def test_label_centroids_stream_out_of_core_and_chunk_exact(self, sdata_blobs: SpatialData):
-        import dask.array as da
+def _labels_sdata(arr: np.ndarray, name: str = "lab", table: str = "t") -> SpatialData:
+    """Build a SpatialData with a single 2D-labels element annotated by a table."""
+    ids = np.unique(arr)
+    ids = ids[ids != 0].astype(int)
+    adata = AnnData(np.zeros((len(ids), 1), dtype=np.float32))
+    adata.obs["instance_id"] = ids
+    adata.obs["region"] = name
+    return SpatialData(
+        labels={name: Labels2DModel.parse(arr, dims=("y", "x"))},
+        tables={table: TableModel.parse(adata, region_key="region", instance_key="instance_id", region=name)},
+    )
 
-        from spatialdata_plot.pl.utils import _stream_label_centroid_stats
 
-        lab = np.asarray(sdata_blobs["blobs_labels"].data.compute())
-        l_np, x_np, y_np, a_np = _stream_label_centroid_stats(lab)
-        # many small chunks -> exercises block streaming + global offsets; must be exact.
-        l_da, x_da, y_da, a_da = _stream_label_centroid_stats(da.from_array(lab, chunks=(64, 64)))
-        assert np.array_equal(l_np, l_da)
-        assert np.allclose(x_np, x_da) and np.allclose(y_np, y_da)
-        assert np.array_equal(a_np, a_da)
-        # area is the per-label pixel count; background label 0 is excluded.
-        assert np.array_equal(a_np.astype(int), np.bincount(lab.ravel())[l_np])
-        assert 0 not in l_np
+class TestMeasureObs:
+    """`measure_obs` materializes centroids/area/equivalent diameter into the annotating table."""
 
-    def test_cache_is_coordinate_system_independent(self, sdata_blobs: SpatialData):
-        # one intrinsic cache serves every coordinate system: add a second CS and confirm both
-        # match get_centroids while only one obsm["spatial"] is written.
-        from spatialdata.transformations import Scale, set_transformation
-
-        set_transformation(
-            sdata_blobs["blobs_labels"], Scale([2.0, 3.0], axes=("x", "y")), to_coordinate_system="scaled"
-        )
-        g = _get_or_compute_centroids(
-            sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table"
-        ).sort_index()
-        s = _get_or_compute_centroids(
-            sdata_blobs, "blobs_labels", coordinate_system="scaled", table_name="table"
-        ).sort_index()
-        assert _CENTROID_OBSM_KEY in sdata_blobs["table"].obsm  # cached once, reused for both
-        ref_g = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()[["x", "y"]]
-        ref_s = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="scaled").compute()[["x", "y"]]
-        assert np.allclose(g.values, ref_g.sort_index().values, atol=1e-9)
-        assert np.allclose(s.values, ref_s.sort_index().values, atol=1e-9)
-        assert not np.allclose(ref_g.values, ref_s.values)  # the coordinate system genuinely matters
-
-    def test_cache_round_trip_and_provenance(self, sdata_blobs: SpatialData):
+    def test_writes_centroid_area_diameter_for_labels(self, sdata_blobs: SpatialData) -> None:
+        ret = measure_obs(sdata_blobs, "blobs_labels")
+        assert ret is None  # inplace default
         table = sdata_blobs["table"]
-        assert _CENTROID_OBSM_KEY not in table.obsm
-        out = _get_or_compute_centroids(sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table")
-        assert _CENTROID_OBSM_KEY in table.obsm  # intrinsic centroids cached
-        prov = table.uns[_CENTROID_PROVENANCE_UNS_KEY]["centroids"]["blobs_labels"]
-        assert prov["n"] == len(out)
-        assert prov["scale_level"] == "scale0"
-        assert "coordinate_system" not in prov  # the cache is coordinate-system-independent
-        again = _get_or_compute_centroids(sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table")
-        assert np.allclose(again.sort_index().values, out.sort_index().values)
 
-    def test_cache_invalidated_on_instance_count_change(self, sdata_blobs: SpatialData):
-        _get_or_compute_centroids(sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table")
-        assert _read_cached_centroids(sdata_blobs, "blobs_labels", "table") is not None
-        # simulate cells added/removed: the recorded instance count no longer matches the table.
-        sdata_blobs["table"].uns[_CENTROID_PROVENANCE_UNS_KEY]["centroids"]["blobs_labels"]["n"] += 1
-        assert _read_cached_centroids(sdata_blobs, "blobs_labels", "table") is None
+        assert "spatial" in table.obsm
+        coords = table.obsm["spatial"]
+        assert coords.shape == (table.n_obs, 2)
+        assert np.isfinite(coords).all()
+        assert "area" in table.obs and "equivalent_diameter" in table.obs
 
-    def test_preexisting_obsm_spatial_is_trusted(self, sdata_blobs: SpatialData):
-        # a loader/user-provided obsm["spatial"] (no provenance) is trusted as the cells'
-        # intrinsic locations without recomputation.
-        table = sdata_blobs["table"]
-        coords = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
-        table.obsm[_CENTROID_OBSM_KEY] = coords
-        got = _read_cached_centroids(sdata_blobs, "blobs_labels", "table")
-        assert got is not None
-        assert np.allclose(got.values, coords)  # whole table = this one region, order preserved
+        # centroids match spatialdata's get_centroids (blobs_labels has the identity transform,
+        # so global == intrinsic here)
+        gc = get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()
+        expected = gc.reindex(table.obs["instance_id"].to_numpy())[["x", "y"]].to_numpy()
+        np.testing.assert_allclose(coords, expected, rtol=1e-6)
 
-    def test_unsupported_element_type_raises(self, sdata_blobs: SpatialData):
-        with pytest.raises(NotImplementedError, match="shapes and 2D labels"):
-            _compute_element_centroids(sdata_blobs, "blobs_points")
-
-    def test_no_annotating_table_computes_without_caching(self, sdata_blobs: SpatialData):
-        # blobs_circles has no annotating table -> compute and return, no persistence.
-        centroids = _get_or_compute_centroids(sdata_blobs, "blobs_circles", coordinate_system="global", table_name=None)
-        assert list(centroids.columns) == ["x", "y"]
-        assert len(centroids) > 0
-
-    def test_cache_false_does_not_write(self, sdata_blobs: SpatialData):
-        _get_or_compute_centroids(
-            sdata_blobs, "blobs_labels", coordinate_system="global", table_name="table", cache=False
+        # area is the pixel count (positive integers); diameter = 2*sqrt(area/pi)
+        area = table.obs["area"].to_numpy()
+        assert (area > 0).all()
+        np.testing.assert_allclose(
+            table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12
         )
-        assert _CENTROID_OBSM_KEY not in sdata_blobs["table"].obsm
+
+    def test_writes_for_shapes(self, sdata_blobs: SpatialData) -> None:
+        _add_shapes_table(sdata_blobs, "blobs_polygons")
+        measure_obs(sdata_blobs, "blobs_polygons", table_name="shapes_table")
+        table = sdata_blobs["shapes_table"]
+
+        gdf = sdata_blobs["blobs_polygons"]
+        expected_xy = np.column_stack([gdf.geometry.centroid.x, gdf.geometry.centroid.y])
+        order = table.obs["instance_id"].to_numpy()
+        expected_xy = expected_xy[[list(gdf.index).index(i) for i in order]]
+        np.testing.assert_allclose(table.obsm["spatial"], expected_xy, rtol=1e-9)
+        np.testing.assert_allclose(
+            table.obs["area"].to_numpy(),
+            gdf.geometry.area.to_numpy()[[list(gdf.index).index(i) for i in order]],
+            rtol=1e-9,
+        )
+
+    def test_circles_area_is_pi_r_squared(self, sdata_blobs: SpatialData) -> None:
+        # Circles are stored as Point geometries (radius column); shapely .area is 0 for them,
+        # so area must be pi * r**2 and equivalent diameter must equal the true diameter 2*r.
+        _add_shapes_table(sdata_blobs, "blobs_circles", name="circles_table")
+        measure_obs(sdata_blobs, "blobs_circles", table_name="circles_table")
+        table = sdata_blobs["circles_table"]
+        gdf = sdata_blobs["blobs_circles"]
+        order = table.obs["instance_id"].to_numpy()
+        r = gdf["radius"].to_numpy()[[list(gdf.index).index(i) for i in order]]
+        np.testing.assert_allclose(table.obs["area"].to_numpy(), np.pi * r**2, rtol=1e-9)
+        np.testing.assert_allclose(table.obs["equivalent_diameter"].to_numpy(), 2.0 * r, rtol=1e-9)
+
+    def test_inplace_false_leaves_original_untouched(self, sdata_blobs: SpatialData) -> None:
+        out = measure_obs(sdata_blobs, "blobs_labels", inplace=False)
+        assert isinstance(out, SpatialData)
+        assert "spatial" in out["table"].obsm
+        assert "spatial" not in sdata_blobs["table"].obsm  # original not mutated
+
+    def test_existing_centroids_not_clobbered(self, sdata_blobs: SpatialData) -> None:
+        # #1: a populated obsm["spatial"] (reader- or prior-call-provided) is not overwritten.
+        table = sdata_blobs["table"]
+        sentinel = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
+        table.obsm["spatial"] = sentinel.copy()
+        with pytest.warns(UserWarning, match="already populated"):
+            measure_obs(sdata_blobs, "blobs_labels")
+        np.testing.assert_array_equal(table.obsm["spatial"], sentinel)  # centroids untouched
+        assert "area" in table.obs  # area/diameter still written
+
+    def test_centroids_false_keeps_existing_obsm(self, sdata_blobs: SpatialData) -> None:
+        table = sdata_blobs["table"]
+        sentinel = np.arange(table.n_obs * 2, dtype=float).reshape(table.n_obs, 2)
+        table.obsm["spatial"] = sentinel.copy()
+        measure_obs(sdata_blobs, "blobs_labels", centroids=False)  # only area/diameter written
+        np.testing.assert_array_equal(table.obsm["spatial"], sentinel)
+        assert "area" in table.obs
+
+    def test_incompatible_obsm_shape_raises(self, sdata_blobs: SpatialData) -> None:
+        table = sdata_blobs["table"]
+        table.obsm["spatial"] = np.zeros((table.n_obs, 3))  # e.g. xyz; cannot write 2D centroids over it
+        with pytest.raises(ValueError, match="Refusing to overwrite"):
+            measure_obs(sdata_blobs, "blobs_labels")
+
+    def test_unmatched_instance_ids_warn_and_write_nan(self, sdata_blobs: SpatialData) -> None:
+        # #2: instance ids that don't match the element (e.g. str vs int) -> warn + NaN, not silent.
+        table = sdata_blobs["table"]
+        table.obs["instance_id"] = table.obs["instance_id"].astype(str)
+        with pytest.warns(UserWarning, match="no match"):
+            measure_obs(sdata_blobs, "blobs_labels")
+        assert np.isnan(table.obsm["spatial"]).all()
+
+    def test_float_dtype_labels_supported(self, sdata_blobs: SpatialData) -> None:
+        # #3: a float-typed (but integer-valued) labels raster must not crash np.bincount.
+        arr = np.asarray(sdata_blobs["blobs_labels"].data).astype(np.float32)
+        sd = _labels_sdata(arr)
+        measure_obs(sd, "lab", table_name="t")
+        assert np.isfinite(sd["t"].obsm["spatial"]).all()
+
+    def test_existing_nonnumeric_column_raises_before_any_write(self, sdata_blobs: SpatialData) -> None:
+        # #4: a non-numeric collision raises BEFORE obsm is mutated (no half-written table).
+        table = sdata_blobs["table"]
+        table.obs["area"] = pd.Categorical(["lo"] * table.n_obs)
+        with pytest.raises(ValueError, match="not numeric"):
+            measure_obs(sdata_blobs, "blobs_labels")
+        assert "spatial" not in table.obsm  # atomic: nothing written
+
+    def test_sparse_high_label_ids(self, sdata_blobs: SpatialData) -> None:
+        # #5: sparse/high label ids (max id >> n_labels) are measured correctly (dense relabelling).
+        arr = np.asarray(sdata_blobs["blobs_labels"].data)
+        hi = (arr.astype(np.int64) * 1000)  # ids become 1000, 2000, ... ; max id is huge, few labels
+        measure_obs(sd_hi := _labels_sdata(hi), "lab", table_name="t")
+        measure_obs(sd_lo := _labels_sdata(arr.astype(np.int64)), "lab", table_name="t")
+        # relabelling values does not move pixels -> identical centroid set
+        np.testing.assert_allclose(
+            np.sort(sd_hi["t"].obsm["spatial"], axis=0), np.sort(sd_lo["t"].obsm["spatial"], axis=0)
+        )
+
+    def test_polygon_with_radius_column_uses_geometric_area(self, sdata_blobs: SpatialData) -> None:
+        # #7: dispatch on geometry type, not the "radius" column name -> polygons use geometry.area.
+        gdf = sdata_blobs["blobs_polygons"].copy()
+        gdf["radius"] = 5.0  # incidental column; must NOT trigger the circle (pi*r**2) branch
+        sdata_blobs["pr"] = ShapesModel.parse(gdf)
+        _add_shapes_table(sdata_blobs, "pr", name="pt")
+        measure_obs(sdata_blobs, "pr", table_name="pt")
+        order = sdata_blobs["pt"].obs["instance_id"].to_numpy()
+        expected = gdf.geometry.area.to_numpy()[[list(gdf.index).index(i) for i in order]]
+        np.testing.assert_allclose(sdata_blobs["pt"].obs["area"].to_numpy(), expected, rtol=1e-9)
+
+    def test_flags_select_outputs(self, sdata_blobs: SpatialData) -> None:
+        measure_obs(sdata_blobs, "blobs_labels", area=False, diameter=False)
+        table = sdata_blobs["table"]
+        assert "spatial" in table.obsm
+        assert "area" not in table.obs and "equivalent_diameter" not in table.obs
+
+    def test_no_annotating_table_raises(self, sdata_blobs: SpatialData) -> None:
+        # blobs_circles is not annotated by any table
+        with pytest.raises(ValueError, match="no annotating table"):
+            measure_obs(sdata_blobs, "blobs_circles")
+
+    def test_ambiguous_table_raises(self, sdata_blobs: SpatialData) -> None:
+        _add_shapes_table(sdata_blobs, "blobs_polygons", name="table_a")
+        _add_shapes_table(sdata_blobs, "blobs_polygons", name="table_b")
+        with pytest.raises(ValueError, match="multiple tables"):
+            measure_obs(sdata_blobs, "blobs_polygons")
+
+    def test_nothing_to_measure_raises(self, sdata_blobs: SpatialData) -> None:
+        with pytest.raises(ValueError, match="at least one"):
+            measure_obs(sdata_blobs, "blobs_labels", centroids=False, area=False, diameter=False)
+
+    def test_element_none_measures_single_table_elements(self, sdata_blobs: SpatialData) -> None:
+        # default blobs: only blobs_labels has a single annotating table
+        measure_obs(sdata_blobs)
+        assert "spatial" in sdata_blobs["table"].obsm
