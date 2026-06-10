@@ -444,7 +444,11 @@ def _join_table_for_element(
     element: str,
     table_name: str,
 ) -> tuple[Any, AnnData]:
-    """Inner-join ``element`` with its annotating ``table_name``.
+    """Left-join ``element`` with its annotating ``table_name``.
+
+    A left join keeps every shape, including those without a table row (they get no color value and
+    are rendered with ``na_color``), matching the points/labels behaviour instead of silently dropping
+    unannotated shapes.
 
     Wraps the workaround for scverse/spatialdata#1099: ``join_spatialelement_table``
     calls ``table.obs.reset_index()`` which fails when the obs index name matches
@@ -470,7 +474,7 @@ def _join_table_for_element(
 
     try:
         element_dict, joined_table = join_spatialelement_table(
-            sdata, spatial_element_names=element, table_name=table_name, how="inner"
+            sdata, spatial_element_names=element, table_name=table_name, how="left"
         )
     finally:
         if _saved_index is not None:

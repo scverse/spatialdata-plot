@@ -646,7 +646,7 @@ def _render_shapes(
     outline_color_vector: Any = None
     if col_for_outline_color is not None:
         # When the outline column lives in a table that hasn't been joined yet
-        # (no fill table, or a different table than fill's), inner-join it onto
+        # (no fill table, or a different table than fill's), left-join it onto
         # the element so the lookup is aligned and the element row count matches
         # the outline vector length.
         if outline_table_name is not None and outline_table_name != table_name:
