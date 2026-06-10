@@ -602,8 +602,8 @@ def _render_shapes(
 
     _check_obs_var_shadow(sdata, element, col_for_color, render_params.table_name)
 
-    # filter_tables=False: join_spatialelement_table below overwrites the table,
-    # so the cs-level sparse copy is wasted work.
+    # filter_tables=False: the annotating table is read directly below (color is resolved per shape
+    # from it, region-masked and reindexed), so the cs-level sparse table copy would be wasted work.
     sdata_filt = sdata.filter_by_coordinate_system(
         coordinate_system=coordinate_system,
         filter_tables=False,
@@ -612,12 +612,11 @@ def _render_shapes(
     table_name = render_params.table_name
     if table_name is None:
         table = None
-        shapes = sdata_filt[element]
     else:
+        # No join/copy: _set_color_source_vec resolves each shape's color from the table (region-masked
+        # and reindexed to the element), so unannotated shapes keep their place and render with na_color.
         _check_instance_ids_overlap(sdata_filt, table_name, element, sdata_filt[element].index)
-        joined_element, joined_table = _join_table_for_element(sdata, element, table_name)
-        sdata_filt[element] = shapes = joined_element
-        sdata_filt[table_name] = table = joined_table
+        table = sdata_filt[table_name]
 
     shapes = sdata_filt[element]
 
@@ -648,7 +647,7 @@ def _render_shapes(
     outline_color_vector: Any = None
     if col_for_outline_color is not None:
         # When the outline column lives in a table that hasn't been joined yet
-        # (no fill table, or a different table than fill's), inner-join it onto
+        # (no fill table, or a different table than fill's), left-join it onto
         # the element so the lookup is aligned and the element row count matches
         # the outline vector length.
         if outline_table_name is not None and outline_table_name != table_name:

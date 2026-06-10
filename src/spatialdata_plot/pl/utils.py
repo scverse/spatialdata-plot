@@ -445,7 +445,11 @@ def _join_table_for_element(
     element: str,
     table_name: str,
 ) -> tuple[Any, AnnData]:
-    """Inner-join ``element`` with its annotating ``table_name``.
+    """Left-join ``element`` with its annotating ``table_name``.
+
+    A left join keeps every shape, including those without a table row (they get no color value and
+    are rendered with ``na_color``), matching the points/labels behaviour instead of silently dropping
+    unannotated shapes.
 
     Wraps the workaround for scverse/spatialdata#1099: ``join_spatialelement_table``
     calls ``table.obs.reset_index()`` which fails when the obs index name matches
@@ -471,7 +475,7 @@ def _join_table_for_element(
 
     try:
         element_dict, joined_table = join_spatialelement_table(
-            sdata, spatial_element_names=element, table_name=table_name, how="inner"
+            sdata, spatial_element_names=element, table_name=table_name, how="left"
         )
     finally:
         if _saved_index is not None:
@@ -1233,6 +1237,37 @@ def _build_alignment_dtype_hint(
     return ""
 
 
+def _extract_color_column(
+    table: AnnData,
+    value_key: str,
+    *,
+    origin: str,
+    element: GeoDataFrame,
+    element_name: str,
+    table_layer: str | None = None,
+) -> pd.Series:
+    """Read one color column from ``table`` aligned to ``element`` order, without copying the table.
+
+    Equivalent to ``get_values(value_key, sdata=..., element_name=..., table_name=...)[value_key]`` but
+    skips the table->element join, whose ``table[indices, :].copy()`` does an expensive out-of-order
+    sparse CSR row-gather. Restricts to rows annotating ``element_name`` (via ``region_key``), then
+    reindexes to the element's instance order (``NaN`` for instances with no table row), preserving the
+    categorical dtype of ``obs`` columns so the downstream legend path is unchanged.
+    """
+    attrs = table.uns["spatialdata_attrs"]
+    region_key, instance_key = attrs["region_key"], attrs["instance_key"]
+    mask = table.obs[region_key].to_numpy() == element_name
+    inst = table.obs[instance_key].to_numpy()[mask]
+    if origin == "var":
+        source = table.layers[table_layer] if table_layer is not None else table.X
+        col = source[:, table.var_names.get_loc(value_key)]
+        col = np.asarray(col.todense()).ravel() if hasattr(col, "todense") else np.asarray(col).ravel()
+        values = pd.Series(col[mask], index=inst)
+    else:  # obs column; .values keeps a Categorical categorical so the legend path still sees one
+        values = pd.Series(table.obs[value_key].values[mask], index=inst)
+    return values.reindex(element.index)
+
+
 def _set_color_source_vec(
     sdata: sd.SpatialData,
     element: SpatialElement | None,
@@ -1284,6 +1319,23 @@ def _set_color_source_vec(
             )
         if preloaded_color_data is not None:
             color_source_vector = preloaded_color_data
+        elif (
+            isinstance(element, GeoDataFrame)
+            and isinstance(element_name, str)
+            and table_name is not None
+            and table_name in sdata.tables
+            and origins[0].origin in ("obs", "var")
+        ):
+            # Fast path: read the single aligned column directly instead of joining/copying the
+            # whole annotating table (the join's out-of-order sparse row-gather dominates large renders).
+            color_source_vector = _extract_color_column(
+                sdata[table_name],
+                value_to_plot,
+                origin=origins[0].origin,
+                element=element,
+                element_name=element_name,
+                table_layer=table_layer,
+            )
         elif explicit_table_shadows_df:
             # Pass the table as `element` so upstream `get_values` skips the
             # element-column lookup and avoids the multi-origin error.
@@ -2284,6 +2336,10 @@ def _rasterize_if_necessary(
             coordinate_system,
             target_unit_to_pixels=target_unit_to_pixels,
         )
+        if hasattr(image.data, "compute"):
+            # rasterize is lazy; downstream reads the result once per channel (NaN check,
+            # compositing, draw), so materialize once instead of re-running the warp each time.
+            image = image.copy(data=image.data.compute())
 
     return image
 

@@ -439,6 +439,20 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
                 element="blobs_polygons", color="not_a_column", table_name="table"
             )
 
+    def test_plot_shapes_unannotated_by_table_render_with_na_color(self, sdata_blobs_shapes_annotated: SpatialData):
+        # Regression for #710: blobs_polygons instance 0 has no row in the table (instance_id starts
+        # at 1), so coloring by a table column must render it with na_color, not drop it.
+        sdata_blobs_shapes_annotated.pl.render_shapes(
+            "blobs_polygons", color="channel_0_sum", na_color="red"
+        ).pl.show()
+
+    def test_plot_shapes_unannotated_by_table_hidden_with_na_color_none(self, sdata_blobs_shapes_annotated: SpatialData):
+        # Counterpart to the test above: na_color=None makes the unannotated polygon (instance 0)
+        # transparent, opting back into hiding it.
+        sdata_blobs_shapes_annotated.pl.render_shapes(
+            "blobs_polygons", color="channel_0_sum", na_color=None
+        ).pl.show()
+
     def test_plot_can_plot_shapes_after_spatial_query(self, sdata_blobs: SpatialData):
         # subset to only shapes, should be unnecessary after rasterizeation of multiscale images is included
         blob = SpatialData.init_from_elements(
