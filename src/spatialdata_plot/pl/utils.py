@@ -3078,6 +3078,14 @@ def _expand_color_panels(
     return panel_param_dicts
 
 
+def _validate_as_points_size(size: float) -> None:
+    """Validate the centroid marker `size` used by ``render_shapes``/``render_labels`` with ``as_points=True``."""
+    if isinstance(size, bool) or not isinstance(size, (int, float)):
+        raise TypeError("Parameter 'size' must be numeric.")
+    if size <= 0:
+        raise ValueError("Parameter 'size' must be a positive number.")
+
+
 def _validate_label_render_params(
     sdata: sd.SpatialData,
     element: str | None,

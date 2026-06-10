@@ -2370,15 +2370,14 @@ def _render_labels(
         )
         # coerce so str/object table ids (e.g. Xenium) match the integer raster labels instead of NaN
         centroids = centroids.reindex(point_ids.astype(labels.dtype, copy=False))
-        color_vec = np.asarray(color_vector)
         if col_for_color is None and not na_color.color_modified_by_user():
             # no color column: one distinct random colour per cell, matching the mask path
             # (`_map_color_seg` Case C) instead of collapsing every dot to a single na_color.
             point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
             point_color_source_vector = None
-        elif len(color_vec) == len(instance_id):
+        elif len(color_vector) == len(instance_id):
             # data-driven colour is per-instance
-            point_color_vector = color_vec[keep]
+            point_color_vector = np.asarray(color_vector)[keep]
             point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
         else:
             # literal colour / user-set na_color -> one colour per centroid

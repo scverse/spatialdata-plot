@@ -72,6 +72,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _validate_as_points_size,
     _validate_graph_render_params,
     _validate_image_render_params,
     _validate_label_render_params,
@@ -452,10 +453,7 @@ class PlotAccessor:
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
         if as_points:
-            if isinstance(size, bool) or not isinstance(size, (int, float)):
-                raise TypeError("Parameter 'size' must be numeric.")
-            if size <= 0:
-                raise ValueError("Parameter 'size' must be a positive number.")
+            _validate_as_points_size(size)
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
@@ -1057,10 +1055,7 @@ class PlotAccessor:
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
         if as_points:
-            if isinstance(size, bool) or not isinstance(size, (int, float)):
-                raise TypeError("Parameter 'size' must be numeric.")
-            if size <= 0:
-                raise ValueError("Parameter 'size' must be a positive number.")
+            _validate_as_points_size(size)
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
