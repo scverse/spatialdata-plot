@@ -679,3 +679,64 @@ class TestMeasureObs:
         # default blobs: only blobs_labels has a single annotating table
         measure_obs(sdata_blobs)
         assert "spatial" in sdata_blobs["table"].obsm
+
+
+class TestExtractColorColumn:
+    """`_extract_color_column` matches spatialdata's `get_values` bit-identically without copying the table."""
+
+    @staticmethod
+    def _annotated_shapes(n: int = 30, *, shuffle: bool = False, drop: int = 0, seed: int = 0) -> SpatialData:
+        rng = np.random.default_rng(seed)
+        coords = rng.random((n, 2)) * 100
+        geom = gpd.GeoDataFrame(
+            {"geometry": [Point(*xy) for xy in coords], "radius": np.ones(n)}, index=pd.Index(range(n))
+        )
+        inst = (rng.permutation(n) if shuffle else np.arange(n))[drop:]
+        adata = AnnData(
+            X=rng.random((len(inst), 4)).astype("float32"),
+            obs=pd.DataFrame(
+                {
+                    "region": pd.Categorical(["shapes"] * len(inst)),
+                    "instance_id": inst,
+                    "num": rng.random(len(inst)),
+                    "cat": pd.Categorical(rng.choice(list("abc"), len(inst))),
+                }
+            ),
+        )
+        adata.var_names = [f"g{i}" for i in range(4)]
+        table = TableModel.parse(adata, region="shapes", region_key="region", instance_key="instance_id")
+        return SpatialData(shapes={"shapes": ShapesModel.parse(geom)}, tables={"table": table})
+
+    @pytest.mark.parametrize(("key", "origin"), [("g0", "var"), ("g3", "var"), ("num", "obs"), ("cat", "obs")])
+    def test_matches_get_values(self, key: str, origin: str):
+        from spatialdata import get_values
+
+        from spatialdata_plot.pl.utils import _extract_color_column
+
+        sdata = self._annotated_shapes()
+        old = pd.Series(get_values(value_key=key, sdata=sdata, element_name="shapes", table_name="table")[key])
+        new = _extract_color_column(sdata["table"], key, origin=origin, element=sdata["shapes"], element_name="shapes")
+        assert (old.index == new.index).all()
+        if pd.api.types.is_numeric_dtype(old):
+            np.testing.assert_allclose(old.to_numpy(float), new.to_numpy(float))
+        else:
+            assert old.astype(str).equals(new.astype(str))
+            assert isinstance(new.dtype, pd.CategoricalDtype)  # preserved for the legend path
+
+    def test_shuffled_table_order_realigns(self):
+        from spatialdata import get_values
+
+        from spatialdata_plot.pl.utils import _extract_color_column
+
+        sdata = self._annotated_shapes(shuffle=True)
+        old = pd.Series(get_values(value_key="g0", sdata=sdata, element_name="shapes", table_name="table")["g0"])
+        new = _extract_color_column(sdata["table"], "g0", origin="var", element=sdata["shapes"], element_name="shapes")
+        np.testing.assert_allclose(old.to_numpy(float), new.to_numpy(float))
+
+    def test_missing_instances_become_nan(self):
+        from spatialdata_plot.pl.utils import _extract_color_column
+
+        sdata = self._annotated_shapes(drop=5)  # 5 shapes have no annotating table row
+        new = _extract_color_column(sdata["table"], "g0", origin="var", element=sdata["shapes"], element_name="shapes")
+        assert len(new) == 30
+        assert int(new.isna().sum()) == 5
