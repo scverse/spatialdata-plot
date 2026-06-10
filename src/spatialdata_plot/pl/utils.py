@@ -4822,7 +4822,9 @@ def _is_axis_aligned(linear2x2: ArrayLike, *, rtol: float = 1e-9) -> bool:
     return bool((nz.sum(0) <= 1).all() and (nz.sum(1) <= 1).all() and int(nz.sum()) == m.shape[0])
 
 
-def _element_extent_fast(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]] | None:
+def _element_extent_fast(
+    element: Any, coordinate_system: str, *, transformations: Mapping[str, Any] | None = None
+) -> dict[str, tuple[float, float]] | None:
     """Extent of one shapes/points element in ``coordinate_system`` via corner-transform.
 
     Returns ``None`` (signalling the caller to fall back to ``get_extent``) when the element type is
@@ -4831,11 +4833,16 @@ def _element_extent_fast(element: Any, coordinate_system: str) -> dict[str, tupl
     is an ellipse, but spatialdata stores a single uniformly-scaled radius, so the cheap and exact
     extents only agree when the scale is isotropic. Intrinsic bounds are read vectorised (no
     per-geometry empty filter); NaN bounds of empty geometries are skipped by the reductions.
+
+    ``transformations`` may pass a pre-fetched ``get_transformation(element, get_all=True)`` to avoid
+    re-reading it when the caller already has it.
     """
     model = get_model(element)
     if model not in (ShapesModel, PointsModel):
         return None
-    matrix = get_transformation(element, get_all=True)[coordinate_system].to_affine_matrix(("x", "y"), ("x", "y"))
+    if transformations is None:
+        transformations = get_transformation(element, get_all=True)
+    matrix = transformations[coordinate_system].to_affine_matrix(("x", "y"), ("x", "y"))
     affine = matrix[:2, :2]
     if not _is_axis_aligned(affine):
         return None
@@ -4890,9 +4897,14 @@ def _get_extent_fast(
         for name, element in edict.items():
             if elements is not None and name not in elements:
                 continue
-            if coordinate_system not in get_transformation(element, get_all=True):
+            transformations = get_transformation(element, get_all=True)
+            if coordinate_system not in transformations:
                 continue
-            ext = _element_extent_fast(element, coordinate_system) if etype in ("shapes", "points") else None
+            ext = (
+                _element_extent_fast(element, coordinate_system, transformations=transformations)
+                if etype in ("shapes", "points")
+                else None
+            )
             if ext is None:  # rotation/shear, image/label (already cheap), or unsupported
                 ext = get_extent(element, coordinate_system=coordinate_system)
             for ax in ("x", "y"):
