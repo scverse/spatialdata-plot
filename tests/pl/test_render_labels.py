@@ -435,6 +435,14 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels", color="GeneA", table_name="table", gene_symbols="gene_symbol"
         ).pl.show()
 
+    def test_plot_can_render_labels_as_points(self, sdata_blobs: SpatialData):
+        """as_points draws one colored dot per label at its centroid instead of the mask."""
+        sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=100).pl.show()
+
+    def test_plot_labels_as_points_respects_size(self, sdata_blobs: SpatialData):
+        """size sets the scatter marker area; larger size -> larger dots."""
+        sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=600).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables

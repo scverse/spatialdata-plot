@@ -1108,6 +1108,14 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             "blobs_circles", color="GeneA", table_name="table", gene_symbols="gene_symbol"
         ).pl.show()
 
+    def test_plot_can_render_circles_as_points(self, sdata_blobs: SpatialData):
+        """as_points draws one dot per shape at its centroid instead of the geometry."""
+        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=100).pl.show()
+
+    def test_plot_shapes_as_points_respects_size(self, sdata_blobs: SpatialData):
+        """size sets the scatter marker area; larger size -> larger dots."""
+        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=600).pl.show()
+
 
 def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
     """gene_symbols resolves correctly without explicit table_name (#247)."""
