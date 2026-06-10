@@ -3912,7 +3912,11 @@ def _get_extent_and_range_for_datashader_canvas(
     coordinate_system: str,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
-    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    # The corner-transform fast path avoids transforming every geometry just to size the canvas;
+    # it is identical for axis-aligned transforms and returns None (-> exact get_extent) otherwise.
+    extent = _element_extent_fast(spatial_element, coordinate_system) or get_extent(
+        spatial_element, coordinate_system=coordinate_system
+    )
     x_ext = [float(extent["x"][0]), float(extent["x"][1])]
     y_ext = [float(extent["y"][0]), float(extent["y"][1])]
     return _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
