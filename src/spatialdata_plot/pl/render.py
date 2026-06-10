@@ -2302,9 +2302,9 @@ def _render_labels(
             len(instance_id),
         )
 
-    # rasterize could have removed labels from label
-    # only problematic if color is specified
-    if rasterize and (col_for_color is not None or col_for_outline_color is not None):
+    # rasterize/downsampling can drop labels from the raster; remove their (now-absent) instance ids
+    # so per-instance colors stay aligned and as_points does not emit dots for dropped cells.
+    if rasterize and (col_for_color is not None or col_for_outline_color is not None or render_params.as_points):
         mask = np.isin(instance_id, unique_labels)
         instance_id = instance_id[mask]
         if col_for_color is not None:
@@ -2370,12 +2370,18 @@ def _render_labels(
         )
         # coerce so str/object table ids (e.g. Xenium) match the integer raster labels instead of NaN
         centroids = centroids.reindex(point_ids.astype(labels.dtype, copy=False))
-        # data-driven color is per-instance; literal/no-color is not -> one na color per centroid
         color_vec = np.asarray(color_vector)
-        if len(color_vec) == len(instance_id):
+        if col_for_color is None and not na_color.color_modified_by_user():
+            # no color column: one distinct random colour per cell, matching the mask path
+            # (`_map_color_seg` Case C) instead of collapsing every dot to a single na_color.
+            point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
+            point_color_source_vector = None
+        elif len(color_vec) == len(instance_id):
+            # data-driven colour is per-instance
             point_color_vector = color_vec[keep]
             point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
         else:
+            # literal colour / user-set na_color -> one colour per centroid
             point_color_vector = np.asarray([na_color.get_hex_with_alpha()] * len(point_ids))
             point_color_source_vector = None
         _render_centroids_as_points(
@@ -2385,7 +2391,7 @@ def _render_labels(
             y=centroids["y"].to_numpy(),
             color_vector=point_color_vector,
             color_source_vector=point_color_source_vector,
-            norm=render_params.cmap_params.norm,
+            norm=copy(render_params.cmap_params.norm),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
             transform=trans_data,  # rendered-raster intrinsic coords -> coordinate system -> display
             adata=table if table_name is not None else None,

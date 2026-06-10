@@ -634,6 +634,9 @@ def test_render_labels_as_points_without_color(sdata_blobs: SpatialData):
     offsets = np.asarray(ax.collections[0].get_offsets())
     n_cells = len(sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute())
     assert len(offsets) == n_cells  # one dot per cell, no spurious background point
+    # without a color column, cells get distinct random colours (like the mask path), not one na_color
+    facecolors = ax.collections[0].get_facecolors()
+    assert len({tuple(np.round(c, 4)) for c in facecolors}) > 1
     plt.close(fig)
 
 

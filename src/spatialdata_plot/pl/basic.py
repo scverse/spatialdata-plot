@@ -451,6 +451,11 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
+        if as_points:
+            if isinstance(size, bool) or not isinstance(size, (int, float)):
+                raise TypeError("Parameter 'size' must be numeric.")
+            if size <= 0:
+                raise ValueError("Parameter 'size' must be a positive number.")
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
@@ -1051,6 +1056,11 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
+        if as_points:
+            if isinstance(size, bool) or not isinstance(size, (int, float)):
+                raise TypeError("Parameter 'size' must be numeric.")
+            if size <= 0:
+                raise ValueError("Parameter 'size' must be a positive number.")
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
