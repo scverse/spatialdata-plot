@@ -1826,7 +1826,7 @@ class PlotAccessor:
                 empty_shape_elements = [
                     name
                     for name in wanted_elements
-                    if name in sdata.shapes and not sdata.shapes[name]["geometry"].apply(lambda g: not g.is_empty).any()
+                    if name in sdata.shapes and sdata.shapes[name]["geometry"].is_empty.all()
                 ]
                 if empty_shape_elements:
                     raise ValueError(
