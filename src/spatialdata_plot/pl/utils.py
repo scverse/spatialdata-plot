@@ -2283,6 +2283,10 @@ def _rasterize_if_necessary(
             coordinate_system,
             target_unit_to_pixels=target_unit_to_pixels,
         )
+        if hasattr(image.data, "compute"):
+            # rasterize is lazy; downstream reads the result once per channel (NaN check,
+            # compositing, draw), so materialize once instead of re-running the warp each time.
+            image = image.copy(data=image.data.compute())
 
     return image
 
