@@ -682,7 +682,7 @@ class TestMeasureObs:
 
 
 class TestGetExtentFast:
-    """`get_extent_fast` matches spatialdata's `get_extent` while skipping the per-geometry transform."""
+    """`_get_extent_fast` matches spatialdata's `get_extent` while skipping the per-geometry transform."""
 
     @pytest.mark.parametrize(
         ("matrix", "expected"),
@@ -708,7 +708,7 @@ class TestGetExtentFast:
         from spatialdata import get_extent
         from spatialdata.transformations import Affine, Scale, Translation, set_transformation
 
-        from spatialdata_plot.pl.utils import get_extent_fast
+        from spatialdata_plot.pl.utils import _get_extent_fast
 
         def _rot(theta: float) -> Affine:
             c, s = math.cos(theta), math.sin(theta)
@@ -726,7 +726,7 @@ class TestGetExtentFast:
         set_transformation(sdata_blobs[element], transforms[kind], "cs")
         sub = SpatialData(shapes={element: sdata_blobs[element]})
         kw = dict(has_images=False, has_labels=False, has_points=False)
-        fast = get_extent_fast(sub, "cs", **kw)
+        fast = _get_extent_fast(sub, "cs", **kw)
         exact = get_extent(sub, "cs", exact=True, **kw)
         for ax in ("x", "y"):
             np.testing.assert_allclose(fast[ax], exact[ax], atol=1e-6)

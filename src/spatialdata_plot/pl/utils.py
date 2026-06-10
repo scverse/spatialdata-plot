@@ -4754,28 +4754,6 @@ def _is_axis_aligned(linear2x2: ArrayLike, *, rtol: float = 1e-9) -> bool:
     return bool((nz.sum(0) <= 1).all() and (nz.sum(1) <= 1).all() and int(nz.sum()) == m.shape[0])
 
 
-def _intrinsic_xy_bounds(element: Any) -> tuple[float, float, float, float] | None:
-    """``(xmin, ymin, xmax, ymax)`` of a shapes/points element in its intrinsic coords, vectorised.
-
-    Circles (``Point`` + ``radius``) expand by the radius; polygons use the vectorised ``.bounds``;
-    points read the x/y columns. NaN bounds of empty geometries are skipped by min/max, so no
-    per-geometry empty filter is needed. Returns ``None`` for unsupported element types.
-    """
-    model = get_model(element)
-    if model is ShapesModel:
-        geom = element.geometry
-        if (geom.geom_type == "Point").all():  # circles
-            x, y = geom.x.to_numpy(), geom.y.to_numpy()
-            r = np.asarray(element["radius"], dtype=float)
-            return float(np.nanmin(x - r)), float(np.nanmin(y - r)), float(np.nanmax(x + r)), float(np.nanmax(y + r))
-        b = geom.bounds  # vectorised; columns minx/miny/maxx/maxy
-        return float(b["minx"].min()), float(b["miny"].min()), float(b["maxx"].max()), float(b["maxy"].max())
-    if model is PointsModel:
-        x, y = element["x"], element["y"]
-        return float(x.min().compute()), float(y.min().compute()), float(x.max().compute()), float(y.max().compute())
-    return None
-
-
 def _element_extent_fast(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]] | None:
     """Extent of one shapes/points element in ``coordinate_system`` via corner-transform.
 
@@ -4783,7 +4761,8 @@ def _element_extent_fast(element: Any, coordinate_system: str) -> dict[str, tupl
     unsupported or the transform is not axis-aligned (rotation/shear, where the cheap path would
     over-estimate). For circles it also falls back under an *anisotropic* linear map: a scaled circle
     is an ellipse, but spatialdata stores a single uniformly-scaled radius, so the cheap and exact
-    extents only agree when the scale is isotropic.
+    extents only agree when the scale is isotropic. Intrinsic bounds are read vectorised (no
+    per-geometry empty filter); NaN bounds of empty geometries are skipped by the reductions.
     """
     model = get_model(element)
     if model not in (ShapesModel, PointsModel):
@@ -4792,20 +4771,32 @@ def _element_extent_fast(element: Any, coordinate_system: str) -> dict[str, tupl
     affine = matrix[:2, :2]
     if not _is_axis_aligned(affine):
         return None
-    if model is ShapesModel and bool((element.geometry.geom_type == "Point").all()):  # circles
-        nz = np.abs(affine)[np.abs(affine) > 1e-9 * (np.abs(affine).max() or 1.0)]
-        if not np.allclose(nz, nz[0]):  # anisotropic -> radius handling diverges from spatialdata
-            return None
-    bounds = _intrinsic_xy_bounds(element)
-    if bounds is None:
-        return None
-    xmin, ymin, xmax, ymax = bounds
+
+    if model is PointsModel:
+        x, y = element["x"], element["y"]
+        xmin, ymin, xmax, ymax = (float(v) for v in dask.compute(x.min(), y.min(), x.max(), y.max()))
+    else:  # ShapesModel
+        geom = element.geometry
+        if (geom.geom_type == "Point").all():  # circles
+            a = np.abs(affine)
+            nz = a[a > 1e-9 * (a.max() or 1.0)]
+            if not np.allclose(nz, nz[0]):  # anisotropic -> radius handling diverges from spatialdata
+                return None
+            x, y = geom.x.to_numpy(), geom.y.to_numpy()
+            r = np.asarray(element["radius"], dtype=float)
+            xmin = float(np.nanmin(x - r))
+            ymin = float(np.nanmin(y - r))
+            xmax = float(np.nanmax(x + r))
+            ymax = float(np.nanmax(y + r))
+        else:  # polygons / multipolygons
+            xmin, ymin, xmax, ymax = (float(v) for v in geom.total_bounds)  # C-level union; skips empties
+
     corners = np.array([[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]])
     tc = corners @ affine.T + matrix[:2, 2]
     return {"x": (float(tc[:, 0].min()), float(tc[:, 0].max())), "y": (float(tc[:, 1].min()), float(tc[:, 1].max()))}
 
 
-def get_extent_fast(
+def _get_extent_fast(
     sdata: SpatialData,
     coordinate_system: str,
     *,
