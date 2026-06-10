@@ -1834,9 +1834,7 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            # `_get_extent_fast` skips transforming every shapes/points geometry when the element's
-            # transform is axis-aligned (the common scale+translation case); identical result, but
-            # avoids the O(N-geometries) bottleneck for large shape collections.
+            # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
             extent = _get_extent_fast(
                 sdata,
                 coordinate_system=cs,

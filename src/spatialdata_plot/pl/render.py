@@ -1092,9 +1092,8 @@ def _scatter_points(
 ) -> Any:
     """Draw one marker per (x, y) colored by ``color_vector`` via ``ax.scatter``.
 
-    Shared matplotlib scatter primitive: used by ``_render_points`` and (later) by the
-    centroid-point "fast" rendering of shapes/labels. ``color_vector`` is per-point hex
-    strings (categorical) or numeric values mapped through ``cmap``/``norm`` (continuous).
+    Shared scatter primitive for points and the centroid "fast mode" of shapes/labels;
+    ``color_vector`` is per-point hex strings or numeric values mapped through ``cmap``/``norm``.
     """
     return ax.scatter(
         x,
@@ -1131,10 +1130,8 @@ def _render_centroids_as_points(
 ) -> None:
     """Render one dot per cell at ``(x, y)`` colored like the fill, with legend/colorbar.
 
-    Shared "fast mode" draw for shapes/labels: cmap/size/alpha/zorder/colorbar come off
-    ``render_params``; ``color_vector`` is the same per-instance color vector the geometry/raster
-    path would use, so colors match the full rendering exactly. ``norm``/``na_color`` stay explicit
-    because they differ between the shapes (locally adjusted) and labels paths.
+    Shared "fast mode" draw for shapes/labels; style comes off ``render_params``. ``norm``/``na_color``
+    stay explicit because they differ between the shapes (locally adjusted) and labels paths.
     """
     cax = _scatter_points(
         ax,

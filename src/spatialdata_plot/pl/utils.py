@@ -4800,14 +4800,10 @@ def measure_obs(
 
 
 # --- Fast extent for axis-aligned transforms ------------------------------------------------------
-# `pl.show()` computes axis bounds via spatialdata's `get_extent(..., exact=True)`, which transforms
-# EVERY shapes/points geometry into the coordinate system (per-geometry, O(N)) just to take a bounding
-# box — the dominant cost when rendering large shape collections. When the element's transform is
-# axis-aligned (scale / flip / 90deg rotation / axis swap + translation), the exact extent equals the
-# bounding box of the *transformed corners* (spatialdata's own get_extent docstring notes this), so we
-# can transform 4 corners instead of N geometries, and read the intrinsic bounds vectorised (avoiding
-# spatialdata's per-geometry `.apply(is_empty)` filter). This whole block is self-contained so it can
-# be lifted into spatialdata's `get_extent` verbatim; it falls back to `get_extent` for rotation/shear.
+# spatialdata's `get_extent(..., exact=True)` transforms every shapes/points geometry (O(N)) just to
+# take a bounding box. For an axis-aligned transform (scale/flip/90deg-rotation/axis-swap + translation)
+# the exact extent equals the bbox of the *transformed corners*, so we transform 4 corners instead;
+# rotation/shear and other element types fall back to `get_extent`. Self-contained for upstreaming.
 
 
 def _is_axis_aligned(linear2x2: ArrayLike, *, rtol: float = 1e-9) -> bool:
@@ -4827,15 +4823,10 @@ def _element_extent_fast(
 ) -> dict[str, tuple[float, float]] | None:
     """Extent of one shapes/points element in ``coordinate_system`` via corner-transform.
 
-    Returns ``None`` (signalling the caller to fall back to ``get_extent``) when the element type is
-    unsupported or the transform is not axis-aligned (rotation/shear, where the cheap path would
-    over-estimate). For circles it also falls back under an *anisotropic* linear map: a scaled circle
-    is an ellipse, but spatialdata stores a single uniformly-scaled radius, so the cheap and exact
-    extents only agree when the scale is isotropic. Intrinsic bounds are read vectorised (no
-    per-geometry empty filter); NaN bounds of empty geometries are skipped by the reductions.
-
-    ``transformations`` may pass a pre-fetched ``get_transformation(element, get_all=True)`` to avoid
-    re-reading it when the caller already has it.
+    Returns ``None`` to fall back to ``get_extent`` for an unsupported type, a non-axis-aligned
+    transform, or an anisotropically-scaled circle (an ellipse, but spatialdata stores one radius, so
+    cheap and exact agree only under isotropic scale). ``transformations`` may pass a pre-fetched
+    ``get_transformation(element, get_all=True)`` to avoid re-reading it.
     """
     model = get_model(element)
     if model not in (ShapesModel, PointsModel):
@@ -4866,6 +4857,8 @@ def _element_extent_fast(
         else:  # polygons / multipolygons
             xmin, ymin, xmax, ymax = (float(v) for v in geom.total_bounds)  # C-level union; skips empties
 
+    if not np.isfinite((xmin, ymin, xmax, ymax)).all():  # all-empty element: defer to get_extent's clear error
+        return None
     corners = np.array([[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]])
     tc = corners @ affine.T + matrix[:2, 2]
     return {"x": (float(tc[:, 0].min()), float(tc[:, 0].max())), "y": (float(tc[:, 1].min()), float(tc[:, 1].max()))}
