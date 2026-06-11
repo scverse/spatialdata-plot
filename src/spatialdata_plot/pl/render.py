@@ -66,6 +66,7 @@ from spatialdata_plot.pl.utils import (
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
+    _element_extent_fast,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
@@ -774,7 +775,10 @@ def _render_shapes(
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
-            axes_extent=get_extent(sdata_filt.shapes[element], coordinate_system=coordinate_system),
+            # fast corner-transform extent (avoids transforming every geometry); identical for
+            # axis-aligned transforms, falls back to get_extent for rotation/shear
+            axes_extent=_element_extent_fast(sdata_filt.shapes[element], coordinate_system)
+            or get_extent(sdata_filt.shapes[element], coordinate_system=coordinate_system),
         )
         return
 
