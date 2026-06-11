@@ -757,16 +757,17 @@ def _render_shapes(
         # Fast mode: draw one dot per shape at its centroid instead of its geometry.
         logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
         centroids = shapes.geometry.centroid  # intrinsic coords, positionally aligned to color_vector
+        # transform to coordinate-system coords so dots land correctly under non-identity transforms
+        xy = trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()]))
         _render_centroids_as_points(
             ax,
             render_params,
-            x=centroids.x.to_numpy(),
-            y=centroids.y.to_numpy(),
+            x=xy[:, 0],
+            y=xy[:, 1],
             color_vector=color_vector,
             color_source_vector=color_source_vector,
             norm=norm,
             na_color=render_params.cmap_params.na_color,
-            transform=trans_data,  # intrinsic -> coordinate system -> display
             adata=table,
             col_for_color=col_for_color,
             palette=palette,
@@ -1110,6 +1111,34 @@ def _scatter_points(
     )
 
 
+# as_points: matplotlib draws crisp markers; above this many dots its per-glyph draw dominates
+# (≈18 µs/dot), so auto-switch to datashader. Datashader changes appearance (density raster), so
+# the threshold is conservative and only applies when the user did not pick a backend explicitly.
+AS_POINTS_DS_AUTO = 500_000
+
+
+def _resolve_as_points_method(
+    render_params: ShapesRenderParams | LabelsRenderParams, *, n: int, allow_datashader: bool
+) -> str:
+    """Pick the as_points backend. matplotlib by default; datashader only when it can represent the colors."""
+    method = render_params.method
+    if not allow_datashader or n == 0:
+        # e.g. no-color labels get one distinct random colour per cell (`_map_color_seg` Case C),
+        # which datashader's aggregate-then-shade model cannot represent.
+        if method == "datashader":
+            logger.warning("`as_points` cannot use datashader for this colouring; falling back to matplotlib.")
+        return "matplotlib"
+    if method == "datashader":
+        return "datashader"
+    if method is None and n > AS_POINTS_DS_AUTO:
+        logger.info(
+            f"`as_points`: {n} centroids exceed {AS_POINTS_DS_AUTO}; using the datashader backend "
+            "(pass `method='matplotlib'` to override)."
+        )
+        return "datashader"
+    return "matplotlib"
+
+
 def _render_centroids_as_points(
     ax: matplotlib.axes.SubplotBase,
     render_params: ShapesRenderParams | LabelsRenderParams,
@@ -1120,31 +1149,56 @@ def _render_centroids_as_points(
     color_source_vector: pd.Series | None,
     norm: Normalize | None,
     na_color: Any,
-    transform: Any,
     adata: AnnData | None,
     col_for_color: str | None,
     palette: Any,
     fig_params: FigParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None,
+    allow_datashader: bool = True,
 ) -> None:
     """Render one dot per cell at ``(x, y)`` colored like the fill, with legend/colorbar.
 
-    Shared "fast mode" draw for shapes/labels; style comes off ``render_params``. ``norm``/``na_color``
-    stay explicit because they differ between the shapes (locally adjusted) and labels paths.
+    Shared "fast mode" draw for shapes/labels. ``x``/``y`` are in **coordinate-system coords** (so the
+    datashader canvas and matplotlib's ``transData`` agree). Backend is matplotlib unless
+    ``render_params.method`` / the size threshold selects datashader (and the colouring supports it).
+    ``norm``/``na_color`` stay explicit because they differ between the shapes and labels paths.
     """
-    cax = _scatter_points(
-        ax,
-        x,
-        y,
-        color_vector,
-        size=render_params.size,
-        cmap=render_params.cmap_params.cmap,
-        norm=norm,
-        alpha=render_params.fill_alpha,
-        trans_data=transform,
-        zorder=render_params.zorder,
-    )
+    method = _resolve_as_points_method(render_params, n=len(np.asarray(x)), allow_datashader=allow_datashader)
+    if method == "datashader":
+        df = pd.DataFrame({"x": np.asarray(x), "y": np.asarray(y)})
+        cax, color_vector, color_source_vector = _datashader_points(
+            ax,
+            df,
+            col_for_color=col_for_color,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            norm=norm,
+            cmap_params=render_params.cmap_params,
+            alpha=render_params.fill_alpha,
+            size=render_params.size,
+            zorder=render_params.zorder,
+            # as_points has no user reduction knob: centroids rarely share a pixel, and "max"
+            # (the top cell) keeps the datashader output closest to the matplotlib backend.
+            ds_reduction=None,
+            default_reduction="max",
+            density=False,
+            density_how="linear",
+            fig_params=fig_params,
+        )
+    else:
+        cax = _scatter_points(
+            ax,
+            x,
+            y,
+            color_vector,
+            size=render_params.size,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            alpha=render_params.fill_alpha,
+            trans_data=ax.transData,  # x/y are coordinate-system coords
+            zorder=render_params.zorder,
+        )
     _add_legend_and_colorbar(
         ax=ax,
         cax=cax,
@@ -2266,7 +2320,7 @@ def _render_labels(
         # get instance id based on subsetted table
         instance_id = np.unique(table.obs[instance_key].values)
 
-    _, trans_data = _prepare_transformation(label, coordinate_system, ax)
+    trans, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
     na_color = (
         render_params.color
@@ -2387,11 +2441,14 @@ def _render_labels(
         )
         # coerce so str/object table ids (e.g. Xenium) match the integer raster labels instead of NaN
         centroids = centroids.reindex(point_ids.astype(labels.dtype, copy=False))
+        # datashader cannot represent one distinct random colour per cell (the no-color path below)
+        allow_datashader = True
         if col_for_color is None and not na_color.color_modified_by_user():
             # no color column: one distinct random colour per cell, matching the mask path
             # (`_map_color_seg` Case C) instead of collapsing every dot to a single na_color.
             point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
             point_color_source_vector = None
+            allow_datashader = False
         elif len(color_vector) == len(instance_id):
             # data-driven colour is per-instance
             point_color_vector = np.asarray(color_vector)[keep]
@@ -2400,22 +2457,24 @@ def _render_labels(
             # literal colour / user-set na_color -> one colour per centroid
             point_color_vector = np.asarray([na_color.get_hex_with_alpha()] * len(point_ids))
             point_color_source_vector = None
+        # transform rendered-raster intrinsic centroids to coordinate-system coords
+        xy = trans.transform(np.column_stack([centroids["x"].to_numpy(), centroids["y"].to_numpy()]))
         _render_centroids_as_points(
             ax,
             render_params,
-            x=centroids["x"].to_numpy(),
-            y=centroids["y"].to_numpy(),
+            x=xy[:, 0],
+            y=xy[:, 1],
             color_vector=point_color_vector,
             color_source_vector=point_color_source_vector,
             norm=copy(render_params.cmap_params.norm),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
-            transform=trans_data,  # rendered-raster intrinsic coords -> coordinate system -> display
             adata=table if table_name is not None else None,
             col_for_color=col_for_color,
             palette=palette,
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
+            allow_datashader=allow_datashader,
         )
         return
 

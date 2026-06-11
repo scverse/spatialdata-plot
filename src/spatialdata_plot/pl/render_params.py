@@ -334,6 +334,8 @@ class LabelsRenderParams:
     # Fast mode: render each label as a single dot at its centroid instead of the mask.
     as_points: bool = False
     size: float = 1.0  # marker size for as_points (matplotlib scatter ``s``)
+    # Backend for the as_points centroids: None auto-selects (datashader above ~500k dots).
+    method: str | None = None
     # Multi-panel color: when set, this render entry belongs to the panel identified by this
     # color key. ``None`` means the entry is shared across every panel (e.g. a background layer).
     panel_key: str | None = None
