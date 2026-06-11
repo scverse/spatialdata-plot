@@ -1114,7 +1114,7 @@ def _scatter_points(
 
 # Above this many centroids matplotlib's per-glyph draw (~18 µs/dot) dominates, so auto-switch to
 # datashader. Conservative because datashader changes the look (density raster); only used when method=None.
-AS_POINTS_DS_AUTO = 500_000
+AS_POINTS_DS_AUTO = 50_000
 
 
 def _resolve_as_points_method(
