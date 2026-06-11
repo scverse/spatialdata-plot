@@ -1183,6 +1183,7 @@ def _render_centroids_as_points(
             density=False,
             density_how="linear",
             fig_params=fig_params,
+            pad_for_markers=True,
         )
     else:
         cax = _scatter_points(
@@ -1232,17 +1233,26 @@ def _datashader_points(
     density_how: str,
     fig_params: FigParams,
     default_reduction: _DsReduction = "sum",
+    pad_for_markers: bool = False,
 ) -> tuple[Any, Any, Any]:
     """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
 
     Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y``
     in coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's
     legend uses the same values. Primitives are explicit because shapes/labels params lack ``alpha``/density.
+    ``pad_for_markers`` grows the canvas by the spread radius so as_points dots at the data edge are not
+    clipped (the centroid bbox, unlike a points element, leaves no room for the marker radius).
     """
     # spread radius from marker size (matplotlib points**2, dpi-scaled); off under density to keep counts crisp
     px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 100)))
 
     plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
+    if pad_for_markers and px:
+        # grow the canvas by `px` pixels (= px * factor data units) on each side; `factor` (data units
+        # per pixel) is unchanged, so the image still aligns, and edge dots get room for their spread.
+        pad = px * factor
+        x_ext, y_ext = [x_ext[0] - pad, x_ext[1] + pad], [y_ext[0] - pad, y_ext[1] + pad]
+        plot_width, plot_height = plot_width + 2 * px, plot_height + 2 * px
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment
