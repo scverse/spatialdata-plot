@@ -449,6 +449,16 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels", color="instance_id", as_points=True, method="datashader", size=600
         ).pl.show()
 
+    def test_plot_labels_as_points_datashader_categorical(self, sdata_blobs: SpatialData):
+        """Categorical-coloured as_points centroids datashade with a legend (color_source_vector path)."""
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        sdata_blobs["table"].obs["which_max"] = pd.Categorical(
+            max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True
+        )
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="which_max", as_points=True, method="datashader", size=600
+        ).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
