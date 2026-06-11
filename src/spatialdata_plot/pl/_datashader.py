@@ -234,10 +234,12 @@ def _ds_shade_continuous(
     spread_px: int | None = None,
     ds_reduction: _DsReduction | None = None,
     how: str = "linear",
+    uniform_alpha: bool = False,
 ) -> tuple[Any, Any | None, tuple[Any, Any] | None]:
     """Shade a continuous datashader aggregate, optionally applying spread and NaN coloring.
 
-    Returns (shaded, nan_shaded, reduction_bounds).
+    Returns (shaded, nan_shaded, reduction_bounds). ``uniform_alpha`` (as_points markers) uses a full
+    alpha floor so each dot is one flat colour at ``alpha`` instead of fading by per-pixel count.
     """
     if spread_px is not None:
         spread_how = _datshader_get_how_kw_for_spread(ds_reduction)
@@ -259,7 +261,7 @@ def _ds_shade_continuous(
     shaded = _datashader_map_aggregate_to_color(
         agg,
         cmap=ds_cmap,
-        min_alpha=_convert_alpha_to_datashader_range(alpha),
+        min_alpha=254.0 if uniform_alpha else _convert_alpha_to_datashader_range(alpha),
         span=color_span,
         clip=norm.clip,
         how=how,
@@ -288,6 +290,7 @@ def _ds_shade_categorical(
     spread_px: int | None = None,
     how: str = "linear",
     density: bool = False,
+    uniform_alpha: bool = False,
 ) -> Any:
     """Shade a categorical or no-color datashader aggregate."""
     ds_cmap = None
@@ -301,7 +304,14 @@ def _ds_shade_categorical(
     # density read as a flat hue cloud. Drop the floor under density so per-pixel
     # alpha can actually encode count. A small non-zero floor (~15%) keeps the
     # sparse edges visible under density_how="linear" instead of vanishing.
-    min_alpha = 40.0 if density else _convert_alpha_to_datashader_range(alpha)
+    # uniform_alpha (as_points markers): full floor so every dot is one flat colour at
+    # `alpha`, matching matplotlib's markers instead of fading single-cell pixels.
+    if density:
+        min_alpha = 40.0
+    elif uniform_alpha:
+        min_alpha = 254.0
+    else:
+        min_alpha = _convert_alpha_to_datashader_range(alpha)
 
     agg_to_shade = ds.tf.spread(agg, px=spread_px) if spread_px is not None else agg
     shaded = _datashader_map_aggregate_to_color(
