@@ -63,7 +63,6 @@ from spatialdata_plot.pl.utils import (
     _build_shape_patches,
     _check_obs_var_shadow,
     _color_vector_to_rgba,
-    _compute_datashader_canvas_params,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -1258,10 +1257,17 @@ def _datashader_points(
     px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / px_div)))
 
     if as_markers and axes_extent is not None:
-        # rasterize over the same extent the axes will use, so 1 canvas px == 1 display px (as render_points)
+        # Rasterize over the element extent (the frame the axes use) at the AXES' display resolution, not
+        # the figure's. The datashader result is a data-coordinate image that scales with the axes, while
+        # matplotlib markers are fixed in display points; sizing the canvas to the figure (which is larger
+        # than the axes once margins/colorbar are accounted for) shrank the dots. With 1 canvas px == 1
+        # axes-display px, the spread radius (matplotlib's marker radius, sqrt(s)*dpi/144) matches.
         x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
         y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
-        plot_width, plot_height, x_ext, y_ext, factor = _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
+        bb = ax.get_window_extent()
+        rx, ry = x_ext[1] - x_ext[0], y_ext[1] - y_ext[0]
+        factor = max(rx / bb.width, ry / bb.height)
+        plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
     else:
         plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)

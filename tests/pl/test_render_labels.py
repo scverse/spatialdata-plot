@@ -437,8 +437,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
 
     @staticmethod
     def _as_points(sdata_blobs: SpatialData, method: str, color: str = "instance_id"):
-        # identical params for both backends, so the matplotlib and datashader baselines are comparable
-        return sdata_blobs.pl.render_labels("blobs_labels", color=color, as_points=True, method=method, size=600)
+        # identical params for both backends; non-overlapping size so the only place the engines differ
+        # (overlap: matplotlib stacks markers, datashader aggregates) doesn't enter the comparison
+        return sdata_blobs.pl.render_labels("blobs_labels", color=color, as_points=True, method=method, size=120)
 
     @staticmethod
     def _add_categorical_color(sdata_blobs: SpatialData) -> str:

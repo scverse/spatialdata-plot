@@ -1111,7 +1111,9 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     @staticmethod
     def _as_points(sdata_blobs: SpatialData, method: str):
         # identical params for both backends, so the matplotlib and datashader baselines are comparable
-        return sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method=method, size=600)
+        # non-overlapping size: matplotlib (vector, stacks markers) and datashader (raster, aggregates)
+        # only diverge where dots overlap, so keep them apart to compare the backends fairly
+        return sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method=method, size=120)
 
     def test_plot_shapes_as_points_matplotlib(self, sdata_blobs: SpatialData):
         """as_points draws one dot per shape at its centroid (matplotlib backend)."""
