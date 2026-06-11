@@ -308,12 +308,7 @@ def _ds_shade_categorical(
     # sparse edges visible under density_how="linear" instead of vanishing.
     # uniform_alpha (as_points markers): full floor so every dot is one flat colour at
     # `alpha`, matching matplotlib's markers instead of fading single-cell pixels.
-    if density:
-        min_alpha = 40.0
-    elif uniform_alpha:
-        min_alpha = 254.0
-    else:
-        min_alpha = _convert_alpha_to_datashader_range(alpha)
+    min_alpha = 40.0 if density else 254.0 if uniform_alpha else _convert_alpha_to_datashader_range(alpha)
 
     agg_to_shade = ds.tf.spread(agg, px=spread_px) if spread_px is not None else agg
     shaded = _datashader_map_aggregate_to_color(

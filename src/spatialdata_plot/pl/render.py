@@ -1243,25 +1243,20 @@ def _datashader_points(
 ) -> tuple[Any, Any, Any]:
     """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
 
-    Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y``
-    in coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's
-    legend uses the same values. Primitives are explicit because shapes/labels params lack ``alpha``/density.
-    ``as_markers`` (as_points) makes the output mimic matplotlib markers: it rasterizes over ``axes_extent``
-    (the plot frame, like ``render_points``, so the dot size is the same regardless of element type and
-    edge dots aren't clipped), sizes the spread to the matplotlib marker radius, and uses a uniform alpha.
+    Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y`` in
+    coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's legend
+    matches. ``as_markers`` mimics matplotlib markers: it rasterizes over ``axes_extent`` (the plot frame),
+    sizes the spread to the marker radius, and uses a uniform alpha.
     """
-    # Spread radius from marker size. matplotlib's 'o' marker has diameter sqrt(s)*dpi/72 px, so a marker
-    # radius is sqrt(s)*dpi/144; the spread radius (canvas px == display px when the canvas is the axes
-    # frame) is set to that. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
+    # Spread radius = matplotlib marker radius: an 'o' marker has diameter sqrt(s)*dpi/72 px, so radius
+    # sqrt(s)*dpi/144. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
     px_div = 144 if as_markers else 100
     px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / px_div)))
 
     if as_markers and axes_extent is not None:
-        # Rasterize over the element extent (the frame the axes use) at the AXES' display resolution, not
-        # the figure's. The datashader result is a data-coordinate image that scales with the axes, while
-        # matplotlib markers are fixed in display points; sizing the canvas to the figure (which is larger
-        # than the axes once margins/colorbar are accounted for) shrank the dots. With 1 canvas px == 1
-        # axes-display px, the spread radius (matplotlib's marker radius, sqrt(s)*dpi/144) matches.
+        # Size the canvas to the AXES display box, not the figure: the datashader output is a
+        # data-coordinate image that scales with the (smaller) axes, so a figure-sized canvas shrinks the
+        # dots. With 1 canvas px == 1 axes-display px, the spread radius above matches the marker.
         x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
         y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
         bb = ax.get_window_extent()
@@ -2470,7 +2465,7 @@ def _render_labels(
             point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
         else:
             # literal colour / user-set na_color -> one colour per centroid
-            point_color_vector = np.asarray([na_color.get_hex_with_alpha()] * len(point_ids))
+            point_color_vector = np.full(len(point_ids), na_color.get_hex_with_alpha())
             point_color_source_vector = None
         # transform rendered-raster intrinsic centroids to coordinate-system coords
         xy = trans.transform(np.column_stack([centroids["x"].to_numpy(), centroids["y"].to_numpy()]))
@@ -2489,7 +2484,7 @@ def _render_labels(
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
-            axes_extent=get_extent(label, coordinate_system=coordinate_system),
+            axes_extent=extent,  # label's CS extent, already computed above (scale/rasterize preserve it)
             allow_datashader=allow_datashader,
         )
         return
