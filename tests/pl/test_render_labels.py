@@ -443,6 +443,12 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         """size sets the scatter marker area; larger size -> larger dots."""
         sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=600).pl.show()
 
+    def test_plot_labels_as_points_datashader(self, sdata_blobs: SpatialData):
+        """as_points with method='datashader' rasterizes the colored centroids instead of drawing markers."""
+        sdata_blobs.pl.render_labels(
+            "blobs_labels", color="instance_id", as_points=True, method="datashader", size=600
+        ).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
@@ -668,3 +674,45 @@ def test_render_labels_as_points_applies_non_identity_transform(sdata_blobs: Spa
     order_e = np.lexsort((expected_display[:, 1], expected_display[:, 0]))
     assert np.allclose(dots_display[order_d], expected_display[order_e], atol=3.0)
     plt.close(fig)
+
+
+def test_render_labels_as_points_method_datashader_renders_image(sdata_blobs: SpatialData):
+    """method='datashader' under as_points (with a color column) draws a datashaded raster."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(
+        "blobs_labels", color="instance_id", as_points=True, method="datashader", size=50
+    ).pl.show(ax=ax)
+    assert len(ax.images) >= 1
+    assert len(ax.collections) == 0
+    plt.close(fig)
+
+
+def test_render_labels_as_points_no_color_forces_matplotlib(sdata_blobs: SpatialData, caplog):
+    """No-color labels get one random colour per cell, which datashader cannot represent; even
+    method='datashader' must fall back to a matplotlib scatter (with a warning)."""
+    fig, ax = plt.subplots()
+    with logger_warns(caplog, logger, match="cannot use datashader"):
+        sdata_blobs.pl.render_labels("blobs_labels", as_points=True, method="datashader").pl.show(ax=ax)
+    assert len(ax.collections) == 1  # matplotlib scatter, not a datashader image
+    assert len(ax.images) == 0
+    plt.close(fig)
+
+
+def test_resolve_as_points_method_threshold_and_fallback():
+    """Backend selection: explicit honored, no-color/empty force matplotlib, auto switches past the cap."""
+    from types import SimpleNamespace
+
+    from spatialdata_plot.pl.render import AS_POINTS_DS_AUTO, _resolve_as_points_method
+
+    rp_auto = SimpleNamespace(method=None)
+    rp_ds = SimpleNamespace(method="datashader")
+    rp_mpl = SimpleNamespace(method="matplotlib")
+    # auto: matplotlib below the cap, datashader above
+    assert _resolve_as_points_method(rp_auto, n=1000, allow_datashader=True) == "matplotlib"
+    assert _resolve_as_points_method(rp_auto, n=AS_POINTS_DS_AUTO + 1, allow_datashader=True) == "datashader"
+    # explicit datashader honored only when the colouring allows it
+    assert _resolve_as_points_method(rp_ds, n=10, allow_datashader=True) == "datashader"
+    assert _resolve_as_points_method(rp_ds, n=10, allow_datashader=False) == "matplotlib"
+    # explicit matplotlib always matplotlib; empty always matplotlib
+    assert _resolve_as_points_method(rp_mpl, n=10**9, allow_datashader=True) == "matplotlib"
+    assert _resolve_as_points_method(rp_auto, n=0, allow_datashader=True) == "matplotlib"

@@ -1116,6 +1116,10 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         """size sets the scatter marker area; larger size -> larger dots."""
         sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=600).pl.show()
 
+    def test_plot_shapes_as_points_datashader(self, sdata_blobs: SpatialData):
+        """as_points with method='datashader' rasterizes the centroids instead of drawing markers."""
+        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method="datashader", size=600).pl.show()
+
 
 def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
     """gene_symbols resolves correctly without explicit table_name (#247)."""
@@ -1736,4 +1740,41 @@ def test_render_shapes_as_points_ignores_outline_and_shape(sdata_blobs: SpatialD
         "blobs_polygons", as_points=True, outline_alpha=1.0, outline_color="red", shape="square"
     ).pl.show(ax=ax)
     assert len(ax.collections) >= 1  # a scatter, not the patch collections of the geometry path
+    plt.close(fig)
+
+
+def test_render_shapes_as_points_applies_non_identity_transform(sdata_blobs: SpatialData):
+    """Regression: shapes as_points must place dots at coordinate-system positions, not intrinsic ones.
+    A wrong transform is off by the scale factor (hundreds of px)."""
+    import spatialdata as sd
+    from spatialdata.transformations import Scale, set_transformation
+
+    set_transformation(sdata_blobs["blobs_circles"], Scale([3.0, 5.0], axes=("x", "y")), "scaled")
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=50).pl.show(
+        ax=ax, coordinate_systems="scaled"
+    )
+    coll = ax.collections[0]
+    dots = coll.get_offset_transform().transform(np.asarray(coll.get_offsets()))
+    cs = sd.get_centroids(sdata_blobs["blobs_circles"], coordinate_system="scaled").compute()[["x", "y"]].to_numpy()
+    expected = ax.transData.transform(cs)
+    od, oe = np.lexsort((dots[:, 1], dots[:, 0])), np.lexsort((expected[:, 1], expected[:, 0]))
+    assert np.allclose(dots[od], expected[oe], atol=3.0)
+    plt.close(fig)
+
+
+def test_render_shapes_as_points_method_datashader_renders_image(sdata_blobs: SpatialData):
+    """method='datashader' under as_points draws a datashaded raster, not a scatter collection."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method="datashader", size=50).pl.show(ax=ax)
+    assert len(ax.images) >= 1  # datashader image
+    assert len(ax.collections) == 0  # no matplotlib scatter
+    plt.close(fig)
+
+
+def test_render_shapes_as_points_default_is_matplotlib(sdata_blobs: SpatialData):
+    """Small element with method=None uses matplotlib (crisp markers), not datashader."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=50).pl.show(ax=ax)
+    assert len(ax.collections) == 1 and len(ax.images) == 0
     plt.close(fig)
