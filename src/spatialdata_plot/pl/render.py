@@ -1247,25 +1247,16 @@ def _datashader_points(
 
     # ensure color column exists on the frame with positional alignment
     if col_for_color is not None and col_for_color not in df.columns:
-        series_index = df.index
+        # materialize the colour source (categorical vector preferred) and align it to df's rows
         if color_source_vector is not None:
             if isinstance(color_source_vector, dd.Series):
                 color_source_vector = color_source_vector.compute()
-            source_series = (
-                color_source_vector.reindex(series_index)
-                if isinstance(color_source_vector, pd.Series)
-                else pd.Series(color_source_vector, index=series_index)
-            )
-            df[col_for_color] = source_series
+            series = color_source_vector
         else:
             if isinstance(color_vector, dd.Series):
                 color_vector = color_vector.compute()
-            color_series = (
-                color_vector.reindex(series_index)
-                if isinstance(color_vector, pd.Series)
-                else pd.Series(color_vector, index=series_index)
-            )
-            df[col_for_color] = color_series
+            series = color_vector
+        df[col_for_color] = series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
 
     color_dtype = df[col_for_color].dtype if col_for_color is not None else None
     color_by_categorical = col_for_color is not None and (
