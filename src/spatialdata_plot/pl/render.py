@@ -1111,9 +1111,8 @@ def _scatter_points(
     )
 
 
-# as_points: matplotlib draws crisp markers; above this many dots its per-glyph draw dominates
-# (≈18 µs/dot), so auto-switch to datashader. Datashader changes appearance (density raster), so
-# the threshold is conservative and only applies when the user did not pick a backend explicitly.
+# Above this many centroids matplotlib's per-glyph draw (~18 µs/dot) dominates, so auto-switch to
+# datashader. Conservative because datashader changes the look (density raster); only used when method=None.
 AS_POINTS_DS_AUTO = 500_000
 
 
@@ -1123,9 +1122,9 @@ def _resolve_as_points_method(
     """Pick the as_points backend. matplotlib by default; datashader only when it can represent the colors."""
     method = render_params.method
     if not allow_datashader or n == 0:
-        # e.g. no-color labels get one distinct random colour per cell (`_map_color_seg` Case C),
-        # which datashader's aggregate-then-shade model cannot represent.
-        if method == "datashader":
+        # no-color labels get one random colour per cell (`_map_color_seg` Case C), which datashader's
+        # aggregate-then-shade model cannot represent; an empty element just has nothing to draw.
+        if method == "datashader" and not allow_datashader:
             logger.warning("`as_points` cannot use datashader for this colouring; falling back to matplotlib.")
         return "matplotlib"
     if method == "datashader":
@@ -1157,16 +1156,15 @@ def _render_centroids_as_points(
     colorbar_requests: list[ColorbarSpec] | None,
     allow_datashader: bool = True,
 ) -> None:
-    """Render one dot per cell at ``(x, y)`` colored like the fill, with legend/colorbar.
+    """Render one dot per cell at ``(x, y)`` (coordinate-system coords), colored like the fill.
 
-    Shared "fast mode" draw for shapes/labels. ``x``/``y`` are in **coordinate-system coords** (so the
-    datashader canvas and matplotlib's ``transData`` agree). Backend is matplotlib unless
-    ``render_params.method`` / the size threshold selects datashader (and the colouring supports it).
-    ``norm``/``na_color`` stay explicit because they differ between the shapes and labels paths.
+    Shared "fast mode" for shapes/labels. Backend is matplotlib unless ``render_params.method`` or the
+    size threshold selects datashader (and the colouring supports it). ``norm``/``na_color`` are explicit
+    because they differ between the shapes and labels paths.
     """
-    method = _resolve_as_points_method(render_params, n=len(np.asarray(x)), allow_datashader=allow_datashader)
+    method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
     if method == "datashader":
-        df = pd.DataFrame({"x": np.asarray(x), "y": np.asarray(y)})
+        df = pd.DataFrame({"x": x, "y": y})
         cax, color_vector, color_source_vector = _datashader_points(
             ax,
             df,
@@ -1235,16 +1233,13 @@ def _datashader_points(
     fig_params: FigParams,
     default_reduction: _DsReduction = "sum",
 ) -> tuple[Any, Any, Any]:
-    """Datashade an x/y(+color) point frame onto ``ax``; returns ``(cax, color_vector, color_source_vector)``.
+    """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
 
-    Shared datashader draw for ``render_points`` and the centroid "fast mode" of shapes/labels. ``df``
-    holds ``x``/``y`` in coordinate-system coords (+ an optional color column). The (possibly
-    recomputed) color vectors are returned so the caller's legend/colorbar uses the same values.
-    Primitives are taken explicitly rather than a ``render_params`` because shapes/labels params use
-    ``fill_alpha`` and lack the density fields.
+    Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y``
+    in coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's
+    legend uses the same values. Primitives are explicit because shapes/labels params lack ``alpha``/density.
     """
-    # NOTE: s in matplotlib is in units of points**2; use dpi/100 so dpi!=100 still spreads correctly.
-    # Under density, spreading would smear the count signal across pixels, so disable it.
+    # spread radius from marker size (matplotlib points**2, dpi-scaled); off under density to keep counts crisp
     px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 100)))
 
     plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
