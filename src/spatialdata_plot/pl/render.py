@@ -1163,6 +1163,134 @@ def _render_centroids_as_points(
     )
 
 
+def _datashader_points(
+    ax: matplotlib.axes.SubplotBase,
+    df: pd.DataFrame,
+    *,
+    col_for_color: str | None,
+    color_vector: Any,
+    color_source_vector: Any,
+    norm: Normalize | None,
+    cmap_params: CmapParams,
+    alpha: float,
+    size: float,
+    zorder: int,
+    ds_reduction: _DsReduction | None,
+    density: bool,
+    density_how: str,
+    fig_params: FigParams,
+    default_reduction: _DsReduction = "sum",
+) -> tuple[Any, Any, Any]:
+    """Datashade an x/y(+color) point frame onto ``ax``; returns ``(cax, color_vector, color_source_vector)``.
+
+    Shared datashader draw for ``render_points`` and the centroid "fast mode" of shapes/labels. ``df``
+    holds ``x``/``y`` in coordinate-system coords (+ an optional color column). The (possibly
+    recomputed) color vectors are returned so the caller's legend/colorbar uses the same values.
+    Primitives are taken explicitly rather than a ``render_params`` because shapes/labels params use
+    ``fill_alpha`` and lack the density fields.
+    """
+    # NOTE: s in matplotlib is in units of points**2; use dpi/100 so dpi!=100 still spreads correctly.
+    # Under density, spreading would smear the count signal across pixels, so disable it.
+    px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 100)))
+
+    plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
+    cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
+
+    # ensure color column exists on the frame with positional alignment
+    if col_for_color is not None and col_for_color not in df.columns:
+        series_index = df.index
+        if color_source_vector is not None:
+            if isinstance(color_source_vector, dd.Series):
+                color_source_vector = color_source_vector.compute()
+            source_series = (
+                color_source_vector.reindex(series_index)
+                if isinstance(color_source_vector, pd.Series)
+                else pd.Series(color_source_vector, index=series_index)
+            )
+            df[col_for_color] = source_series
+        else:
+            if isinstance(color_vector, dd.Series):
+                color_vector = color_vector.compute()
+            color_series = (
+                color_vector.reindex(series_index)
+                if isinstance(color_vector, pd.Series)
+                else pd.Series(color_vector, index=series_index)
+            )
+            df[col_for_color] = color_series
+
+    color_dtype = df[col_for_color].dtype if col_for_color is not None else None
+    color_by_categorical = col_for_color is not None and (
+        color_source_vector is not None
+        or isinstance(color_dtype, pd.CategoricalDtype)
+        or pd.api.types.is_object_dtype(color_dtype)
+        or pd.api.types.is_string_dtype(color_dtype)
+    )
+    if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
+        df[col_for_color] = df[col_for_color].astype("category")
+
+    agg, reduction_bounds, nan_agg = _ds_aggregate(
+        cvs,
+        df,
+        col_for_color,
+        color_by_categorical,
+        ds_reduction,
+        default_reduction,
+        "points",
+    )
+
+    agg, color_span = _apply_ds_norm(agg, norm)
+    na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
+    if cmap_params.na_color.is_fully_transparent():
+        nan_agg = None
+    color_key = _build_color_key(df, col_for_color, color_by_categorical, color_vector, na_color_hex)
+
+    if (
+        color_vector is not None
+        and len(color_vector) > 0
+        and isinstance(color_vector[0], str)
+        and color_vector[0].startswith("#")
+    ):
+        # color_vector usually holds only a few distinct hex strings (one per category), so strip
+        # alpha on the unique values and map back rather than parsing once per point.
+        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
+        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
+
+    shade_how = density_how if density else "linear"
+    # Plain density (no color column) uses the cmap as a sequential gradient over counts; the
+    # categorical path collapses to a single color and only modulates alpha.
+    plain_density = density and col_for_color is None
+
+    nan_shaded = None
+    if not plain_density and (color_by_categorical or col_for_color is None):
+        shaded = _ds_shade_categorical(
+            agg,
+            color_key,
+            color_vector,
+            alpha,
+            spread_px=px,
+            how=shade_how,
+            density=density,
+        )
+    else:
+        shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
+            agg,
+            color_span,
+            norm,
+            cmap_params.cmap,
+            alpha,
+            reduction_bounds,
+            nan_agg,
+            na_color_hex,
+            spread_px=px,
+            ds_reduction=ds_reduction,
+            how=shade_how,
+        )
+
+    _render_ds_image(ax, shaded, factor, zorder, x_min=x_ext[0], y_min=y_ext[0], nan_result=nan_shaded)
+    cax = _build_ds_colorbar(reduction_bounds, norm, cmap_params.cmap)
+    return cax, color_vector, color_source_vector
+
+
 def _render_points(
     sdata: sd.SpatialData,
     render_params: PointsRenderParams,
@@ -1373,14 +1501,6 @@ def _render_points(
     if method == "datashader":
         _log_datashader_method(method, render_params.ds_reduction, _default_reduction)
 
-        # NOTE: s in matplotlib is in units of points**2
-        # use dpi/100 as a factor for cases where dpi!=100
-        # Under density, spreading would smear the count signal across pixels and
-        # distort apparent density at sparse edges, so disable it unconditionally.
-        px: int | None = (
-            None if render_params.density else int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
-        )
-
         # Apply transformations and materialize to pandas immediately so
         # datashader aggregates without dask scheduler overhead.  See #379.
         transformed_element = PointsModel.parse(
@@ -1395,122 +1515,23 @@ def _render_points(
             # any other elements on the axes.
             return
 
-        plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(
-            transformed_element, fig_params
-        )
-
-        # use datashader for the visualization of points
-        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
-
-        # ensure color column exists on the transformed element with positional alignment
-        if col_for_color is not None and col_for_color not in transformed_element.columns:
-            series_index = transformed_element.index
-            if color_source_vector is not None:
-                if isinstance(color_source_vector, dd.Series):
-                    color_source_vector = color_source_vector.compute()
-                source_series = (
-                    color_source_vector.reindex(series_index)
-                    if isinstance(color_source_vector, pd.Series)
-                    else pd.Series(color_source_vector, index=series_index)
-                )
-                transformed_element[col_for_color] = source_series
-            else:
-                if isinstance(color_vector, dd.Series):
-                    color_vector = color_vector.compute()
-                color_series = (
-                    color_vector.reindex(series_index)
-                    if isinstance(color_vector, pd.Series)
-                    else pd.Series(color_vector, index=series_index)
-                )
-                transformed_element[col_for_color] = color_series
-
-        color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
-        color_by_categorical = col_for_color is not None and (
-            color_source_vector is not None
-            or isinstance(color_dtype, pd.CategoricalDtype)
-            or pd.api.types.is_object_dtype(color_dtype)
-            or pd.api.types.is_string_dtype(color_dtype)
-        )
-        if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
-            transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
-
-        agg, reduction_bounds, nan_agg = _ds_aggregate(
-            cvs,
-            transformed_element,
-            col_for_color,
-            color_by_categorical,
-            render_params.ds_reduction,
-            _default_reduction,
-            "points",
-        )
-
-        agg, color_span = _apply_ds_norm(agg, norm)
-        na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
-        if render_params.cmap_params.na_color.is_fully_transparent():
-            nan_agg = None
-        color_key = _build_color_key(
-            transformed_element,
-            col_for_color,
-            color_by_categorical,
-            color_vector,
-            na_color_hex,
-        )
-
-        if (
-            color_vector is not None
-            and len(color_vector) > 0
-            and isinstance(color_vector[0], str)
-            and color_vector[0].startswith("#")
-        ):
-            # color_vector usually holds only a few distinct hex strings (one per
-            # category), so strip alpha on the unique values and map back rather than
-            # calling the per-string parser once per point.
-            unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-            color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
-
-        shade_how = render_params.density_how if render_params.density else "linear"
-        # Plain density (no color column) must use the user-facing cmap as a sequential
-        # gradient over counts; the categorical path collapses to a single color and only
-        # modulates alpha, which renders as a flat hue regardless of density.
-        plain_density = render_params.density and col_for_color is None
-
-        nan_shaded = None
-        if not plain_density and (color_by_categorical or col_for_color is None):
-            shaded = _ds_shade_categorical(
-                agg,
-                color_key,
-                color_vector,
-                render_params.alpha,
-                spread_px=px,
-                how=shade_how,
-                density=render_params.density,
-            )
-        else:
-            shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
-                agg,
-                color_span,
-                norm,
-                render_params.cmap_params.cmap,
-                render_params.alpha,
-                reduction_bounds,
-                nan_agg,
-                na_color_hex,
-                spread_px=px,
-                ds_reduction=render_params.ds_reduction,
-                how=shade_how,
-            )
-
-        _render_ds_image(
+        cax, color_vector, color_source_vector = _datashader_points(
             ax,
-            shaded,
-            factor,
-            render_params.zorder,
-            x_min=x_ext[0],
-            y_min=y_ext[0],
-            nan_result=nan_shaded,
+            transformed_element,
+            col_for_color=col_for_color,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            norm=norm,
+            cmap_params=render_params.cmap_params,
+            alpha=render_params.alpha,
+            size=render_params.size,
+            zorder=render_params.zorder,
+            ds_reduction=render_params.ds_reduction,
+            density=render_params.density,
+            density_how=render_params.density_how,
+            fig_params=fig_params,
+            default_reduction=_default_reduction,
         )
-
-        cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
