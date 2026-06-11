@@ -242,7 +242,9 @@ def _ds_shade_continuous(
     alpha floor so each dot is one flat colour at ``alpha`` instead of fading by per-pixel count.
     """
     if spread_px is not None:
-        spread_how = _datshader_get_how_kw_for_spread(ds_reduction)
+        # markers overlay (don't accumulate): spread with "max" so overlapping dots keep the true
+        # value range instead of summing and inflating the colorbar (see as_points).
+        spread_how = "max" if uniform_alpha else _datshader_get_how_kw_for_spread(ds_reduction)
         agg = ds.tf.spread(agg, px=spread_px, how=spread_how)
         reduction_bounds = (agg.min(), agg.max())
 

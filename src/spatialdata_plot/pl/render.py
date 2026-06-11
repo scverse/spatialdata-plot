@@ -63,6 +63,7 @@ from spatialdata_plot.pl.utils import (
     _build_shape_patches,
     _check_obs_var_shadow,
     _color_vector_to_rgba,
+    _compute_datashader_canvas_params,
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
@@ -774,6 +775,7 @@ def _render_shapes(
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
+            axes_extent=get_extent(sdata_filt.shapes[element], coordinate_system=coordinate_system),
         )
         return
 
@@ -1154,13 +1156,16 @@ def _render_centroids_as_points(
     fig_params: FigParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None,
+    axes_extent: dict[str, tuple[float, float]],
     allow_datashader: bool = True,
 ) -> None:
     """Render one dot per cell at ``(x, y)`` (coordinate-system coords), colored like the fill.
 
     Shared "fast mode" for shapes/labels. Backend is matplotlib unless ``render_params.method`` or the
-    size threshold selects datashader (and the colouring supports it). ``norm``/``na_color`` are explicit
-    because they differ between the shapes and labels paths.
+    size threshold selects datashader (and the colouring supports it). ``axes_extent`` is the element's
+    extent in the coordinate system (the frame the axes will use), which the datashader backend rasterizes
+    over so its dots match the matplotlib markers. ``norm``/``na_color`` are explicit because they differ
+    between the shapes and labels paths.
     """
     method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
     if method == "datashader":
@@ -1184,6 +1189,7 @@ def _render_centroids_as_points(
             density_how="linear",
             fig_params=fig_params,
             as_markers=True,
+            axes_extent=axes_extent,
         )
     else:
         cax = _scatter_points(
@@ -1234,25 +1240,30 @@ def _datashader_points(
     fig_params: FigParams,
     default_reduction: _DsReduction = "sum",
     as_markers: bool = False,
+    axes_extent: dict[str, tuple[float, float]] | None = None,
 ) -> tuple[Any, Any, Any]:
     """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
 
     Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y``
     in coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's
     legend uses the same values. Primitives are explicit because shapes/labels params lack ``alpha``/density.
-    ``as_markers`` (as_points) makes the output mimic matplotlib markers: it grows the canvas by the spread
-    radius so edge dots aren't clipped, and shades each dot at a uniform ``alpha`` instead of fading by count.
+    ``as_markers`` (as_points) makes the output mimic matplotlib markers: it rasterizes over ``axes_extent``
+    (the plot frame, like ``render_points``, so the dot size is the same regardless of element type and
+    edge dots aren't clipped), sizes the spread to the matplotlib marker radius, and uses a uniform alpha.
     """
-    # spread radius from marker size (matplotlib points**2, dpi-scaled); off under density to keep counts crisp
-    px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 100)))
+    # Spread radius from marker size. matplotlib's 'o' marker has diameter sqrt(s)*dpi/72 px, so a marker
+    # radius is sqrt(s)*dpi/144; the spread radius (canvas px == display px when the canvas is the axes
+    # frame) is set to that. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
+    px_div = 144 if as_markers else 100
+    px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / px_div)))
 
-    plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
-    if as_markers and px:
-        # grow the canvas by `px` pixels (= px * factor data units) on each side; `factor` (data units
-        # per pixel) is unchanged, so the image still aligns, and edge dots get room for their spread.
-        pad = px * factor
-        x_ext, y_ext = [x_ext[0] - pad, x_ext[1] + pad], [y_ext[0] - pad, y_ext[1] + pad]
-        plot_width, plot_height = plot_width + 2 * px, plot_height + 2 * px
+    if as_markers and axes_extent is not None:
+        # rasterize over the same extent the axes will use, so 1 canvas px == 1 display px (as render_points)
+        x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
+        y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
+        plot_width, plot_height, x_ext, y_ext, factor = _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
+    else:
+        plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment
@@ -2472,6 +2483,7 @@ def _render_labels(
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
+            axes_extent=get_extent(label, coordinate_system=coordinate_system),
             allow_datashader=allow_datashader,
         )
         return
