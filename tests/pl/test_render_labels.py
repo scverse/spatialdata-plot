@@ -435,29 +435,34 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels", color="GeneA", table_name="table", gene_symbols="gene_symbol"
         ).pl.show()
 
-    def test_plot_can_render_labels_as_points(self, sdata_blobs: SpatialData):
-        """as_points draws one colored dot per label at its centroid instead of the mask."""
-        sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=100).pl.show()
+    @staticmethod
+    def _as_points(sdata_blobs: SpatialData, method: str, color: str = "instance_id"):
+        # identical params for both backends, so the matplotlib and datashader baselines are comparable
+        return sdata_blobs.pl.render_labels("blobs_labels", color=color, as_points=True, method=method, size=600)
 
-    def test_plot_labels_as_points_respects_size(self, sdata_blobs: SpatialData):
-        """size sets the scatter marker area; larger size -> larger dots."""
-        sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=600).pl.show()
-
-    def test_plot_labels_as_points_datashader(self, sdata_blobs: SpatialData):
-        """as_points with method='datashader' rasterizes the colored centroids instead of drawing markers."""
-        sdata_blobs.pl.render_labels(
-            "blobs_labels", color="instance_id", as_points=True, method="datashader", size=600
-        ).pl.show()
-
-    def test_plot_labels_as_points_datashader_categorical(self, sdata_blobs: SpatialData):
-        """Categorical-coloured as_points centroids datashade with a legend (color_source_vector path)."""
+    @staticmethod
+    def _add_categorical_color(sdata_blobs: SpatialData) -> str:
         max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
         sdata_blobs["table"].obs["which_max"] = pd.Categorical(
             max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True
         )
-        sdata_blobs.pl.render_labels(
-            "blobs_labels", color="which_max", as_points=True, method="datashader", size=600
-        ).pl.show()
+        return "which_max"
+
+    def test_plot_labels_as_points_matplotlib(self, sdata_blobs: SpatialData):
+        """as_points draws one colored dot per label at its centroid (matplotlib backend)."""
+        self._as_points(sdata_blobs, "matplotlib").pl.show()
+
+    def test_plot_labels_as_points_datashader(self, sdata_blobs: SpatialData):
+        """Same render via datashader; should look maximally similar to the matplotlib baseline."""
+        self._as_points(sdata_blobs, "datashader").pl.show()
+
+    def test_plot_labels_as_points_categorical_matplotlib(self, sdata_blobs: SpatialData):
+        """Categorical-coloured as_points with a legend (matplotlib backend)."""
+        self._as_points(sdata_blobs, "matplotlib", color=self._add_categorical_color(sdata_blobs)).pl.show()
+
+    def test_plot_labels_as_points_categorical_datashader(self, sdata_blobs: SpatialData):
+        """Same categorical render via datashader (color_source_vector + legend path)."""
+        self._as_points(sdata_blobs, "datashader", color=self._add_categorical_color(sdata_blobs)).pl.show()
 
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):

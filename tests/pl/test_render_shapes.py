@@ -1108,17 +1108,18 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             "blobs_circles", color="GeneA", table_name="table", gene_symbols="gene_symbol"
         ).pl.show()
 
-    def test_plot_can_render_circles_as_points(self, sdata_blobs: SpatialData):
-        """as_points draws one dot per shape at its centroid instead of the geometry."""
-        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=100).pl.show()
+    @staticmethod
+    def _as_points(sdata_blobs: SpatialData, method: str):
+        # identical params for both backends, so the matplotlib and datashader baselines are comparable
+        return sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method=method, size=600)
 
-    def test_plot_shapes_as_points_respects_size(self, sdata_blobs: SpatialData):
-        """size sets the scatter marker area; larger size -> larger dots."""
-        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=600).pl.show()
+    def test_plot_shapes_as_points_matplotlib(self, sdata_blobs: SpatialData):
+        """as_points draws one dot per shape at its centroid (matplotlib backend)."""
+        self._as_points(sdata_blobs, "matplotlib").pl.show()
 
     def test_plot_shapes_as_points_datashader(self, sdata_blobs: SpatialData):
-        """as_points with method='datashader' rasterizes the centroids instead of drawing markers."""
-        sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method="datashader", size=600).pl.show()
+        """Same render via datashader; should look maximally similar to the matplotlib baseline."""
+        self._as_points(sdata_blobs, "datashader").pl.show()
 
 
 def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
