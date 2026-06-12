@@ -48,6 +48,10 @@ dev = [
 ]
 test = [
   "coverage[toml]>=7.4",
+  # Image-comparison baselines are matplotlib-version-sensitive; matplotlib 3.11.0 (released
+  # 2026-06-12) shifts colorbar rendering past the comparison tolerance. Cap for tests only
+  # (the runtime dependency stays open) until the baselines are regenerated against 3.11.
+  "matplotlib<3.11",
   "pooch",
   "pytest",
   "pytest-cov",
