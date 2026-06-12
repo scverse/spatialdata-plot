@@ -3976,11 +3976,7 @@ def _get_extent_and_range_for_datashader_canvas(
     coordinate_system: str,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
-    # The corner-transform fast path avoids transforming every geometry just to size the canvas;
-    # it is identical for axis-aligned transforms and returns None (-> exact get_extent) otherwise.
-    extent = _element_extent_fast(spatial_element, coordinate_system) or get_extent(
-        spatial_element, coordinate_system=coordinate_system
-    )
+    extent = _fast_extent(spatial_element, coordinate_system)
     x_ext = [float(extent["x"][0]), float(extent["x"][1])]
     y_ext = [float(extent["y"][0]), float(extent["y"][1])]
     return _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
@@ -4803,7 +4799,7 @@ def measure_obs(
 # spatialdata's `get_extent(..., exact=True)` transforms every shapes/points geometry (O(N)) just to
 # take a bounding box. For an axis-aligned transform (scale/flip/90deg-rotation/axis-swap + translation)
 # the exact extent equals the bbox of the *transformed corners*, so we transform 4 corners instead;
-# rotation/shear and other element types fall back to `get_extent`. Self-contained for upstreaming.
+# rotation/shear and other element types fall back to `get_extent`.
 
 
 def _is_axis_aligned(linear2x2: ArrayLike, *, rtol: float = 1e-9) -> bool:
@@ -4862,6 +4858,12 @@ def _element_extent_fast(
     corners = np.array([[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]])
     tc = corners @ affine.T + matrix[:2, 2]
     return {"x": (float(tc[:, 0].min()), float(tc[:, 0].max())), "y": (float(tc[:, 1].min()), float(tc[:, 1].max()))}
+
+
+def _fast_extent(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]]:
+    """Element extent via the fast corner-transform; identical to ``get_extent`` but avoids transforming
+    every geometry for axis-aligned transforms (falls back to ``get_extent`` for rotation/shear)."""
+    return _element_extent_fast(element, coordinate_system) or get_extent(element, coordinate_system=coordinate_system)
 
 
 def _get_extent_fast(

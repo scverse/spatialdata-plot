@@ -66,7 +66,7 @@ from spatialdata_plot.pl.utils import (
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
-    _element_extent_fast,
+    _fast_extent,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
@@ -775,10 +775,7 @@ def _render_shapes(
             fig_params=fig_params,
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
-            # fast corner-transform extent (avoids transforming every geometry); identical for
-            # axis-aligned transforms, falls back to get_extent for rotation/shear
-            axes_extent=_element_extent_fast(sdata_filt.shapes[element], coordinate_system)
-            or get_extent(sdata_filt.shapes[element], coordinate_system=coordinate_system),
+            axes_extent=_fast_extent(sdata_filt.shapes[element], coordinate_system),
         )
         return
 
@@ -1164,11 +1161,9 @@ def _render_centroids_as_points(
 ) -> None:
     """Render one dot per cell at ``(x, y)`` (coordinate-system coords), colored like the fill.
 
-    Shared "fast mode" for shapes/labels. Backend is matplotlib unless ``render_params.method`` or the
-    size threshold selects datashader (and the colouring supports it). ``axes_extent`` is the element's
-    extent in the coordinate system (the frame the axes will use), which the datashader backend rasterizes
-    over so its dots match the matplotlib markers. ``norm``/``na_color`` are explicit because they differ
-    between the shapes and labels paths.
+    Shared "fast mode" for shapes/labels; backend chosen by ``_resolve_as_points_method``. ``axes_extent``
+    (the element's extent, i.e. the frame the axes will use) is what the datashader backend rasterizes over
+    so its dots match the matplotlib markers.
     """
     method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
     if method == "datashader":

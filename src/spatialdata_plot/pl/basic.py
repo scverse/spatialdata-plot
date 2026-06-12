@@ -1051,7 +1051,7 @@ class PlotAccessor:
             Optional transformation applied to the continuous color vector before normalization and colormap mapping.
         method : str | None, optional
             Backend for ``as_points`` centroids: ``'matplotlib'`` or ``'datashader'``. When ``None``,
-            matplotlib is used unless there are more than ~500k centroids. Datashader is skipped (with a
+            matplotlib is used unless there are more than ~50k centroids. Datashader is skipped (with a
             warning) when the colouring cannot be aggregated (e.g. labels with no color column).
 
         Returns
