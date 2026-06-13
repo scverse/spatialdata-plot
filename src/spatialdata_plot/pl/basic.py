@@ -1493,7 +1493,7 @@ class PlotAccessor:
             axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params_obj.colorbar else None
             axis_channel_legend_entries: list[ChannelLegendEntry] = []
 
-            wanted_elements, wants_images, wants_labels, wants_points, wants_shapes = _render_panel(
+            wanted_elements, wants = _render_panel(
                 sdata=sdata,
                 render_cmds=render_cmds,
                 cs=cs,
@@ -1504,16 +1504,13 @@ class PlotAccessor:
                 legend_params_obj=legend_params_obj,
                 axis_colorbar_requests=axis_colorbar_requests,
                 axis_channel_legend_entries=axis_channel_legend_entries,
-                has_images=has_images,
-                has_labels=has_labels,
-                has_points=has_points,
-                has_shapes=has_shapes,
+                cs_row=cs_row,
                 title=title,
                 dpi=dpi,
                 figsize=figsize,
             )
 
-            if has_shapes and wants_shapes:
+            if has_shapes and wants["shapes"]:
                 empty_shape_elements = [
                     name
                     for name in wanted_elements
@@ -1528,10 +1525,10 @@ class PlotAccessor:
             extent = get_extent(
                 sdata,
                 coordinate_system=cs,
-                has_images=has_images and wants_images,
-                has_labels=has_labels and wants_labels,
-                has_points=has_points and wants_points,
-                has_shapes=has_shapes and wants_shapes,
+                has_images=has_images and wants["images"],
+                has_labels=has_labels and wants["labels"],
+                has_points=has_points and wants["points"],
+                has_shapes=has_shapes and wants["shapes"],
                 elements=wanted_elements,
             )
             cs_x_min, cs_x_max = extent["x"]
@@ -1767,7 +1764,6 @@ def _draw_colorbar(
     spec: ColorbarSpec,
     fig: Figure,
     renderer: RendererBase,
-    base_offsets_axes: dict[str, float],
     trackers_axes: dict[str, float],
     colorbar_params: dict[str, object] | None,
 ) -> None:
@@ -1807,14 +1803,11 @@ def _draw_colorbar(
     fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
     pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
 
-    if location in {"left", "right"}:
-        pad_axes = pad + trackers_axes[location]
-        x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
-        bbox = (float(x0), 0.0, float(fraction), 1.0)
-    else:
-        pad_axes = pad + trackers_axes[location]
-        y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
-        bbox = (0.0, float(y0), 1.0, float(fraction))
+    vertical = location in {"left", "right"}
+    pad_axes = pad + trackers_axes[location]
+    # "left"/"bottom" grow outward in the negative direction; "right"/"top" past 1.
+    start = -pad_axes - fraction if location in {"left", "bottom"} else 1 + pad_axes
+    bbox = (float(start), 0.0, float(fraction), 1.0) if vertical else (0.0, float(start), 1.0, float(fraction))
     cax = inset_axes(
         spec.ax,
         width="100%",
@@ -1826,22 +1819,11 @@ def _draw_colorbar(
     )
 
     cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
-    if location == "left":
-        cb.ax.yaxis.set_ticks_position("left")
-        cb.ax.yaxis.set_label_position("left")
-        cb.ax.tick_params(labelleft=True, labelright=False)
-    elif location == "top":
-        cb.ax.xaxis.set_ticks_position("top")
-        cb.ax.xaxis.set_label_position("top")
-        cb.ax.tick_params(labeltop=True, labelbottom=False)
-    elif location == "right":
-        cb.ax.yaxis.set_ticks_position("right")
-        cb.ax.yaxis.set_label_position("right")
-        cb.ax.tick_params(labelright=True, labelleft=False)
-    elif location == "bottom":
-        cb.ax.xaxis.set_ticks_position("bottom")
-        cb.ax.xaxis.set_label_position("bottom")
-        cb.ax.tick_params(labelbottom=True, labeltop=False)
+    opposite = {"left": "right", "right": "left", "top": "bottom", "bottom": "top"}[location]
+    cbar_axis = cb.ax.yaxis if vertical else cb.ax.xaxis
+    cbar_axis.set_ticks_position(location)
+    cbar_axis.set_label_position(location)
+    cb.ax.tick_params(**{f"label{location}": True, f"label{opposite}": False})
 
     final_label = global_label_override or layer_label_override or spec.label
     if final_label:
@@ -1850,14 +1832,7 @@ def _draw_colorbar(
         with contextlib.suppress(Exception):
             cb.solids.set_alpha(spec.alpha)
     bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
-    if location == "left":
-        trackers_axes["left"] = pad_axes + bbox_axes.width
-    elif location == "right":
-        trackers_axes["right"] = pad_axes + bbox_axes.width
-    elif location == "bottom":
-        trackers_axes["bottom"] = pad_axes + bbox_axes.height
-    elif location == "top":
-        trackers_axes["top"] = pad_axes + bbox_axes.height
+    trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
 def _layout_pending_colorbars(
@@ -1887,15 +1862,14 @@ def _layout_pending_colorbars(
             seen_mappables.add(mappable_id)
             unique_specs.append(spec)
         tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
-        base_offsets_axes = {
+        trackers_axes = {
             "left": max(0.0, -tight_bbox.x0),
             "right": max(0.0, tight_bbox.x1 - 1),
             "bottom": max(0.0, -tight_bbox.y0),
             "top": max(0.0, tight_bbox.y1 - 1),
         }
-        trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
         for spec in unique_specs:
-            _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes, colorbar_params)
+            _draw_colorbar(spec, fig, renderer, trackers_axes, colorbar_params)
 
 
 def _finalize_panel(
@@ -1927,6 +1901,31 @@ def _finalize_panel(
         ax.axis("off")
 
 
+def _should_rasterize(
+    render_params: ImageRenderParams | LabelsRenderParams,
+    dpi: int | None,
+    figsize: tuple[float, float] | None,
+) -> bool:
+    """Rasterize when no scale is set, or a non-``"full"`` scale is paired with a fixed canvas size."""
+    scale = render_params.scale
+    return scale is None or (isinstance(scale, str) and scale != "full" and (dpi is not None or figsize is not None))
+
+
+def _maybe_set_label_colors(sdata: sd.SpatialData, render_params: LabelsRenderParams) -> None:
+    """Materialize a categorical palette on the table annotating a labels element, if applicable."""
+    table = render_params.table_name
+    if table is None or render_params.col_for_color is None:
+        return
+    colors = sc.get.obs_df(sdata[table], [render_params.col_for_color])
+    if isinstance(colors[render_params.col_for_color].dtype, pd.CategoricalDtype):
+        _maybe_set_colors(
+            source=sdata[table],
+            target=sdata[table],
+            key=render_params.col_for_color,
+            palette=render_params.palette,
+        )
+
+
 def _render_panel(
     sdata: sd.SpatialData,
     render_cmds: list[_RenderCmd],
@@ -1938,25 +1937,26 @@ def _render_panel(
     legend_params_obj: LegendParams,
     axis_colorbar_requests: list[ColorbarSpec] | None,
     axis_channel_legend_entries: list[ChannelLegendEntry],
-    has_images: bool,
-    has_labels: bool,
-    has_points: bool,
-    has_shapes: bool,
+    cs_row: pd.Series,
     title: list[str] | None,
     dpi: int | None,
     figsize: tuple[float, float] | None,
-) -> tuple[list[str], bool, bool, bool, bool]:
+) -> tuple[list[str], dict[str, bool]]:
     """Render every applicable render command into a single panel's axes.
 
     Dispatches each queued render command to its ``_render_*`` function, skipping entries that
     belong to a different color panel (``panel_key``). Colorbar requests and channel-legend
-    entries accumulate on the passed-in lists. Returns the wanted element names and the per-type
-    ``wants_*`` flags needed downstream for extent computation.
+    entries accumulate on the passed-in lists. Returns the wanted element names and a per-type
+    ``wants`` flag dict (keyed ``"images"``/``"labels"``/``"points"``/``"shapes"``) needed
+    downstream for extent computation.
     """
-    wants_images = False
-    wants_labels = False
-    wants_points = False
-    wants_shapes = False
+    renderers = {
+        "render_images": _render_images,
+        "render_shapes": _render_shapes,
+        "render_points": _render_points,
+        "render_labels": _render_labels,
+    }
+    wants = dict.fromkeys(("images", "labels", "points", "shapes"), False)
     wanted_elements: list[str] = []
 
     for cmd, params in render_cmds:
@@ -1967,103 +1967,10 @@ def _render_panel(
             continue
         # We create a copy here as the wanted elements can change from one cs to another.
         params_copy = deepcopy(params)
-        if cmd == "render_images" and has_images:
-            wanted_elements, wanted_images_on_this_cs, wants_images = _get_wanted_render_elements(
-                sdata, wanted_elements, params_copy, cs, "images"
-            )
 
-            if wanted_images_on_this_cs:
-                rasterize = (params_copy.scale is None) or (
-                    isinstance(params_copy.scale, str)
-                    and params_copy.scale != "full"
-                    and (dpi is not None or figsize is not None)
-                )
-                _render_images(
-                    sdata=sdata,
-                    render_params=params_copy,
-                    coordinate_system=cs,
-                    ax=ax,
-                    fig_params=fig_params,
-                    legend_params=legend_params_obj,
-                    colorbar_requests=axis_colorbar_requests,
-                    channel_legend_entries=axis_channel_legend_entries,
-                    rasterize=rasterize,
-                )
-
-        elif cmd == "render_shapes" and has_shapes:
-            wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
-                sdata, wanted_elements, params_copy, cs, "shapes"
-            )
-
-            if wanted_shapes_on_this_cs:
-                _render_shapes(
-                    sdata=sdata,
-                    render_params=params_copy,
-                    coordinate_system=cs,
-                    ax=ax,
-                    fig_params=fig_params,
-                    legend_params=legend_params_obj,
-                    colorbar_requests=axis_colorbar_requests,
-                )
-
-        elif cmd == "render_points" and has_points:
-            wanted_elements, wanted_points_on_this_cs, wants_points = _get_wanted_render_elements(
-                sdata, wanted_elements, params_copy, cs, "points"
-            )
-
-            if wanted_points_on_this_cs:
-                _render_points(
-                    sdata=sdata,
-                    render_params=params_copy,
-                    coordinate_system=cs,
-                    ax=ax,
-                    fig_params=fig_params,
-                    legend_params=legend_params_obj,
-                    colorbar_requests=axis_colorbar_requests,
-                )
-
-        elif cmd == "render_labels" and has_labels:
-            wanted_elements, wanted_labels_on_this_cs, wants_labels = _get_wanted_render_elements(
-                sdata, wanted_elements, params_copy, cs, "labels"
-            )
-
-            if wanted_labels_on_this_cs:
-                table = params_copy.table_name
-                if table is not None and params_copy.col_for_color is not None:
-                    colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
-                    if isinstance(
-                        colors[params_copy.col_for_color].dtype,
-                        pd.CategoricalDtype,
-                    ):
-                        _maybe_set_colors(
-                            source=sdata[table],
-                            target=sdata[table],
-                            key=params_copy.col_for_color,
-                            palette=params_copy.palette,
-                        )
-
-                rasterize = (params_copy.scale is None) or (
-                    isinstance(params_copy.scale, str)
-                    and params_copy.scale != "full"
-                    and (dpi is not None or figsize is not None)
-                )
-                _render_labels(
-                    sdata=sdata,
-                    render_params=params_copy,
-                    coordinate_system=cs,
-                    ax=ax,
-                    fig_params=fig_params,
-                    legend_params=legend_params_obj,
-                    colorbar_requests=axis_colorbar_requests,
-                    rasterize=rasterize,
-                )
-
-        elif cmd == "render_graph":
+        if cmd == "render_graph":
             graph_element = params_copy.element
-            element_in_cs = graph_element in sdata and cs in set(
-                get_transformation(sdata[graph_element], get_all=True).keys()
-            )
-            if element_in_cs:
+            if graph_element in sdata and cs in get_transformation(sdata[graph_element], get_all=True):
                 _render_graph(
                     sdata=sdata,
                     render_params=params_copy,
@@ -2072,7 +1979,29 @@ def _render_panel(
                     legend_params=legend_params_obj,
                     colorbar_requests=axis_colorbar_requests,
                 )
+        elif cmd in renderers and cs_row[_RENDER_CMD_TO_CS_FLAG[cmd]]:
+            element_type = cmd.removeprefix("render_")
+            wanted_elements, wanted_on_cs, wants[element_type] = _get_wanted_render_elements(
+                sdata, wanted_elements, params_copy, cs, element_type
+            )
+            if wanted_on_cs:
+                kwargs: dict[str, Any] = {
+                    "sdata": sdata,
+                    "render_params": params_copy,
+                    "coordinate_system": cs,
+                    "ax": ax,
+                    "fig_params": fig_params,
+                    "legend_params": legend_params_obj,
+                    "colorbar_requests": axis_colorbar_requests,
+                }
+                if cmd == "render_images":
+                    kwargs["channel_legend_entries"] = axis_channel_legend_entries
+                if cmd in {"render_images", "render_labels"}:
+                    kwargs["rasterize"] = _should_rasterize(params_copy, dpi, figsize)
+                if cmd == "render_labels":
+                    _maybe_set_label_colors(sdata, params_copy)
+                renderers[cmd](**kwargs)
 
         _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
 
-    return wanted_elements, wants_images, wants_labels, wants_points, wants_shapes
+    return wanted_elements, wants
