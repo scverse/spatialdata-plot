@@ -1493,139 +1493,25 @@ class PlotAccessor:
             axis_colorbar_requests: list[ColorbarSpec] | None = [] if legend_params_obj.colorbar else None
             axis_channel_legend_entries: list[ChannelLegendEntry] = []
 
-            wants_images = False
-            wants_labels = False
-            wants_points = False
-            wants_shapes = False
-            wanted_elements: list[str] = []
-
-            for cmd, params in render_cmds:
-                # Skip render entries that belong to a different color panel. Entries with no
-                # `panel_key` (None) are shared and drawn into every panel (e.g. a background image).
-                cmd_panel_key = getattr(params, "panel_key", None)
-                if panel_key is not None and cmd_panel_key is not None and cmd_panel_key != panel_key:
-                    continue
-                # We create a copy here as the wanted elements can change from one cs to another.
-                params_copy = deepcopy(params)
-                if cmd == "render_images" and has_images:
-                    wanted_elements, wanted_images_on_this_cs, wants_images = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "images"
-                    )
-
-                    if wanted_images_on_this_cs:
-                        rasterize = (params_copy.scale is None) or (
-                            isinstance(params_copy.scale, str)
-                            and params_copy.scale != "full"
-                            and (dpi is not None or figsize is not None)
-                        )
-                        _render_images(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            fig_params=fig_params,
-                            legend_params=legend_params_obj,
-                            colorbar_requests=axis_colorbar_requests,
-                            channel_legend_entries=axis_channel_legend_entries,
-                            rasterize=rasterize,
-                        )
-
-                elif cmd == "render_shapes" and has_shapes:
-                    wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "shapes"
-                    )
-
-                    if wanted_shapes_on_this_cs:
-                        _render_shapes(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            fig_params=fig_params,
-                            legend_params=legend_params_obj,
-                            colorbar_requests=axis_colorbar_requests,
-                        )
-
-                elif cmd == "render_points" and has_points:
-                    wanted_elements, wanted_points_on_this_cs, wants_points = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "points"
-                    )
-
-                    if wanted_points_on_this_cs:
-                        _render_points(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            fig_params=fig_params,
-                            legend_params=legend_params_obj,
-                            colorbar_requests=axis_colorbar_requests,
-                        )
-
-                elif cmd == "render_labels" and has_labels:
-                    wanted_elements, wanted_labels_on_this_cs, wants_labels = _get_wanted_render_elements(
-                        sdata, wanted_elements, params_copy, cs, "labels"
-                    )
-
-                    if wanted_labels_on_this_cs:
-                        table = params_copy.table_name
-                        if table is not None and params_copy.col_for_color is not None:
-                            colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
-                            if isinstance(
-                                colors[params_copy.col_for_color].dtype,
-                                pd.CategoricalDtype,
-                            ):
-                                _maybe_set_colors(
-                                    source=sdata[table],
-                                    target=sdata[table],
-                                    key=params_copy.col_for_color,
-                                    palette=params_copy.palette,
-                                )
-
-                        rasterize = (params_copy.scale is None) or (
-                            isinstance(params_copy.scale, str)
-                            and params_copy.scale != "full"
-                            and (dpi is not None or figsize is not None)
-                        )
-                        _render_labels(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            fig_params=fig_params,
-                            legend_params=legend_params_obj,
-                            colorbar_requests=axis_colorbar_requests,
-                            rasterize=rasterize,
-                        )
-
-                elif cmd == "render_graph":
-                    graph_element = params_copy.element
-                    element_in_cs = graph_element in sdata and cs in set(
-                        get_transformation(sdata[graph_element], get_all=True).keys()
-                    )
-                    if element_in_cs:
-                        _render_graph(
-                            sdata=sdata,
-                            render_params=params_copy,
-                            coordinate_system=cs,
-                            ax=ax,
-                            legend_params=legend_params_obj,
-                            colorbar_requests=axis_colorbar_requests,
-                        )
-
-                if title is None:
-                    t = panel_key if panel_key is not None else cs
-                elif len(title) == 1:
-                    t = title[0]
-                else:
-                    try:
-                        t = title[i]
-                    except IndexError as e:
-                        raise IndexError("The number of titles must match the number of panels.") from e
-                ax.set_title(t)
-                ax.set_aspect("equal")
-                if fig_params.frameon is False:
-                    ax.axis("off")
+            wanted_elements, wants_images, wants_labels, wants_points, wants_shapes = _render_panel(
+                sdata=sdata,
+                render_cmds=render_cmds,
+                cs=cs,
+                panel_key=panel_key,
+                panel_idx=i,
+                ax=ax,
+                fig_params=fig_params,
+                legend_params_obj=legend_params_obj,
+                axis_colorbar_requests=axis_colorbar_requests,
+                axis_channel_legend_entries=axis_channel_legend_entries,
+                has_images=has_images,
+                has_labels=has_labels,
+                has_points=has_points,
+                has_shapes=has_shapes,
+                title=title,
+                dpi=dpi,
+                figsize=figsize,
+            )
 
             if has_shapes and wants_shapes:
                 empty_shape_elements = [
@@ -2010,3 +1896,183 @@ def _layout_pending_colorbars(
         trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
         for spec in unique_specs:
             _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes, colorbar_params)
+
+
+def _finalize_panel(
+    ax: Axes,
+    panel_idx: int,
+    title: list[str] | None,
+    panel_key: str | None,
+    cs: str,
+    frameon: bool | None,
+) -> None:
+    """Set a panel's title, equal aspect ratio and frame visibility.
+
+    With no explicit ``title`` the panel is labelled with its color key (multi-panel color mode)
+    or its coordinate-system name; a single-element list applies to every panel, otherwise the
+    title at ``panel_idx`` is used.
+    """
+    if title is None:
+        t = panel_key if panel_key is not None else cs
+    elif len(title) == 1:
+        t = title[0]
+    else:
+        try:
+            t = title[panel_idx]
+        except IndexError as e:
+            raise IndexError("The number of titles must match the number of panels.") from e
+    ax.set_title(t)
+    ax.set_aspect("equal")
+    if frameon is False:
+        ax.axis("off")
+
+
+def _render_panel(
+    sdata: sd.SpatialData,
+    render_cmds: list[_RenderCmd],
+    cs: str,
+    panel_key: str | None,
+    panel_idx: int,
+    ax: Axes,
+    fig_params: FigParams,
+    legend_params_obj: LegendParams,
+    axis_colorbar_requests: list[ColorbarSpec] | None,
+    axis_channel_legend_entries: list[ChannelLegendEntry],
+    has_images: bool,
+    has_labels: bool,
+    has_points: bool,
+    has_shapes: bool,
+    title: list[str] | None,
+    dpi: int | None,
+    figsize: tuple[float, float] | None,
+) -> tuple[list[str], bool, bool, bool, bool]:
+    """Render every applicable render command into a single panel's axes.
+
+    Dispatches each queued render command to its ``_render_*`` function, skipping entries that
+    belong to a different color panel (``panel_key``). Colorbar requests and channel-legend
+    entries accumulate on the passed-in lists. Returns the wanted element names and the per-type
+    ``wants_*`` flags needed downstream for extent computation.
+    """
+    wants_images = False
+    wants_labels = False
+    wants_points = False
+    wants_shapes = False
+    wanted_elements: list[str] = []
+
+    for cmd, params in render_cmds:
+        # Skip render entries that belong to a different color panel. Entries with no
+        # `panel_key` (None) are shared and drawn into every panel (e.g. a background image).
+        cmd_panel_key = getattr(params, "panel_key", None)
+        if panel_key is not None and cmd_panel_key is not None and cmd_panel_key != panel_key:
+            continue
+        # We create a copy here as the wanted elements can change from one cs to another.
+        params_copy = deepcopy(params)
+        if cmd == "render_images" and has_images:
+            wanted_elements, wanted_images_on_this_cs, wants_images = _get_wanted_render_elements(
+                sdata, wanted_elements, params_copy, cs, "images"
+            )
+
+            if wanted_images_on_this_cs:
+                rasterize = (params_copy.scale is None) or (
+                    isinstance(params_copy.scale, str)
+                    and params_copy.scale != "full"
+                    and (dpi is not None or figsize is not None)
+                )
+                _render_images(
+                    sdata=sdata,
+                    render_params=params_copy,
+                    coordinate_system=cs,
+                    ax=ax,
+                    fig_params=fig_params,
+                    legend_params=legend_params_obj,
+                    colorbar_requests=axis_colorbar_requests,
+                    channel_legend_entries=axis_channel_legend_entries,
+                    rasterize=rasterize,
+                )
+
+        elif cmd == "render_shapes" and has_shapes:
+            wanted_elements, wanted_shapes_on_this_cs, wants_shapes = _get_wanted_render_elements(
+                sdata, wanted_elements, params_copy, cs, "shapes"
+            )
+
+            if wanted_shapes_on_this_cs:
+                _render_shapes(
+                    sdata=sdata,
+                    render_params=params_copy,
+                    coordinate_system=cs,
+                    ax=ax,
+                    fig_params=fig_params,
+                    legend_params=legend_params_obj,
+                    colorbar_requests=axis_colorbar_requests,
+                )
+
+        elif cmd == "render_points" and has_points:
+            wanted_elements, wanted_points_on_this_cs, wants_points = _get_wanted_render_elements(
+                sdata, wanted_elements, params_copy, cs, "points"
+            )
+
+            if wanted_points_on_this_cs:
+                _render_points(
+                    sdata=sdata,
+                    render_params=params_copy,
+                    coordinate_system=cs,
+                    ax=ax,
+                    fig_params=fig_params,
+                    legend_params=legend_params_obj,
+                    colorbar_requests=axis_colorbar_requests,
+                )
+
+        elif cmd == "render_labels" and has_labels:
+            wanted_elements, wanted_labels_on_this_cs, wants_labels = _get_wanted_render_elements(
+                sdata, wanted_elements, params_copy, cs, "labels"
+            )
+
+            if wanted_labels_on_this_cs:
+                table = params_copy.table_name
+                if table is not None and params_copy.col_for_color is not None:
+                    colors = sc.get.obs_df(sdata[table], [params_copy.col_for_color])
+                    if isinstance(
+                        colors[params_copy.col_for_color].dtype,
+                        pd.CategoricalDtype,
+                    ):
+                        _maybe_set_colors(
+                            source=sdata[table],
+                            target=sdata[table],
+                            key=params_copy.col_for_color,
+                            palette=params_copy.palette,
+                        )
+
+                rasterize = (params_copy.scale is None) or (
+                    isinstance(params_copy.scale, str)
+                    and params_copy.scale != "full"
+                    and (dpi is not None or figsize is not None)
+                )
+                _render_labels(
+                    sdata=sdata,
+                    render_params=params_copy,
+                    coordinate_system=cs,
+                    ax=ax,
+                    fig_params=fig_params,
+                    legend_params=legend_params_obj,
+                    colorbar_requests=axis_colorbar_requests,
+                    rasterize=rasterize,
+                )
+
+        elif cmd == "render_graph":
+            graph_element = params_copy.element
+            element_in_cs = graph_element in sdata and cs in set(
+                get_transformation(sdata[graph_element], get_all=True).keys()
+            )
+            if element_in_cs:
+                _render_graph(
+                    sdata=sdata,
+                    render_params=params_copy,
+                    coordinate_system=cs,
+                    ax=ax,
+                    legend_params=legend_params_obj,
+                    colorbar_requests=axis_colorbar_requests,
+                )
+
+        _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
+
+    return wanted_elements, wants_images, wants_labels, wants_points, wants_shapes
