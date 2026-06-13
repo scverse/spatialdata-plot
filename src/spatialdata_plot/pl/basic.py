@@ -47,6 +47,7 @@ from spatialdata_plot.pl.render_params import (
     CmapParams,
     ColorbarSpec,
     ColorLike,
+    FigParams,
     GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
@@ -1428,83 +1429,28 @@ class PlotAccessor:
             ax_x_min, ax_x_max = ax.get_xlim()
             ax_y_max, ax_y_min = ax.get_ylim()  # (0, 0) is top-left
 
-        cs_was_auto = coordinate_systems is None
-        coordinate_systems = list(sdata.coordinate_systems) if cs_was_auto else coordinate_systems
-        if isinstance(coordinate_systems, str):
-            coordinate_systems = [coordinate_systems]
-        assert coordinate_systems is not None
-
-        for cs in coordinate_systems:
-            if cs not in sdata.coordinate_systems:
-                raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
-
         # Check if user specified only certain elements to be plotted
         cs_contents = _get_cs_contents(sdata)
         cs_index = cs_contents.set_index("cs")
         pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]] = []
 
-        elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_index, cs)
-
-        # filter out cs without relevant elements
-        cmds = [cmd for cmd, _ in render_cmds]
-        coordinate_systems = _get_valid_cs(
+        cs_was_auto = coordinate_systems is None
+        coordinate_systems = _resolve_coordinate_systems(
             sdata=sdata,
             coordinate_systems=coordinate_systems,
-            render_images="render_images" in cmds,
-            render_labels="render_labels" in cmds,
-            render_points="render_points" in cmds,
-            render_shapes="render_shapes" in cmds,
-            elements=elements_to_be_rendered,
+            cs_was_auto=cs_was_auto,
+            render_cmds=render_cmds,
+            cs_index=cs_index,
+            ax=ax,
         )
 
-        # When CS was auto-detected and ax is provided, keep only CS that have
-        # element types for ALL render commands (workaround for upstream #176).
-        if ax is not None and cs_was_auto:
-            n_ax = 1 if isinstance(ax, Axes) else len(ax)
-            if len(coordinate_systems) > n_ax:
-                required_flags = [_RENDER_CMD_TO_CS_FLAG[cmd] for cmd in cmds if cmd in _RENDER_CMD_TO_CS_FLAG]
-                strict_cs = [
-                    cs_name
-                    for cs_name in coordinate_systems
-                    if cs_name in cs_index.index and all(cs_index.loc[cs_name][flag] for flag in required_flags)
-                ]
-                if strict_cs:
-                    coordinate_systems = strict_cs
-
-        # Determine the panel layout. Panels are normally one per coordinate system, but when a
-        # render_* call passed a list of color keys we instead lay out one panel per key within a
-        # single coordinate system (scanpy-style `color=[...]`). Render entries tagged with a
-        # `panel_key` belong to that key's panel; untagged entries are shared across all panels.
-        panel_keys: list[str] = []
-        for _cmd, _params in render_cmds:
-            pkey = getattr(_params, "panel_key", None)
-            if pkey is not None and pkey not in panel_keys:
-                panel_keys.append(pkey)
-        if panel_keys:
-            if len(coordinate_systems) != 1:
-                raise ValueError(
-                    "A list of color keys (multi-panel plotting) requires exactly one coordinate system, "
-                    f"but {len(coordinate_systems)} were selected: {coordinate_systems}. "
-                    "Pass `coordinate_systems=` to choose a single one."
-                )
-            panels: list[tuple[str, str | None]] = [(coordinate_systems[0], key) for key in panel_keys]
-        else:
-            panels = [(cs, None) for cs in coordinate_systems]
+        panels = _plan_panels(
+            coordinate_systems=coordinate_systems,
+            render_cmds=render_cmds,
+            ax=ax,
+            cs_was_auto=cs_was_auto,
+        )
         num_panels = len(panels)
-
-        if ax is not None:
-            n_ax = 1 if isinstance(ax, Axes) else len(ax)
-            if num_panels != n_ax:
-                msg = (
-                    f"Mismatch between number of matplotlib axes objects ({n_ax}) and number of panels ({num_panels})."
-                )
-                if cs_was_auto:
-                    msg += (
-                        " This can happen when elements have transformations to multiple "
-                        "coordinate systems (e.g. after filter_by_coordinate_system). "
-                        "Pass `coordinate_systems=` explicitly to select which ones to plot."
-                    )
-                raise ValueError(msg)
 
         # set up canvas
         fig_params, scalebar_params_obj = _prepare_params_plot(
@@ -1521,18 +1467,8 @@ class PlotAccessor:
             scalebar_units=scalebar_units,
             scalebar_kwargs=scalebar_params,
         )
-        if legend_params:
-            legend_fontsize = legend_params.get("fontsize", legend_fontsize)
-            legend_fontweight = legend_params.get("fontweight", legend_fontweight)
-            # `loc` is matplotlib.Legend's native key; `location` aligns with colorbar/scalebar.
-            legend_loc = legend_params.get("location", legend_params.get("loc", legend_loc))
-            legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
-            na_in_legend = legend_params.get("na_in_legend", na_in_legend)
-
-        if legend_loc == "on data":
-            raise ValueError("legend_loc='on data' is not supported in spatialdata-plot.")
-
-        legend_params_obj = LegendParams(
+        legend_params_obj = _build_legend_params(
+            legend_params=legend_params,
             legend_fontsize=legend_fontsize,
             legend_fontweight=legend_fontweight,
             legend_loc=legend_loc,
@@ -1542,96 +1478,6 @@ class PlotAccessor:
             legend_title=legend_title,
             outline_legend_title=outline_legend_title,
         )
-
-        def _draw_colorbar(
-            spec: ColorbarSpec,
-            fig: Figure,
-            renderer: RendererBase,
-            base_offsets_axes: dict[str, float],
-            trackers_axes: dict[str, float],
-        ) -> None:
-            norm = spec.mappable.norm
-            if isinstance(norm, LogNorm):
-                vmin, vmax = norm.vmin, norm.vmax
-                if vmin is None or vmax is None or vmin <= 0 or vmin >= vmax:
-                    warnings.warn(
-                        "Data contains zeros or non-positive values; colorbar suppressed for `LogNorm`. "
-                        "Pass `colorbar=False` to silence this warning, or clip the data to positive values.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    return
-
-            base_layout = {
-                "location": CBAR_DEFAULT_LOCATION,
-                "fraction": CBAR_DEFAULT_FRACTION,
-                "pad": CBAR_DEFAULT_PAD,
-            }
-            layer_layout, layer_kwargs, layer_label_override = _split_colorbar_params(spec.params)
-            global_layout, global_kwargs, global_label_override = _split_colorbar_params(colorbar_params)
-            layout = {**base_layout, **layer_layout, **global_layout}
-            cbar_kwargs = {**layer_kwargs, **global_kwargs}
-
-            location = cast(str, layout.get("location", base_layout["location"]))
-            if location not in {"left", "right", "top", "bottom"}:
-                location = CBAR_DEFAULT_LOCATION
-            default_orientation = "vertical" if location in {"right", "left"} else "horizontal"
-            cbar_kwargs.setdefault("orientation", default_orientation)
-
-            fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
-            pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
-
-            if location in {"left", "right"}:
-                pad_axes = pad + trackers_axes[location]
-                x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
-                bbox = (float(x0), 0.0, float(fraction), 1.0)
-            else:
-                pad_axes = pad + trackers_axes[location]
-                y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
-                bbox = (0.0, float(y0), 1.0, float(fraction))
-            cax = inset_axes(
-                spec.ax,
-                width="100%",
-                height="100%",
-                loc="center",
-                bbox_to_anchor=bbox,
-                bbox_transform=spec.ax.transAxes,
-                borderpad=0.0,
-            )
-
-            cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
-            if location == "left":
-                cb.ax.yaxis.set_ticks_position("left")
-                cb.ax.yaxis.set_label_position("left")
-                cb.ax.tick_params(labelleft=True, labelright=False)
-            elif location == "top":
-                cb.ax.xaxis.set_ticks_position("top")
-                cb.ax.xaxis.set_label_position("top")
-                cb.ax.tick_params(labeltop=True, labelbottom=False)
-            elif location == "right":
-                cb.ax.yaxis.set_ticks_position("right")
-                cb.ax.yaxis.set_label_position("right")
-                cb.ax.tick_params(labelright=True, labelleft=False)
-            elif location == "bottom":
-                cb.ax.xaxis.set_ticks_position("bottom")
-                cb.ax.xaxis.set_label_position("bottom")
-                cb.ax.tick_params(labelbottom=True, labeltop=False)
-
-            final_label = global_label_override or layer_label_override or spec.label
-            if final_label:
-                cb.set_label(final_label)
-            if spec.alpha is not None:
-                with contextlib.suppress(Exception):
-                    cb.solids.set_alpha(spec.alpha)
-            bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
-            if location == "left":
-                trackers_axes["left"] = pad_axes + bbox_axes.width
-            elif location == "right":
-                trackers_axes["right"] = pad_axes + bbox_axes.width
-            elif location == "bottom":
-                trackers_axes["bottom"] = pad_axes + bbox_axes.height
-            elif location == "top":
-                trackers_axes["top"] = pad_axes + bbox_axes.height
 
         # go through tree
 
@@ -1822,29 +1668,7 @@ class PlotAccessor:
 
             _draw_scalebar(ax, scalebar_params_obj, panel_idx=i)
 
-        if pending_colorbars and fig_params.fig is not None:
-            fig = fig_params.fig
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
-            for axis, requests in pending_colorbars:
-                unique_specs: list[ColorbarSpec] = []
-                seen_mappables: set[int] = set()
-                for spec in requests:
-                    mappable_id = id(spec.mappable)
-                    if mappable_id in seen_mappables:
-                        continue
-                    seen_mappables.add(mappable_id)
-                    unique_specs.append(spec)
-                tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
-                base_offsets_axes = {
-                    "left": max(0.0, -tight_bbox.x0),
-                    "right": max(0.0, tight_bbox.x1 - 1),
-                    "bottom": max(0.0, -tight_bbox.y0),
-                    "top": max(0.0, tight_bbox.y1 - 1),
-                }
-                trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
-                for spec in unique_specs:
-                    _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes)
+        _layout_pending_colorbars(pending_colorbars, fig_params, colorbar_params)
 
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
@@ -1912,3 +1736,277 @@ def _normalize_title(title: list[str] | str | None) -> list[str] | None:
     if not all(isinstance(t, str) for t in title):
         raise TypeError("All titles must be strings.")
     return title
+
+
+def _resolve_coordinate_systems(
+    sdata: sd.SpatialData,
+    coordinate_systems: list[str] | str | None,
+    cs_was_auto: bool,
+    render_cmds: list[_RenderCmd],
+    cs_index: pd.DataFrame,
+    ax: list[Axes] | Axes | None,
+) -> list[str]:
+    """Resolve, validate and filter the coordinate systems to render.
+
+    Auto-detects all coordinate systems when ``coordinate_systems is None``, validates the
+    requested names, then drops systems that hold no element relevant to the queued render
+    commands. When axes are supplied alongside auto-detection, narrows to systems carrying an
+    element for *every* render command (workaround for upstream #176).
+    """
+    coordinate_systems = list(sdata.coordinate_systems) if cs_was_auto else coordinate_systems
+    if isinstance(coordinate_systems, str):
+        coordinate_systems = [coordinate_systems]
+    assert coordinate_systems is not None
+
+    for cs in coordinate_systems:
+        if cs not in sdata.coordinate_systems:
+            raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
+
+    elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_index, cs)
+
+    # filter out cs without relevant elements
+    cmds = [cmd for cmd, _ in render_cmds]
+    coordinate_systems = _get_valid_cs(
+        sdata=sdata,
+        coordinate_systems=coordinate_systems,
+        render_images="render_images" in cmds,
+        render_labels="render_labels" in cmds,
+        render_points="render_points" in cmds,
+        render_shapes="render_shapes" in cmds,
+        elements=elements_to_be_rendered,
+    )
+
+    # When CS was auto-detected and ax is provided, keep only CS that have
+    # element types for ALL render commands (workaround for upstream #176).
+    if ax is not None and cs_was_auto:
+        n_ax = 1 if isinstance(ax, Axes) else len(ax)
+        if len(coordinate_systems) > n_ax:
+            required_flags = [_RENDER_CMD_TO_CS_FLAG[cmd] for cmd in cmds if cmd in _RENDER_CMD_TO_CS_FLAG]
+            strict_cs = [
+                cs_name
+                for cs_name in coordinate_systems
+                if cs_name in cs_index.index and all(cs_index.loc[cs_name][flag] for flag in required_flags)
+            ]
+            if strict_cs:
+                coordinate_systems = strict_cs
+
+    return coordinate_systems
+
+
+def _plan_panels(
+    coordinate_systems: list[str],
+    render_cmds: list[_RenderCmd],
+    ax: list[Axes] | Axes | None,
+    cs_was_auto: bool,
+) -> list[tuple[str, str | None]]:
+    """Determine the panel layout as ``(coordinate_system, panel_key)`` tuples.
+
+    Panels are normally one per coordinate system, but when a render_* call passed a list of
+    color keys we instead lay out one panel per key within a single coordinate system
+    (scanpy-style ``color=[...]``). Render entries tagged with a ``panel_key`` belong to that
+    key's panel; untagged entries are shared across all panels. Also validates the panel count
+    against any user-supplied axes.
+    """
+    panel_keys: list[str] = []
+    for _cmd, _params in render_cmds:
+        pkey = getattr(_params, "panel_key", None)
+        if pkey is not None and pkey not in panel_keys:
+            panel_keys.append(pkey)
+    if panel_keys:
+        if len(coordinate_systems) != 1:
+            raise ValueError(
+                "A list of color keys (multi-panel plotting) requires exactly one coordinate system, "
+                f"but {len(coordinate_systems)} were selected: {coordinate_systems}. "
+                "Pass `coordinate_systems=` to choose a single one."
+            )
+        panels: list[tuple[str, str | None]] = [(coordinate_systems[0], key) for key in panel_keys]
+    else:
+        panels = [(cs, None) for cs in coordinate_systems]
+
+    if ax is not None:
+        n_ax = 1 if isinstance(ax, Axes) else len(ax)
+        if len(panels) != n_ax:
+            msg = f"Mismatch between number of matplotlib axes objects ({n_ax}) and number of panels ({len(panels)})."
+            if cs_was_auto:
+                msg += (
+                    " This can happen when elements have transformations to multiple "
+                    "coordinate systems (e.g. after filter_by_coordinate_system). "
+                    "Pass `coordinate_systems=` explicitly to select which ones to plot."
+                )
+            raise ValueError(msg)
+
+    return panels
+
+
+def _build_legend_params(
+    legend_params: dict[str, Any] | None,
+    legend_fontsize: int | float | _FontSize | None,
+    legend_fontweight: int | _FontWeight,
+    legend_loc: str | None,
+    legend_fontoutline: int | None,
+    na_in_legend: bool,
+    colorbar: bool,
+    legend_title: str | None,
+    outline_legend_title: str | None,
+) -> LegendParams:
+    """Build the :class:`LegendParams` bundle, applying the ``legend_params`` dict overrides.
+
+    Keys in the ``legend_params`` dict take precedence over the matching flat ``legend_*``
+    keyword arguments.
+    """
+    if legend_params:
+        legend_fontsize = legend_params.get("fontsize", legend_fontsize)
+        legend_fontweight = legend_params.get("fontweight", legend_fontweight)
+        # `loc` is matplotlib.Legend's native key; `location` aligns with colorbar/scalebar.
+        legend_loc = legend_params.get("location", legend_params.get("loc", legend_loc))
+        legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
+        na_in_legend = legend_params.get("na_in_legend", na_in_legend)
+
+    if legend_loc == "on data":
+        raise ValueError("legend_loc='on data' is not supported in spatialdata-plot.")
+
+    return LegendParams(
+        legend_fontsize=legend_fontsize,
+        legend_fontweight=legend_fontweight,
+        legend_loc=legend_loc,
+        legend_fontoutline=legend_fontoutline,
+        na_in_legend=na_in_legend,
+        colorbar=colorbar,
+        legend_title=legend_title,
+        outline_legend_title=outline_legend_title,
+    )
+
+
+def _draw_colorbar(
+    spec: ColorbarSpec,
+    fig: Figure,
+    renderer: RendererBase,
+    base_offsets_axes: dict[str, float],
+    trackers_axes: dict[str, float],
+    colorbar_params: dict[str, object] | None,
+) -> None:
+    """Draw a single colorbar inset against ``spec.ax`` and update the side-offset trackers.
+
+    ``trackers_axes`` accumulates, per side, how far out colorbars already extend so successive
+    colorbars on the same side stack instead of overlapping.
+    """
+    norm = spec.mappable.norm
+    if isinstance(norm, LogNorm):
+        vmin, vmax = norm.vmin, norm.vmax
+        if vmin is None or vmax is None or vmin <= 0 or vmin >= vmax:
+            warnings.warn(
+                "Data contains zeros or non-positive values; colorbar suppressed for `LogNorm`. "
+                "Pass `colorbar=False` to silence this warning, or clip the data to positive values.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
+
+    base_layout = {
+        "location": CBAR_DEFAULT_LOCATION,
+        "fraction": CBAR_DEFAULT_FRACTION,
+        "pad": CBAR_DEFAULT_PAD,
+    }
+    layer_layout, layer_kwargs, layer_label_override = _split_colorbar_params(spec.params)
+    global_layout, global_kwargs, global_label_override = _split_colorbar_params(colorbar_params)
+    layout = {**base_layout, **layer_layout, **global_layout}
+    cbar_kwargs = {**layer_kwargs, **global_kwargs}
+
+    location = cast(str, layout.get("location", base_layout["location"]))
+    if location not in {"left", "right", "top", "bottom"}:
+        location = CBAR_DEFAULT_LOCATION
+    default_orientation = "vertical" if location in {"right", "left"} else "horizontal"
+    cbar_kwargs.setdefault("orientation", default_orientation)
+
+    fraction = float(cast(float | int, layout.get("fraction", base_layout["fraction"])))
+    pad = float(cast(float | int, layout.get("pad", base_layout["pad"])))
+
+    if location in {"left", "right"}:
+        pad_axes = pad + trackers_axes[location]
+        x0 = -pad_axes - fraction if location == "left" else 1 + pad_axes
+        bbox = (float(x0), 0.0, float(fraction), 1.0)
+    else:
+        pad_axes = pad + trackers_axes[location]
+        y0 = -pad_axes - fraction if location == "bottom" else 1 + pad_axes
+        bbox = (0.0, float(y0), 1.0, float(fraction))
+    cax = inset_axes(
+        spec.ax,
+        width="100%",
+        height="100%",
+        loc="center",
+        bbox_to_anchor=bbox,
+        bbox_transform=spec.ax.transAxes,
+        borderpad=0.0,
+    )
+
+    cb = fig.colorbar(spec.mappable, cax=cax, **cbar_kwargs)
+    if location == "left":
+        cb.ax.yaxis.set_ticks_position("left")
+        cb.ax.yaxis.set_label_position("left")
+        cb.ax.tick_params(labelleft=True, labelright=False)
+    elif location == "top":
+        cb.ax.xaxis.set_ticks_position("top")
+        cb.ax.xaxis.set_label_position("top")
+        cb.ax.tick_params(labeltop=True, labelbottom=False)
+    elif location == "right":
+        cb.ax.yaxis.set_ticks_position("right")
+        cb.ax.yaxis.set_label_position("right")
+        cb.ax.tick_params(labelright=True, labelleft=False)
+    elif location == "bottom":
+        cb.ax.xaxis.set_ticks_position("bottom")
+        cb.ax.xaxis.set_label_position("bottom")
+        cb.ax.tick_params(labelbottom=True, labeltop=False)
+
+    final_label = global_label_override or layer_label_override or spec.label
+    if final_label:
+        cb.set_label(final_label)
+    if spec.alpha is not None:
+        with contextlib.suppress(Exception):
+            cb.solids.set_alpha(spec.alpha)
+    bbox_axes = cb.ax.get_tightbbox(renderer).transformed(spec.ax.transAxes.inverted())
+    if location == "left":
+        trackers_axes["left"] = pad_axes + bbox_axes.width
+    elif location == "right":
+        trackers_axes["right"] = pad_axes + bbox_axes.width
+    elif location == "bottom":
+        trackers_axes["bottom"] = pad_axes + bbox_axes.height
+    elif location == "top":
+        trackers_axes["top"] = pad_axes + bbox_axes.height
+
+
+def _layout_pending_colorbars(
+    pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]],
+    fig_params: FigParams,
+    colorbar_params: dict[str, object] | None,
+) -> None:
+    """Second-pass colorbar layout, run once the canvas geometry is known.
+
+    For each axis, deduplicates colorbar requests by mappable, seeds the per-side offset
+    trackers from the axis' tight bounding box, and draws each colorbar so they stack outward
+    without overlapping the axis content.
+    """
+    if not (pending_colorbars and fig_params.fig is not None):
+        return
+
+    fig = fig_params.fig
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for axis, requests in pending_colorbars:
+        unique_specs: list[ColorbarSpec] = []
+        seen_mappables: set[int] = set()
+        for spec in requests:
+            mappable_id = id(spec.mappable)
+            if mappable_id in seen_mappables:
+                continue
+            seen_mappables.add(mappable_id)
+            unique_specs.append(spec)
+        tight_bbox = axis.get_tightbbox(renderer).transformed(axis.transAxes.inverted())
+        base_offsets_axes = {
+            "left": max(0.0, -tight_bbox.x0),
+            "right": max(0.0, tight_bbox.x1 - 1),
+            "bottom": max(0.0, -tight_bbox.y0),
+            "top": max(0.0, tight_bbox.y1 - 1),
+        }
+        trackers_axes = {k: base_offsets_axes[k] for k in base_offsets_axes}
+        for spec in unique_specs:
+            _draw_colorbar(spec, fig, renderer, base_offsets_axes, trackers_axes, colorbar_params)
