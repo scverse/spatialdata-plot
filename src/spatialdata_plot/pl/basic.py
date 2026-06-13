@@ -1373,31 +1373,31 @@ class PlotAccessor:
             ) from e
 
         _validate_show_parameters(
-            coordinate_systems,
-            legend_fontsize,
-            legend_fontweight,
-            legend_loc,
-            legend_fontoutline,
-            na_in_legend,
-            colorbar,
-            colorbar_params,
-            wspace,
-            hspace,
-            ncols,
-            frameon,
-            figsize,
-            dpi,
-            fig,
-            title,
-            pad_extent,
-            ax,
-            return_ax,
-            save,
-            show,
-            scalebar_dx,
-            scalebar_units,
-            scalebar_params,
-            legend_params,
+            coordinate_systems=coordinate_systems,
+            legend_fontsize=legend_fontsize,
+            legend_fontweight=legend_fontweight,
+            legend_loc=legend_loc,
+            legend_fontoutline=legend_fontoutline,
+            na_in_legend=na_in_legend,
+            colorbar=colorbar,
+            colorbar_params=colorbar_params,
+            wspace=wspace,
+            hspace=hspace,
+            ncols=ncols,
+            frameon=frameon,
+            figsize=figsize,
+            dpi=dpi,
+            fig=fig,
+            title=title,
+            pad_extent=pad_extent,
+            ax=ax,
+            return_ax=return_ax,
+            save=save,
+            show=show,
+            scalebar_dx=scalebar_dx,
+            scalebar_units=scalebar_units,
+            scalebar_params=scalebar_params,
+            legend_params=legend_params,
         )
 
         if fig is not None:
@@ -1412,36 +1412,9 @@ class PlotAccessor:
         sdata = self._copy()
 
         # Evaluate execution tree for plotting
-        valid_commands = [
-            "render_images",
-            "render_shapes",
-            "render_labels",
-            "render_points",
-            "render_graph",
-        ]
+        render_cmds = _collect_render_commands(plotting_tree)
 
-        # prepare rendering params
-        render_cmds = []
-        for cmd, params in plotting_tree.items():
-            # strip prefix from cmd and verify it's valid
-            cmd = "_".join(cmd.split("_")[1:])
-
-            if cmd not in valid_commands:
-                raise ValueError(f"Command {cmd} is not valid.")
-
-            if "render" in cmd:
-                # verify that rendering commands have been called before
-                render_cmds.append((cmd, params))
-
-        if not render_cmds:
-            raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
-
-        if title is not None:
-            if isinstance(title, str):
-                title = [title]
-
-            if not all(isinstance(t, str) for t in title):
-                raise TypeError("All titles must be strings.")
+        title = _normalize_title(title)
 
         # Track whether the caller supplied their own axes so we can skip
         # plt.show() later (ax is reassigned inside the rendering loop).
@@ -1888,3 +1861,54 @@ class PlotAccessor:
         if show:
             plt.show()
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
+
+
+# Render commands queued on the plotting tree, as ``(command_name, render_params)`` pairs.
+_RenderCmd = tuple[
+    str,
+    ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams | GraphRenderParams,
+]
+
+
+def _collect_render_commands(plotting_tree: OrderedDict[str, Any]) -> list[_RenderCmd]:
+    """Extract and validate the queued ``render_*`` commands from the plotting tree.
+
+    Each tree key is prefixed with its execution step (e.g. ``"1_render_images"``); the prefix
+    is stripped and the bare command validated. Raises if an unknown command is present or if no
+    render command was queued at all.
+    """
+    valid_commands = [
+        "render_images",
+        "render_shapes",
+        "render_labels",
+        "render_points",
+        "render_graph",
+    ]
+
+    render_cmds: list[_RenderCmd] = []
+    for cmd, params in plotting_tree.items():
+        # strip the step-index prefix from cmd and verify it's valid
+        cmd = "_".join(cmd.split("_")[1:])
+
+        if cmd not in valid_commands:
+            raise ValueError(f"Command {cmd} is not valid.")
+
+        if "render" in cmd:
+            # verify that rendering commands have been called before
+            render_cmds.append((cmd, params))
+
+    if not render_cmds:
+        raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
+
+    return render_cmds
+
+
+def _normalize_title(title: list[str] | str | None) -> list[str] | None:
+    """Normalize the ``title`` argument to a list of strings (or ``None``)."""
+    if title is None:
+        return None
+    if isinstance(title, str):
+        title = [title]
+    if not all(isinstance(t, str) for t in title):
+        raise TypeError("All titles must be strings.")
+    return title
