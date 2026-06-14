@@ -33,14 +33,10 @@ from xarray import DataTree
 
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._datashader import (
-    _apply_ds_norm,
-    _build_color_key,
     _build_ds_colorbar,
-    _ds_aggregate,
-    _ds_shade_categorical,
-    _ds_shade_continuous,
     _render_ds_image,
     _render_ds_outlines,
+    _shade_datashader_aggregate,
 )
 from spatialdata_plot.pl.render_params import (
     ChannelLegendEntry,
@@ -259,6 +255,32 @@ def _warn_missing_groups(
         )
 
 
+def _warn_groups(
+    groups: str | list[str] | None,
+    color_source_vector: pd.Categorical | None,
+    col_for_color: str | None,
+) -> None:
+    """Emit the two groups-related warnings every ``_render_*`` preamble shares."""
+    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
+    if groups is not None and color_source_vector is not None:
+        _warn_missing_groups(groups, color_source_vector, col_for_color)
+
+
+def _maybe_apply_transfunc(
+    color_source_vector: pd.Categorical | None,
+    color_vector: Any,
+    transfunc: abc.Callable[[Any], Any] | None,
+) -> Any:
+    """Apply ``transfunc`` to a continuous ``color_vector``; no-op when categorical or unset.
+
+    ``color_source_vector is None`` marks continuous coloring (it is the materialized categorical
+    source otherwise), so the transform only runs on continuous values.
+    """
+    if color_source_vector is None and transfunc is not None:
+        return transfunc(color_vector)
+    return color_vector
+
+
 def _filter_groups_transparent_na(
     groups: str | list[str],
     color_source_vector: pd.Categorical,
@@ -358,8 +380,15 @@ def _add_legend_and_colorbar(
     outline_color_source_vector: pd.Series | None = None,
     outline_color_vector: Any | None = None,
     outline_cmap_params: CmapParams | None = None,
+    is_continuous_override: bool | None = None,
+    na_in_legend_override: bool | None = None,
 ) -> None:
-    """Add legend and colorbar decorations if the color vector warrants them."""
+    """Add legend and colorbar decorations if the color vector warrants them.
+
+    ``is_continuous_override`` / ``na_in_legend_override`` let labels supply its renderer-specific
+    values (it tracks ``categorical`` separately and adjusts ``na_in_legend`` for groups) while sharing
+    this body; when ``None`` the shapes/points defaults apply.
+    """
     fill_has_decorations = _want_decorations(color_vector, na_color) and col_for_color is not None
     outline_has_decorations = outline_col_for_color is not None and (
         outline_color_source_vector is not None or outline_color_vector is not None
@@ -377,7 +406,9 @@ def _add_legend_and_colorbar(
     wants_colorbar = _should_request_colorbar(
         colorbar,
         has_mappable=cax is not None,
-        is_continuous=col_for_color is not None and color_source_vector is None,
+        is_continuous=is_continuous_override
+        if is_continuous_override is not None
+        else (col_for_color is not None and color_source_vector is None),
     )
 
     if fill_has_decorations:
@@ -404,7 +435,7 @@ def _add_legend_and_colorbar(
             legend_fontweight=legend_params.legend_fontweight,
             legend_loc=legend_params.legend_loc,
             legend_fontoutline=legend_params.legend_fontoutline,
-            na_in_legend=legend_params.na_in_legend,
+            na_in_legend=na_in_legend_override if na_in_legend_override is not None else legend_params.na_in_legend,
             colorbar=wants_colorbar and legend_params.colorbar,
             colorbar_params=colorbar_params,
             colorbar_requests=colorbar_requests,
@@ -690,10 +721,7 @@ def _render_shapes(
                 _n_shapes,
             )
 
-    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
-
-    if groups is not None and color_source_vector is not None:
-        _warn_missing_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, color_source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
@@ -711,9 +739,7 @@ def _render_shapes(
                 outline_color_vector, outline_color_source_vector, keep
             )
 
-    # color_source_vector is None when the values aren't categorical
-    if not values_are_categorical and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
+    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
 
     norm = copy(render_params.cmap_params.norm)
 
@@ -876,47 +902,20 @@ def _render_shapes(
                 cat_series = cat_series.astype("category")
             transformed_element[col_for_color] = cat_series
 
-        agg, reduction_bounds, nan_agg = _ds_aggregate(
+        shaded, nan_shaded, reduction_bounds, color_vector = _shade_datashader_aggregate(
             cvs,
             transformed_element,
-            col_for_color,
-            color_by_categorical,
-            render_params.ds_reduction,
-            _default_reduction,
-            "shapes",
+            col_for_color=col_for_color,
+            color_vector=color_vector,
+            color_by_categorical=color_by_categorical,
+            norm=norm,
+            cmap=render_params.cmap_params.cmap,
+            na_color=render_params.cmap_params.na_color,
+            alpha=render_params.fill_alpha,
+            ds_reduction=render_params.ds_reduction,
+            default_reduction=_default_reduction,
+            kind="shapes",
         )
-
-        agg, color_span = _apply_ds_norm(agg, norm)
-        na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
-        if render_params.cmap_params.na_color.is_fully_transparent():
-            nan_agg = None
-        color_key = _build_color_key(
-            transformed_element,
-            col_for_color,
-            color_by_categorical,
-            color_vector,
-            na_color_hex,
-        )
-
-        nan_shaded = None
-        if color_by_categorical or col_for_color is None:
-            shaded = _ds_shade_categorical(
-                agg,
-                color_key,
-                color_vector,
-                render_params.fill_alpha,
-            )
-        else:
-            shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
-                agg,
-                color_span,
-                norm,
-                render_params.cmap_params.cmap,
-                render_params.fill_alpha,
-                reduction_bounds,
-                nan_agg,
-                na_color_hex,
-            )
 
         _render_ds_outlines(
             cvs,
@@ -1277,7 +1276,9 @@ def _datashader_points(
             if isinstance(color_vector, dd.Series):
                 color_vector = color_vector.compute()
             series = color_vector
-        df[col_for_color] = series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
+        df[col_for_color] = (
+            series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
+        )
 
     color_dtype = df[col_for_color].dtype if col_for_color is not None else None
     color_by_categorical = col_for_color is not None and (
@@ -1289,65 +1290,25 @@ def _datashader_points(
     if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
         df[col_for_color] = df[col_for_color].astype("category")
 
-    agg, reduction_bounds, nan_agg = _ds_aggregate(
+    shaded, nan_shaded, reduction_bounds, color_vector = _shade_datashader_aggregate(
         cvs,
         df,
-        col_for_color,
-        color_by_categorical,
-        ds_reduction,
-        default_reduction,
-        "points",
+        col_for_color=col_for_color,
+        color_vector=color_vector,
+        color_by_categorical=color_by_categorical,
+        norm=norm,
+        cmap=cmap_params.cmap,
+        na_color=cmap_params.na_color,
+        alpha=alpha,
+        ds_reduction=ds_reduction,
+        default_reduction=default_reduction,
+        kind="points",
+        spread_px=px,
+        shade_how=density_how if density else "linear",
+        density=density,
+        uniform_alpha=as_markers,
+        strip_alpha_hex=True,
     )
-
-    agg, color_span = _apply_ds_norm(agg, norm)
-    na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
-    if cmap_params.na_color.is_fully_transparent():
-        nan_agg = None
-    color_key = _build_color_key(df, col_for_color, color_by_categorical, color_vector, na_color_hex)
-
-    if (
-        color_vector is not None
-        and len(color_vector) > 0
-        and isinstance(color_vector[0], str)
-        and color_vector[0].startswith("#")
-    ):
-        # color_vector usually holds only a few distinct hex strings (one per category), so strip
-        # alpha on the unique values and map back rather than parsing once per point.
-        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
-
-    shade_how = density_how if density else "linear"
-    # Plain density (no color column) uses the cmap as a sequential gradient over counts; the
-    # categorical path collapses to a single color and only modulates alpha.
-    plain_density = density and col_for_color is None
-
-    nan_shaded = None
-    if not plain_density and (color_by_categorical or col_for_color is None):
-        shaded = _ds_shade_categorical(
-            agg,
-            color_key,
-            color_vector,
-            alpha,
-            spread_px=px,
-            how=shade_how,
-            density=density,
-            uniform_alpha=as_markers,
-        )
-    else:
-        shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
-            agg,
-            color_span,
-            norm,
-            cmap_params.cmap,
-            alpha,
-            reduction_bounds,
-            nan_agg,
-            na_color_hex,
-            spread_px=px,
-            ds_reduction=ds_reduction,
-            how=shade_how,
-            uniform_alpha=as_markers,
-        )
 
     _render_ds_image(ax, shaded, factor, zorder, x_min=x_ext[0], y_min=y_ext[0], nan_result=nan_shaded)
     cax = _build_ds_colorbar(reduction_bounds, norm, cmap_params.cmap)
@@ -1523,10 +1484,7 @@ def _render_points(
             col_for_color,
         )
 
-    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
-
-    if groups is not None and color_source_vector is not None:
-        _warn_missing_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, color_source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
@@ -1543,9 +1501,7 @@ def _render_points(
         adata = adata[keep]
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
-    # color_source_vector is None when the values aren't categorical
-    if color_source_vector is None and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
+    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
@@ -2400,10 +2356,7 @@ def _render_labels(
                 outline_color_vector, outline_color_source_vector, mask
             )
 
-    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
-
-    if groups is not None and color_source_vector is not None:
-        _warn_missing_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, color_source_vector, col_for_color)
 
     # When groups are specified, zero out non-matching label IDs so they render as background.
     # Only show non-matching labels if the user explicitly sets na_color.
@@ -2429,9 +2382,7 @@ def _render_labels(
                 outline_color_vector, outline_color_source_vector, keep_vec
             )
 
-    # color_source_vector is None when the values aren't categorical
-    if color_source_vector is None and render_params.transfunc is not None:
-        color_vector = render_params.transfunc(color_vector)
+    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
 
     if render_params.as_points:
         # Fast mode: one dot per label at its centroid. Compute on the *rendered* raster (already
@@ -2573,60 +2524,30 @@ def _render_labels(
     else:
         raise ValueError("Parameters 'fill_alpha' and 'outline_alpha' cannot both be 0.")
 
-    colorbar_requested = _should_request_colorbar(
-        render_params.colorbar,
-        has_mappable=cax is not None,
-        is_continuous=col_for_color is not None and color_source_vector is None and not categorical,
-    )
-
-    # Auto-title the fill legend only when an outline legend will also be drawn.
-    outline_legend_will_render = col_for_outline_color is not None and outline_color_source_vector is not None
-    if legend_params.legend_title is not None:
-        fill_title: str | None = legend_params.legend_title or None
-    elif outline_legend_will_render and color_source_vector is not None:
-        fill_title = "fill"
-    else:
-        fill_title = None
-    _ = _decorate_axs(
+    # Labels track `categorical` separately and tweak `na_in_legend` for groups, so pass those through
+    # the overrides; everything else (fill/outline legends, colorbar request, auto-title) is shared.
+    _add_legend_and_colorbar(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
         adata=table,
-        value_to_plot=col_for_color,
+        col_for_color=col_for_color,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
         alpha=alpha_to_decorate_ax,
         na_color=render_params.cmap_params.na_color,
-        legend_fontsize=legend_params.legend_fontsize,
-        legend_fontweight=legend_params.legend_fontweight,
-        legend_loc=legend_params.legend_loc,
-        legend_fontoutline=legend_params.legend_fontoutline,
-        na_in_legend=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
-        colorbar=colorbar_requested and legend_params.colorbar,
+        legend_params=legend_params,
+        colorbar=render_params.colorbar,
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
-        colorbar_label=_resolve_colorbar_label(
-            render_params.colorbar_params,
-            col_for_color if isinstance(col_for_color, str) else None,
-        ),
-        legend_title=fill_title,
+        outline_col_for_color=col_for_outline_color,
+        outline_color_source_vector=outline_color_source_vector,
+        outline_color_vector=outline_color_vector,
+        outline_cmap_params=render_params.cmap_params,
+        is_continuous_override=col_for_color is not None and color_source_vector is None and not categorical,
+        na_in_legend_override=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
     )
-
-    if col_for_outline_color is not None:
-        _decorate_outline(
-            ax=ax,
-            fig_params=fig_params,
-            outline_col=col_for_outline_color,
-            outline_color_source_vector=outline_color_source_vector,
-            outline_color_vector=outline_color_vector,
-            cmap_params=render_params.cmap_params,
-            colorbar_params=render_params.colorbar_params,
-            colorbar_requests=colorbar_requests,
-            legend_params=legend_params,
-            fill_has_legend=col_for_color is not None and color_source_vector is not None,
-            alpha=alpha_to_decorate_ax,
-        )
 
 
 def _normalise_to_range(values: np.ndarray, lo: float, hi: float) -> np.ndarray:

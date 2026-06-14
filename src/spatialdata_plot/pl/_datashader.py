@@ -321,6 +321,90 @@ def _ds_shade_categorical(
     return _apply_user_alpha(shaded, alpha)
 
 
+def _shade_datashader_aggregate(
+    cvs: ds.Canvas,
+    frame: Any,
+    *,
+    col_for_color: str | None,
+    color_vector: Any,
+    color_by_categorical: bool,
+    norm: Normalize | None,
+    cmap: Any,
+    na_color: Color,
+    alpha: float,
+    ds_reduction: _DsReduction | None,
+    default_reduction: _DsReduction,
+    kind: Literal["shapes", "points"],
+    spread_px: int | None = None,
+    shade_how: str = "linear",
+    density: bool = False,
+    uniform_alpha: bool = False,
+    strip_alpha_hex: bool = False,
+) -> tuple[Any, Any | None, tuple[Any, Any] | None, Any]:
+    """Aggregate ``frame`` over ``cvs`` and shade it; the core shared by shapes and points.
+
+    Runs the steps every datashader caller repeats: ``_ds_aggregate`` -> ``_apply_ds_norm`` ->
+    transparent-NA guard -> ``_build_color_key`` -> categorical/continuous shade dispatch. Returns
+    ``(shaded, nan_shaded, reduction_bounds, color_vector)``; ``color_vector`` is returned because the
+    points path strips hex alpha off it and the caller's legend must match. Callers keep their
+    element-specific prep (geometry transform / point parse), outline rendering, ``_render_ds_image``
+    and ``_build_ds_colorbar``.
+    """
+    agg, reduction_bounds, nan_agg = _ds_aggregate(
+        cvs, frame, col_for_color, color_by_categorical, ds_reduction, default_reduction, kind
+    )
+    agg, color_span = _apply_ds_norm(agg, norm)
+    na_color_hex = _hex_no_alpha(na_color.get_hex())
+    if na_color.is_fully_transparent():
+        nan_agg = None
+    color_key = _build_color_key(frame, col_for_color, color_by_categorical, color_vector, na_color_hex)
+
+    if (
+        strip_alpha_hex
+        and color_vector is not None
+        and len(color_vector) > 0
+        and isinstance(color_vector[0], str)
+        and color_vector[0].startswith("#")
+    ):
+        # color_vector usually holds only a few distinct hex strings (one per category), so strip
+        # alpha on the unique values and map back rather than parsing once per point.
+        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
+        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
+
+    # density without a color column collapses to a sequential count gradient; everything else with no
+    # explicit continuous value (categorical or no color) goes through the categorical shader.
+    plain_density = density and col_for_color is None
+    nan_shaded = None
+    if not plain_density and (color_by_categorical or col_for_color is None):
+        shaded = _ds_shade_categorical(
+            agg,
+            color_key,
+            color_vector,
+            alpha,
+            spread_px=spread_px,
+            how=shade_how,
+            density=density,
+            uniform_alpha=uniform_alpha,
+        )
+    else:
+        shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
+            agg,
+            color_span,
+            norm,
+            cmap,
+            alpha,
+            reduction_bounds,
+            nan_agg,
+            na_color_hex,
+            spread_px=spread_px,
+            ds_reduction=ds_reduction,
+            how=shade_how,
+            uniform_alpha=uniform_alpha,
+        )
+
+    return shaded, nan_shaded, reduction_bounds, color_vector
+
+
 # ---------------------------------------------------------------------------
 # Image rendering
 # ---------------------------------------------------------------------------
