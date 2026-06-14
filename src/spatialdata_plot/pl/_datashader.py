@@ -38,10 +38,12 @@ from spatialdata.transformations.transformations import Sequence as TransformSeq
 from xarray import DataArray
 
 from spatialdata_plot._logging import logger
+from spatialdata_plot.pl._color import (
+    _make_continuous_mappable,
+)
 from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams, _DsReduction
 from spatialdata_plot.pl.utils import (
     _fast_extent,
-    _make_continuous_mappable,
     to_hex,
 )
 

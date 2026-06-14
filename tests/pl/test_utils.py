@@ -18,7 +18,7 @@ from spatialdata_plot.pl._datashader import (
     _datashader_map_aggregate_to_color,
 )
 from spatialdata_plot.pl.render_params import Color, ColorLike
-from spatialdata_plot.pl.utils import (
+from spatialdata_plot.pl._color import (
     _set_outline,
     set_zero_in_cmap_to_transparent,
 )
@@ -164,7 +164,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
 def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
-    assert spatialdata_plot.pl.utils._is_color_like(color) == result
+    assert spatialdata_plot.pl._color._is_color_like(color) == result
 
 
 @pytest.mark.parametrize(
@@ -760,7 +760,7 @@ class TestExtractColorColumn:
     def test_matches_get_values(self, key: str, origin: str):
         from spatialdata import get_values
 
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes()
         old = pd.Series(get_values(value_key=key, sdata=sdata, element_name="shapes", table_name="table")[key])
@@ -775,7 +775,7 @@ class TestExtractColorColumn:
     def test_shuffled_table_order_realigns(self):
         from spatialdata import get_values
 
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes(shuffle=True)
         old = pd.Series(get_values(value_key="g0", sdata=sdata, element_name="shapes", table_name="table")["g0"])
@@ -783,7 +783,7 @@ class TestExtractColorColumn:
         np.testing.assert_allclose(old.to_numpy(float), new.to_numpy(float))
 
     def test_missing_instances_become_nan(self):
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes(drop=5)  # 5 shapes have no annotating table row
         new = _extract_color_column(sdata["table"], "g0", origin="var", element=sdata["shapes"], element_name="shapes")

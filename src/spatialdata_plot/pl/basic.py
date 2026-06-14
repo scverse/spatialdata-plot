@@ -23,13 +23,17 @@ from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot._logging import _log_context, logger
+from spatialdata_plot.pl._color import (
+    _maybe_set_colors,
+    _prepare_cmap_norm,
+    _set_outline,
+)
 from spatialdata_plot.pl.render import (
     _draw_channel_legend,
     _render_graph,
@@ -67,11 +71,8 @@ from spatialdata_plot.pl.utils import (
     _get_extent_fast,
     _get_valid_cs,
     _get_wanted_render_elements,
-    _maybe_set_colors,
     _mpl_ax_contains_elements,
-    _prepare_cmap_norm,
     _prepare_params_plot,
-    _set_outline,
     _validate_as_points_size,
     _validate_graph_render_params,
     _validate_image_render_params,

@@ -32,6 +32,18 @@ from spatialdata.transformations.transformations import Identity
 from xarray import DataTree
 
 from spatialdata_plot._logging import _log_context, logger
+from spatialdata_plot.pl._color import (
+    _align_outline_vector_to_length,
+    _apply_mask_to_outline_vectors,
+    _color_vector_to_rgba,
+    _get_colors_for_categorical_obs,
+    _get_linear_colormap,
+    _make_continuous_mappable,
+    _map_color_seg,
+    _maybe_set_colors,
+    _prepare_cmap_norm,
+    _set_color_source_vec,
+)
 from spatialdata_plot.pl._datashader import (
     _apply_ds_norm,
     _ax_show_and_transform,
@@ -68,25 +80,15 @@ from spatialdata_plot.pl.render_params import (
     _DsReduction,
 )
 from spatialdata_plot.pl.utils import (
-    _align_outline_vector_to_length,
-    _apply_mask_to_outline_vectors,
     _check_obs_var_shadow,
-    _color_vector_to_rgba,
     _decorate_axs,
     _fast_extent,
-    _get_colors_for_categorical_obs,
-    _get_linear_colormap,
     _join_table_for_element,
-    _make_continuous_mappable,
-    _map_color_seg,
-    _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
     _pixel_to_coord,
-    _prepare_cmap_norm,
     _rasterize_if_necessary,
     _rasterize_if_necessary_datashader,
-    _set_color_source_vec,
     _stream_label_centroid_stats,
 )
 
