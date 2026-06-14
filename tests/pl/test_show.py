@@ -136,6 +136,24 @@ def test_fig_parameter_default_no_warning(sdata_blobs: SpatialData):
     plt.close("all")
 
 
+def test_title_count_validation(sdata_blobs: SpatialData):
+    """title must be length 1 or one-per-panel; mismatches raise up front (regression for #695)."""
+    base = sdata_blobs.pl.render_images(element="blobs_image")
+    with pytest.raises(ValueError, match="number of titles"):  # single panel, too many
+        base.pl.show(title=["a", "b"], show=False)
+    plt.close("all")
+
+    set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
+    base2 = sdata_blobs.pl.render_images(element="blobs_image")
+    with pytest.raises(ValueError, match="number of titles"):  # 2 panels, too many (was silently truncated)
+        base2.pl.show(title=["a", "b", "c"], show=False)
+    plt.close("all")
+
+    axs = base2.pl.show(title=["left", "right"], return_ax=True, show=False)  # one per panel -> applied
+    assert sorted(a.get_title() for a in axs) == ["left", "right"]
+    plt.close("all")
+
+
 def test_fig_parameter_warns_with_ax_list(sdata_blobs: SpatialData):
     """Passing fig= alongside a list of axes should also emit the deprecation (regression for #625)."""
     set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
