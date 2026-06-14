@@ -21,6 +21,7 @@ from matplotlib import colors, patheffects, rcParams
 from matplotlib.axes import Axes
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import (
+    Colormap,
     ListedColormap,
 )
 from matplotlib.figure import Figure
@@ -1207,6 +1208,28 @@ def _resolve_measure_table(sdata: SpatialData, element_name: str, table_name: st
             f"pass `table_name=` to pick one."
         )
     return str(annotators[0])
+
+
+def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
+    """
+    Modify colormap so that 0s are transparent.
+
+    Parameters
+    ----------
+    cmap (Colormap | str): A matplotlib Colormap instance or a colormap name string.
+    steps (int): The number of steps in the colormap.
+
+    Returns
+    -------
+    ListedColormap: A new colormap instance with modified alpha values.
+    """
+    if isinstance(cmap, str):
+        cmap = plt.get_cmap(cmap)
+
+    colors = cmap(np.arange(steps or cmap.N))
+    colors[0, :] = [1.0, 1.0, 1.0, 0.0]
+
+    return ListedColormap(colors)
 
 
 def measure_obs(

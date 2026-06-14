@@ -18,10 +18,8 @@ from spatialdata_plot.pl._datashader import (
     _datashader_map_aggregate_to_color,
 )
 from spatialdata_plot.pl.render_params import Color, ColorLike
-from spatialdata_plot.pl._color import (
-    _set_outline,
-    set_zero_in_cmap_to_transparent,
-)
+from spatialdata_plot.pl._color import _set_outline
+from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()

@@ -7,7 +7,6 @@ from copy import copy
 from typing import Any, Literal
 
 import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import spatialdata as sd
@@ -1211,25 +1210,3 @@ def _maybe_set_colors(
 
 def _get_linear_colormap(colors: list[str], background: str) -> list[LinearSegmentedColormap]:
     return [LinearSegmentedColormap.from_list(c, [background, c], N=256) for c in colors]
-
-
-def set_zero_in_cmap_to_transparent(cmap: Colormap | str, steps: int | None = None) -> ListedColormap:
-    """
-    Modify colormap so that 0s are transparent.
-
-    Parameters
-    ----------
-    cmap (Colormap | str): A matplotlib Colormap instance or a colormap name string.
-    steps (int): The number of steps in the colormap.
-
-    Returns
-    -------
-    ListedColormap: A new colormap instance with modified alpha values.
-    """
-    if isinstance(cmap, str):
-        cmap = plt.get_cmap(cmap)
-
-    colors = cmap(np.arange(steps or cmap.N))
-    colors[0, :] = [1.0, 1.0, 1.0, 0.0]
-
-    return ListedColormap(colors)
