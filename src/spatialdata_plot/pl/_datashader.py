@@ -5,7 +5,6 @@ Shared by ``_render_shapes`` and ``_render_points`` in ``render.py``.
 
 from __future__ import annotations
 
-from copy import copy
 from typing import Any, Literal
 
 import dask
@@ -588,7 +587,7 @@ def _render_ds_outline_by_column(
         )
         # Apply the user-provided norm (vmin/vmax) the same way the fill path does so
         # an explicit Normalize takes effect for the outline cmap.
-        norm = copy(cmap_params.norm)
+        norm = cmap_params.fresh_norm()
         agg_outline, color_span = _apply_ds_norm(agg_outline, norm)
         shaded = ds.tf.shade(
             agg_outline,

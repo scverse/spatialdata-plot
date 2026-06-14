@@ -13,11 +13,12 @@ import shapely
 from geopandas import GeoDataFrame
 from matplotlib import colors
 from matplotlib.collections import PatchCollection
-from matplotlib.colors import ColorConverter, Normalize
+from matplotlib.colors import ColorConverter
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 
 from spatialdata_plot._logging import logger
+from spatialdata_plot.pl._color import _resolve_continuous_norm
 from spatialdata_plot.pl.render_params import ShapesRenderParams
 from spatialdata_plot.pl.utils import _extract_scalar_value
 
@@ -167,7 +168,6 @@ def _get_collection_shape(
     shapes: list[GeoDataFrame],
     c: Any,
     s: float,
-    norm: Any,
     render_params: ShapesRenderParams,
     fill_alpha: None | float = None,
     outline_alpha: None | float = None,
@@ -215,23 +215,11 @@ def _get_collection_shape(
     elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and np.issubdtype(c_arr.dtype, np.number):
         finite_mask = np.isfinite(c_arr)
 
-        # Select or build a normalization that ignores NaNs for scaling
-        if isinstance(norm, Normalize):
-            used_norm: Normalize = norm
-        else:
-            if finite_mask.any():
-                vmin = float(np.nanmin(c_arr[finite_mask]))
-                vmax = float(np.nanmax(c_arr[finite_mask]))
-                if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
-                    vmin, vmax = 0.0, 1.0
-            else:
-                vmin, vmax = 0.0, 1.0
-            used_norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
-
-        # Map finite values through cmap(norm(.)); NaNs get na_color
+        # Map finite values through cmap(norm(.)); NaNs get na_color.
         fill_c = np.empty((len(c_arr), 4), dtype=float)
         fill_c[:] = na_rgba
         if finite_mask.any():
+            used_norm = _resolve_continuous_norm(c_arr, render_params.cmap_params)
             fill_c[finite_mask] = cmap(used_norm(c_arr[finite_mask]))
 
     elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and c_arr.dtype == object:
@@ -246,14 +234,7 @@ def _get_collection_shape(
 
         # numeric entries via cmap(norm)
         if is_num.any():
-            if isinstance(norm, Normalize):
-                used_norm = norm
-            else:
-                vmin = float(np.nanmin(num[is_num])) if is_num.any() else 0.0
-                vmax = float(np.nanmax(num[is_num])) if is_num.any() else 1.0
-                if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
-                    vmin, vmax = 0.0, 1.0
-                used_norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
+            used_norm = _resolve_continuous_norm(num, render_params.cmap_params)
             fill_c[is_num] = cmap(used_norm(num[is_num]))
 
         # non-numeric, non-NaN entries as explicit colors

@@ -38,10 +38,10 @@ from spatialdata_plot.pl._color import (
     _color_vector_to_rgba,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
-    _make_continuous_mappable,
     _map_color_seg,
     _maybe_set_colors,
     _prepare_cmap_norm,
+    _resolve_continuous_norm,
     _set_color_source_vec,
 )
 from spatialdata_plot.pl._datashader import (
@@ -77,6 +77,7 @@ from spatialdata_plot.pl.render_params import (
     PointsRenderParams,
     ShapesRenderParams,
     _DsReduction,
+    colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
     _decorate_axs,
@@ -515,21 +516,17 @@ def _append_outline_colorbar(
 ) -> None:
     """Append a `ColorbarSpec` for a continuous outline column.
 
-    No-op when ``outline_color_vector`` has no finite values. Honors user-supplied
-    `vmin`/`vmax` on ``cmap_params.norm``; falls back to data range. Mirrors the
-    `vmin == vmax` ±0.5 expansion used by the fill colorbar.
+    No-op when ``outline_color_vector`` has no finite values; derives the bar from the same resolved
+    norm the outline pixels use.
     """
     arr = pd.to_numeric(pd.Series(np.asarray(outline_color_vector)), errors="coerce").to_numpy()
-    finite = np.isfinite(arr)
-    if not finite.any():
+    if not np.isfinite(arr).any():
         return
-    norm = cmap_params.norm
-    vmin = norm.vmin if norm.vmin is not None else float(np.nanmin(arr[finite]))
-    vmax = norm.vmax if norm.vmax is not None else float(np.nanmax(arr[finite]))
+    used_norm = _resolve_continuous_norm(outline_color_vector, cmap_params)
     colorbar_requests.append(
         ColorbarSpec(
             ax=ax,
-            mappable=_make_continuous_mappable(vmin, vmax, cmap_params.cmap),
+            mappable=ScalarMappable(norm=used_norm, cmap=cmap_params.cmap),
             params=colorbar_params,
             label=outline_col,
             alpha=alpha,
@@ -747,7 +744,7 @@ def _render_shapes(
 
     color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
 
-    norm = copy(render_params.cmap_params.norm)
+    norm = render_params.cmap_params.fresh_norm()
 
     if len(color_vector) == 0:
         color_vector = [render_params.cmap_params.na_color.get_hex_with_alpha()]
@@ -968,7 +965,6 @@ def _render_shapes(
                 render_params=render_params,
                 rasterized=sc_settings._vector_friendly,
                 cmap=None,
-                norm=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=outline_rgba,
@@ -987,7 +983,6 @@ def _render_shapes(
                 render_params=render_params,
                 rasterized=sc_settings._vector_friendly,
                 cmap=None,
-                norm=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=render_params.outline_params.outer_outline_color.get_hex(),
@@ -1008,7 +1003,6 @@ def _render_shapes(
                 render_params=render_params,
                 rasterized=sc_settings._vector_friendly,
                 cmap=None,
-                norm=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[1],
                 outline_color=render_params.outline_params.inner_outline_color.get_hex(),
@@ -1030,7 +1024,6 @@ def _render_shapes(
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
-            norm=norm,
             fill_alpha=render_params.fill_alpha,
             outline_alpha=0.0,
             zorder=render_params.zorder,
@@ -1043,25 +1036,9 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     if not values_are_categorical:
-        # Respect explicit vmin/vmax; otherwise derive from finite numeric values, falling back to [0, 1] if unavailable
-        vmin = render_params.cmap_params.norm.vmin
-        vmax = render_params.cmap_params.norm.vmax
-        if vmin is None or vmax is None:
-            numeric_values = pd.to_numeric(np.asarray(color_vector), errors="coerce")
-            finite_mask = np.isfinite(numeric_values)
-            if finite_mask.any():
-                data_min = float(np.nanmin(numeric_values[finite_mask]))
-                data_max = float(np.nanmax(numeric_values[finite_mask]))
-                if vmin is None:
-                    vmin = data_min
-                if vmax is None:
-                    vmax = data_max
-            else:
-                if vmin is None:
-                    vmin = 0.0
-                if vmax is None:
-                    vmax = 1.0
-        _cax.set_clim(vmin=vmin, vmax=vmax)
+        # Colorbar range from the same resolved norm the fill pixels use.
+        used_norm = _resolve_continuous_norm(color_vector, render_params.cmap_params)
+        _cax.set_clim(vmin=used_norm.vmin, vmax=used_norm.vmax)
 
     _add_legend_and_colorbar(
         ax=ax,
@@ -1511,7 +1488,7 @@ def _render_points(
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
-    norm = copy(render_params.cmap_params.norm)
+    norm = render_params.cmap_params.fresh_norm()
 
     method = render_params.method
 
@@ -1972,9 +1949,8 @@ def _render_images(
             else render_params.cmap_params.cmap
         )
 
-        # Overwrite alpha in cmap: https://stackoverflow.com/a/10127675
-        cmap._init()
-        cmap._lut[:, -1] = render_params.alpha
+        # Bake a uniform alpha into a fresh cmap (no shared-cmap mutation).
+        cmap = colormap_with_alpha(cmap, render_params.alpha, render_params.cmap_params.na_color.get_hex_with_alpha())
 
         # norm needs to be passed directly to ax.imshow(). If we normalize before, that method would always clip.
         _ax_show_and_transform(
@@ -2432,7 +2408,7 @@ def _render_labels(
             y=xy[:, 1],
             color_vector=point_color_vector,
             color_source_vector=point_color_source_vector,
-            norm=copy(render_params.cmap_params.norm),  # ax.scatter autoscales in place; don't mutate the shared norm
+            norm=render_params.cmap_params.fresh_norm(),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
             adata=table if table_name is not None else None,
             col_for_color=col_for_color,
@@ -2465,11 +2441,12 @@ def _render_labels(
             outline_color_source_vector=outline_color_source_vector if seg_boundaries else None,
         )
 
+        # labels is pre-baked RGB; cmap/norm only drive the colorbar, so feed the same resolved norm.
         cax = ax.imshow(
             labels,
             rasterized=True,
             cmap=None if categorical else render_params.cmap_params.cmap,
-            norm=None if categorical else render_params.cmap_params.norm,
+            norm=None if categorical else _resolve_continuous_norm(color_vector, render_params.cmap_params),
             alpha=alpha,
             origin="lower",
             zorder=render_params.zorder,
