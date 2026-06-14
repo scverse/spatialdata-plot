@@ -65,6 +65,9 @@ from spatialdata_plot.pl._geometry import (
     _get_collection_shape,
     _validate_polygons,
 )
+from spatialdata_plot.pl._validate import (
+    _check_obs_var_shadow,
+)
 from spatialdata_plot.pl.render_params import (
     ChannelLegendEntry,
     CmapParams,
@@ -80,7 +83,6 @@ from spatialdata_plot.pl.render_params import (
     _DsReduction,
 )
 from spatialdata_plot.pl.utils import (
-    _check_obs_var_shadow,
     _decorate_axs,
     _fast_extent,
     _join_table_for_element,
