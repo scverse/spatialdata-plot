@@ -1673,7 +1673,10 @@ def _resolve_coordinate_systems(
         if cs not in sdata.coordinate_systems:
             raise ValueError(f"Unknown coordinate system '{cs}', valid choices are: {sdata.coordinate_systems}")
 
-    elements_to_be_rendered = _get_elements_to_be_rendered(render_cmds, cs_index, cs)
+    # Union elements across all coordinate systems, not just the last one validated above.
+    elements_to_be_rendered = list(
+        dict.fromkeys(e for cs in coordinate_systems for e in _get_elements_to_be_rendered(render_cmds, cs_index, cs))
+    )
 
     # filter out cs without relevant elements
     cmds = [cmd for cmd, _ in render_cmds]
