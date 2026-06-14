@@ -17,7 +17,7 @@ from spatialdata_plot.pl._datashader import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
 )
-from spatialdata_plot.pl.render_params import Color, ColorLike
+from spatialdata_plot.pl.render_params import CmapParams, Color, ColorLike, colormap_with_alpha
 from spatialdata_plot.pl._color import _set_outline
 from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
@@ -810,3 +810,98 @@ def test_show_renders_all_coordinate_systems_for_distributed_elements():
     axes = axes if isinstance(axes, list) else [axes]
     assert {ax.get_title() for ax in axes} == {"cs_a", "cs_b"}
     plt.close("all")
+
+
+class TestCmapParamsMethods:
+    """Unit tests for fresh_norm and the colormap_with_alpha helper."""
+
+    @staticmethod
+    def _params(cmap_name: str = "viridis", na: Color | None = None) -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        return CmapParams(cmap=colormaps[cmap_name], norm=Normalize(vmin=0.0, vmax=1.0), na_color=na or Color())
+
+    def test_fresh_norm_is_independent_copy(self):
+        params = self._params()
+        fresh = params.fresh_norm()
+        assert fresh is not params.norm
+        assert (fresh.vmin, fresh.vmax) == (params.norm.vmin, params.norm.vmax)
+        # autoscaling the copy must not mutate the shared norm (the bug fresh_norm prevents)
+        fresh.autoscale(np.array([5.0, 10.0]))
+        assert (params.norm.vmin, params.norm.vmax) == (0.0, 1.0)
+
+    def test_colormap_with_alpha_preserves_body_and_sets_alpha(self):
+        from matplotlib import colormaps
+
+        out = colormap_with_alpha(colormaps["viridis"], 0.5, Color().get_hex_with_alpha())
+        # sample at bin centers so quantization is exact for both colormaps
+        xs = (np.arange(out.N) + 0.5) / out.N
+        got = out(xs)
+        np.testing.assert_array_equal(got[:, :3], colormaps["viridis"](xs)[:, :3])
+        np.testing.assert_allclose(got[:, 3], 0.5)
+
+    def test_colormap_with_alpha_bad_color_uses_na_with_requested_alpha(self):
+        from matplotlib import colormaps
+        from matplotlib.colors import to_rgba
+
+        na = Color()  # default lightgray, fully opaque
+        out = colormap_with_alpha(colormaps["viridis"], 0.25, na.get_hex_with_alpha())
+        bad = out(np.nan)
+        np.testing.assert_allclose(bad[:3], to_rgba(na.get_hex_with_alpha())[:3], atol=1e-6)
+        # historical `_lut[:, -1] = alpha` overwrote the bad-row alpha too
+        assert bad[3] == 0.25
+
+
+class TestResolveContinuousNorm:
+    """Unit tests for `_resolve_continuous_norm` — the single norm source feeding pixels + colorbar."""
+
+    @staticmethod
+    def _params(vmin: float | None = None, vmax: float | None = None) -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        return CmapParams(cmap=colormaps["viridis"], norm=Normalize(vmin=vmin, vmax=vmax, clip=False), na_color=Color())
+
+    def test_honors_explicit_vmin_vmax(self):
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        norm = _resolve_continuous_norm(np.array([0.0, 100.0]), self._params(vmin=10.0, vmax=20.0))
+        assert (norm.vmin, norm.vmax) == (10.0, 20.0)
+
+    def test_derives_data_range_ignoring_nan_and_inf(self):
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        norm = _resolve_continuous_norm(np.array([1.0, np.nan, 5.0, np.inf, -np.inf]), self._params())
+        assert (norm.vmin, norm.vmax) == (1.0, 5.0)
+
+    def test_all_nan_falls_back_to_unit_range(self):
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        norm = _resolve_continuous_norm(np.array([np.nan, np.nan]), self._params())
+        assert (norm.vmin, norm.vmax) == (0.0, 1.0)
+
+    def test_degenerate_range_is_not_expanded(self):
+        # behavior-preserving: a single distinct value stays degenerate (no invented +/-0.5)
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        norm = _resolve_continuous_norm(np.array([5.0, 5.0, 5.0]), self._params())
+        assert (norm.vmin, norm.vmax) == (5.0, 5.0)
+
+    def test_object_dtype_coerces_color_strings_to_nan(self):
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        norm = _resolve_continuous_norm(np.array([1.0, "red", 9.0], dtype=object), self._params())
+        assert (norm.vmin, norm.vmax) == (1.0, 9.0)
+
+    def test_same_values_give_identical_norm_and_never_mutate_shared(self):
+        # the core #699 invariant: pixels and colorbar call this with the same vector -> same result,
+        # and the shared CmapParams.norm is never autoscaled in place.
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        params = self._params()
+        vals = np.array([2.0, 7.0, np.nan, 4.0])
+        a = _resolve_continuous_norm(vals, params)
+        b = _resolve_continuous_norm(vals, params)
+        assert (a.vmin, a.vmax) == (b.vmin, b.vmax) == (2.0, 7.0)
+        assert params.norm.vmin is None and params.norm.vmax is None

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Colormap, ListedColormap, Normalize, rgb2hex, to_hex
+from matplotlib.colors import Colormap, ListedColormap, Normalize, rgb2hex, to_hex, to_rgba
 from matplotlib.figure import Figure
 
 _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", "black"]
@@ -148,6 +149,23 @@ class Color:
         return self.alpha == "00"
 
 
+def colormap_with_alpha(cmap: Colormap, alpha: float, na_color: str) -> Colormap:
+    """Return ``cmap`` rebuilt with a uniform ``alpha`` and ``na_color`` as the bad/NaN color.
+
+    Resampling at ``linspace(0, 1, N)`` is lossless (matplotlib quantizes ``__call__`` into ``N`` bins).
+    """
+    lut = cmap(np.linspace(0, 1, cmap.N))
+    lut[:, -1] = alpha
+    new = ListedColormap(lut, name=cmap.name)
+    # Apply alpha to under/over too, matching the old ``_lut[:, -1] = alpha`` (which hit every row).
+    new.set_extremes(
+        bad=[*to_rgba(na_color)[:3], alpha],
+        under=[*cmap.get_under()[:3], alpha],
+        over=[*cmap.get_over()[:3], alpha],
+    )
+    return new
+
+
 @dataclass
 class CmapParams:
     """Cmap params."""
@@ -156,6 +174,14 @@ class CmapParams:
     norm: Normalize
     na_color: Color
     cmap_is_default: bool = True
+
+    def fresh_norm(self) -> Normalize:
+        """Return a copy of ``norm`` safe to apply/autoscale without mutating the shared one.
+
+        ``Normalize.__call__`` autoscales ``vmin``/``vmax`` in place when unset, which would leak one
+        element's data range into later elements that reuse the same ``CmapParams``.
+        """
+        return copy(self.norm)
 
 
 @dataclass

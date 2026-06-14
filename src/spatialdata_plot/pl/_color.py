@@ -109,6 +109,29 @@ def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMapp
     return ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
 
 
+def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
+    """Resolve a concrete ``Normalize`` for continuous coloring.
+
+    Honor explicit ``norm`` vmin/vmax, else the finite-value data range of ``values``, else
+    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. A degenerate
+    ``vmin == vmax`` is left as-is (matplotlib expands it downstream), not reset to ``[0, 1]``.
+    """
+    base = cmap_params.norm
+    vmin, vmax = base.vmin, base.vmax
+    if vmin is None or vmax is None:
+        arr = np.asarray(values)
+        if not np.issubdtype(arr.dtype, np.number):
+            arr = pd.to_numeric(arr.ravel(), errors="coerce")
+        finite = np.isfinite(arr)
+        data_min = float(np.nanmin(arr[finite])) if finite.any() else 0.0
+        data_max = float(np.nanmax(arr[finite])) if finite.any() else 1.0
+        if vmin is None:
+            vmin = data_min
+        if vmax is None:
+            vmax = data_max
+    return Normalize(vmin=vmin, vmax=vmax, clip=base.clip)
+
+
 def _apply_mask_to_outline_vectors(
     outline_color_vector: Any,
     outline_color_source_vector: pd.Series | None,
@@ -189,15 +212,7 @@ def _color_vector_to_rgba(
     if np.issubdtype(arr.dtype, np.number):
         finite_mask = np.isfinite(arr)
         if finite_mask.any():
-            norm = cmap_params.norm
-            if norm.vmin is None or norm.vmax is None:
-                vmin = float(np.nanmin(arr[finite_mask]))
-                vmax = float(np.nanmax(arr[finite_mask]))
-                if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
-                    vmin, vmax = 0.0, 1.0
-                used_norm = Normalize(vmin=vmin, vmax=vmax, clip=False)
-            else:
-                used_norm = norm
+            used_norm = _resolve_continuous_norm(arr, cmap_params)
             rgba[finite_mask] = cmap_params.cmap(used_norm(arr[finite_mask]))
         return rgba
 
@@ -206,15 +221,7 @@ def _color_vector_to_rgba(
     num = pd.to_numeric(series, errors="coerce").to_numpy()
     is_num = np.isfinite(num)
     if is_num.any():
-        norm = cmap_params.norm
-        if norm.vmin is None or norm.vmax is None:
-            vmin = float(np.nanmin(num[is_num]))
-            vmax = float(np.nanmax(num[is_num]))
-            if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
-                vmin, vmax = 0.0, 1.0
-            used_norm = Normalize(vmin=vmin, vmax=vmax, clip=False)
-        else:
-            used_norm = norm
+        used_norm = _resolve_continuous_norm(num, cmap_params)
         rgba[is_num] = cmap_params.cmap(used_norm(num[is_num]))
     color_mask = (~is_num) & series.notna().to_numpy()
     if color_mask.any():
@@ -754,7 +761,8 @@ def _map_color_seg(
             color_vector = color_vector.to_numpy()
         # normalize only the not nan values, else the whole array would contain only nan values
         normed_color_vector = color_vector.copy().astype(float)
-        normed_color_vector[~np.isnan(normed_color_vector)] = cmap_params.norm(
+        used_norm = _resolve_continuous_norm(normed_color_vector, cmap_params)
+        normed_color_vector[~np.isnan(normed_color_vector)] = used_norm(
             normed_color_vector[~np.isnan(normed_color_vector)]
         )
         cols = cmap_params.cmap(normed_color_vector)
@@ -779,7 +787,8 @@ def _map_color_seg(
                 assert all(_is_color_like(c) for c in color_vector), "Not all values are color-like."
                 cols = colors.to_rgba_array(color_vector)
             else:
-                cols = cmap_params.cmap(cmap_params.norm(color_vector))
+                used_norm = _resolve_continuous_norm(color_vector, cmap_params)
+                cols = cmap_params.cmap(used_norm(color_vector))
 
     if seg_erosionpx is not None:
         val_im[val_im == erosion(val_im, footprint_rectangle((seg_erosionpx, seg_erosionpx)))] = 0
@@ -813,7 +822,7 @@ def _map_color_seg(
             normed = ov.copy().astype(float)
             finite = ~np.isnan(normed)
             if finite.any():
-                normed[finite] = cmap_params.norm(normed[finite])
+                normed[finite] = _resolve_continuous_norm(ov, cmap_params)(normed[finite])
             outline_cols = cmap_params.cmap(normed)
             outline_val_im = map_array(seg, cell_id, cell_id)
         if seg_erosionpx is not None:

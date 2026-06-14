@@ -1776,3 +1776,14 @@ def test_render_shapes_as_points_default_is_matplotlib(sdata_blobs: SpatialData)
     sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, size=50).pl.show(ax=ax)
     assert len(ax.collections) == 1 and len(ax.images) == 0
     plt.close(fig)
+
+
+def test_continuous_fill_colorbar_matches_pixel_range(sdata_blobs_shapes_annotated: SpatialData):
+    """The fill colorbar clim is the resolved data range, so the bar matches the shapes."""
+    from matplotlib.collections import PatchCollection
+
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="value").pl.show(ax=ax)
+    clims = [c.get_clim() for c in ax.collections if isinstance(c, PatchCollection)]
+    plt.close(fig)
+    assert clims == [(1.0, 5.0)]  # fixture's value column is [1, 2, 3, 4, 5]
