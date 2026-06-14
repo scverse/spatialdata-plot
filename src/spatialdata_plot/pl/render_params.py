@@ -231,13 +231,28 @@ class ScalebarParams:
     scalebar_kwargs: Mapping[str, Any] = field(default_factory=dict)
 
 
-@dataclass
-class ShapesRenderParams:
+@dataclass(kw_only=True)
+class RenderParams:
+    """Fields shared by every ``*RenderParams``.
+
+    These four are the only fields with identical type and default across all five renderers.
+    ``kw_only=True`` keeps field order irrelevant across inheritance (subclasses add required fields
+    such as ``cmap_params``), and all call sites construct these dataclasses by keyword. Subclasses
+    carry their renderer-specific fields (including ``cmap_params``, whose type varies per renderer).
+    """
+
+    element: str
+    zorder: int = 0
+    colorbar: bool | str | None = "auto"
+    colorbar_params: dict[str, object] | None = None
+
+
+@dataclass(kw_only=True)
+class ShapesRenderParams(RenderParams):
     """Shapes render parameters."""
 
     cmap_params: CmapParams
     outline_params: OutlineParams
-    element: str
     color: Color | None = None
     col_for_color: str | None = None
     col_for_outline_color: str | None = None
@@ -249,7 +264,6 @@ class ShapesRenderParams:
     scale: float = 1.0
     transfunc: Callable[[float], float] | None = None
     method: str | None = None
-    zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
     shape: Literal["circle", "hex", "visium_hex", "square"] | None = None
@@ -257,19 +271,16 @@ class ShapesRenderParams:
     as_points: bool = False
     size: float = 1.0  # marker size for as_points (matplotlib scatter ``s``)
     ds_reduction: _DsReduction | None = None
-    colorbar: bool | str | None = "auto"
-    colorbar_params: dict[str, object] | None = None
     # Multi-panel color: when set, this render entry belongs to the panel identified by this
     # color key. ``None`` means the entry is shared across every panel (e.g. a background layer).
     panel_key: str | None = None
 
 
-@dataclass
-class PointsRenderParams:
+@dataclass(kw_only=True)
+class PointsRenderParams(RenderParams):
     """Points render parameters."""
 
     cmap_params: CmapParams
-    element: str
     color: Color | None = None
     col_for_color: str | None = None
     groups: str | list[str] | None = None
@@ -278,29 +289,22 @@ class PointsRenderParams:
     size: float = 1.0
     transfunc: Callable[[float], float] | None = None
     method: str | None = None
-    zorder: int = 0
     table_name: str | None = None
     table_layer: str | None = None
     ds_reduction: _DsReduction | None = None
-    colorbar: bool | str | None = "auto"
-    colorbar_params: dict[str, object] | None = None
     density: bool = False
     density_how: Literal["linear", "log", "cbrt", "eq_hist"] = "linear"
 
 
-@dataclass
-class ImageRenderParams:
+@dataclass(kw_only=True)
+class ImageRenderParams(RenderParams):
     """Image render parameters."""
 
     cmap_params: list[CmapParams] | CmapParams
-    element: str
     channel: list[str] | list[int] | int | str | None = None
     palette: ListedColormap | list[str] | None = None
     alpha: float = 1.0
     scale: str | None = None
-    zorder: int = 0
-    colorbar: bool | str | None = "auto"
-    colorbar_params: dict[str, object] | None = None
     transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
     grayscale: bool = False
     channels_as_legend: bool = False
@@ -308,12 +312,11 @@ class ImageRenderParams:
     ds_reduction: _ImageDsReduction | None = None
 
 
-@dataclass
-class LabelsRenderParams:
+@dataclass(kw_only=True)
+class LabelsRenderParams(RenderParams):
     """Labels render parameters."""
 
     cmap_params: CmapParams
-    element: str
     color: Color | None = None
     col_for_color: str | None = None
     col_for_outline_color: str | None = None
@@ -328,9 +331,6 @@ class LabelsRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     transfunc: Callable[[float], float] | None = None
-    zorder: int = 0
-    colorbar: bool | str | None = "auto"
-    colorbar_params: dict[str, object] | None = None
     # Fast mode: render each label as a single dot at its centroid instead of the mask.
     as_points: bool = False
     size: float = 1.0  # marker size for as_points (matplotlib scatter ``s``)
@@ -341,11 +341,10 @@ class LabelsRenderParams:
     panel_key: str | None = None
 
 
-@dataclass
-class GraphRenderParams:
+@dataclass(kw_only=True)
+class GraphRenderParams(RenderParams):
     """Graph render parameters."""
 
-    element: str
     connectivity_obsp_key: str = "spatial_connectivities"
     table_name: str | None = None
     color: Color | None = None
@@ -363,6 +362,3 @@ class GraphRenderParams:
     linestyle: str | Sequence[str] = "solid"
     rasterize: bool = True
     include_self_loops: bool = False
-    zorder: int = 0
-    colorbar: bool | str | None = "auto"
-    colorbar_params: dict[str, object] | None = None
