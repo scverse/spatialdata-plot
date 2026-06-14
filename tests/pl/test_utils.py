@@ -13,10 +13,12 @@ from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableMod
 
 import spatialdata_plot
 from spatialdata_plot.pl import measure_obs
-from spatialdata_plot.pl.render_params import Color, ColorLike
-from spatialdata_plot.pl.utils import (
+from spatialdata_plot.pl._datashader import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
+)
+from spatialdata_plot.pl.render_params import Color, ColorLike
+from spatialdata_plot.pl.utils import (
     _set_outline,
     set_zero_in_cmap_to_transparent,
 )
@@ -505,9 +507,7 @@ def _add_shapes_table(sdata: SpatialData, element: str = "blobs_polygons", name:
     adata = AnnData(np.zeros((len(gdf), 1), dtype=np.float32))
     adata.obs["instance_id"] = list(gdf.index)
     adata.obs["region"] = element
-    sdata[name] = TableModel.parse(
-        adata, region_key="region", instance_key="instance_id", region=element
-    )
+    sdata[name] = TableModel.parse(adata, region_key="region", instance_key="instance_id", region=element)
     return sdata
 
 
@@ -547,9 +547,7 @@ class TestMeasureObs:
         # area is the pixel count (positive integers); diameter = 2*sqrt(area/pi)
         area = table.obs["area"].to_numpy()
         assert (area > 0).all()
-        np.testing.assert_allclose(
-            table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12
-        )
+        np.testing.assert_allclose(table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12)
 
     def test_writes_for_shapes(self, sdata_blobs: SpatialData) -> None:
         _add_shapes_table(sdata_blobs, "blobs_polygons")
@@ -635,7 +633,7 @@ class TestMeasureObs:
     def test_sparse_high_label_ids(self, sdata_blobs: SpatialData) -> None:
         # #5: sparse/high label ids (max id >> n_labels) are measured correctly (dense relabelling).
         arr = np.asarray(sdata_blobs["blobs_labels"].data)
-        hi = (arr.astype(np.int64) * 1000)  # ids become 1000, 2000, ... ; max id is huge, few labels
+        hi = arr.astype(np.int64) * 1000  # ids become 1000, 2000, ... ; max id is huge, few labels
         measure_obs(sd_hi := _labels_sdata(hi), "lab", table_name="t")
         measure_obs(sd_lo := _labels_sdata(arr.astype(np.int64)), "lab", table_name="t")
         # relabelling values does not move pixels -> identical centroid set
