@@ -740,6 +740,7 @@ class PlotAccessor:
         colorbar: bool | str | None = "auto",
         colorbar_params: dict[str, object] | None = None,
         channels_as_legend: bool = False,
+        multichannel_strategy: Literal["stack", "pca"] | None = None,
         method: Literal["matplotlib", "datashader"] | None = None,
         datashader_reduction: _ImageDsReduction | None = None,
     ) -> sd.SpatialData:
@@ -822,6 +823,20 @@ class PlotAccessor:
             Ignored for single-channel and RGB(A) images.  When multiple
             ``render_images`` calls use this flag on the same axes, all
             channel entries are combined into a single legend.
+        multichannel_strategy : {"stack", "pca"} | None, default None
+            How to composite an image with more than three channels.
+            ``None`` (default) and ``"stack"`` both use additive blending of
+            per-channel colors (today's behavior, unchanged). ``"pca"`` reduces
+            the per-channel-normalized stack to three principal components mapped
+            to RGB, with per-pixel brightness taken from the total signal so
+            low-signal background fades to black (no segmentation) — useful for
+            highly multiplexed assays (CODEX, IMC, Xenium morphology) where
+            additive blending saturates to a muddy white. The three components
+            map to red/green/blue by default; pass ``palette`` (exactly three
+            colors) or ``cmap`` (three colors are sampled from it) to recolor
+            them. It is an exploratory overview (colors are abstract, not
+            per-channel), so ``channels_as_legend`` is ignored with a warning,
+            and ``"pca"`` requires at least three channels.
         method : str | None, optional
             Whether to use ``'matplotlib'`` (default) or ``'datashader'`` for
             the downsampling step.  When ``'datashader'`` is selected, the
@@ -882,6 +897,7 @@ class PlotAccessor:
             scale=scale,
             colorbar=colorbar,
             colorbar_params=colorbar_params,
+            multichannel_strategy=multichannel_strategy,
         )
 
         sdata = self._copy()
@@ -936,6 +952,7 @@ class PlotAccessor:
                 transfunc=transfunc,
                 grayscale=grayscale,
                 channels_as_legend=channels_as_legend,
+                multichannel_strategy=multichannel_strategy,
                 method=method,
                 ds_reduction=datashader_reduction,
             )

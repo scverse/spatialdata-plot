@@ -927,3 +927,83 @@ class TestRenderImagesDatashader:
                 plt.close(fig)
 
         np.testing.assert_array_equal(_render_and_grab(), _render_and_grab(method="matplotlib"))
+
+
+class TestMultichannelPCA(PlotTester, metaclass=PlotTesterMeta):
+    """PCA compositing strategy for n >= 4 channel images (#450)."""
+
+    @staticmethod
+    def _render_array(sdata: SpatialData, **kwargs) -> np.ndarray:
+        fig, ax = plt.subplots(figsize=(2, 2), dpi=50)
+        try:
+            sdata.pl.render_images("blobs_image", **kwargs).pl.show(ax=ax)
+            return np.asarray(ax.get_images()[-1].get_array())
+        finally:
+            plt.close(fig)
+
+    def test_plot_pca_strategy_5_channels(self, sdata_blobs_str: SpatialData):
+        sdata_blobs_str.pl.render_images("blobs_image", multichannel_strategy="pca").pl.show()
+
+    def test_pca_renders_rgb_in_unit_range(self, sdata_blobs_str: SpatialData):
+        arr = self._render_array(sdata_blobs_str, multichannel_strategy="pca")
+        assert arr.ndim == 3 and arr.shape[-1] == 3
+        assert arr.min() >= 0.0 and arr.max() <= 1.0
+
+    def test_pca_is_deterministic(self, sdata_blobs_str: SpatialData):
+        # PCA's SVD sign ambiguity is pinned by the max-abs sign convention -> stable colors.
+        first = self._render_array(sdata_blobs_str, multichannel_strategy="pca")
+        second = self._render_array(sdata_blobs_str, multichannel_strategy="pca")
+        np.testing.assert_array_equal(first, second)
+
+    def test_pca_below_3_channels_raises(self, sdata_blobs_str: SpatialData):
+        with pytest.raises(ValueError, match="at least 3 channels"):
+            sdata_blobs_str.pl.render_images(
+                "blobs_image", channel=["c1", "c2"], multichannel_strategy="pca"
+            ).pl.show()
+        plt.close("all")
+
+    def test_pca_rank_deficient_drops_components_and_warns(self, caplog):
+        # Three identical channels -> rank 1: the surviving component must still render (not
+        # all-black), the two noise-floor components must be dropped (no color) and reported.
+        rng = np.random.default_rng(0)
+        base = rng.random((64, 64), dtype=np.float32)
+        arr = np.stack([base, base, base], axis=0)
+        sdata = SpatialData(images={"blobs_image": Image2DModel.parse(arr, c_coords=["c1", "c2", "c3"])})
+        with logger_warns(caplog, logger, match="below the noise floor"):
+            out = self._render_array(sdata, multichannel_strategy="pca")
+        assert out.shape[-1] == 3
+        assert out[..., 0].max() > 0  # dominant component rendered
+        assert np.allclose(out[..., 1], 0.0) and np.allclose(out[..., 2], 0.0)  # dropped -> no color
+
+    def test_pca_low_signal_background_renders_dark(self):
+        # Signal in the centre, zeros elsewhere: the total-signal brightness gate must pull the
+        # empty border toward black (the non-segmenting background fix).
+        rng = np.random.default_rng(0)
+        arr = np.zeros((4, 64, 64), dtype=np.float32)
+        arr[:, 24:40, 24:40] = rng.random((4, 16, 16), dtype=np.float32) + 0.5
+        sdata = SpatialData(images={"blobs_image": Image2DModel.parse(arr, c_coords=["c1", "c2", "c3", "c4"])})
+        out = self._render_array(sdata, multichannel_strategy="pca")
+        border = np.concatenate([out[:8].ravel(), out[-8:].ravel()])  # the empty margin
+        assert border.mean() < 0.05
+        assert out[24:40, 24:40].mean() > border.mean()
+
+    @pytest.mark.parametrize("recolor", [{"palette": ["cyan", "magenta", "yellow"]}, {"cmap": "viridis"}])
+    def test_pca_recolors_components(self, sdata_blobs_str: SpatialData, recolor):
+        # palette (3 colors) and cmap (3 samples) must change the output vs the default RGB mapping.
+        default = self._render_array(sdata_blobs_str, multichannel_strategy="pca")
+        recolored = self._render_array(sdata_blobs_str, multichannel_strategy="pca", **recolor)
+        assert not np.array_equal(default, recolored)
+
+    def test_pca_palette_wrong_length_raises(self, sdata_blobs_str: SpatialData):
+        with pytest.raises(ValueError, match="must have exactly 3 entries"):
+            sdata_blobs_str.pl.render_images(
+                "blobs_image", multichannel_strategy="pca", palette=["red", "green"]
+            ).pl.show()
+        plt.close("all")
+
+    def test_stack_default_is_backward_compatible(self, sdata_blobs_str: SpatialData):
+        # None (default) and explicit "stack" must be byte-identical to the pre-#450 output.
+        np.testing.assert_array_equal(
+            self._render_array(sdata_blobs_str, multichannel_strategy=None),
+            self._render_array(sdata_blobs_str, multichannel_strategy="stack"),
+        )

@@ -1756,6 +1756,69 @@ def _draw_channel_legend(
     )
 
 
+# Explained-variance ratio below which a component is treated as noise (rank-deficient input).
+_PCA_NOISE_FLOOR = 1e-6
+# Percentile clip applied per component (and to the brightness) before rescaling to [0, 1].
+_PCA_STRETCH_PERCENTILES = (1.0, 99.0)
+_PCA_DEFAULT_COLORS = np.eye(3)  # PC1/2/3 -> red/green/blue
+
+
+def _stretch_to_unit(values: np.ndarray) -> np.ndarray:
+    """Clip to ``_PCA_STRETCH_PERCENTILES`` and rescale to ``[0, 1]`` (flat input -> zeros)."""
+    lo, hi = np.percentile(values, _PCA_STRETCH_PERCENTILES)
+    if hi <= lo:
+        return np.zeros_like(values)
+    return np.clip((values - lo) / (hi - lo), 0.0, 1.0)
+
+
+def _pca_compose(
+    layers: dict[Any, np.ndarray], channels: list[Any], colors: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reduce a per-channel-normalized multichannel stack to RGB via PCA.
+
+    Channels are treated as features and reduced to up to three principal components; each is
+    percentile-stretched to ``[0, 1]``, additively blended with its ``colors`` row (a ``(3, 3)``
+    RGB array, default red/green/blue), then scaled by per-pixel total signal so background fades
+    to black (no segmentation). Components below ``_PCA_NOISE_FLOOR`` explained variance are
+    dropped (no color) with a warning. ``svd_solver="full"`` plus a per-component max-abs sign
+    convention keep colors deterministic across runs and sklearn versions. Returns
+    ``((y, x, 3) in [0, 1], explained_variance_ratio)``.
+    """
+    from sklearn.decomposition import PCA
+
+    if colors is None:
+        colors = _PCA_DEFAULT_COLORS
+
+    # float32 halves peak memory on the (h*w, n_channels) matrix and everything derived from it;
+    # the percentile stretch and 8-bit display are insensitive to the lost precision.
+    h, w = np.asarray(layers[channels[0]]).shape
+    mat = np.stack([np.asarray(layers[ch], dtype=np.float32).reshape(-1) for ch in channels], axis=1)
+
+    pca = PCA(n_components=min(3, mat.shape[1]), svd_solver="full")
+    comps = pca.fit_transform(mat)
+
+    rgb = np.zeros((h * w, 3), dtype=np.float32)
+    dropped: list[int] = []
+    for k in range(comps.shape[1]):
+        if pca.explained_variance_ratio_[k] < _PCA_NOISE_FLOOR:
+            dropped.append(k)
+            continue
+        col = comps[:, k]
+        if col[np.argmax(np.abs(col))] < 0:  # pin PCA's arbitrary sign
+            col = -col
+        rgb += np.outer(_stretch_to_unit(col), colors[k])
+    np.clip(rgb, 0.0, 1.0, out=rgb)
+
+    if dropped:
+        logger.warning(
+            f"PCA: component(s) {dropped} below the noise floor (explained variance < "
+            f"{_PCA_NOISE_FLOOR:g}); channels appear collinear, so they contribute no color."
+        )
+
+    rgb *= _stretch_to_unit(mat.sum(axis=1))[:, np.newaxis]  # brightness from total signal
+    return rgb.reshape(h, w, 3), pca.explained_variance_ratio_
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -2049,6 +2112,40 @@ def _render_images(
         # Colors for the channel legend (set by each branch if applicable)
         legend_colors: list[str] | None = None
 
+        # 2-PCA) Opt-in PCA reduction to RGB for highly multiplexed images, bypassing the
+        # additive seed-color blending that saturates at 4+ channels.
+        if render_params.multichannel_strategy == "pca":
+            if n_channels < 3:
+                raise ValueError(
+                    f"multichannel_strategy='pca' requires at least 3 channels, got {n_channels}. "
+                    "Select 3+ channels via 'channel' or use the default 'stack' strategy."
+                )
+
+            # Color the 3 components by `palette` (exactly 3, validated upstream), 3 cmap
+            # samples, or (default, left as None) red/green/blue inside _pca_compose.
+            component_colors = None
+            if palette is not None:
+                component_colors = np.array([matplotlib.colors.to_rgb(c) for c in palette])
+            elif has_explicit_cmap or user_supplied_multi_cmaps:
+                cmap_obj = (
+                    render_params.cmap_params[0].cmap
+                    if isinstance(render_params.cmap_params, list)
+                    else render_params.cmap_params.cmap
+                )
+                component_colors = np.array([cmap_obj(x)[:3] for x in (0.0, 0.5, 1.0)])
+
+            colored, explained_variance = _pca_compose(layers, channels, component_colors)
+            logger.info(
+                "PCA explained-variance ratio per component: "
+                f"{', '.join(f'{v:.3f}' for v in explained_variance)}."
+            )
+            _ax_show_and_transform(
+                colored, trans_data, ax, render_params.alpha, zorder=render_params.zorder, interpolation=_interp
+            )
+            if render_params.channels_as_legend:
+                logger.warning("channels_as_legend is ignored with multichannel_strategy='pca'.")
+            return
+
         # 2A) Image has 3 channels, no palette info, and no/only one cmap was given
         if palette is None and n_channels == 3 and not isinstance(render_params.cmap_params, list):
             if render_params.cmap_params.cmap_is_default:  # -> use RGB
@@ -2129,8 +2226,9 @@ def _render_images(
                 colored = np.clip(comp_rgb, 0, 1)
                 logger.info(
                     f"Your image has {n_channels} channels. Sampling categorical colors and using "
-                    f"multichannel strategy 'stack' to render."
-                )  # TODO: update when pca is added as strategy
+                    f"multichannel strategy 'stack' to render (pass multichannel_strategy='pca' for a "
+                    f"PCA overview)."
+                )
 
             legend_colors = seed_colors
 

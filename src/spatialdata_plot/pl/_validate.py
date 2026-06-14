@@ -1345,6 +1345,7 @@ def _validate_image_render_params(
     scale: str | None,
     colorbar: bool | str | None,
     colorbar_params: dict[str, object] | None,
+    multichannel_strategy: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     param_dict: dict[str, Any] = {
         "sdata": sdata,
@@ -1397,17 +1398,25 @@ def _validate_image_render_params(
         assert isinstance(palette, list | type(None))  # if present, was converted to list, just to make sure
 
         if isinstance(palette, list):
-            # case A: single palette for all channels
-            if len(palette) == 1:
-                palette_length = len(channel) if channel is not None else len(spatial_element_ch)
-                palette = palette * palette_length
-            # case B: one palette per channel (either given or derived from channel length)
-            channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
-            if channels_to_use is not None and len(palette) != len(channels_to_use):
-                raise ValueError(
-                    f"Palette length ({len(palette)}) does not match channel length "
-                    f"({', '.join(str(c) for c in channels_to_use)})."
-                )
+            if multichannel_strategy == "pca":
+                # palette colors the 3 principal components, not the channels
+                if len(palette) != 3:
+                    raise ValueError(
+                        "multichannel_strategy='pca' maps the 3 principal components to colors; "
+                        f"'palette' must have exactly 3 entries, got {len(palette)}."
+                    )
+            else:
+                # case A: single palette for all channels
+                if len(palette) == 1:
+                    palette_length = len(channel) if channel is not None else len(spatial_element_ch)
+                    palette = palette * palette_length
+                # case B: one palette per channel (either given or derived from channel length)
+                channels_to_use = spatial_element_ch if element_params[el]["channel"] is None else channel
+                if channels_to_use is not None and len(palette) != len(channels_to_use):
+                    raise ValueError(
+                        f"Palette length ({len(palette)}) does not match channel length "
+                        f"({', '.join(str(c) for c in channels_to_use)})."
+                    )
         element_params[el]["palette"] = palette
 
         expected_len = len(channel) if channel is not None else len(spatial_element_ch)
