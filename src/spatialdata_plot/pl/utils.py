@@ -60,12 +60,14 @@ from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
-    deepcopy as sd_deepcopy,
     get_element_annotators,
     get_extent,
     get_values,
     join_spatialelement_table,
     rasterize,
+)
+from spatialdata import (
+    deepcopy as sd_deepcopy,
 )
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
@@ -4718,7 +4720,7 @@ def _resolve_measure_table(sdata: SpatialData, element_name: str, table_name: st
             f"Element {element_name!r} is annotated by multiple tables ({', '.join(annotators)}); "
             f"pass `table_name=` to pick one."
         )
-    return annotators[0]
+    return str(annotators[0])
 
 
 def measure_obs(
@@ -4861,8 +4863,11 @@ def _element_extent_fast(
 
 
 def _fast_extent(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]]:
-    """Element extent via the fast corner-transform; identical to ``get_extent`` but avoids transforming
-    every geometry for axis-aligned transforms (falls back to ``get_extent`` for rotation/shear)."""
+    """Element extent via the fast corner-transform.
+
+    Identical to ``get_extent`` but avoids transforming every geometry for axis-aligned
+    transforms (falls back to ``get_extent`` for rotation/shear).
+    """
     return _element_extent_fast(element, coordinate_system) or get_extent(element, coordinate_system=coordinate_system)
 
 
@@ -4906,7 +4911,7 @@ def _get_extent_fast(
                 mins[ax].append(ext[ax][0])
                 maxs[ax].append(ext[ax][1])
     if not mins["x"]:  # nothing matched -> defer to spatialdata (preserves its error behaviour)
-        return get_extent(
+        full_extent: dict[str, tuple[float, float]] = get_extent(
             sdata,
             coordinate_system=coordinate_system,
             has_images=has_images,
@@ -4915,4 +4920,5 @@ def _get_extent_fast(
             has_shapes=has_shapes,
             elements=elements,
         )
+        return full_extent
     return {ax: (min(mins[ax]), max(maxs[ax])) for ax in ("x", "y")}
