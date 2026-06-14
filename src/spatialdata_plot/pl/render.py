@@ -42,6 +42,12 @@ from spatialdata_plot.pl._datashader import (
     _render_ds_image,
     _render_ds_outlines,
 )
+from spatialdata_plot.pl._geometry import (
+    _build_shape_patches,
+    _convert_shapes,
+    _get_collection_shape,
+    _validate_polygons,
+)
 from spatialdata_plot.pl.render_params import (
     ChannelLegendEntry,
     CmapParams,
@@ -60,14 +66,11 @@ from spatialdata_plot.pl.utils import (
     _align_outline_vector_to_length,
     _apply_mask_to_outline_vectors,
     _ax_show_and_transform,
-    _build_shape_patches,
     _check_obs_var_shadow,
     _color_vector_to_rgba,
-    _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
     _fast_extent,
-    _get_collection_shape,
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
     _get_linear_colormap,
@@ -85,7 +88,6 @@ from spatialdata_plot.pl.utils import (
     _rasterize_if_necessary_datashader,
     _set_color_source_vec,
     _stream_label_centroid_stats,
-    _validate_polygons,
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
@@ -1277,7 +1279,9 @@ def _datashader_points(
             if isinstance(color_vector, dd.Series):
                 color_vector = color_vector.compute()
             series = color_vector
-        df[col_for_color] = series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
+        df[col_for_color] = (
+            series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
+        )
 
     color_dtype = df[col_for_color].dtype if col_for_color is not None else None
     color_by_categorical = col_for_color is not None and (
