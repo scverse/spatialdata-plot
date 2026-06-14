@@ -33,6 +33,7 @@ from xarray import DataTree
 
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
+    ColorType,
     _align_outline_vector_to_length,
     _apply_mask_to_outline_vectors,
     _color_vector_to_rgba,
@@ -42,7 +43,7 @@ from spatialdata_plot.pl._color import (
     _maybe_set_colors,
     _prepare_cmap_norm,
     _resolve_continuous_norm,
-    _set_color_source_vec,
+    resolve_color,
 )
 from spatialdata_plot.pl._datashader import (
     _ax_show_and_transform,
@@ -181,11 +182,11 @@ def _reparse_points(
 
 def _warn_groups_ignored_continuous(
     groups: str | list[str] | None,
-    color_source_vector: pd.Categorical | None,
+    colortype: ColorType,
     col_for_color: str | None,
 ) -> None:
     """Warn when ``groups`` is set but coloring is continuous (no categorical source)."""
-    if groups is not None and color_source_vector is None and col_for_color is not None:
+    if groups is not None and colortype == "continuous" and col_for_color is not None:
         logger.warning(
             f"`groups` is ignored when coloring by continuous column '{col_for_color}'. "
             "`groups` filters categories of the column specified via `color`; "
@@ -264,26 +265,24 @@ def _warn_missing_groups(
 
 def _warn_groups(
     groups: str | list[str] | None,
+    colortype: ColorType,
     color_source_vector: pd.Categorical | None,
     col_for_color: str | None,
 ) -> None:
     """Emit the two groups-related warnings every ``_render_*`` preamble shares."""
-    _warn_groups_ignored_continuous(groups, color_source_vector, col_for_color)
-    if groups is not None and color_source_vector is not None:
+    _warn_groups_ignored_continuous(groups, colortype, col_for_color)
+    # behaviour-preserving: `color_source_vector is not None` == colortype != "continuous"
+    if groups is not None and colortype != "continuous":
         _warn_missing_groups(groups, color_source_vector, col_for_color)
 
 
 def _maybe_apply_transfunc(
-    color_source_vector: pd.Categorical | None,
+    colortype: ColorType,
     color_vector: Any,
     transfunc: abc.Callable[[Any], Any] | None,
 ) -> Any:
-    """Apply ``transfunc`` to a continuous ``color_vector``; no-op when categorical or unset.
-
-    ``color_source_vector is None`` marks continuous coloring (it is the materialized categorical
-    source otherwise), so the transform only runs on continuous values.
-    """
-    if color_source_vector is None and transfunc is not None:
+    """Apply ``transfunc`` to a continuous ``color_vector``; no-op when categorical/none or unset."""
+    if colortype == "continuous" and transfunc is not None:
         return transfunc(color_vector)
     return color_vector
 
@@ -374,6 +373,7 @@ def _add_legend_and_colorbar(
     fig_params: FigParams,
     adata: AnnData | None,
     col_for_color: str | None,
+    colortype: ColorType,
     color_source_vector: pd.Series | None,
     color_vector: Any,
     palette: ListedColormap | list[str] | None,
@@ -387,14 +387,12 @@ def _add_legend_and_colorbar(
     outline_color_source_vector: pd.Series | None = None,
     outline_color_vector: Any | None = None,
     outline_cmap_params: CmapParams | None = None,
-    is_continuous_override: bool | None = None,
     na_in_legend_override: bool | None = None,
 ) -> None:
     """Add legend and colorbar decorations if the color vector warrants them.
 
-    ``is_continuous_override`` / ``na_in_legend_override`` let labels supply its renderer-specific
-    values (it tracks ``categorical`` separately and adjusts ``na_in_legend`` for groups) while sharing
-    this body; when ``None`` the shapes/points defaults apply.
+    A continuous colorbar is requested for ``colortype == "continuous"``; ``na_in_legend_override``
+    lets labels adjust ``na_in_legend`` for groups while sharing this body.
     """
     fill_has_decorations = _want_decorations(color_vector, na_color) and col_for_color is not None
     outline_has_decorations = outline_col_for_color is not None and (
@@ -413,9 +411,7 @@ def _add_legend_and_colorbar(
     wants_colorbar = _should_request_colorbar(
         colorbar,
         has_mappable=cax is not None,
-        is_continuous=is_continuous_override
-        if is_continuous_override is not None
-        else (col_for_color is not None and color_source_vector is None),
+        is_continuous=col_for_color is not None and colortype == "continuous",
     )
 
     if fill_has_decorations:
@@ -660,7 +656,7 @@ def _render_shapes(
     trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     # get color vector (categorical or continuous)
-    color_source_vector, color_vector, _ = _set_color_source_vec(
+    _spec = resolve_color(
         sdata=sdata_filt,
         element=sdata_filt[element],
         element_name=element,
@@ -673,8 +669,11 @@ def _render_shapes(
         table_layer=table_layer,
         coordinate_system=coordinate_system,
     )
+    colortype = _spec.colortype
+    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
 
-    values_are_categorical = color_source_vector is not None
+    # behaviour-preserving: `color_source_vector is not None` == colortype != "continuous"
+    values_are_categorical = colortype != "continuous"
 
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
@@ -694,7 +693,7 @@ def _render_shapes(
             # so the per-shape outline vector length matches the rendered shapes.
             if table_name is None:
                 sdata_filt[element] = shapes = joined_outline_element
-        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+        _outline_spec = resolve_color(
             sdata=sdata_filt,
             element=sdata_filt[element],
             element_name=element,
@@ -707,6 +706,7 @@ def _render_shapes(
             table_layer=table_layer,
             coordinate_system=coordinate_system,
         )
+        outline_color_source_vector, outline_color_vector = _outline_spec.source_vector, _outline_spec.color_vector
         # Cross-table case: if fill and outline tables differ and the outline table does
         # not annotate every row of the (fill-joined) element, the vector length will
         # differ from the rendered element row count. Warn + align so per-shape lookup stays
@@ -724,7 +724,7 @@ def _render_shapes(
                 _n_shapes,
             )
 
-    _warn_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, colortype, color_source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
@@ -742,7 +742,7 @@ def _render_shapes(
                 outline_color_vector, outline_color_source_vector, keep
             )
 
-    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
+    color_vector = _maybe_apply_transfunc(colortype, color_vector, render_params.transfunc)
 
     norm = render_params.cmap_params.fresh_norm()
 
@@ -796,6 +796,7 @@ def _render_shapes(
             y=xy[:, 1],
             color_vector=color_vector,
             color_source_vector=color_source_vector,
+            colortype=colortype,
             norm=norm,
             na_color=render_params.cmap_params.na_color,
             adata=table,
@@ -1046,6 +1047,7 @@ def _render_shapes(
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
+        colortype=colortype,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
@@ -1130,6 +1132,7 @@ def _render_centroids_as_points(
     y: Any,
     color_vector: Any,
     color_source_vector: pd.Series | None,
+    colortype: ColorType,
     norm: Normalize | None,
     na_color: Any,
     adata: AnnData | None,
@@ -1190,6 +1193,7 @@ def _render_centroids_as_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
+        colortype=colortype,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
@@ -1441,7 +1445,7 @@ def _render_points(
         else None
     )
 
-    color_source_vector, color_vector, _ = _set_color_source_vec(
+    _spec = resolve_color(
         sdata=sdata_filt,
         element=color_element,
         element_name=element,
@@ -1456,6 +1460,8 @@ def _render_points(
         coordinate_system=coordinate_system,
         preloaded_color_data=_preloaded,
     )
+    colortype = _spec.colortype
+    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
 
     if added_color_from_table and col_for_color is not None:
         _reparse_points(
@@ -1467,7 +1473,7 @@ def _render_points(
             col_for_color,
         )
 
-    _warn_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, colortype, color_source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
@@ -1484,7 +1490,7 @@ def _render_points(
         adata = adata[keep]
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
-    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
+    color_vector = _maybe_apply_transfunc(colortype, color_vector, render_params.transfunc)
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
@@ -1562,6 +1568,7 @@ def _render_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
+        colortype=colortype,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=None,
@@ -2274,7 +2281,7 @@ def _render_labels(
         if col_for_color is None and render_params.color is not None
         else render_params.cmap_params.na_color
     )
-    color_source_vector, color_vector, categorical = _set_color_source_vec(
+    _spec = resolve_color(
         sdata=sdata_filt,
         element=label,
         element_name=element,
@@ -2288,6 +2295,9 @@ def _render_labels(
         render_type="labels",
         coordinate_system=coordinate_system,
     )
+    colortype = _spec.colortype
+    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
+    categorical = colortype == "categorical"
 
     # Outline color lookup must run BEFORE any masking so the returned vector aligns to
     # the original instance_id. The same masks applied to fill below are then applied
@@ -2297,7 +2307,7 @@ def _render_labels(
     outline_color_source_vector: pd.Series | None = None
     outline_color_vector: Any = None
     if col_for_outline_color is not None:
-        outline_color_source_vector, outline_color_vector, _ = _set_color_source_vec(
+        _outline_spec = resolve_color(
             sdata=sdata_filt,
             element=label,
             element_name=element,
@@ -2311,6 +2321,7 @@ def _render_labels(
             render_type="labels",
             coordinate_system=coordinate_system,
         )
+        outline_color_source_vector, outline_color_vector = _outline_spec.source_vector, _outline_spec.color_vector
         # Align to instance_id so the rasterize/groups masks (computed against
         # instance_id) can be applied without IndexError when the outline table
         # annotates a subset of the labels.
@@ -2338,7 +2349,7 @@ def _render_labels(
                 outline_color_vector, outline_color_source_vector, mask
             )
 
-    _warn_groups(groups, color_source_vector, col_for_color)
+    _warn_groups(groups, colortype, color_source_vector, col_for_color)
 
     # When groups are specified, zero out non-matching label IDs so they render as background.
     # Only show non-matching labels if the user explicitly sets na_color.
@@ -2364,7 +2375,7 @@ def _render_labels(
                 outline_color_vector, outline_color_source_vector, keep_vec
             )
 
-    color_vector = _maybe_apply_transfunc(color_source_vector, color_vector, render_params.transfunc)
+    color_vector = _maybe_apply_transfunc(colortype, color_vector, render_params.transfunc)
 
     if render_params.as_points:
         # Fast mode: one dot per label at its centroid. Compute on the *rendered* raster (already
@@ -2408,6 +2419,7 @@ def _render_labels(
             y=xy[:, 1],
             color_vector=point_color_vector,
             color_source_vector=point_color_source_vector,
+            colortype=colortype,
             norm=render_params.cmap_params.fresh_norm(),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
             adata=table if table_name is not None else None,
@@ -2507,14 +2519,14 @@ def _render_labels(
     else:
         raise ValueError("Parameters 'fill_alpha' and 'outline_alpha' cannot both be 0.")
 
-    # Labels track `categorical` separately and tweak `na_in_legend` for groups, so pass those through
-    # the overrides; everything else (fill/outline legends, colorbar request, auto-title) is shared.
+    # Labels tweak na_in_legend for groups (via na_in_legend_override); everything else is shared.
     _add_legend_and_colorbar(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
+        colortype=colortype,
         color_source_vector=color_source_vector,
         color_vector=color_vector,
         palette=palette,
@@ -2528,7 +2540,6 @@ def _render_labels(
         outline_color_source_vector=outline_color_source_vector,
         outline_color_vector=outline_color_vector,
         outline_cmap_params=render_params.cmap_params,
-        is_continuous_override=col_for_color is not None and color_source_vector is None and not categorical,
         na_in_legend_override=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
     )
 

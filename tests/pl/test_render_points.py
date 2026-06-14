@@ -905,13 +905,13 @@ def test_groups_warns_when_continuous_points(sdata_blobs: SpatialData, caplog):
 def test_warn_groups_ignored_continuous_emits(caplog):
     """_warn_groups_ignored_continuous emits when groups is set but data is continuous."""
     with logger_warns(caplog, logger, match="ignored.*continuous"):
-        _warn_groups_ignored_continuous(["A"], None, "my_col")
+        _warn_groups_ignored_continuous(["A"], "continuous", "my_col")
 
 
 def test_warn_groups_ignored_continuous_silent_for_categorical(caplog):
-    """No warning when color_source_vector is present (categorical)."""
+    """No warning when coloring is categorical."""
     with logger_no_warns(caplog, logger, match="ignored"):
-        _warn_groups_ignored_continuous(["A"], pd.Categorical(["A", "B"]), "cat_col")
+        _warn_groups_ignored_continuous(["A"], "categorical", "cat_col")
 
 
 def test_color_key_warns_on_short_color_vector(caplog):
