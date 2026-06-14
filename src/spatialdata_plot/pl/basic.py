@@ -1580,7 +1580,7 @@ _RenderCmd = tuple[
 _VALID_RENDER_CMDS = {*_RENDER_CMD_TO_CS_FLAG, "render_graph"}
 
 # Dispatch from render command to its rendering function (constant; defined once).
-_RENDERERS = {
+_RENDERERS: dict[str, Callable[..., None]] = {
     "render_images": _render_images,
     "render_shapes": _render_shapes,
     "render_points": _render_points,
@@ -1962,25 +1962,30 @@ def _render_panel(
         params_copy = deepcopy(params)
 
         if cmd == "render_graph":
-            graph_element = params_copy.element
+            graph_params = cast(GraphRenderParams, params_copy)
+            graph_element = graph_params.element
             if graph_element in sdata and cs in get_transformation(sdata[graph_element], get_all=True):
                 _render_graph(
                     sdata=sdata,
-                    render_params=params_copy,
+                    render_params=graph_params,
                     coordinate_system=cs,
                     ax=ax,
                     legend_params=legend_params_obj,
                     colorbar_requests=axis_colorbar_requests,
                 )
         elif cmd in _RENDERERS and cs_row[_RENDER_CMD_TO_CS_FLAG[cmd]]:
-            element_type = cmd.removeprefix("render_")
+            # `cmd` discriminates the param type, which mypy can't infer from the string alone.
+            element_type = cast(Literal["images", "labels", "points", "shapes"], cmd.removeprefix("render_"))
+            element_params = cast(
+                "ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams", params_copy
+            )
             wanted_elements, wanted_on_cs, wants[element_type] = _get_wanted_render_elements(
-                sdata, wanted_elements, params_copy, cs, element_type
+                sdata, wanted_elements, element_params, cs, element_type
             )
             if wanted_on_cs:
                 kwargs: dict[str, Any] = {
                     "sdata": sdata,
-                    "render_params": params_copy,
+                    "render_params": element_params,
                     "coordinate_system": cs,
                     "ax": ax,
                     "fig_params": fig_params,
@@ -1990,9 +1995,11 @@ def _render_panel(
                 if cmd == "render_images":
                     kwargs["channel_legend_entries"] = axis_channel_legend_entries
                 if cmd in {"render_images", "render_labels"}:
-                    kwargs["rasterize"] = _should_rasterize(params_copy, dpi, figsize)
+                    kwargs["rasterize"] = _should_rasterize(
+                        cast("ImageRenderParams | LabelsRenderParams", element_params), dpi, figsize
+                    )
                 if cmd == "render_labels":
-                    _maybe_set_label_colors(sdata, params_copy)
+                    _maybe_set_label_colors(sdata, cast(LabelsRenderParams, element_params))
                 _RENDERERS[cmd](**kwargs)
 
     # Panel finalization depends only on per-panel values, so run it once after the loop.

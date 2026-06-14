@@ -60,12 +60,14 @@ from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
 from spatialdata import (
     SpatialData,
-    deepcopy as sd_deepcopy,
     get_element_annotators,
     get_extent,
     get_values,
     join_spatialelement_table,
     rasterize,
+)
+from spatialdata import (
+    deepcopy as sd_deepcopy,
 )
 from spatialdata._core.query.relational_query import _locate_value
 from spatialdata._types import ArrayLike
@@ -4709,7 +4711,7 @@ def _resolve_measure_table(sdata: SpatialData, element_name: str, table_name: st
             f"Element {element_name!r} is annotated by multiple tables ({', '.join(annotators)}); "
             f"pass `table_name=` to pick one."
         )
-    return annotators[0]
+    return str(annotators[0])
 
 
 def measure_obs(
