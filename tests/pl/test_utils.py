@@ -905,3 +905,48 @@ class TestResolveContinuousNorm:
         b = _resolve_continuous_norm(vals, params)
         assert (a.vmin, a.vmax) == (b.vmin, b.vmax) == (2.0, 7.0)
         assert params.norm.vmin is None and params.norm.vmax is None
+
+
+class TestResolveColor:
+    """resolve_color classifies each _set_color_source_vec return branch into a ColorType (#700)."""
+
+    @staticmethod
+    def _cmap_params() -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        return CmapParams(cmap=colormaps["viridis"], norm=Normalize(), na_color=Color())
+
+    def _resolve(self, sdata_blobs_shapes_annotated: SpatialData, value_to_plot: str | None):
+        from spatialdata_plot.pl._color import resolve_color
+
+        element_name = "blobs_polygons"
+        return resolve_color(
+            sdata=sdata_blobs_shapes_annotated,
+            element=sdata_blobs_shapes_annotated[element_name],
+            element_name=element_name,
+            value_to_plot=value_to_plot,
+            na_color=Color(),
+            cmap_params=self._cmap_params(),
+        )
+
+    def test_no_value_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
+        spec = self._resolve(sdata_blobs_shapes_annotated, None)
+        assert spec.colortype == "none"
+        assert spec.source_vector is not None  # na array, not None
+
+    def test_all_nan_column_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated["blobs_polygons"]["nanvals"] = [np.nan] * 5
+        spec = self._resolve(sdata_blobs_shapes_annotated, "nanvals")
+        assert spec.colortype == "none"
+
+    def test_numeric_column_is_continuous(self, sdata_blobs_shapes_annotated: SpatialData):
+        spec = self._resolve(sdata_blobs_shapes_annotated, "value")  # fixture's [1..5]
+        assert spec.colortype == "continuous"
+        assert spec.source_vector is None  # the continuous marker
+
+    def test_categorical_column_is_categorical(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated["blobs_polygons"]["cat"] = ["a", "b", "a", "b", "a"]
+        spec = self._resolve(sdata_blobs_shapes_annotated, "cat")
+        assert spec.colortype == "categorical"
+        assert isinstance(spec.source_vector, pd.Categorical)

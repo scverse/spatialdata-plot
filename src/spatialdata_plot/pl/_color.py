@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import copy
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import matplotlib
@@ -734,6 +735,40 @@ def _set_color_source_vec(
     raise KeyError(
         f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
     )
+
+
+ColorType = Literal["categorical", "continuous", "none"]
+
+
+@dataclass(frozen=True)
+class ColorSpec:
+    """Resolved color for one element layer: the explicit color-state the renderers consume.
+
+    ``colortype`` names the three states the renderers used to infer implicitly from
+    ``source_vector``/``categorical``: ``categorical`` (``source_vector`` is the Categorical),
+    ``continuous`` (``source_vector`` is None, ``color_vector`` is numeric), ``none`` (no/uncolorable
+    value -> ``color_vector`` is the na_color, ``source_vector`` is a non-None na array).
+    """
+
+    colortype: ColorType
+    source_vector: ArrayLike | pd.Series | None
+    color_vector: ArrayLike
+
+
+def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:
+    """Resolve an element's color into a typed :class:`ColorSpec` (the #700 IR's color layer).
+
+    Pass-through wrapper over :func:`_set_color_source_vec` that classifies its result into an
+    explicit ``colortype`` so callers stop re-deriving the state from ``source is None``/``categorical``.
+    """
+    source_vector, color_vector, categorical = _set_color_source_vec(*args, **kwargs)
+    if categorical:
+        colortype: ColorType = "categorical"
+    elif source_vector is None:
+        colortype = "continuous"
+    else:
+        colortype = "none"
+    return ColorSpec(colortype=colortype, source_vector=source_vector, color_vector=color_vector)
 
 
 def _map_color_seg(
