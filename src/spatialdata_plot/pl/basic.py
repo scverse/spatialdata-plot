@@ -23,7 +23,6 @@ from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from spatialdata import get_extent
 from spatialdata._utils import _deprecation_alias
 from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
@@ -65,6 +64,7 @@ from spatialdata_plot.pl.utils import (
     _expand_color_panels,
     _get_cs_contents,
     _get_elements_to_be_rendered,
+    _get_extent_fast,
     _get_valid_cs,
     _get_wanted_render_elements,
     _maybe_set_colors,
@@ -72,6 +72,7 @@ from spatialdata_plot.pl.utils import (
     _prepare_cmap_norm,
     _prepare_params_plot,
     _set_outline,
+    _validate_as_points_size,
     _validate_graph_render_params,
     _validate_image_render_params,
     _validate_label_render_params,
@@ -333,6 +334,8 @@ class PlotAccessor:
         colorbar_params: dict[str, object] | None = None,
         datashader_reduction: _DsReduction | None = None,
         transfunc: Callable[[float], float] | None = None,
+        as_points: bool = False,
+        size: float | int = 1.0,
     ) -> sd.SpatialData:
         """
         Render shapes elements in SpatialData.
@@ -449,6 +452,8 @@ class PlotAccessor:
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
+        if as_points:
+            _validate_as_points_size(size)
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
@@ -516,6 +521,8 @@ class PlotAccessor:
                     ds_reduction=param_values["ds_reduction"],
                     colorbar=param_values["colorbar"],
                     colorbar_params=param_values["colorbar_params"],
+                    as_points=as_points,
+                    size=size,
                     panel_key=panel_key,
                 )
                 n_steps += 1
@@ -954,6 +961,9 @@ class PlotAccessor:
         table_layer: str | None = None,
         gene_symbols: str | None = None,
         transfunc: Callable[[float], float] | None = None,
+        as_points: bool = False,
+        size: float | int = 1.0,
+        method: str | None = None,
     ) -> sd.SpatialData:
         """
         Render labels elements in SpatialData.
@@ -1039,12 +1049,18 @@ class PlotAccessor:
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         transfunc : Callable[[float], float] | None, optional
             Optional transformation applied to the continuous color vector before normalization and colormap mapping.
+        method : str | None, optional
+            Backend for ``as_points`` centroids: ``'matplotlib'`` or ``'datashader'``. When ``None``,
+            matplotlib is used unless there are more than ~50k centroids. Datashader is skipped (with a
+            warning) when the colouring cannot be aggregated (e.g. labels with no color column).
 
         Returns
         -------
         sd.SpatialData
             A copy of the SpatialData object with the rendering parameters stored in its plotting tree.
         """
+        if as_points:
+            _validate_as_points_size(size)
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
@@ -1102,6 +1118,9 @@ class PlotAccessor:
                     zorder=n_steps,
                     colorbar=param_values["colorbar"],
                     colorbar_params=param_values["colorbar_params"],
+                    as_points=as_points,
+                    size=size,
+                    method=method,
                     panel_key=panel_key,
                 )
                 n_steps += 1
@@ -1452,6 +1471,15 @@ class PlotAccessor:
         )
         num_panels = len(panels)
 
+        # Titles are panel-level: require one title (broadcast to all panels) or exactly one
+        # per panel. Validating up front surfaces the error before any drawing, and also rejects
+        # an over-long list (previously silently truncated). The axes/panel-count check lives in
+        # _plan_panels above.
+        if title is not None and len(title) not in (1, num_panels):
+            raise ValueError(
+                f"The number of titles ({len(title)}) must be 1 or match the number of panels ({num_panels})."
+            )
+
         # set up canvas
         fig_params, scalebar_params_obj = _prepare_params_plot(
             num_panels=num_panels,
@@ -1514,7 +1542,7 @@ class PlotAccessor:
                 empty_shape_elements = [
                     name
                     for name in wanted_elements
-                    if name in sdata.shapes and not sdata.shapes[name]["geometry"].apply(lambda g: not g.is_empty).any()
+                    if name in sdata.shapes and sdata.shapes[name]["geometry"].is_empty.all()
                 ]
                 if empty_shape_elements:
                     raise ValueError(
@@ -1522,7 +1550,8 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            extent = get_extent(
+            # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
+            extent = _get_extent_fast(
                 sdata,
                 coordinate_system=cs,
                 has_images=has_images and wants["images"],
@@ -1890,10 +1919,8 @@ def _finalize_panel(
     elif len(title) == 1:
         t = title[0]
     else:
-        try:
-            t = title[panel_idx]
-        except IndexError as e:
-            raise IndexError("The number of titles must match the number of panels.") from e
+        # len(title) == num_panels is guaranteed by the up-front check in show().
+        t = title[panel_idx]
     ax.set_title(t)
     ax.set_aspect("equal")
     if frameon is False:

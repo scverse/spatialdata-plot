@@ -21,7 +21,7 @@ import xarray as xr
 from anndata import AnnData
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import ListedColormap, Normalize
+from matplotlib.colors import Colormap, ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values
@@ -66,6 +66,7 @@ from spatialdata_plot.pl.utils import (
     _convert_shapes,
     _datashader_canvas_from_dataframe,
     _decorate_axs,
+    _fast_extent,
     _get_collection_shape,
     _get_colors_for_categorical_obs,
     _get_extent_and_range_for_datashader_canvas,
@@ -77,11 +78,13 @@ from spatialdata_plot.pl.utils import (
     _maybe_set_colors,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
+    _pixel_to_coord,
     _prepare_cmap_norm,
     _prepare_transformation,
     _rasterize_if_necessary,
     _rasterize_if_necessary_datashader,
     _set_color_source_vec,
+    _stream_label_centroid_stats,
     _validate_polygons,
 )
 
@@ -750,6 +753,32 @@ def _render_shapes(
         color_source_vector = color_source_vector.remove_unused_categories()
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
+
+    if render_params.as_points:
+        # Fast mode: draw one dot per shape at its centroid instead of its geometry.
+        logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
+        centroids = shapes.geometry.centroid  # intrinsic coords, positionally aligned to color_vector
+        # transform to coordinate-system coords so dots land correctly under non-identity transforms
+        xy = trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()]))
+        _render_centroids_as_points(
+            ax,
+            render_params,
+            x=xy[:, 0],
+            y=xy[:, 1],
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            norm=norm,
+            na_color=render_params.cmap_params.na_color,
+            adata=table,
+            col_for_color=col_for_color,
+            palette=palette,
+            fig_params=fig_params,
+            legend_params=legend_params,
+            colorbar_requests=colorbar_requests,
+            axes_extent=_fast_extent(sdata_filt.shapes[element], coordinate_system),
+        )
+        return
+
     # convert shapes if necessary
     if render_params.shape is not None:
         current_type = shapes["geometry"].type
@@ -1051,6 +1080,280 @@ def _render_shapes(
     )
 
 
+def _scatter_points(
+    ax: matplotlib.axes.SubplotBase,
+    x: Any,
+    y: Any,
+    color_vector: Any,
+    *,
+    size: float,
+    cmap: Colormap,
+    norm: Normalize | None,
+    alpha: float,
+    trans_data: Any,
+    zorder: int,
+) -> Any:
+    """Draw one marker per (x, y) colored by ``color_vector`` via ``ax.scatter``.
+
+    Shared scatter primitive for points and the centroid "fast mode" of shapes/labels;
+    ``color_vector`` is per-point hex strings or numeric values mapped through ``cmap``/``norm``.
+    """
+    return ax.scatter(
+        x,
+        y,
+        s=size,
+        c=color_vector,
+        rasterized=sc_settings._vector_friendly,
+        cmap=cmap,
+        norm=norm,
+        alpha=alpha,
+        transform=trans_data,
+        zorder=zorder,
+        plotnonfinite=True,  # nan points should be rendered as well
+    )
+
+
+# Above this many centroids matplotlib's per-glyph draw (~18 µs/dot) dominates, so auto-switch to
+# datashader. Conservative because datashader changes the look (density raster); only used when method=None.
+AS_POINTS_DS_AUTO = 50_000
+
+
+def _resolve_as_points_method(
+    render_params: ShapesRenderParams | LabelsRenderParams, *, n: int, allow_datashader: bool
+) -> str:
+    """Pick the as_points backend. matplotlib by default; datashader only when it can represent the colors."""
+    method = render_params.method
+    if not allow_datashader or n == 0:
+        # no-color labels get one random colour per cell (`_map_color_seg` Case C), which datashader's
+        # aggregate-then-shade model cannot represent; an empty element just has nothing to draw.
+        if method == "datashader" and not allow_datashader:
+            logger.warning("`as_points` cannot use datashader for this colouring; falling back to matplotlib.")
+        return "matplotlib"
+    if method == "datashader":
+        return "datashader"
+    if method is None and n > AS_POINTS_DS_AUTO:
+        logger.info(
+            f"`as_points`: {n} centroids exceed {AS_POINTS_DS_AUTO}; using the datashader backend "
+            "(pass `method='matplotlib'` to override)."
+        )
+        return "datashader"
+    return "matplotlib"
+
+
+def _render_centroids_as_points(
+    ax: matplotlib.axes.SubplotBase,
+    render_params: ShapesRenderParams | LabelsRenderParams,
+    *,
+    x: Any,
+    y: Any,
+    color_vector: Any,
+    color_source_vector: pd.Series | None,
+    norm: Normalize | None,
+    na_color: Any,
+    adata: AnnData | None,
+    col_for_color: str | None,
+    palette: Any,
+    fig_params: FigParams,
+    legend_params: LegendParams,
+    colorbar_requests: list[ColorbarSpec] | None,
+    axes_extent: dict[str, tuple[float, float]],
+    allow_datashader: bool = True,
+) -> None:
+    """Render one dot per cell at ``(x, y)`` (coordinate-system coords), colored like the fill.
+
+    Shared "fast mode" for shapes/labels; backend chosen by ``_resolve_as_points_method``. ``axes_extent``
+    (the element's extent, i.e. the frame the axes will use) is what the datashader backend rasterizes over
+    so its dots match the matplotlib markers.
+    """
+    method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
+    if method == "datashader":
+        df = pd.DataFrame({"x": x, "y": y})
+        cax, color_vector, color_source_vector = _datashader_points(
+            ax,
+            df,
+            col_for_color=col_for_color,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            norm=norm,
+            cmap_params=render_params.cmap_params,
+            alpha=render_params.fill_alpha,
+            size=render_params.size,
+            zorder=render_params.zorder,
+            # as_points has no user reduction knob: centroids rarely share a pixel, and "max"
+            # (the top cell) keeps the datashader output closest to the matplotlib backend.
+            ds_reduction=None,
+            default_reduction="max",
+            density=False,
+            density_how="linear",
+            fig_params=fig_params,
+            as_markers=True,
+            axes_extent=axes_extent,
+        )
+    else:
+        cax = _scatter_points(
+            ax,
+            x,
+            y,
+            color_vector,
+            size=render_params.size,
+            cmap=render_params.cmap_params.cmap,
+            norm=norm,
+            alpha=render_params.fill_alpha,
+            trans_data=ax.transData,  # x/y are coordinate-system coords
+            zorder=render_params.zorder,
+        )
+    _add_legend_and_colorbar(
+        ax=ax,
+        cax=cax,
+        fig_params=fig_params,
+        adata=adata,
+        col_for_color=col_for_color,
+        color_source_vector=color_source_vector,
+        color_vector=color_vector,
+        palette=palette,
+        alpha=render_params.fill_alpha,
+        na_color=na_color,
+        legend_params=legend_params,
+        colorbar=render_params.colorbar,
+        colorbar_params=render_params.colorbar_params,
+        colorbar_requests=colorbar_requests,
+    )
+
+
+def _datashader_points(
+    ax: matplotlib.axes.SubplotBase,
+    df: pd.DataFrame,
+    *,
+    col_for_color: str | None,
+    color_vector: Any,
+    color_source_vector: Any,
+    norm: Normalize | None,
+    cmap_params: CmapParams,
+    alpha: float,
+    size: float,
+    zorder: int,
+    ds_reduction: _DsReduction | None,
+    density: bool,
+    density_how: str,
+    fig_params: FigParams,
+    default_reduction: _DsReduction = "sum",
+    as_markers: bool = False,
+    axes_extent: dict[str, tuple[float, float]] | None = None,
+) -> tuple[Any, Any, Any]:
+    """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
+
+    Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y`` in
+    coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's legend
+    matches. ``as_markers`` mimics matplotlib markers: it rasterizes over ``axes_extent`` (the plot frame),
+    sizes the spread to the marker radius, and uses a uniform alpha.
+    """
+    # Spread radius = matplotlib marker radius: an 'o' marker has diameter sqrt(s)*dpi/72 px, so radius
+    # sqrt(s)*dpi/144. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
+    px_div = 144 if as_markers else 100
+    px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / px_div)))
+
+    if as_markers and axes_extent is not None:
+        # Size the canvas to the AXES display box, not the figure: the datashader output is a
+        # data-coordinate image that scales with the (smaller) axes, so a figure-sized canvas shrinks the
+        # dots. With 1 canvas px == 1 axes-display px, the spread radius above matches the marker.
+        x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
+        y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
+        bb = ax.get_window_extent()
+        rx, ry = x_ext[1] - x_ext[0], y_ext[1] - y_ext[0]
+        factor = max(rx / bb.width, ry / bb.height)
+        plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
+    else:
+        plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
+    cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
+
+    # ensure color column exists on the frame with positional alignment
+    if col_for_color is not None and col_for_color not in df.columns:
+        # materialize the colour source (categorical vector preferred) and align it to df's rows
+        if color_source_vector is not None:
+            if isinstance(color_source_vector, dd.Series):
+                color_source_vector = color_source_vector.compute()
+            series = color_source_vector
+        else:
+            if isinstance(color_vector, dd.Series):
+                color_vector = color_vector.compute()
+            series = color_vector
+        df[col_for_color] = series.reindex(df.index) if isinstance(series, pd.Series) else pd.Series(series, index=df.index)
+
+    color_dtype = df[col_for_color].dtype if col_for_color is not None else None
+    color_by_categorical = col_for_color is not None and (
+        color_source_vector is not None
+        or isinstance(color_dtype, pd.CategoricalDtype)
+        or pd.api.types.is_object_dtype(color_dtype)
+        or pd.api.types.is_string_dtype(color_dtype)
+    )
+    if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
+        df[col_for_color] = df[col_for_color].astype("category")
+
+    agg, reduction_bounds, nan_agg = _ds_aggregate(
+        cvs,
+        df,
+        col_for_color,
+        color_by_categorical,
+        ds_reduction,
+        default_reduction,
+        "points",
+    )
+
+    agg, color_span = _apply_ds_norm(agg, norm)
+    na_color_hex = _hex_no_alpha(cmap_params.na_color.get_hex())
+    if cmap_params.na_color.is_fully_transparent():
+        nan_agg = None
+    color_key = _build_color_key(df, col_for_color, color_by_categorical, color_vector, na_color_hex)
+
+    if (
+        color_vector is not None
+        and len(color_vector) > 0
+        and isinstance(color_vector[0], str)
+        and color_vector[0].startswith("#")
+    ):
+        # color_vector usually holds only a few distinct hex strings (one per category), so strip
+        # alpha on the unique values and map back rather than parsing once per point.
+        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
+        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
+
+    shade_how = density_how if density else "linear"
+    # Plain density (no color column) uses the cmap as a sequential gradient over counts; the
+    # categorical path collapses to a single color and only modulates alpha.
+    plain_density = density and col_for_color is None
+
+    nan_shaded = None
+    if not plain_density and (color_by_categorical or col_for_color is None):
+        shaded = _ds_shade_categorical(
+            agg,
+            color_key,
+            color_vector,
+            alpha,
+            spread_px=px,
+            how=shade_how,
+            density=density,
+            uniform_alpha=as_markers,
+        )
+    else:
+        shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
+            agg,
+            color_span,
+            norm,
+            cmap_params.cmap,
+            alpha,
+            reduction_bounds,
+            nan_agg,
+            na_color_hex,
+            spread_px=px,
+            ds_reduction=ds_reduction,
+            how=shade_how,
+            uniform_alpha=as_markers,
+        )
+
+    _render_ds_image(ax, shaded, factor, zorder, x_min=x_ext[0], y_min=y_ext[0], nan_result=nan_shaded)
+    cax = _build_ds_colorbar(reduction_bounds, norm, cmap_params.cmap)
+    return cax, color_vector, color_source_vector
+
+
 def _render_points(
     sdata: sd.SpatialData,
     render_params: PointsRenderParams,
@@ -1261,14 +1564,6 @@ def _render_points(
     if method == "datashader":
         _log_datashader_method(method, render_params.ds_reduction, _default_reduction)
 
-        # NOTE: s in matplotlib is in units of points**2
-        # use dpi/100 as a factor for cases where dpi!=100
-        # Under density, spreading would smear the count signal across pixels and
-        # distort apparent density at sparse edges, so disable it unconditionally.
-        px: int | None = (
-            None if render_params.density else int(np.round(np.sqrt(render_params.size) * (fig_params.fig.dpi / 100)))
-        )
-
         # Apply transformations and materialize to pandas immediately so
         # datashader aggregates without dask scheduler overhead.  See #379.
         transformed_element = PointsModel.parse(
@@ -1283,138 +1578,38 @@ def _render_points(
             # any other elements on the axes.
             return
 
-        plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(
-            transformed_element, fig_params
-        )
-
-        # use datashader for the visualization of points
-        cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
-
-        # ensure color column exists on the transformed element with positional alignment
-        if col_for_color is not None and col_for_color not in transformed_element.columns:
-            series_index = transformed_element.index
-            if color_source_vector is not None:
-                if isinstance(color_source_vector, dd.Series):
-                    color_source_vector = color_source_vector.compute()
-                source_series = (
-                    color_source_vector.reindex(series_index)
-                    if isinstance(color_source_vector, pd.Series)
-                    else pd.Series(color_source_vector, index=series_index)
-                )
-                transformed_element[col_for_color] = source_series
-            else:
-                if isinstance(color_vector, dd.Series):
-                    color_vector = color_vector.compute()
-                color_series = (
-                    color_vector.reindex(series_index)
-                    if isinstance(color_vector, pd.Series)
-                    else pd.Series(color_vector, index=series_index)
-                )
-                transformed_element[col_for_color] = color_series
-
-        color_dtype = transformed_element[col_for_color].dtype if col_for_color is not None else None
-        color_by_categorical = col_for_color is not None and (
-            color_source_vector is not None
-            or isinstance(color_dtype, pd.CategoricalDtype)
-            or pd.api.types.is_object_dtype(color_dtype)
-            or pd.api.types.is_string_dtype(color_dtype)
-        )
-        if color_by_categorical and not isinstance(color_dtype, pd.CategoricalDtype):
-            transformed_element[col_for_color] = transformed_element[col_for_color].astype("category")
-
-        agg, reduction_bounds, nan_agg = _ds_aggregate(
-            cvs,
-            transformed_element,
-            col_for_color,
-            color_by_categorical,
-            render_params.ds_reduction,
-            _default_reduction,
-            "points",
-        )
-
-        agg, color_span = _apply_ds_norm(agg, norm)
-        na_color_hex = _hex_no_alpha(render_params.cmap_params.na_color.get_hex())
-        if render_params.cmap_params.na_color.is_fully_transparent():
-            nan_agg = None
-        color_key = _build_color_key(
-            transformed_element,
-            col_for_color,
-            color_by_categorical,
-            color_vector,
-            na_color_hex,
-        )
-
-        if (
-            color_vector is not None
-            and len(color_vector) > 0
-            and isinstance(color_vector[0], str)
-            and color_vector[0].startswith("#")
-        ):
-            # color_vector usually holds only a few distinct hex strings (one per
-            # category), so strip alpha on the unique values and map back rather than
-            # calling the per-string parser once per point.
-            unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-            color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
-
-        shade_how = render_params.density_how if render_params.density else "linear"
-        # Plain density (no color column) must use the user-facing cmap as a sequential
-        # gradient over counts; the categorical path collapses to a single color and only
-        # modulates alpha, which renders as a flat hue regardless of density.
-        plain_density = render_params.density and col_for_color is None
-
-        nan_shaded = None
-        if not plain_density and (color_by_categorical or col_for_color is None):
-            shaded = _ds_shade_categorical(
-                agg,
-                color_key,
-                color_vector,
-                render_params.alpha,
-                spread_px=px,
-                how=shade_how,
-                density=render_params.density,
-            )
-        else:
-            shaded, nan_shaded, reduction_bounds = _ds_shade_continuous(
-                agg,
-                color_span,
-                norm,
-                render_params.cmap_params.cmap,
-                render_params.alpha,
-                reduction_bounds,
-                nan_agg,
-                na_color_hex,
-                spread_px=px,
-                ds_reduction=render_params.ds_reduction,
-                how=shade_how,
-            )
-
-        _render_ds_image(
+        cax, color_vector, color_source_vector = _datashader_points(
             ax,
-            shaded,
-            factor,
-            render_params.zorder,
-            x_min=x_ext[0],
-            y_min=y_ext[0],
-            nan_result=nan_shaded,
+            transformed_element,
+            col_for_color=col_for_color,
+            color_vector=color_vector,
+            color_source_vector=color_source_vector,
+            norm=norm,
+            cmap_params=render_params.cmap_params,
+            alpha=render_params.alpha,
+            size=render_params.size,
+            zorder=render_params.zorder,
+            ds_reduction=render_params.ds_reduction,
+            density=render_params.density,
+            density_how=render_params.density_how,
+            fig_params=fig_params,
+            default_reduction=_default_reduction,
         )
-
-        cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
-        cax = ax.scatter(
+        cax = _scatter_points(
+            ax,
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
-            s=render_params.size,
-            c=color_vector,
-            rasterized=sc_settings._vector_friendly,
+            color_vector,
+            size=render_params.size,
             cmap=render_params.cmap_params.cmap,
             norm=norm,
             alpha=render_params.alpha,
-            transform=trans_data,
+            trans_data=trans_data,
             zorder=render_params.zorder,
-            plotnonfinite=True,  # nan points should be rendered as well
         )
         if update_parameters:
             # necessary if points are plotted with mpl first and then with datashader
@@ -2134,7 +2329,7 @@ def _render_labels(
         # get instance id based on subsetted table
         instance_id = np.unique(table.obs[instance_key].values)
 
-    _, trans_data = _prepare_transformation(label, coordinate_system, ax)
+    trans, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
     na_color = (
         render_params.color
@@ -2187,9 +2382,9 @@ def _render_labels(
             len(instance_id),
         )
 
-    # rasterize could have removed labels from label
-    # only problematic if color is specified
-    if rasterize and (col_for_color is not None or col_for_outline_color is not None):
+    # rasterize/downsampling can drop labels from the raster; remove their (now-absent) instance ids
+    # so per-instance colors stay aligned and as_points does not emit dots for dropped cells.
+    if rasterize and (col_for_color is not None or col_for_outline_color is not None or render_params.as_points):
         mask = np.isin(instance_id, unique_labels)
         instance_id = instance_id[mask]
         if col_for_color is not None:
@@ -2237,6 +2432,61 @@ def _render_labels(
     # color_source_vector is None when the values aren't categorical
     if color_source_vector is None and render_params.transfunc is not None:
         color_vector = render_params.transfunc(color_vector)
+
+    if render_params.as_points:
+        # Fast mode: one dot per label at its centroid. Compute on the *rendered* raster (already
+        # downsampled to ~display resolution above) and draw with its `trans_data`, so this is cheap
+        # and the dots land where the cells are. Centroid error is sub-pixel at display resolution.
+        logger.info("`as_points=True`: rendering label centroids; `contour_px` and `outline_*` are ignored.")
+        keep = instance_id != 0  # background label 0 has no centroid
+        point_ids = instance_id[keep]
+        labels, x_idx, y_idx, _area = _stream_label_centroid_stats(label.data)
+        centroids = pd.DataFrame(
+            {
+                "x": _pixel_to_coord(x_idx, label.coords["x"].values),
+                "y": _pixel_to_coord(y_idx, label.coords["y"].values),
+            },
+            index=labels,
+        )
+        # coerce so str/object table ids (e.g. Xenium) match the integer raster labels instead of NaN
+        centroids = centroids.reindex(point_ids.astype(labels.dtype, copy=False))
+        # datashader cannot represent one distinct random colour per cell (the no-color path below)
+        allow_datashader = True
+        if col_for_color is None and not na_color.color_modified_by_user():
+            # no color column: one distinct random colour per cell, matching the mask path
+            # (`_map_color_seg` Case C) instead of collapsing every dot to a single na_color.
+            point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
+            point_color_source_vector = None
+            allow_datashader = False
+        elif len(color_vector) == len(instance_id):
+            # data-driven colour is per-instance
+            point_color_vector = np.asarray(color_vector)[keep]
+            point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
+        else:
+            # literal colour / user-set na_color -> one colour per centroid
+            point_color_vector = np.full(len(point_ids), na_color.get_hex_with_alpha())
+            point_color_source_vector = None
+        # transform rendered-raster intrinsic centroids to coordinate-system coords
+        xy = trans.transform(np.column_stack([centroids["x"].to_numpy(), centroids["y"].to_numpy()]))
+        _render_centroids_as_points(
+            ax,
+            render_params,
+            x=xy[:, 0],
+            y=xy[:, 1],
+            color_vector=point_color_vector,
+            color_source_vector=point_color_source_vector,
+            norm=copy(render_params.cmap_params.norm),  # ax.scatter autoscales in place; don't mutate the shared norm
+            na_color=na_color,
+            adata=table if table_name is not None else None,
+            col_for_color=col_for_color,
+            palette=palette,
+            fig_params=fig_params,
+            legend_params=legend_params,
+            colorbar_requests=colorbar_requests,
+            axes_extent=extent,  # label's CS extent, already computed above (scale/rasterize preserve it)
+            allow_datashader=allow_datashader,
+        )
+        return
 
     def _draw_labels(
         seg_erosionpx: int | None,

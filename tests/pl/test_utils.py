@@ -681,6 +681,57 @@ class TestMeasureObs:
         assert "spatial" in sdata_blobs["table"].obsm
 
 
+class TestGetExtentFast:
+    """`_get_extent_fast` matches spatialdata's `get_extent` while skipping the per-geometry transform."""
+
+    @pytest.mark.parametrize(
+        ("matrix", "expected"),
+        [
+            ([[2, 0], [0, 3]], True),  # anisotropic scale
+            ([[-1, 0], [0, 1]], True),  # flip
+            ([[0, -1], [1, 0]], True),  # 90-degree rotation
+            ([[0, 1], [1, 0]], True),  # axis swap
+            ([[0.7071, -0.7071], [0.7071, 0.7071]], False),  # 45-degree rotation
+            ([[1, 0.5], [0, 1]], False),  # shear
+        ],
+    )
+    def test_is_axis_aligned(self, matrix, expected):
+        from spatialdata_plot.pl.utils import _is_axis_aligned
+
+        assert _is_axis_aligned(matrix) is expected
+
+    @pytest.mark.parametrize("element", ["blobs_circles", "blobs_polygons"])
+    @pytest.mark.parametrize("kind", ["scale_iso", "scale_aniso", "translate", "flip", "rot90", "rot45", "shear"])
+    def test_matches_get_extent(self, sdata_blobs: SpatialData, element: str, kind: str):
+        import math
+
+        from spatialdata import get_extent
+        from spatialdata.transformations import Affine, Scale, Translation, set_transformation
+
+        from spatialdata_plot.pl.utils import _get_extent_fast
+
+        def _rot(theta: float) -> Affine:
+            c, s = math.cos(theta), math.sin(theta)
+            return Affine([[c, -s, 0], [s, c, 0], [0, 0, 1]], input_axes=("x", "y"), output_axes=("x", "y"))
+
+        transforms = {
+            "scale_iso": Scale([2.0, 2.0], axes=("x", "y")),
+            "scale_aniso": Scale([2.0, 3.0], axes=("x", "y")),  # circles fall back here
+            "translate": Translation([10.0, 20.0], axes=("x", "y")),
+            "flip": Scale([-1.0, 1.0], axes=("x", "y")),
+            "rot90": _rot(math.pi / 2),
+            "rot45": _rot(math.pi / 4),  # not axis-aligned -> fall back
+            "shear": Affine([[1, 0.5, 0], [0, 1, 0], [0, 0, 1]], input_axes=("x", "y"), output_axes=("x", "y")),
+        }
+        set_transformation(sdata_blobs[element], transforms[kind], "cs")
+        sub = SpatialData(shapes={element: sdata_blobs[element]})
+        kw = dict(has_images=False, has_labels=False, has_points=False)
+        fast = _get_extent_fast(sub, "cs", **kw)
+        exact = get_extent(sub, "cs", exact=True, **kw)
+        for ax in ("x", "y"):
+            np.testing.assert_allclose(fast[ax], exact[ax], atol=1e-6)
+
+
 class TestExtractColorColumn:
     """`_extract_color_column` matches spatialdata's `get_values` bit-identically without copying the table."""
 

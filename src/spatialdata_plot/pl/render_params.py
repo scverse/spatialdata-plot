@@ -253,6 +253,9 @@ class ShapesRenderParams:
     table_name: str | None = None
     table_layer: str | None = None
     shape: Literal["circle", "hex", "visium_hex", "square"] | None = None
+    # Fast mode: render each shape as a single dot at its centroid instead of its geometry.
+    as_points: bool = False
+    size: float = 1.0  # marker size for as_points (matplotlib scatter ``s``)
     ds_reduction: _DsReduction | None = None
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
@@ -328,6 +331,11 @@ class LabelsRenderParams:
     zorder: int = 0
     colorbar: bool | str | None = "auto"
     colorbar_params: dict[str, object] | None = None
+    # Fast mode: render each label as a single dot at its centroid instead of the mask.
+    as_points: bool = False
+    size: float = 1.0  # marker size for as_points (matplotlib scatter ``s``)
+    # Backend for the as_points centroids: None auto-selects (datashader above ~50k dots).
+    method: str | None = None
     # Multi-panel color: when set, this render entry belongs to the panel identified by this
     # color key. ``None`` means the entry is shared across every panel (e.g. a background layer).
     panel_key: str | None = None

@@ -435,6 +435,36 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             "blobs_labels", color="GeneA", table_name="table", gene_symbols="gene_symbol"
         ).pl.show()
 
+    @staticmethod
+    def _as_points(sdata_blobs: SpatialData, method: str, color: str = "instance_id"):
+        # identical params for both backends; non-overlapping size so the only place the engines differ
+        # (overlap: matplotlib stacks markers, datashader aggregates) doesn't enter the comparison
+        return sdata_blobs.pl.render_labels("blobs_labels", color=color, as_points=True, method=method, size=120)
+
+    @staticmethod
+    def _add_categorical_color(sdata_blobs: SpatialData) -> str:
+        max_col = sdata_blobs["table"].to_df().idxmax(axis=1)
+        sdata_blobs["table"].obs["which_max"] = pd.Categorical(
+            max_col, categories=sdata_blobs["table"].to_df().columns, ordered=True
+        )
+        return "which_max"
+
+    def test_plot_labels_as_points_matplotlib(self, sdata_blobs: SpatialData):
+        """as_points draws one colored dot per label at its centroid (matplotlib backend)."""
+        self._as_points(sdata_blobs, "matplotlib").pl.show()
+
+    def test_plot_labels_as_points_datashader(self, sdata_blobs: SpatialData):
+        """Same render via datashader; should look maximally similar to the matplotlib baseline."""
+        self._as_points(sdata_blobs, "datashader").pl.show()
+
+    def test_plot_labels_as_points_categorical_matplotlib(self, sdata_blobs: SpatialData):
+        """Categorical-coloured as_points with a legend (matplotlib backend)."""
+        self._as_points(sdata_blobs, "matplotlib", color=self._add_categorical_color(sdata_blobs)).pl.show()
+
+    def test_plot_labels_as_points_categorical_datashader(self, sdata_blobs: SpatialData):
+        """Same categorical render via datashader (color_source_vector + legend path)."""
+        self._as_points(sdata_blobs, "datashader", color=self._add_categorical_color(sdata_blobs)).pl.show()
+
 
 def test_raises_when_table_does_not_annotate_element(sdata_blobs: SpatialData):
     # Work on an independent copy since we mutate tables
@@ -605,3 +635,100 @@ def test_render_labels_color_list_creates_one_panel_per_key(sdata_blobs: Spatial
     assert len(axs) == 2
     assert [ax.get_title() for ax in axs] == ["channel_0_sum", "channel_1_sum"]
     plt.close("all")
+
+
+def test_render_labels_as_points_renders_centroids(sdata_blobs: SpatialData):
+    """as_points draws one dot per label near its centroid. Centroids are computed on the rendered
+    (possibly downsampled) raster, so positions are checked in display space within a few-pixel
+    rasterization tolerance rather than against the exact full-resolution centroid."""
+    import spatialdata as sd
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=50).pl.show(ax=ax)
+    coll = ax.collections[0]
+    dots = coll.get_offset_transform().transform(np.asarray(coll.get_offsets()))  # display px
+    ref_world = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute()[["x", "y"]]
+    ref = ax.transData.transform(ref_world.to_numpy())
+    assert len(dots) == len(ref)
+    od, oe = np.lexsort((dots[:, 1], dots[:, 0])), np.lexsort((ref[:, 1], ref[:, 0]))
+    assert np.allclose(dots[od], ref[oe], atol=3.0)  # within a few display px of the true centroid
+    plt.close(fig)
+
+
+def test_render_labels_as_points_without_color(sdata_blobs: SpatialData):
+    """as_points must not crash without a color column; the background label (0) is excluded."""
+    import spatialdata as sd
+
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", as_points=True).pl.show(ax=ax)
+    offsets = np.asarray(ax.collections[0].get_offsets())
+    n_cells = len(sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="global").compute())
+    assert len(offsets) == n_cells  # one dot per cell, no spurious background point
+    # without a color column, cells get distinct random colours (like the mask path), not one na_color
+    facecolors = ax.collections[0].get_facecolors()
+    assert len({tuple(np.round(c, 4)) for c in facecolors}) > 1
+    plt.close(fig)
+
+
+def test_render_labels_as_points_applies_non_identity_transform(sdata_blobs: SpatialData):
+    """Regression guard: under a non-identity element->CS transform the dots must land at the cells'
+    coordinate-system positions (in display space). A wrong transform would be off by the scale
+    factor (hundreds of px); the rendered-raster centroid is correct within a few px."""
+    import spatialdata as sd
+    from spatialdata.transformations import Scale, set_transformation
+
+    set_transformation(sdata_blobs["blobs_labels"], Scale([2.0, 3.0], axes=("x", "y")), "scaled")
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="instance_id", as_points=True, size=50).pl.show(
+        ax=ax, coordinate_systems="scaled"
+    )
+    coll = ax.collections[0]
+    dots_display = coll.get_offset_transform().transform(np.asarray(coll.get_offsets()))
+    cs = sd.get_centroids(sdata_blobs["blobs_labels"], coordinate_system="scaled").compute()[["x", "y"]].to_numpy()
+    expected_display = ax.transData.transform(cs)  # where the cells truly are, in display pixels
+    order_d = np.lexsort((dots_display[:, 1], dots_display[:, 0]))
+    order_e = np.lexsort((expected_display[:, 1], expected_display[:, 0]))
+    assert np.allclose(dots_display[order_d], expected_display[order_e], atol=3.0)
+    plt.close(fig)
+
+
+def test_render_labels_as_points_method_datashader_renders_image(sdata_blobs: SpatialData):
+    """method='datashader' under as_points (with a color column) draws a datashaded raster."""
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(
+        "blobs_labels", color="instance_id", as_points=True, method="datashader", size=50
+    ).pl.show(ax=ax)
+    assert len(ax.images) >= 1
+    assert len(ax.collections) == 0
+    plt.close(fig)
+
+
+def test_render_labels_as_points_no_color_forces_matplotlib(sdata_blobs: SpatialData, caplog):
+    """No-color labels get one random colour per cell, which datashader cannot represent; even
+    method='datashader' must fall back to a matplotlib scatter (with a warning)."""
+    fig, ax = plt.subplots()
+    with logger_warns(caplog, logger, match="cannot use datashader"):
+        sdata_blobs.pl.render_labels("blobs_labels", as_points=True, method="datashader").pl.show(ax=ax)
+    assert len(ax.collections) == 1  # matplotlib scatter, not a datashader image
+    assert len(ax.images) == 0
+    plt.close(fig)
+
+
+def test_resolve_as_points_method_threshold_and_fallback():
+    """Backend selection: explicit honored, no-color/empty force matplotlib, auto switches past the cap."""
+    from types import SimpleNamespace
+
+    from spatialdata_plot.pl.render import AS_POINTS_DS_AUTO, _resolve_as_points_method
+
+    rp_auto = SimpleNamespace(method=None)
+    rp_ds = SimpleNamespace(method="datashader")
+    rp_mpl = SimpleNamespace(method="matplotlib")
+    # auto: matplotlib below the cap, datashader above
+    assert _resolve_as_points_method(rp_auto, n=1000, allow_datashader=True) == "matplotlib"
+    assert _resolve_as_points_method(rp_auto, n=AS_POINTS_DS_AUTO + 1, allow_datashader=True) == "datashader"
+    # explicit datashader honored only when the colouring allows it
+    assert _resolve_as_points_method(rp_ds, n=10, allow_datashader=True) == "datashader"
+    assert _resolve_as_points_method(rp_ds, n=10, allow_datashader=False) == "matplotlib"
+    # explicit matplotlib always matplotlib; empty always matplotlib
+    assert _resolve_as_points_method(rp_mpl, n=10**9, allow_datashader=True) == "matplotlib"
+    assert _resolve_as_points_method(rp_auto, n=0, allow_datashader=True) == "matplotlib"

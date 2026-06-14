@@ -74,6 +74,7 @@ from spatialdata._types import ArrayLike
 from spatialdata.models import (
     Image2DModel,
     Labels2DModel,
+    PointsModel,
     ShapesModel,
     SpatialElement,
     get_model,
@@ -3135,6 +3136,14 @@ def _expand_color_panels(
     return panel_param_dicts
 
 
+def _validate_as_points_size(size: float) -> None:
+    """Validate the centroid marker `size` used by ``render_shapes``/``render_labels`` with ``as_points=True``."""
+    if isinstance(size, bool) or not isinstance(size, (int, float)):
+        raise TypeError("Parameter 'size' must be numeric.")
+    if size <= 0:
+        raise ValueError("Parameter 'size' must be a positive number.")
+
+
 def _validate_label_render_params(
     sdata: sd.SpatialData,
     element: str | None,
@@ -3969,7 +3978,7 @@ def _get_extent_and_range_for_datashader_canvas(
     coordinate_system: str,
     fig_params: FigParams,
 ) -> tuple[Any, Any, list[Any], list[Any], Any]:
-    extent = get_extent(spatial_element, coordinate_system=coordinate_system)
+    extent = _fast_extent(spatial_element, coordinate_system)
     x_ext = [float(extent["x"][0]), float(extent["x"][1])]
     y_ext = [float(extent["y"][0]), float(extent["y"][1])]
     return _compute_datashader_canvas_params(x_ext, y_ext, fig_params)
@@ -4786,3 +4795,130 @@ def measure_obs(
         table = _resolve_measure_table(target, name, table_name)
         _measure_into_table(target, name, table, centroids=centroids, area=area, diameter=diameter)
     return None if inplace else target
+
+
+# --- Fast extent for axis-aligned transforms ------------------------------------------------------
+# spatialdata's `get_extent(..., exact=True)` transforms every shapes/points geometry (O(N)) just to
+# take a bounding box. For an axis-aligned transform (scale/flip/90deg-rotation/axis-swap + translation)
+# the exact extent equals the bbox of the *transformed corners*, so we transform 4 corners instead;
+# rotation/shear and other element types fall back to `get_extent`.
+
+
+def _is_axis_aligned(linear2x2: ArrayLike, *, rtol: float = 1e-9) -> bool:
+    """Whether a 2x2 linear map sends axis-aligned boxes to axis-aligned boxes.
+
+    True for a *monomial matrix* (at most one non-zero per row and per column): scale, axis flips,
+    90/180/270-degree rotations and axis swaps. For such maps the exact extent equals the bounding box
+    of the transformed corners. A relative tolerance ignores floating-point noise in the affine matrix.
+    """
+    m = np.abs(np.asarray(linear2x2, dtype=float))
+    nz = m > rtol * (m.max() or 1.0)
+    return bool((nz.sum(0) <= 1).all() and (nz.sum(1) <= 1).all() and int(nz.sum()) == m.shape[0])
+
+
+def _element_extent_fast(
+    element: Any, coordinate_system: str, *, transformations: Mapping[str, Any] | None = None
+) -> dict[str, tuple[float, float]] | None:
+    """Extent of one shapes/points element in ``coordinate_system`` via corner-transform.
+
+    Returns ``None`` to fall back to ``get_extent`` for an unsupported type, a non-axis-aligned
+    transform, or an anisotropically-scaled circle (an ellipse, but spatialdata stores one radius, so
+    cheap and exact agree only under isotropic scale). ``transformations`` may pass a pre-fetched
+    ``get_transformation(element, get_all=True)`` to avoid re-reading it.
+    """
+    model = get_model(element)
+    if model not in (ShapesModel, PointsModel):
+        return None
+    if transformations is None:
+        transformations = get_transformation(element, get_all=True)
+    matrix = transformations[coordinate_system].to_affine_matrix(("x", "y"), ("x", "y"))
+    affine = matrix[:2, :2]
+    if not _is_axis_aligned(affine):
+        return None
+
+    if model is PointsModel:
+        x, y = element["x"], element["y"]
+        xmin, ymin, xmax, ymax = (float(v) for v in dask.compute(x.min(), y.min(), x.max(), y.max()))
+    else:  # ShapesModel
+        geom = element.geometry
+        if (geom.geom_type == "Point").all():  # circles
+            a = np.abs(affine)
+            nz = a[a > 1e-9 * (a.max() or 1.0)]
+            if not np.allclose(nz, nz[0]):  # anisotropic -> radius handling diverges from spatialdata
+                return None
+            x, y = geom.x.to_numpy(), geom.y.to_numpy()
+            r = np.asarray(element["radius"], dtype=float)
+            xmin = float(np.nanmin(x - r))
+            ymin = float(np.nanmin(y - r))
+            xmax = float(np.nanmax(x + r))
+            ymax = float(np.nanmax(y + r))
+        else:  # polygons / multipolygons
+            xmin, ymin, xmax, ymax = (float(v) for v in geom.total_bounds)  # C-level union; skips empties
+
+    if not np.isfinite((xmin, ymin, xmax, ymax)).all():  # all-empty element: defer to get_extent's clear error
+        return None
+    corners = np.array([[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]])
+    tc = corners @ affine.T + matrix[:2, 2]
+    return {"x": (float(tc[:, 0].min()), float(tc[:, 0].max())), "y": (float(tc[:, 1].min()), float(tc[:, 1].max()))}
+
+
+def _fast_extent(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]]:
+    """Element extent via the fast corner-transform.
+
+    Identical to ``get_extent`` but avoids transforming every geometry for axis-aligned
+    transforms (falls back to ``get_extent`` for rotation/shear).
+    """
+    return _element_extent_fast(element, coordinate_system) or get_extent(element, coordinate_system=coordinate_system)
+
+
+def _get_extent_fast(
+    sdata: SpatialData,
+    coordinate_system: str,
+    *,
+    has_images: bool = True,
+    has_labels: bool = True,
+    has_points: bool = True,
+    has_shapes: bool = True,
+    elements: list[str] | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Drop-in replacement for spatialdata ``get_extent(sdata, ...)`` with a fast path for shapes/points.
+
+    Shapes/points with axis-aligned transforms get the corner-transform extent (identical result, no
+    per-geometry transform); everything else (rotation/shear, images, labels) delegates to spatialdata's
+    ``get_extent``. The union semantics match spatialdata's ``get_extent``.
+    """
+    include = {"images": has_images, "labels": has_labels, "points": has_points, "shapes": has_shapes}
+    element_dicts = {"images": sdata.images, "labels": sdata.labels, "points": sdata.points, "shapes": sdata.shapes}
+    mins: dict[str, list[float]] = {"x": [], "y": []}
+    maxs: dict[str, list[float]] = {"x": [], "y": []}
+    for etype, edict in element_dicts.items():
+        if not include[etype]:
+            continue
+        for name, element in edict.items():
+            if elements is not None and name not in elements:
+                continue
+            transformations = get_transformation(element, get_all=True)
+            if coordinate_system not in transformations:
+                continue
+            ext = (
+                _element_extent_fast(element, coordinate_system, transformations=transformations)
+                if etype in ("shapes", "points")
+                else None
+            )
+            if ext is None:  # rotation/shear, image/label (already cheap), or unsupported
+                ext = get_extent(element, coordinate_system=coordinate_system)
+            for ax in ("x", "y"):
+                mins[ax].append(ext[ax][0])
+                maxs[ax].append(ext[ax][1])
+    if not mins["x"]:  # nothing matched -> defer to spatialdata (preserves its error behaviour)
+        full_extent: dict[str, tuple[float, float]] = get_extent(
+            sdata,
+            coordinate_system=coordinate_system,
+            has_images=has_images,
+            has_labels=has_labels,
+            has_points=has_points,
+            has_shapes=has_shapes,
+            elements=elements,
+        )
+        return full_extent
+    return {ax: (min(mins[ax]), max(maxs[ax])) for ax in ("x", "y")}
