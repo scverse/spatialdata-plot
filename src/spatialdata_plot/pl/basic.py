@@ -1519,6 +1519,14 @@ class PlotAccessor:
             panels = [(cs, None) for cs in coordinate_systems]
         num_panels = len(panels)
 
+        # Titles are panel-level: require one title (broadcast to all panels) or exactly one
+        # per panel. Validating up front surfaces the error before any drawing, and also rejects
+        # an over-long list (previously silently truncated).
+        if title is not None and len(title) not in (1, num_panels):
+            raise ValueError(
+                f"The number of titles ({len(title)}) must be 1 or match the number of panels ({num_panels})."
+            )
+
         if ax is not None:
             n_ax = 1 if isinstance(ax, Axes) else len(ax)
             if num_panels != n_ax:
@@ -1794,19 +1802,18 @@ class PlotAccessor:
                             colorbar_requests=axis_colorbar_requests,
                         )
 
-                if title is None:
-                    t = panel_key if panel_key is not None else cs
-                elif len(title) == 1:
-                    t = title[0]
-                else:
-                    try:
-                        t = title[i]
-                    except IndexError as e:
-                        raise IndexError("The number of titles must match the number of panels.") from e
-                ax.set_title(t)
-                ax.set_aspect("equal")
-                if fig_params.frameon is False:
-                    ax.axis("off")
+            # Title/aspect/frameon are panel-level: set once per panel.
+            if title is None:
+                t = panel_key if panel_key is not None else cs
+            elif len(title) == 1:
+                t = title[0]
+            else:
+                # len(title) == num_panels is guaranteed by the up-front check above.
+                t = title[i]
+            ax.set_title(t)
+            ax.set_aspect("equal")
+            if fig_params.frameon is False:
+                ax.axis("off")
 
             if has_shapes and wants_shapes:
                 empty_shape_elements = [
