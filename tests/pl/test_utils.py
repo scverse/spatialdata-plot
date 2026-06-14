@@ -13,13 +13,13 @@ from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableMod
 
 import spatialdata_plot
 from spatialdata_plot.pl import measure_obs
-from spatialdata_plot.pl.render_params import Color, ColorLike
-from spatialdata_plot.pl.utils import (
+from spatialdata_plot.pl._datashader import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
-    _set_outline,
-    set_zero_in_cmap_to_transparent,
 )
+from spatialdata_plot.pl.render_params import Color, ColorLike
+from spatialdata_plot.pl._color import _set_outline
+from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -162,7 +162,7 @@ class TestUtils(PlotTester, metaclass=PlotTesterMeta):
 def test_is_color_like(color_result: tuple[ColorLike, bool]):
     color, result = color_result
 
-    assert spatialdata_plot.pl.utils._is_color_like(color) == result
+    assert spatialdata_plot.pl._color._is_color_like(color) == result
 
 
 @pytest.mark.parametrize(
@@ -505,9 +505,7 @@ def _add_shapes_table(sdata: SpatialData, element: str = "blobs_polygons", name:
     adata = AnnData(np.zeros((len(gdf), 1), dtype=np.float32))
     adata.obs["instance_id"] = list(gdf.index)
     adata.obs["region"] = element
-    sdata[name] = TableModel.parse(
-        adata, region_key="region", instance_key="instance_id", region=element
-    )
+    sdata[name] = TableModel.parse(adata, region_key="region", instance_key="instance_id", region=element)
     return sdata
 
 
@@ -547,9 +545,7 @@ class TestMeasureObs:
         # area is the pixel count (positive integers); diameter = 2*sqrt(area/pi)
         area = table.obs["area"].to_numpy()
         assert (area > 0).all()
-        np.testing.assert_allclose(
-            table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12
-        )
+        np.testing.assert_allclose(table.obs["equivalent_diameter"].to_numpy(), 2.0 * np.sqrt(area / np.pi), rtol=1e-12)
 
     def test_writes_for_shapes(self, sdata_blobs: SpatialData) -> None:
         _add_shapes_table(sdata_blobs, "blobs_polygons")
@@ -635,7 +631,7 @@ class TestMeasureObs:
     def test_sparse_high_label_ids(self, sdata_blobs: SpatialData) -> None:
         # #5: sparse/high label ids (max id >> n_labels) are measured correctly (dense relabelling).
         arr = np.asarray(sdata_blobs["blobs_labels"].data)
-        hi = (arr.astype(np.int64) * 1000)  # ids become 1000, 2000, ... ; max id is huge, few labels
+        hi = arr.astype(np.int64) * 1000  # ids become 1000, 2000, ... ; max id is huge, few labels
         measure_obs(sd_hi := _labels_sdata(hi), "lab", table_name="t")
         measure_obs(sd_lo := _labels_sdata(arr.astype(np.int64)), "lab", table_name="t")
         # relabelling values does not move pixels -> identical centroid set
@@ -762,7 +758,7 @@ class TestExtractColorColumn:
     def test_matches_get_values(self, key: str, origin: str):
         from spatialdata import get_values
 
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes()
         old = pd.Series(get_values(value_key=key, sdata=sdata, element_name="shapes", table_name="table")[key])
@@ -777,7 +773,7 @@ class TestExtractColorColumn:
     def test_shuffled_table_order_realigns(self):
         from spatialdata import get_values
 
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes(shuffle=True)
         old = pd.Series(get_values(value_key="g0", sdata=sdata, element_name="shapes", table_name="table")["g0"])
@@ -785,7 +781,7 @@ class TestExtractColorColumn:
         np.testing.assert_allclose(old.to_numpy(float), new.to_numpy(float))
 
     def test_missing_instances_become_nan(self):
-        from spatialdata_plot.pl.utils import _extract_color_column
+        from spatialdata_plot.pl._color import _extract_color_column
 
         sdata = self._annotated_shapes(drop=5)  # 5 shapes have no annotating table row
         new = _extract_color_column(sdata["table"], "g0", origin="var", element=sdata["shapes"], element_name="shapes")

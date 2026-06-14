@@ -29,6 +29,21 @@ from xarray import DataArray, DataTree
 
 from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot._logging import _log_context, logger
+from spatialdata_plot.pl._color import (
+    _maybe_set_colors,
+    _prepare_cmap_norm,
+    _set_outline,
+)
+from spatialdata_plot.pl._validate import (
+    _expand_color_panels,
+    _validate_as_points_size,
+    _validate_graph_render_params,
+    _validate_image_render_params,
+    _validate_label_render_params,
+    _validate_points_render_params,
+    _validate_shape_render_params,
+    _validate_show_parameters,
+)
 from spatialdata_plot.pl.render import (
     _draw_channel_legend,
     _render_graph,
@@ -61,24 +76,13 @@ from spatialdata_plot.pl.render_params import (
 from spatialdata_plot.pl.utils import (
     _RENDER_CMD_TO_CS_FLAG,
     _draw_scalebar,
-    _expand_color_panels,
     _get_cs_contents,
     _get_elements_to_be_rendered,
     _get_extent_fast,
     _get_valid_cs,
     _get_wanted_render_elements,
-    _maybe_set_colors,
     _mpl_ax_contains_elements,
-    _prepare_cmap_norm,
     _prepare_params_plot,
-    _set_outline,
-    _validate_as_points_size,
-    _validate_graph_render_params,
-    _validate_image_render_params,
-    _validate_label_render_params,
-    _validate_points_render_params,
-    _validate_shape_render_params,
-    _validate_show_parameters,
     _verify_plotting_tree,
     save_fig,
 )

@@ -1106,8 +1106,8 @@ def test_datashader_canvas_preserves_resolution_under_bbox_query():
     # units per canvas pixel) at offset must match the no-offset baseline.
     from spatialdata import bounding_box_query
 
+    from spatialdata_plot.pl._datashader import _datashader_canvas_from_dataframe
     from spatialdata_plot.pl.render_params import FigParams
-    from spatialdata_plot.pl.utils import _datashader_canvas_from_dataframe
 
     baseline_sdata = _make_offset_points_sdata(offset=(0.0, 0.0))
     offset_sdata = _make_offset_points_sdata(offset=(10000.0, 18000.0))
@@ -1176,8 +1176,8 @@ def test_datashader_canvas_from_empty_dataframe_does_not_crash():
     # crash with ``ValueError: cannot convert float NaN to integer`` when fed
     # an empty DataFrame (NaN min()/max() → int cast). The helper now returns
     # a zero-sized sentinel so callers can short-circuit cleanly.
+    from spatialdata_plot.pl._datashader import _datashader_canvas_from_dataframe
     from spatialdata_plot.pl.render_params import FigParams
-    from spatialdata_plot.pl.utils import _datashader_canvas_from_dataframe
 
     empty_df = pd.DataFrame({"x": pd.Series(dtype=float), "y": pd.Series(dtype=float)})
     fig = plt.figure(figsize=(6, 6), dpi=100)
