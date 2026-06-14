@@ -1576,6 +1576,17 @@ _RenderCmd = tuple[
     ImageRenderParams | LabelsRenderParams | PointsRenderParams | ShapesRenderParams | GraphRenderParams,
 ]
 
+# All valid render commands: the element types (which carry a coordinate-system flag) plus graphs.
+_VALID_RENDER_CMDS = {*_RENDER_CMD_TO_CS_FLAG, "render_graph"}
+
+# Dispatch from render command to its rendering function (constant; defined once).
+_RENDERERS = {
+    "render_images": _render_images,
+    "render_shapes": _render_shapes,
+    "render_points": _render_points,
+    "render_labels": _render_labels,
+}
+
 
 def _collect_render_commands(plotting_tree: OrderedDict[str, Any]) -> list[_RenderCmd]:
     """Extract and validate the queued ``render_*`` commands from the plotting tree.
@@ -1584,25 +1595,13 @@ def _collect_render_commands(plotting_tree: OrderedDict[str, Any]) -> list[_Rend
     is stripped and the bare command validated. Raises if an unknown command is present or if no
     render command was queued at all.
     """
-    valid_commands = [
-        "render_images",
-        "render_shapes",
-        "render_labels",
-        "render_points",
-        "render_graph",
-    ]
-
     render_cmds: list[_RenderCmd] = []
     for cmd, params in plotting_tree.items():
-        # strip the step-index prefix from cmd and verify it's valid
+        # strip the step-index prefix (e.g. "1_render_images" -> "render_images")
         cmd = "_".join(cmd.split("_")[1:])
-
-        if cmd not in valid_commands:
+        if cmd not in _VALID_RENDER_CMDS:
             raise ValueError(f"Command {cmd} is not valid.")
-
-        if "render" in cmd:
-            # verify that rendering commands have been called before
-            render_cmds.append((cmd, params))
+        render_cmds.append((cmd, params))
 
     if not render_cmds:
         raise TypeError("Please specify what to plot using the 'render_*' functions before calling 'imshow()'.")
@@ -1950,12 +1949,6 @@ def _render_panel(
     ``wants`` flag dict (keyed ``"images"``/``"labels"``/``"points"``/``"shapes"``) needed
     downstream for extent computation.
     """
-    renderers = {
-        "render_images": _render_images,
-        "render_shapes": _render_shapes,
-        "render_points": _render_points,
-        "render_labels": _render_labels,
-    }
     wants = dict.fromkeys(("images", "labels", "points", "shapes"), False)
     wanted_elements: list[str] = []
 
@@ -1979,7 +1972,7 @@ def _render_panel(
                     legend_params=legend_params_obj,
                     colorbar_requests=axis_colorbar_requests,
                 )
-        elif cmd in renderers and cs_row[_RENDER_CMD_TO_CS_FLAG[cmd]]:
+        elif cmd in _RENDERERS and cs_row[_RENDER_CMD_TO_CS_FLAG[cmd]]:
             element_type = cmd.removeprefix("render_")
             wanted_elements, wanted_on_cs, wants[element_type] = _get_wanted_render_elements(
                 sdata, wanted_elements, params_copy, cs, element_type
@@ -2000,8 +1993,8 @@ def _render_panel(
                     kwargs["rasterize"] = _should_rasterize(params_copy, dpi, figsize)
                 if cmd == "render_labels":
                     _maybe_set_label_colors(sdata, params_copy)
-                renderers[cmd](**kwargs)
+                _RENDERERS[cmd](**kwargs)
 
-        _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
-
+    # Panel finalization depends only on per-panel values, so run it once after the loop.
+    _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
     return wanted_elements, wants
