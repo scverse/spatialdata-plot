@@ -1121,6 +1121,15 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         self._as_points(sdata_blobs, "datashader").pl.show()
 
 
+def test_render_shapes_all_nan_color_with_groups_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
+    # Regression: all-NaN color is the "none" colortype (na-array source, not categorical); the
+    # groups preamble must not feed it to _warn_missing_groups, which reads `.categories`.
+    sdata_blobs_shapes_annotated["blobs_polygons"]["nanvals"] = [np.nan] * 5
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="nanvals", groups=["a"]).pl.show(ax=ax)
+    plt.close(fig)
+
+
 def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
     """gene_symbols resolves correctly without explicit table_name (#247)."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)

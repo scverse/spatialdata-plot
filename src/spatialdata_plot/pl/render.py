@@ -33,9 +33,8 @@ from xarray import DataTree
 
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
+    ColorSpec,
     ColorType,
-    _align_outline_vector_to_length,
-    _apply_mask_to_outline_vectors,
     _color_vector_to_rgba,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
@@ -646,8 +645,7 @@ def _render_shapes(
 
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
-    outline_color_source_vector: pd.Series | None = None
-    outline_color_vector: Any = None
+    outline_color_spec: ColorSpec | None = None
     if col_for_outline_color is not None:
         # When the outline column lives in a table that hasn't been joined yet
         # (no fill table, or a different table than fill's), left-join it onto
@@ -675,51 +673,41 @@ def _render_shapes(
             table_layer=table_layer,
             coordinate_system=coordinate_system,
         )
-        outline_color_source_vector, outline_color_vector = (
-            outline_color_spec.source_vector,
-            outline_color_spec.color_vector,
-        )
         # Cross-table case: if fill and outline tables differ and the outline table does
         # not annotate every row of the (fill-joined) element, the vector length will
         # differ from the rendered element row count. Warn + align so per-shape lookup stays
         # well-defined.
         _n_shapes = len(sdata_filt[element])
-        if outline_color_vector is not None and len(outline_color_vector) != _n_shapes:
+        if len(outline_color_spec.color_vector) != _n_shapes:
             logger.warning(
                 f"Outline column '{col_for_outline_color}' does not fully annotate "
                 f"element '{element}' under its fill-joined alignment "
-                f"({len(outline_color_vector)} of {_n_shapes} rows). Missing rows will use na_color."
+                f"({len(outline_color_spec.color_vector)} of {_n_shapes} rows). Missing rows will use na_color."
             )
-            outline_color_vector, outline_color_source_vector = _align_outline_vector_to_length(
-                outline_color_vector,
-                outline_color_source_vector,
-                _n_shapes,
-            )
+            outline_color_spec = outline_color_spec.align_to_length(_n_shapes, render_params.cmap_params.na_color)
 
     _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if (
-        groups is not None
-        and color_spec.source_vector is not None
-        and (_na.default_color_set or _na.is_fully_transparent())
-    ):
+    if groups is not None and color_spec.is_categorical and (_na.default_color_set or _na.is_fully_transparent()):
         keep = color_spec.source_vector.isin(groups)
         color_spec = color_spec.filter(keep)
         shapes = shapes[keep].reset_index(drop=True)
         if len(shapes) == 0:
             return
         sdata_filt[element] = shapes
-        if outline_color_vector is not None:
-            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
-                outline_color_vector, outline_color_source_vector, keep
-            )
+        if outline_color_spec is not None:
+            outline_color_spec = outline_color_spec.filter(keep)
 
-    # carrier pipeline done; unpack the final vectors for the read/draw phase below
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
     color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
+    outline_color_source_vector, outline_color_vector = (
+        (outline_color_spec.source_vector, outline_color_spec.color_vector)
+        if outline_color_spec is not None
+        else (None, None)
+    )
 
     norm = render_params.cmap_params.fresh_norm()
 
@@ -1454,11 +1442,7 @@ def _render_points(
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if (
-        groups is not None
-        and color_spec.source_vector is not None
-        and (_na.default_color_set or _na.is_fully_transparent())
-    ):
+    if groups is not None and color_spec.is_categorical and (_na.default_color_set or _na.is_fully_transparent()):
         keep = color_spec.source_vector.isin(groups)
         color_spec = color_spec.filter(keep)
         n_points = int(keep.sum())
@@ -1469,7 +1453,6 @@ def _render_points(
         adata = adata[keep]
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
-    # carrier pipeline done; unpack the final vectors for the read/draw phase below
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
     color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
@@ -2284,8 +2267,7 @@ def _render_labels(
     # to the outline vectors to keep lengths consistent.
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
-    outline_color_source_vector: pd.Series | None = None
-    outline_color_vector: Any = None
+    outline_color_spec: ColorSpec | None = None
     if col_for_outline_color is not None:
         outline_color_spec = resolve_color(
             sdata=sdata_filt,
@@ -2301,18 +2283,10 @@ def _render_labels(
             render_type="labels",
             coordinate_system=coordinate_system,
         )
-        outline_color_source_vector, outline_color_vector = (
-            outline_color_spec.source_vector,
-            outline_color_spec.color_vector,
-        )
         # Align to instance_id so the rasterize/groups masks (computed against
         # instance_id) can be applied without IndexError when the outline table
         # annotates a subset of the labels.
-        outline_color_vector, outline_color_source_vector = _align_outline_vector_to_length(
-            outline_color_vector,
-            outline_color_source_vector,
-            len(instance_id),
-        )
+        outline_color_spec = outline_color_spec.align_to_length(len(instance_id), render_params.cmap_params.na_color)
 
     # rasterize/downsampling can drop labels from the raster; remove their (now-absent) instance ids
     # so per-instance colors stay aligned and as_points does not emit dots for dropped cells.
@@ -2321,10 +2295,8 @@ def _render_labels(
         instance_id = instance_id[mask]
         if col_for_color is not None:
             color_spec = color_spec.filter(mask)
-        if outline_color_vector is not None:
-            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
-                outline_color_vector, outline_color_source_vector, mask
-            )
+        if outline_color_spec is not None:
+            outline_color_spec = outline_color_spec.filter(mask)
 
     _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
 
@@ -2344,14 +2316,16 @@ def _render_labels(
         label.values[~keep_mask] = 0
         instance_id = instance_id[keep_vec]
         color_spec = color_spec.filter(keep_vec)
-        if outline_color_vector is not None:
-            outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
-                outline_color_vector, outline_color_source_vector, keep_vec
-            )
+        if outline_color_spec is not None:
+            outline_color_spec = outline_color_spec.filter(keep_vec)
 
-    # carrier pipeline done; unpack the final vectors for the read/draw phase below
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
     color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
+    outline_color_source_vector, outline_color_vector = (
+        (outline_color_spec.source_vector, outline_color_spec.color_vector)
+        if outline_color_spec is not None
+        else (None, None)
+    )
 
     if render_params.as_points:
         # Fast mode: one dot per label at its centroid. Compute on the *rendered* raster (already

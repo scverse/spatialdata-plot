@@ -21,6 +21,7 @@ from matplotlib.colors import (
     Colormap,
     LinearSegmentedColormap,
     ListedColormap,
+    LogNorm,
     Normalize,
     to_rgba,
 )
@@ -130,58 +131,14 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
             vmin = data_min
         if vmax is None:
             vmax = data_max
+    if vmin == vmax and not isinstance(base, LogNorm):
+        # A constant/degenerate range collapses the colormap onto its floor; fall back to the
+        # unit interval so the single value maps to a stable color. LogNorm is exempt: 0 is
+        # out of its domain.
+        vmin, vmax = 0.0, 1.0
     resolved = copy(base)
     resolved.vmin, resolved.vmax = vmin, vmax
     return resolved
-
-
-def _apply_mask_to_outline_vectors(
-    outline_color_vector: Any,
-    outline_color_source_vector: pd.Series | None,
-    mask: Any,
-) -> tuple[Any, pd.Series | None]:
-    """Apply a boolean ``keep`` mask to outline color vector(s).
-
-    Used to keep outline data aligned with the fill data after a ``groups``
-    or rasterize-based filter is applied to the rendered element.
-    """
-    arr = np.asarray(mask)
-    if outline_color_source_vector is not None:
-        outline_color_source_vector = outline_color_source_vector[arr]
-    return outline_color_vector[arr], outline_color_source_vector
-
-
-def _align_outline_vector_to_length(
-    outline_color_vector: Any,
-    outline_color_source_vector: pd.Series | None,
-    n: int,
-) -> tuple[Any, pd.Series | None]:
-    """Pad or truncate the outline color vector(s) to length ``n``.
-
-    Used when the outline column annotates a different row count than the rendered
-    element (cross-table case, or rasterize-induced label drop). Missing entries
-    are padded with NaN so downstream code maps them to ``na_color``.
-    """
-    if outline_color_vector is None or len(outline_color_vector) == n:
-        return outline_color_vector, outline_color_source_vector
-    if len(outline_color_vector) > n:
-        if outline_color_source_vector is not None:
-            outline_color_source_vector = outline_color_source_vector[:n]
-        return outline_color_vector[:n], outline_color_source_vector
-    pad = n - len(outline_color_vector)
-    if outline_color_source_vector is not None:
-        # Categorical: downstream picks one hex per category from rows that *have* a
-        # category. NaN-padded rows contribute no category, so the per-row hex pad is
-        # immaterial; pad with NaN to skip the allocation.
-        padded_vec = np.concatenate([np.asarray(outline_color_vector), np.full(pad, np.nan, dtype=object)])
-        outline_color_source_vector = pd.Categorical(
-            list(outline_color_source_vector) + [None] * pad,
-            categories=outline_color_source_vector.categories,
-        )
-    else:
-        # Continuous: numeric vector, pad with NaN so cmap maps padded rows to na_color.
-        padded_vec = np.concatenate([np.asarray(outline_color_vector, dtype=float), np.full(pad, np.nan)])
-    return padded_vec, outline_color_source_vector
 
 
 def _color_vector_to_rgba(
@@ -742,7 +699,7 @@ def _set_color_source_vec(
 ColorType = Literal["categorical", "continuous", "none"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ColorSpec:
     """Resolved color for one element layer: the explicit color-state the renderers consume.
 
@@ -793,13 +750,32 @@ class ColorSpec:
             return replace(self, color_vector=transfunc(self.color_vector))
         return self
 
-    def with_color_vector(self, color_vector: ArrayLike) -> ColorSpec:
-        """Return a copy with a replaced ``color_vector`` (renderer-specific rewrites: broadcast, compute)."""
-        return replace(self, color_vector=color_vector)
+    def align_to_length(self, n: int, na_color: Color) -> ColorSpec:
+        """Pad or truncate both vectors to ``n`` rows (cross-table / rasterize outline alignment).
+
+        Padded rows render as ``na_color``: a categorical (hex) ``color_vector`` pads with the na_color
+        hex — NaN would crash ``to_rgba_array`` — and ``source_vector`` with an absent category; a
+        continuous vector pads with NaN so the cmap maps it to na_color.
+        """
+        vec = self.color_vector
+        if vec is None or len(vec) == n:
+            return self
+        if len(vec) > n:
+            source = None if self.source_vector is None else self.source_vector[:n]
+            return replace(self, source_vector=source, color_vector=np.asarray(vec)[:n])
+        pad = n - len(vec)
+        if self.source_vector is not None:
+            padded = np.concatenate(
+                [np.asarray(vec, dtype=object), np.full(pad, na_color.get_hex_with_alpha(), dtype=object)]
+            )
+            source = pd.Categorical(list(self.source_vector) + [None] * pad, categories=self.source_vector.categories)
+            return replace(self, source_vector=source, color_vector=padded)
+        padded = np.concatenate([np.asarray(vec, dtype=float), np.full(pad, np.nan)])
+        return replace(self, color_vector=padded)
 
 
 def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:
-    """Resolve an element's color into a typed :class:`ColorSpec` (the #700 IR's color layer).
+    """Resolve an element's color into a typed :class:`ColorSpec`.
 
     Pass-through wrapper over :func:`_set_color_source_vec` that classifies its result into an
     explicit ``colortype`` so callers stop re-deriving the state from ``source is None``/``categorical``.

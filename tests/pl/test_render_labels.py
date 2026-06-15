@@ -521,6 +521,25 @@ def test_transfunc_is_applied_for_continuous_labels(sdata_blobs: SpatialData):
     assert called, "transfunc was not called for continuous labels data"
 
 
+def test_render_labels_all_nan_color_renders_under_rasterize(sdata_blobs: SpatialData):
+    # Regression: an all-NaN color column is the "none" colortype (na-array source, not None).
+    # Under default rasterize the per-instance mask path used to trip an
+    # `assert color_source_vector is None`; it must now just render.
+    labels_name = "blobs_labels"
+    instances = get_element_instances(sdata_blobs[labels_name])
+    n_obs = len(instances)
+    adata = AnnData(np.zeros((n_obs, 1)))
+    adata.obs["instance_id"] = instances.values
+    adata.obs["nanvals"] = np.full(n_obs, np.nan)
+    adata.obs["region"] = labels_name
+    sdata_blobs["label_table"] = TableModel.parse(
+        adata=adata, region_key="region", instance_key="instance_id", region=labels_name
+    )
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(labels_name, color="nanvals", table_name="label_table").pl.show(ax=ax)
+    plt.close(fig)
+
+
 @pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64])
 def test_render_labels_rejects_float_dtype(dtype):
     # Regression test for #606: float-dtype labels must raise a clear

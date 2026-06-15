@@ -1029,6 +1029,18 @@ def test_render_points_color_by_z_data_column():
         plt.close(fig)
 
 
+def test_render_points_all_nan_color_with_groups_does_not_crash():
+    # Regression: all-NaN color is the "none" colortype; the groups preamble must not call
+    # .isin on the na-array source (same none-state class as the labels/shapes crashes).
+    pts = PointsModel.parse(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0], "nanvals": [np.nan] * 3}))
+    sdata = SpatialData(points={"p": pts})
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_points("p", color="nanvals", groups=["a"]).pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
 def test_render_points_color_by_z_with_extra_columns():
     # regression test for #615
     pts = PointsModel.parse(
