@@ -670,7 +670,6 @@ def _render_shapes(
         coordinate_system=coordinate_system,
     )
     colortype = color_spec.colortype
-    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
@@ -724,15 +723,18 @@ def _render_shapes(
                 _n_shapes,
             )
 
-    _warn_groups(groups, colortype, color_source_vector, col_for_color)
+    _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
 
     # When groups are specified, filter out non-matching elements by default.
     # Only show non-matching elements if the user explicitly sets na_color.
     _na = render_params.cmap_params.na_color
-    if groups is not None and color_source_vector is not None and (_na.default_color_set or _na.is_fully_transparent()):
-        keep, color_source_vector, color_vector = _filter_groups_transparent_na(
-            groups, color_source_vector, color_vector
-        )
+    if (
+        groups is not None
+        and color_spec.source_vector is not None
+        and (_na.default_color_set or _na.is_fully_transparent())
+    ):
+        keep = color_spec.source_vector.isin(groups)
+        color_spec = color_spec.filter(keep)
         shapes = shapes[keep].reset_index(drop=True)
         if len(shapes) == 0:
             return
@@ -742,7 +744,9 @@ def _render_shapes(
                 outline_color_vector, outline_color_source_vector, keep
             )
 
-    color_vector = _maybe_apply_transfunc(colortype, color_vector, render_params.transfunc)
+    # carrier pipeline done; unpack the final vectors for the read/draw phase below
+    color_spec = color_spec.apply_transfunc(render_params.transfunc)
+    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     norm = render_params.cmap_params.fresh_norm()
 
