@@ -276,33 +276,6 @@ def _warn_groups(
         _warn_missing_groups(groups, color_source_vector, col_for_color)
 
 
-def _maybe_apply_transfunc(
-    colortype: ColorType,
-    color_vector: Any,
-    transfunc: abc.Callable[[Any], Any] | None,
-) -> Any:
-    """Apply ``transfunc`` to a continuous ``color_vector``; no-op when categorical/none or unset."""
-    if colortype == "continuous" and transfunc is not None:
-        return transfunc(color_vector)
-    return color_vector
-
-
-def _filter_groups_transparent_na(
-    groups: str | list[str],
-    color_source_vector: pd.Categorical,
-    color_vector: pd.Series | np.ndarray | list[str],
-) -> tuple[np.ndarray, pd.Categorical, np.ndarray]:
-    """Return a boolean mask and filtered color vectors for groups filtering.
-
-    Used when ``na_color=None`` (fully transparent) so that non-matching
-    elements are removed entirely instead of rendered invisibly.
-    """
-    keep = color_source_vector.isin(groups)
-    filtered_csv = color_source_vector[keep]
-    filtered_cv = np.asarray(color_vector)[keep]
-    return keep, filtered_csv, filtered_cv
-
-
 def _split_colorbar_params(
     params: dict[str, object] | None,
 ) -> tuple[dict[str, object], dict[str, object], str | None]:
