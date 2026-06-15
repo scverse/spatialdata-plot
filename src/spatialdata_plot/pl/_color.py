@@ -754,6 +754,20 @@ class ColorSpec:
     source_vector: ArrayLike | pd.Series | None
     color_vector: ArrayLike
 
+    # Predicates on the invariant ``colortype`` — safe to read anywhere (unlike the vectors, which
+    # the renderers mutate after resolution). They replace scattered, typo-prone ``colortype == "..."``.
+    @property
+    def is_categorical(self) -> bool:
+        return self.colortype == "categorical"
+
+    @property
+    def is_continuous(self) -> bool:
+        return self.colortype == "continuous"
+
+    @property
+    def is_none(self) -> bool:
+        return self.colortype == "none"
+
 
 def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:
     """Resolve an element's color into a typed :class:`ColorSpec` (the #700 IR's color layer).

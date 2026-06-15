@@ -930,23 +930,36 @@ class TestResolveColor:
             cmap_params=self._cmap_params(),
         )
 
+    @staticmethod
+    def _assert_predicates(spec, expected: str):
+        # exactly one predicate true, matching colortype
+        assert (spec.is_categorical, spec.is_continuous, spec.is_none) == (
+            expected == "categorical",
+            expected == "continuous",
+            expected == "none",
+        )
+
     def test_no_value_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
         spec = self._resolve(sdata_blobs_shapes_annotated, None)
         assert spec.colortype == "none"
         assert spec.source_vector is not None  # na array, not None
+        self._assert_predicates(spec, "none")
 
     def test_all_nan_column_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
         sdata_blobs_shapes_annotated["blobs_polygons"]["nanvals"] = [np.nan] * 5
         spec = self._resolve(sdata_blobs_shapes_annotated, "nanvals")
         assert spec.colortype == "none"
+        self._assert_predicates(spec, "none")
 
     def test_numeric_column_is_continuous(self, sdata_blobs_shapes_annotated: SpatialData):
         spec = self._resolve(sdata_blobs_shapes_annotated, "value")  # fixture's [1..5]
         assert spec.colortype == "continuous"
         assert spec.source_vector is None  # the continuous marker
+        self._assert_predicates(spec, "continuous")
 
     def test_categorical_column_is_categorical(self, sdata_blobs_shapes_annotated: SpatialData):
         sdata_blobs_shapes_annotated["blobs_polygons"]["cat"] = ["a", "b", "a", "b", "a"]
         spec = self._resolve(sdata_blobs_shapes_annotated, "cat")
         assert spec.colortype == "categorical"
         assert isinstance(spec.source_vector, pd.Categorical)
+        self._assert_predicates(spec, "categorical")

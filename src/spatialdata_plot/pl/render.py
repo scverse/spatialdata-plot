@@ -206,17 +206,16 @@ def _reject_continuous_color_under_density(
     sdata_filt: sd.SpatialData,
     element: str,
     col_for_color: str | None,
-    color_source_vector: Any,
+    colortype: ColorType,
     color_vector: Any,
 ) -> None:
     """Raise before any materialization if density+continuous-color was requested.
 
-    ``color_source_vector`` is only populated by ``_set_color_source_vec`` for the categorical
-    branch, so a non-None value is sufficient to accept the call. Otherwise we read the dtype
-    from the dask source (points element column) or the pre-computed color vector — neither
-    forces a ``.compute()``.
+    Only ``continuous`` coloring is rejected; categorical and none are fine. When the colortype
+    is not yet decisive we read the dtype from the dask source (points element column) or the
+    pre-computed color vector — neither forces a ``.compute()``.
     """
-    if col_for_color is None or color_source_vector is not None:
+    if col_for_color is None or colortype != "continuous":
         return
     points_columns = sdata_filt.points[element].columns
     if col_for_color in points_columns:
@@ -271,8 +270,9 @@ def _warn_groups(
 ) -> None:
     """Emit the two groups-related warnings every ``_render_*`` preamble shares."""
     _warn_groups_ignored_continuous(groups, colortype, col_for_color)
-    # behaviour-preserving: `color_source_vector is not None` == colortype != "continuous"
-    if groups is not None and colortype != "continuous":
+    # Only a categorical source has `.categories` to check groups against; the none state
+    # (na-array source) must not reach _warn_missing_groups (it has no categories).
+    if groups is not None and colortype == "categorical":
         _warn_missing_groups(groups, color_source_vector, col_for_color)
 
 
@@ -656,7 +656,7 @@ def _render_shapes(
     trans, trans_data = _prepare_transformation(sdata_filt.shapes[element], coordinate_system)
 
     # get color vector (categorical or continuous)
-    _spec = resolve_color(
+    color_spec = resolve_color(
         sdata=sdata_filt,
         element=sdata_filt[element],
         element_name=element,
@@ -669,11 +669,8 @@ def _render_shapes(
         table_layer=table_layer,
         coordinate_system=coordinate_system,
     )
-    colortype = _spec.colortype
-    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
-
-    # behaviour-preserving: `color_source_vector is not None` == colortype != "continuous"
-    values_are_categorical = colortype != "continuous"
+    colortype = color_spec.colortype
+    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
@@ -693,7 +690,7 @@ def _render_shapes(
             # so the per-shape outline vector length matches the rendered shapes.
             if table_name is None:
                 sdata_filt[element] = shapes = joined_outline_element
-        _outline_spec = resolve_color(
+        outline_color_spec = resolve_color(
             sdata=sdata_filt,
             element=sdata_filt[element],
             element_name=element,
@@ -706,7 +703,10 @@ def _render_shapes(
             table_layer=table_layer,
             coordinate_system=coordinate_system,
         )
-        outline_color_source_vector, outline_color_vector = _outline_spec.source_vector, _outline_spec.color_vector
+        outline_color_source_vector, outline_color_vector = (
+            outline_color_spec.source_vector,
+            outline_color_spec.color_vector,
+        )
         # Cross-table case: if fill and outline tables differ and the outline table does
         # not annotate every row of the (fill-joined) element, the vector length will
         # differ from the rendered element row count. Warn + align so per-shape lookup stays
@@ -750,7 +750,7 @@ def _render_shapes(
         color_vector = [render_params.cmap_params.na_color.get_hex_with_alpha()]
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
-    if color_source_vector is None and not values_are_categorical:
+    if color_spec.is_continuous:
         _series = color_vector if isinstance(color_vector, pd.Series) else pd.Series(color_vector)
 
         try:
@@ -1036,7 +1036,7 @@ def _render_shapes(
         for path in _cax.get_paths():
             path.vertices = trans.transform(path.vertices)
 
-    if not values_are_categorical:
+    if color_spec.is_continuous:
         # Colorbar range from the same resolved norm the fill pixels use.
         used_norm = _resolve_continuous_norm(color_vector, render_params.cmap_params)
         _cax.set_clim(vmin=used_norm.vmin, vmax=used_norm.vmax)
@@ -1445,7 +1445,7 @@ def _render_points(
         else None
     )
 
-    _spec = resolve_color(
+    color_spec = resolve_color(
         sdata=sdata_filt,
         element=color_element,
         element_name=element,
@@ -1460,8 +1460,8 @@ def _render_points(
         coordinate_system=coordinate_system,
         preloaded_color_data=_preloaded,
     )
-    colortype = _spec.colortype
-    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
+    colortype = color_spec.colortype
+    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     if added_color_from_table and col_for_color is not None:
         _reparse_points(
@@ -1500,7 +1500,7 @@ def _render_points(
 
     if render_params.density:
         method = "datashader"
-        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, color_source_vector, color_vector)
+        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, colortype, color_vector)
     elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
@@ -2281,7 +2281,7 @@ def _render_labels(
         if col_for_color is None and render_params.color is not None
         else render_params.cmap_params.na_color
     )
-    _spec = resolve_color(
+    color_spec = resolve_color(
         sdata=sdata_filt,
         element=label,
         element_name=element,
@@ -2295,9 +2295,9 @@ def _render_labels(
         render_type="labels",
         coordinate_system=coordinate_system,
     )
-    colortype = _spec.colortype
-    color_source_vector, color_vector = _spec.source_vector, _spec.color_vector
-    categorical = colortype == "categorical"
+    colortype = color_spec.colortype
+    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
+    categorical = color_spec.is_categorical
 
     # Outline color lookup must run BEFORE any masking so the returned vector aligns to
     # the original instance_id. The same masks applied to fill below are then applied
@@ -2307,7 +2307,7 @@ def _render_labels(
     outline_color_source_vector: pd.Series | None = None
     outline_color_vector: Any = None
     if col_for_outline_color is not None:
-        _outline_spec = resolve_color(
+        outline_color_spec = resolve_color(
             sdata=sdata_filt,
             element=label,
             element_name=element,
@@ -2321,7 +2321,10 @@ def _render_labels(
             render_type="labels",
             coordinate_system=coordinate_system,
         )
-        outline_color_source_vector, outline_color_vector = _outline_spec.source_vector, _outline_spec.color_vector
+        outline_color_source_vector, outline_color_vector = (
+            outline_color_spec.source_vector,
+            outline_color_spec.color_vector,
+        )
         # Align to instance_id so the rasterize/groups masks (computed against
         # instance_id) can be applied without IndexError when the outline table
         # annotates a subset of the labels.
