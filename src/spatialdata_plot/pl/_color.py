@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import matplotlib
@@ -767,6 +767,33 @@ class ColorSpec:
     @property
     def is_none(self) -> bool:
         return self.colortype == "none"
+
+    # Immutable transforms — return a new spec so the renderers can thread one ``color_spec`` through
+    # the post-resolution mutations instead of reassigning two vectors in lockstep (the sync footgun).
+    def filter(self, mask: Any) -> ColorSpec:
+        """Row-subset both vectors by a boolean/index ``mask``; ``colortype`` is unchanged.
+
+        A categorical ``color_vector`` keeps its dtype and drops now-unused categories; otherwise it is
+        coerced to an array (matching the groups/transparent-na path). ``source_vector`` (None for
+        continuous) is masked as-is.
+        """
+        source = None if self.source_vector is None else self.source_vector[mask]
+        color = self.color_vector
+        if isinstance(getattr(color, "dtype", None), pd.CategoricalDtype):
+            color = color[mask].remove_unused_categories()
+        else:
+            color = np.asarray(color)[mask]
+        return replace(self, source_vector=source, color_vector=color)
+
+    def apply_transfunc(self, transfunc: Any) -> ColorSpec:
+        """Map ``color_vector`` through ``transfunc`` for continuous coloring; no-op otherwise."""
+        if self.is_continuous and transfunc is not None:
+            return replace(self, color_vector=transfunc(self.color_vector))
+        return self
+
+    def with_color_vector(self, color_vector: ArrayLike) -> ColorSpec:
+        """Return a copy with a replaced ``color_vector`` (renderer-specific rewrites: broadcast, compute)."""
+        return replace(self, color_vector=color_vector)
 
 
 def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:

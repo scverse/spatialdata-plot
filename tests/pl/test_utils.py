@@ -963,3 +963,45 @@ class TestResolveColor:
         assert spec.colortype == "categorical"
         assert isinstance(spec.source_vector, pd.Categorical)
         self._assert_predicates(spec, "categorical")
+
+
+class TestColorSpecTransforms:
+    """Immutable ColorSpec transforms reproduce the renderers' lockstep vector mutations (#700)."""
+
+    @staticmethod
+    def _cat_spec():
+        from spatialdata_plot.pl._color import ColorSpec
+
+        src = pd.Categorical(["a", "b", "a", "c"])
+        col = pd.Categorical(["#ff0000", "#00ff00", "#ff0000", "#0000ff"])
+        return ColorSpec("categorical", src, col)
+
+    @staticmethod
+    def _cont_spec():
+        from spatialdata_plot.pl._color import ColorSpec
+
+        return ColorSpec("continuous", None, np.array([1.0, 2.0, 3.0, 4.0]))
+
+    def test_filter_categorical_keeps_dtype_and_drops_unused(self):
+        out = self._cat_spec().filter(np.array([True, False, True, False]))  # keep the two "a"s
+        assert out.colortype == "categorical"
+        assert list(out.source_vector) == ["a", "a"]
+        assert isinstance(out.color_vector.dtype, pd.CategoricalDtype)
+        assert set(out.color_vector.categories) == {"#ff0000"}  # unused colors dropped
+
+    def test_filter_continuous_masks_color_and_keeps_source_none(self):
+        out = self._cont_spec().filter(np.array([True, False, True, False]))
+        assert out.source_vector is None
+        assert list(out.color_vector) == [1.0, 3.0]
+
+    def test_apply_transfunc_is_continuous_only(self):
+        out = self._cont_spec().apply_transfunc(lambda x: x * 10)
+        assert list(out.color_vector) == [10.0, 20.0, 30.0, 40.0]
+        cat = self._cat_spec()
+        assert cat.apply_transfunc(lambda x: x) is cat  # no-op for categorical
+        assert cat.apply_transfunc(None) is cat
+
+    def test_with_color_vector_replaces_only_color(self):
+        out = self._cont_spec().with_color_vector(np.array([9.0]))
+        assert list(out.color_vector) == [9.0]
+        assert out.colortype == "continuous" and out.source_vector is None
