@@ -132,9 +132,7 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
         if vmax is None:
             vmax = data_max
     if vmin == vmax and not isinstance(base, LogNorm):
-        # A constant/degenerate range collapses the colormap onto its floor; fall back to the
-        # unit interval so the single value maps to a stable color. LogNorm is exempt: 0 is
-        # out of its domain.
+        # degenerate range collapses the cmap onto its floor; fall back to [0, 1]. LogNorm exempt (0 not in domain).
         vmin, vmax = 0.0, 1.0
     resolved = copy(base)
     resolved.vmin, resolved.vmax = vmin, vmax
@@ -701,20 +699,19 @@ ColorType = Literal["categorical", "continuous", "none"]
 
 @dataclass(frozen=True, eq=False)
 class ColorSpec:
-    """Resolved color for one element layer: the explicit color-state the renderers consume.
+    """Resolved color for one element layer, with the color-state made explicit.
 
-    ``colortype`` names the three states the renderers used to infer implicitly from
-    ``source_vector``/``categorical``: ``categorical`` (``source_vector`` is the Categorical),
-    ``continuous`` (``source_vector`` is None, ``color_vector`` is numeric), ``none`` (no/uncolorable
-    value -> ``color_vector`` is the na_color, ``source_vector`` is a non-None na array).
+    ``colortype``: ``categorical`` (``source_vector`` is the Categorical), ``continuous``
+    (``source_vector`` is None, ``color_vector`` numeric), ``none`` (uncolorable -> ``color_vector`` is
+    na_color, ``source_vector`` a non-None na array). Trap: ``source_vector is not None`` means
+    categorical OR none, not categorical — branch on :attr:`is_categorical`.
     """
 
     colortype: ColorType
     source_vector: ArrayLike | pd.Series | None
     color_vector: ArrayLike
 
-    # Predicates on the invariant ``colortype`` — safe to read anywhere (unlike the vectors, which
-    # the renderers mutate after resolution). They replace scattered, typo-prone ``colortype == "..."``.
+    # Predicates on the invariant ``colortype`` (the vectors get mutated after resolution; the type does not).
     @property
     def is_categorical(self) -> bool:
         return self.colortype == "categorical"
@@ -727,8 +724,7 @@ class ColorSpec:
     def is_none(self) -> bool:
         return self.colortype == "none"
 
-    # Immutable transforms — return a new spec so the renderers can thread one ``color_spec`` through
-    # the post-resolution mutations instead of reassigning two vectors in lockstep (the sync footgun).
+    # Immutable transforms: return a new spec so renderers thread one ``color_spec``, not two vectors in lockstep.
     def filter(self, mask: Any) -> ColorSpec:
         """Row-subset both vectors by a boolean/index ``mask``; ``colortype`` is unchanged.
 
@@ -753,25 +749,27 @@ class ColorSpec:
     def align_to_length(self, n: int, na_color: Color) -> ColorSpec:
         """Pad or truncate both vectors to ``n`` rows (cross-table / rasterize outline alignment).
 
-        Padded rows render as ``na_color``: a categorical (hex) ``color_vector`` pads with the na_color
-        hex — NaN would crash ``to_rgba_array`` — and ``source_vector`` with an absent category; a
-        continuous vector pads with NaN so the cmap maps it to na_color.
+        Padded rows render as ``na_color``: continuous pads with NaN; categorical/none pad the hex
+        ``color_vector`` with the na_color hex (NaN would crash ``to_rgba_array``) and the
+        ``source_vector`` with an absent category / na entry.
         """
         vec = self.color_vector
         if vec is None or len(vec) == n:
             return self
         if len(vec) > n:
             source = None if self.source_vector is None else self.source_vector[:n]
-            return replace(self, source_vector=source, color_vector=np.asarray(vec)[:n])
+            return replace(self, source_vector=source, color_vector=vec[:n])
         pad = n - len(vec)
-        if self.source_vector is not None:
-            padded = np.concatenate(
-                [np.asarray(vec, dtype=object), np.full(pad, na_color.get_hex_with_alpha(), dtype=object)]
-            )
+        if self.is_continuous:
+            padded = np.concatenate([np.asarray(vec, dtype=float), np.full(pad, np.nan)])
+            return replace(self, color_vector=padded)
+        na_hex = na_color.get_hex_with_alpha()
+        padded = np.concatenate([np.asarray(vec, dtype=object), np.full(pad, na_hex, dtype=object)])
+        if self.is_categorical:
             source = pd.Categorical(list(self.source_vector) + [None] * pad, categories=self.source_vector.categories)
-            return replace(self, source_vector=source, color_vector=padded)
-        padded = np.concatenate([np.asarray(vec, dtype=float), np.full(pad, np.nan)])
-        return replace(self, color_vector=padded)
+        else:  # none: source is an na array, not a Categorical — extend it with na entries
+            source = np.concatenate([np.asarray(self.source_vector, dtype=object), np.full(pad, na_hex, dtype=object)])
+        return replace(self, source_vector=source, color_vector=padded)
 
 
 def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:

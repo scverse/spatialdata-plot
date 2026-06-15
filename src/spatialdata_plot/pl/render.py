@@ -269,8 +269,7 @@ def _warn_groups(
 ) -> None:
     """Emit the two groups-related warnings every ``_render_*`` preamble shares."""
     _warn_groups_ignored_continuous(groups, colortype, col_for_color)
-    # Only a categorical source has `.categories` to check groups against; the none state
-    # (na-array source) must not reach _warn_missing_groups (it has no categories).
+    # only a categorical source has `.categories`; the none state (na-array source) must not reach it
     if groups is not None and colortype == "categorical":
         _warn_missing_groups(groups, color_source_vector, col_for_color)
 

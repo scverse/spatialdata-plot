@@ -1027,6 +1027,18 @@ class TestColorSpecTransforms:
         assert list(out.color_vector[-2:]) == [na.get_hex_with_alpha()] * 2
         assert pd.isna(out.source_vector[-2:]).all()  # padded rows carry no category
 
+    def test_align_to_length_pads_none_state_with_na(self):
+        # the trap: a `none` spec has a non-None na *array* source (not a Categorical); padding it
+        # must not take the categorical `.categories` branch
+        from spatialdata_plot.pl._color import ColorSpec
+
+        na = Color("#abcdefff")
+        na_hex = na.get_hex_with_alpha()
+        spec = ColorSpec("none", np.array([na_hex, na_hex], dtype=object), np.array([na_hex, na_hex], dtype=object))
+        out = spec.align_to_length(4, na)
+        assert len(out.color_vector) == len(out.source_vector) == 4
+        assert list(out.color_vector) == [na_hex] * 4
+
     def test_align_to_length_pads_continuous_with_nan(self):
         out = self._cont_spec().align_to_length(6, Color())
         assert out.source_vector is None
