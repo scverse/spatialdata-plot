@@ -35,7 +35,6 @@ from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
     ColorSpec,
     ColorType,
-    _color_vector_to_rgba,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
     _map_color_seg,
@@ -917,12 +916,7 @@ def _render_shapes(
 
         # render outlines separately to ensure they are always underneath the shape
         if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
-            outline_rgba = _color_vector_to_rgba(
-                outline_color_vector,
-                outline_color_source_vector,
-                render_params.cmap_params,
-                n_rows=len(shapes),
-            )
+            outline_rgba = outline_color_spec.to_rgba(render_params.cmap_params)
             _cax = _get_collection_shape(
                 shapes=shapes,
                 s=render_params.scale,
@@ -984,7 +978,7 @@ def _render_shapes(
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
-            c=color_vector.copy(),  # copy bc c is modified in _get_collection_shape
+            c=color_spec.to_rgba(render_params.cmap_params),
             prebuilt_patches=prebuilt_patches,
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,

@@ -139,54 +139,6 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
     return resolved
 
 
-def _color_vector_to_rgba(
-    color_vector: Any | None,
-    color_source_vector: pd.Series | None,
-    cmap_params: CmapParams,
-    n_rows: int,
-) -> np.ndarray:
-    """Convert a fill/outline `color_vector` (categorical hex strings or continuous numerics) to (N, 4) RGBA.
-
-    Mirrors the per-row mapping done inside :func:`_get_collection_shape` so that
-    callers can pre-materialize an outline-color array. NaN/non-finite entries are
-    painted with ``cmap_params.na_color``.
-    """
-    na_rgba = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
-    if color_vector is None:
-        rgba = np.empty((n_rows, 4), dtype=float)
-        rgba[:] = na_rgba
-        return rgba
-
-    if color_source_vector is not None:
-        # Categorical: color_vector contains hex strings aligned to color_source_vector
-        return np.asarray(ColorConverter().to_rgba_array(list(color_vector)))
-
-    arr = np.asarray(color_vector)
-    if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
-        return np.asarray(ColorConverter().to_rgba_array(arr))
-
-    rgba = np.empty((len(arr), 4), dtype=float)
-    rgba[:] = na_rgba
-    if np.issubdtype(arr.dtype, np.number):
-        finite_mask = np.isfinite(arr)
-        if finite_mask.any():
-            used_norm = _resolve_continuous_norm(arr, cmap_params)
-            rgba[finite_mask] = cmap_params.cmap(used_norm(arr[finite_mask]))
-        return rgba
-
-    # Object dtype: mix of numerics and color-like specs (apply cmap to the numeric subset only)
-    series = pd.Series(arr, copy=False)
-    num = pd.to_numeric(series, errors="coerce").to_numpy()
-    is_num = np.isfinite(num)
-    if is_num.any():
-        used_norm = _resolve_continuous_norm(num, cmap_params)
-        rgba[is_num] = cmap_params.cmap(used_norm(num[is_num]))
-    color_mask = (~is_num) & series.notna().to_numpy()
-    if color_mask.any():
-        rgba[color_mask] = ColorConverter().to_rgba_array(series[color_mask].tolist())
-    return rgba
-
-
 def _prepare_cmap_norm(
     cmap: Colormap | str | None = None,
     norm: Normalize | None = None,
@@ -745,6 +697,38 @@ class ColorSpec:
         if self.is_continuous and transfunc is not None:
             return replace(self, color_vector=transfunc(self.color_vector))
         return self
+
+    def to_rgba(self, cmap_params: CmapParams) -> np.ndarray:
+        """Map this layer's color to an ``(N, 4)`` RGBA array; the one fill+outline mapping.
+
+        Categorical/none ``color_vector`` is per-row hex -> straight to RGBA; continuous numerics map
+        via norm+cmap with NaN/non-finite rows painted ``na_color``; an object vector mixes the two.
+        """
+        na_rgba = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
+        if self.source_vector is not None:  # categorical or none: color_vector holds per-row hex
+            return np.asarray(ColorConverter().to_rgba_array(list(self.color_vector)))
+        arr = np.asarray(self.color_vector)
+        if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
+            return np.asarray(ColorConverter().to_rgba_array(arr))
+        rgba = np.empty((len(arr), 4), dtype=float)
+        rgba[:] = na_rgba
+        if np.issubdtype(arr.dtype, np.number):
+            finite = np.isfinite(arr)
+            if finite.any():
+                norm = _resolve_continuous_norm(arr, cmap_params)
+                rgba[finite] = cmap_params.cmap(norm(arr[finite]))
+            return rgba
+        # object dtype: numeric subset via cmap(norm), explicit color-likes via to_rgba_array
+        series = pd.Series(arr, copy=False)
+        num = pd.to_numeric(series, errors="coerce").to_numpy()
+        is_num = np.isfinite(num)
+        if is_num.any():
+            norm = _resolve_continuous_norm(num, cmap_params)
+            rgba[is_num] = cmap_params.cmap(norm(num[is_num]))
+        color_mask = (~is_num) & series.notna().to_numpy()
+        if color_mask.any():
+            rgba[color_mask] = ColorConverter().to_rgba_array(series[color_mask].tolist())
+        return rgba
 
     def align_to_length(self, n: int, na_color: Color) -> ColorSpec:
         """Pad or truncate both vectors to ``n`` rows (cross-table / rasterize outline alignment).

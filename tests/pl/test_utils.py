@@ -1047,3 +1047,45 @@ class TestColorSpecTransforms:
     def test_align_to_length_noop_when_already_matching(self):
         spec = self._cont_spec()
         assert spec.align_to_length(4, Color()) is spec
+
+
+class TestColorSpecToRgba:
+    """ColorSpec.to_rgba is the single fill+outline continuous/categorical -> RGBA mapping."""
+
+    @staticmethod
+    def _params() -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        # transparent-black na so the na rows are an unambiguous (0, 0, 0, 0)
+        return CmapParams(cmap=colormaps["viridis"], norm=Normalize(0.0, 10.0, clip=False), na_color=Color("#00000000"))
+
+    def test_continuous_maps_finite_via_norm_and_nan_to_na(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        p = self._params()
+        rgba = ColorSpec("continuous", None, np.array([0.0, 10.0, np.nan])).to_rgba(p)
+        np.testing.assert_allclose(rgba[0], p.cmap(0.0))
+        np.testing.assert_allclose(rgba[1], p.cmap(1.0))
+        np.testing.assert_allclose(rgba[2], (0.0, 0.0, 0.0, 0.0))
+
+    def test_categorical_hex_to_rgba(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        spec = ColorSpec("categorical", pd.Categorical(["a", "b"]), np.array(["#ff0000ff", "#00ff00ff"], dtype=object))
+        np.testing.assert_allclose(spec.to_rgba(self._params()), [[1, 0, 0, 1], [0, 1, 0, 1]])
+
+    def test_object_vector_mixes_numeric_and_colorlike(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        p = self._params()
+        rgba = ColorSpec("continuous", None, np.array([0.0, "#ff0000ff", np.nan], dtype=object)).to_rgba(p)
+        np.testing.assert_allclose(rgba[0], p.cmap(0.0))
+        np.testing.assert_allclose(rgba[1], (1.0, 0.0, 0.0, 1.0))
+        np.testing.assert_allclose(rgba[2], (0.0, 0.0, 0.0, 0.0))
+
+    def test_precomputed_rgba_passthrough(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        arr = np.array([[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]])
+        np.testing.assert_allclose(ColorSpec("continuous", None, arr).to_rgba(self._params()), arr)
