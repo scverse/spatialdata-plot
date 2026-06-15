@@ -105,9 +105,13 @@ def _is_color_like(color: Any) -> bool:
 
 
 def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMappable:
-    """Build a ``ScalarMappable`` for a continuous colorbar, with a ±0.5 fallback when ``vmin == vmax``."""
+    """Build a ``ScalarMappable`` for a continuous colorbar.
+
+    A degenerate ``vmin == vmax`` falls back to ``[0, 1]`` — the same rule as
+    :func:`_resolve_continuous_norm`, so the colorbar agrees with the pixel mapping.
+    """
     if vmin == vmax:
-        vmin, vmax = vmin - 0.5, vmax + 0.5
+        vmin, vmax = 0.0, 1.0
     return ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
 
 
