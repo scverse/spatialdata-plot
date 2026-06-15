@@ -24,6 +24,7 @@ from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
+from spatialdata_plot.pl._color import ColorSpec
 from spatialdata_plot.pl._datashader import (
     _build_datashader_color_key,
     _ds_aggregate,
@@ -904,14 +905,16 @@ def test_groups_warns_when_continuous_points(sdata_blobs: SpatialData, caplog):
 
 def test_warn_groups_ignored_continuous_emits(caplog):
     """_warn_groups_ignored_continuous emits when groups is set but data is continuous."""
+    spec = ColorSpec("continuous", None, np.array([1.0, 2.0]))
     with logger_warns(caplog, logger, match="ignored.*continuous"):
-        _warn_groups_ignored_continuous(["A"], "continuous", "my_col")
+        _warn_groups_ignored_continuous(["A"], spec, "my_col")
 
 
 def test_warn_groups_ignored_continuous_silent_for_categorical(caplog):
     """No warning when coloring is categorical."""
+    spec = ColorSpec("categorical", pd.Categorical(["a", "b"]), np.array(["#ff0000ff", "#00ff00ff"], dtype=object))
     with logger_no_warns(caplog, logger, match="ignored"):
-        _warn_groups_ignored_continuous(["A"], "categorical", "cat_col")
+        _warn_groups_ignored_continuous(["A"], spec, "cat_col")
 
 
 def test_color_key_warns_on_short_color_vector(caplog):

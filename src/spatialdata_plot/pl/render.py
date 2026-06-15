@@ -180,11 +180,11 @@ def _reparse_points(
 
 def _warn_groups_ignored_continuous(
     groups: str | list[str] | None,
-    colortype: ColorType,
+    color_spec: ColorSpec,
     col_for_color: str | None,
 ) -> None:
     """Warn when ``groups`` is set but coloring is continuous (no categorical source)."""
-    if groups is not None and colortype == "continuous" and col_for_color is not None:
+    if groups is not None and color_spec.is_continuous and col_for_color is not None:
         logger.warning(
             f"`groups` is ignored when coloring by continuous column '{col_for_color}'. "
             "`groups` filters categories of the column specified via `color`; "
@@ -204,22 +204,21 @@ def _reject_continuous_color_under_density(
     sdata_filt: sd.SpatialData,
     element: str,
     col_for_color: str | None,
-    colortype: ColorType,
-    color_vector: Any,
+    color_spec: ColorSpec,
 ) -> None:
     """Raise before any materialization if density+continuous-color was requested.
 
-    Only ``continuous`` coloring is rejected; categorical and none are fine. When the colortype
-    is not yet decisive we read the dtype from the dask source (points element column) or the
-    pre-computed color vector — neither forces a ``.compute()``.
+    Only ``continuous`` coloring is rejected; categorical and none are fine. We read the dtype from
+    the dask source (points element column) or the pre-computed color vector — neither forces a
+    ``.compute()``.
     """
-    if col_for_color is None or colortype != "continuous":
+    if col_for_color is None or not color_spec.is_continuous:
         return
     points_columns = sdata_filt.points[element].columns
     if col_for_color in points_columns:
         dtype = sdata_filt.points[element][col_for_color].dtype
     else:
-        dtype = getattr(color_vector, "dtype", None)
+        dtype = getattr(color_spec.color_vector, "dtype", None)
     if dtype is None or _is_categorical_like_dtype(dtype):
         return
     raise ValueError(
@@ -262,15 +261,14 @@ def _warn_missing_groups(
 
 def _warn_groups(
     groups: str | list[str] | None,
-    colortype: ColorType,
-    color_source_vector: pd.Categorical | None,
+    color_spec: ColorSpec,
     col_for_color: str | None,
 ) -> None:
     """Emit the two groups-related warnings every ``_render_*`` preamble shares."""
-    _warn_groups_ignored_continuous(groups, colortype, col_for_color)
+    _warn_groups_ignored_continuous(groups, color_spec, col_for_color)
     # only a categorical source has `.categories`; the none state (na-array source) must not reach it
-    if groups is not None and colortype == "categorical":
-        _warn_missing_groups(groups, color_source_vector, col_for_color)
+    if groups is not None and color_spec.is_categorical:
+        _warn_missing_groups(groups, color_spec.source_vector, col_for_color)
 
 
 def _split_colorbar_params(
@@ -684,13 +682,11 @@ def _render_shapes(
             )
             outline_color_spec = outline_color_spec.align_to_length(_n_shapes, render_params.cmap_params.na_color)
 
-    _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
+    _warn_groups(groups, color_spec, col_for_color)
 
-    # When groups are specified, filter out non-matching elements by default.
-    # Only show non-matching elements if the user explicitly sets na_color.
-    _na = render_params.cmap_params.na_color
-    if groups is not None and color_spec.is_categorical and (_na.default_color_set or _na.is_fully_transparent()):
-        keep = color_spec.source_vector.isin(groups)
+    # groups filters to matching categories by default; a visible na_color keeps non-matching rows.
+    keep = color_spec.groups_keep_mask(groups, render_params.cmap_params.na_color)
+    if keep is not None:
         color_spec = color_spec.filter(keep)
         shapes = shapes[keep].reset_index(drop=True)
         if len(shapes) == 0:
@@ -862,7 +858,7 @@ def _render_shapes(
 
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
         # Render shapes with datashader
-        color_by_categorical = col_for_color is not None and color_source_vector is not None
+        color_by_categorical = color_spec.is_categorical
         if color_by_categorical:
             cat_series = transformed_element[col_for_color]
             if not isinstance(cat_series.dtype, pd.CategoricalDtype):
@@ -1430,16 +1426,13 @@ def _render_points(
             col_for_color,
         )
 
-    _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
+    _warn_groups(groups, color_spec, col_for_color)
 
-    # When groups are specified, filter out non-matching elements by default.
-    # Only show non-matching elements if the user explicitly sets na_color.
-    _na = render_params.cmap_params.na_color
-    if groups is not None and color_spec.is_categorical and (_na.default_color_set or _na.is_fully_transparent()):
-        keep = color_spec.source_vector.isin(groups)
+    # groups filters to matching categories by default; a visible na_color keeps non-matching rows.
+    keep = color_spec.groups_keep_mask(groups, render_params.cmap_params.na_color)
+    if keep is not None:
         color_spec = color_spec.filter(keep)
-        n_points = int(keep.sum())
-        if n_points == 0:
+        if int(keep.sum()) == 0:
             return
         # filter the materialized points, adata, and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
@@ -1457,7 +1450,7 @@ def _render_points(
 
     if render_params.density:
         method = "datashader"
-        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, colortype, color_vector)
+        _reject_continuous_color_under_density(sdata_filt, element, col_for_color, color_spec)
     elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
@@ -2253,7 +2246,6 @@ def _render_labels(
         coordinate_system=coordinate_system,
     )
     colortype = color_spec.colortype
-    categorical = color_spec.is_categorical
 
     # Outline color lookup must run BEFORE any masking so the returned vector aligns to
     # the original instance_id. The same masks applied to fill below are then applied
@@ -2291,18 +2283,12 @@ def _render_labels(
         if outline_color_spec is not None:
             outline_color_spec = outline_color_spec.filter(mask)
 
-    _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
+    _warn_groups(groups, color_spec, col_for_color)
 
     # When groups are specified, zero out non-matching label IDs so they render as background.
     # Only show non-matching labels if the user explicitly sets na_color.
-    _na = render_params.cmap_params.na_color
-    if (
-        groups is not None
-        and categorical
-        and color_spec.source_vector is not None
-        and (_na.default_color_set or _na.is_fully_transparent())
-    ):
-        keep_vec = color_spec.source_vector.isin(groups)
+    keep_vec = color_spec.groups_keep_mask(groups, render_params.cmap_params.na_color)
+    if keep_vec is not None:
         matching_ids = instance_id[keep_vec]
         keep_mask = np.isin(label.values, matching_ids)
         label = label.copy()
@@ -2400,8 +2386,10 @@ def _render_labels(
         cax = ax.imshow(
             labels,
             rasterized=True,
-            cmap=None if categorical else render_params.cmap_params.cmap,
-            norm=None if categorical else _resolve_continuous_norm(color_vector, render_params.cmap_params),
+            cmap=None if color_spec.is_categorical else render_params.cmap_params.cmap,
+            norm=None
+            if color_spec.is_categorical
+            else _resolve_continuous_norm(color_vector, render_params.cmap_params),
             alpha=alpha,
             origin="lower",
             zorder=render_params.zorder,

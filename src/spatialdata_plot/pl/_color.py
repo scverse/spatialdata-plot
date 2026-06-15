@@ -698,6 +698,18 @@ class ColorSpec:
             return replace(self, color_vector=transfunc(self.color_vector))
         return self
 
+    def groups_keep_mask(self, groups: Any, na_color: Color) -> Any | None:
+        """Rows whose category is in ``groups``, or None when the groups filter does not apply.
+
+        Does not apply when there is no ``groups``, the layer is not categorical, or ``na_color`` is a
+        visible override (which shows non-matching rows rather than dropping them).
+        """
+        if groups is None or not self.is_categorical:
+            return None
+        if not (na_color.default_color_set or na_color.is_fully_transparent()):
+            return None
+        return self.source_vector.isin(groups)
+
     def to_rgba(self, cmap_params: CmapParams) -> np.ndarray:
         """Map this layer's color to an ``(N, 4)`` RGBA array; the one fill+outline mapping.
 
