@@ -702,13 +702,9 @@ class ColorSpec:
             return replace(self, color_vector=transfunc(self.color_vector))
         return self
 
-    def with_color_vector(self, color_vector: ArrayLike) -> ColorSpec:
-        """Return a copy with a replaced ``color_vector`` (a post-resolution rewrite: reprocess, compute)."""
-        return replace(self, color_vector=color_vector)
-
-    def with_source_vector(self, source_vector: ArrayLike | pd.Series | None) -> ColorSpec:
-        """Return a copy with a replaced ``source_vector`` (e.g. ``remove_unused_categories``, ``compute``)."""
-        return replace(self, source_vector=source_vector)
+    def evolve(self, **changes: Any) -> ColorSpec:
+        """Return a copy with ``source_vector``/``color_vector`` replaced (post-resolution rewrites)."""
+        return replace(self, **changes)
 
     def make_palette(self) -> ListedColormap:
         """Build a ``ListedColormap`` from the colors, dropping NaN categories when categorical."""
@@ -734,14 +730,13 @@ class ColorSpec:
         Categorical/none ``color_vector`` is per-row hex -> straight to RGBA; continuous numerics map
         via norm+cmap with NaN/non-finite rows painted ``na_color``; an object vector mixes the two.
         """
-        na_rgba = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
         if self.source_vector is not None:  # categorical or none: color_vector holds per-row hex
             return np.asarray(ColorConverter().to_rgba_array(list(self.color_vector)))
         arr = np.asarray(self.color_vector)
         if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
             return np.asarray(ColorConverter().to_rgba_array(arr))
         rgba = np.empty((len(arr), 4), dtype=float)
-        rgba[:] = na_rgba
+        rgba[:] = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
         if np.issubdtype(arr.dtype, np.number):
             finite = np.isfinite(arr)
             if finite.any():

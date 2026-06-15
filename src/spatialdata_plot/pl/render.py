@@ -684,7 +684,7 @@ def _render_shapes(
     norm = render_params.cmap_params.fresh_norm()
 
     if len(color_spec.color_vector) == 0:
-        color_spec = color_spec.with_color_vector([render_params.cmap_params.na_color.get_hex_with_alpha()])
+        color_spec = color_spec.evolve(color_vector=[render_params.cmap_params.na_color.get_hex_with_alpha()])
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_spec.is_continuous:
@@ -708,7 +708,7 @@ def _render_shapes(
                     f"Found {nan_count} NaN values in color data. "
                     "These observations will be colored with the 'na_color'."
                 )
-        color_spec = color_spec.with_color_vector(cv)
+        color_spec = color_spec.evolve(color_vector=cv)
 
     palette = color_spec.make_palette()
 
@@ -718,7 +718,7 @@ def _render_shapes(
     )
     if has_valid_color and color_spec.is_categorical and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table
-        color_spec = color_spec.with_source_vector(color_spec.source_vector.remove_unused_categories())
+        color_spec = color_spec.evolve(source_vector=color_spec.source_vector.remove_unused_categories())
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -816,7 +816,7 @@ def _render_shapes(
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
-        # datashader consumes raw arrays; unpack the carrier for this leaf and re-wrap its result
+        # datashader leaf consumes raw arrays; re-wrapped into the carrier after aggregation
         color_vector = color_spec.color_vector
         color_source_vector = color_spec.source_vector
 
@@ -839,8 +839,9 @@ def _render_shapes(
                         color_vector = list(color_vector) + [na_color] * (len(transformed_element) - len(color_vector))
 
             transformed_element[col_for_color] = color_vector if color_source_vector is None else color_source_vector
-        # Render shapes with datashader
-        color_by_categorical = color_spec.is_categorical
+        # Render shapes with datashader: categorical AND none (na-array) go through the categorical
+        # color-key path; only continuous uses the numeric reduction.
+        color_by_categorical = col_for_color is not None and not color_spec.is_continuous
         if color_by_categorical:
             cat_series = transformed_element[col_for_color]
             if not isinstance(cat_series.dtype, pd.CategoricalDtype):
@@ -861,7 +862,7 @@ def _render_shapes(
             default_reduction=_default_reduction,
             kind="shapes",
         )
-        color_spec = color_spec.with_color_vector(color_vector)
+        color_spec = color_spec.evolve(color_vector=color_vector)
 
         _render_ds_outlines(
             cvs,
@@ -1106,7 +1107,7 @@ def _render_centroids_as_points(
             as_markers=True,
             axes_extent=axes_extent,
         )
-        color_spec = color_spec.with_source_vector(csv).with_color_vector(cv)
+        color_spec = color_spec.evolve(source_vector=csv, color_vector=cv)
     else:
         cax = _scatter_points(
             ax,
@@ -1465,7 +1466,7 @@ def _render_points(
             fig_params=fig_params,
             default_reduction=_default_reduction,
         )
-        color_spec = color_spec.with_source_vector(csv).with_color_vector(cv)
+        color_spec = color_spec.evolve(source_vector=csv, color_vector=cv)
 
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
@@ -2319,7 +2320,12 @@ def _render_labels(
             render_params,
             x=xy[:, 0],
             y=xy[:, 1],
-            color_spec=ColorSpec(color_spec.colortype, point_color_source_vector, point_color_vector),
+            # point colours are derived fresh; classify by source so the spec stays self-consistent
+            color_spec=ColorSpec(
+                "categorical" if point_color_source_vector is not None else "continuous",
+                point_color_source_vector,
+                point_color_vector,
+            ),
             norm=render_params.cmap_params.fresh_norm(),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
             adata=table if table_name is not None else None,

@@ -1132,6 +1132,15 @@ def test_render_shapes_all_nan_outline_color_does_not_crash(sdata_blobs_shapes_a
     plt.close(fig)
 
 
+def test_render_shapes_all_nan_color_datashader_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
+    # Regression: all-NaN color is the "none" colortype; the datashader path must route it through
+    # the categorical color-key (na_color), not the numeric reduction (which rejects the na column).
+    sdata_blobs_shapes_annotated["blobs_polygons"]["nanvals"] = [np.nan] * 5
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="nanvals", method="datashader").pl.show(ax=ax)
+    plt.close(fig)
+
+
 def test_render_shapes_all_nan_color_with_groups_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
     # Regression: all-NaN color is the "none" colortype (na-array source, not categorical); the
     # groups preamble must not feed it to _warn_missing_groups, which reads `.categories`.

@@ -180,16 +180,12 @@ def _get_collection_shape(
     color / list of color specs (broadcast). ``outline_color`` may be an ``(N, 4)`` float RGBA array,
     whose alpha channel is mutated in place to apply ``outline_alpha`` (pass a copy to retain it).
     """
-    # Per-row fill is pre-mapped to RGBA by ``ColorSpec.to_rgba``; here ``c`` is either that
-    # (N, 4) array or a single color / list of color specs (e.g. the white outline placeholder).
+    # Per-row fill is pre-mapped to RGBA by ``ColorSpec.to_rgba`` (an (N, 4) float array, used
+    # as-is); otherwise ``c`` is a single color / list of color specs (e.g. the white outline
+    # placeholder), which ``to_rgba_array`` broadcasts.
     c_arr = np.asarray(c)
-    if (
-        c_arr.ndim == 2
-        and c_arr.shape[0] == len(shapes)
-        and c_arr.shape[1] in (3, 4)
-        and np.issubdtype(c_arr.dtype, np.number)
-    ):
-        fill_c = np.asarray(ColorConverter().to_rgba_array(c_arr))
+    if c_arr.shape == (len(shapes), 4) and np.issubdtype(c_arr.dtype, np.floating):
+        fill_c = c_arr
     else:
         fill_c = np.asarray(ColorConverter().to_rgba_array(c))
 
