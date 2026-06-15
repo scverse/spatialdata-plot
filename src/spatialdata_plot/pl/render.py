@@ -2304,7 +2304,6 @@ def _render_labels(
         coordinate_system=coordinate_system,
     )
     colortype = color_spec.colortype
-    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
     categorical = color_spec.is_categorical
 
     # Outline color lookup must run BEFORE any masking so the returned vector aligns to
@@ -2348,19 +2347,13 @@ def _render_labels(
         mask = np.isin(instance_id, unique_labels)
         instance_id = instance_id[mask]
         if col_for_color is not None:
-            color_vector = color_vector[mask]
-            if isinstance(color_vector.dtype, pd.CategoricalDtype):
-                color_vector = color_vector.remove_unused_categories()
-                assert color_source_vector is not None  # noqa: S101
-                color_source_vector = color_source_vector[mask]
-            else:
-                assert color_source_vector is None  # noqa: S101
+            color_spec = color_spec.filter(mask)
         if outline_color_vector is not None:
             outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
                 outline_color_vector, outline_color_source_vector, mask
             )
 
-    _warn_groups(groups, colortype, color_source_vector, col_for_color)
+    _warn_groups(groups, colortype, color_spec.source_vector, col_for_color)
 
     # When groups are specified, zero out non-matching label IDs so they render as background.
     # Only show non-matching labels if the user explicitly sets na_color.
@@ -2368,25 +2361,24 @@ def _render_labels(
     if (
         groups is not None
         and categorical
-        and color_source_vector is not None
+        and color_spec.source_vector is not None
         and (_na.default_color_set or _na.is_fully_transparent())
     ):
-        keep_vec = color_source_vector.isin(groups)
+        keep_vec = color_spec.source_vector.isin(groups)
         matching_ids = instance_id[keep_vec]
         keep_mask = np.isin(label.values, matching_ids)
         label = label.copy()
         label.values[~keep_mask] = 0
         instance_id = instance_id[keep_vec]
-        color_source_vector = color_source_vector[keep_vec]
-        color_vector = color_vector[keep_vec]
-        if isinstance(color_vector.dtype, pd.CategoricalDtype):
-            color_vector = color_vector.remove_unused_categories()
+        color_spec = color_spec.filter(keep_vec)
         if outline_color_vector is not None:
             outline_color_vector, outline_color_source_vector = _apply_mask_to_outline_vectors(
                 outline_color_vector, outline_color_source_vector, keep_vec
             )
 
-    color_vector = _maybe_apply_transfunc(colortype, color_vector, render_params.transfunc)
+    # carrier pipeline done; unpack the final vectors for the read/draw phase below
+    color_spec = color_spec.apply_transfunc(render_params.transfunc)
+    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     if render_params.as_points:
         # Fast mode: one dot per label at its centroid. Compute on the *rendered* raster (already
