@@ -362,7 +362,7 @@ def _add_legend_and_colorbar(
     if palette is None and fill_has_decorations:
         palette = color_spec.make_palette()
 
-    if color_source_vector is not None and hasattr(color_source_vector, "remove_unused_categories"):
+    if color_spec.is_categorical:
         color_source_vector = color_source_vector.remove_unused_categories()
 
     wants_colorbar = _should_request_colorbar(
@@ -690,31 +690,24 @@ def _render_shapes(
     if color_spec.is_continuous:
         cv = color_spec.color_vector
         _series = cv if isinstance(cv, pd.Series) else pd.Series(cv)
-
         try:
             cv = np.asarray(_series, dtype=float)
         except (TypeError, ValueError):
-            nan_count = int(_series.isna().sum())
-            if nan_count:
-                logger.warning(
-                    f"Found {nan_count} NaN values in color data. "
-                    "These observations will be colored with the 'na_color'."
-                )
             cv = _series.to_numpy()
-        else:
-            if np.isnan(cv).any():
-                nan_count = int(np.isnan(cv).sum())
-                logger.warning(
-                    f"Found {nan_count} NaN values in color data. "
-                    "These observations will be colored with the 'na_color'."
-                )
+        nan_count = int(pd.isna(cv).sum())
+        if nan_count:
+            logger.warning(
+                f"Found {nan_count} NaN values in color data. "
+                "These observations will be colored with the 'na_color'."
+            )
         color_spec = color_spec.evolve(color_vector=cv)
 
     palette = color_spec.make_palette()
 
+    distinct_colors = set(color_spec.color_vector)
     has_valid_color = (
-        len(set(color_spec.color_vector)) != 1
-        or list(set(color_spec.color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
+        len(distinct_colors) != 1
+        or next(iter(distinct_colors)) != render_params.cmap_params.na_color.get_hex_with_alpha()
     )
     if has_valid_color and color_spec.is_categorical and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table

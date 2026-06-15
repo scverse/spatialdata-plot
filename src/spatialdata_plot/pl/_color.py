@@ -17,7 +17,6 @@ from geopandas import GeoDataFrame
 from matplotlib import colors, rcParams
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import (
-    ColorConverter,
     Colormap,
     LinearSegmentedColormap,
     ListedColormap,
@@ -727,10 +726,10 @@ class ColorSpec:
         via norm+cmap with NaN/non-finite rows painted ``na_color``; an object vector mixes the two.
         """
         if self.source_vector is not None:  # categorical or none: color_vector holds per-row hex
-            return np.asarray(ColorConverter().to_rgba_array(list(self.color_vector)))
+            return np.asarray(colors.to_rgba_array(list(self.color_vector)))
         arr = np.asarray(self.color_vector)
         if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
-            return np.asarray(ColorConverter().to_rgba_array(arr))
+            return np.asarray(colors.to_rgba_array(arr))
         rgba = np.empty((len(arr), 4), dtype=float)
         rgba[:] = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
         if np.issubdtype(arr.dtype, np.number):
@@ -748,7 +747,7 @@ class ColorSpec:
             rgba[is_num] = cmap_params.cmap(norm(num[is_num]))
         color_mask = (~is_num) & series.notna().to_numpy()
         if color_mask.any():
-            rgba[color_mask] = ColorConverter().to_rgba_array(series[color_mask].tolist())
+            rgba[color_mask] = colors.to_rgba_array(series[color_mask].tolist())
         return rgba
 
     def align_to_length(self, n: int, na_color: Color) -> ColorSpec:
