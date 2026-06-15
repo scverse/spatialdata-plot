@@ -111,11 +111,11 @@ def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMapp
 
 
 def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
-    """Resolve a concrete ``Normalize`` for continuous coloring.
+    """Resolve ``cmap_params.norm`` with concrete vmin/vmax for continuous coloring.
 
     Honor explicit ``norm`` vmin/vmax, else the finite-value data range of ``values``, else
-    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. A degenerate
-    ``vmin == vmax`` is left as-is (matplotlib expands it downstream), not reset to ``[0, 1]``.
+    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. Preserves the
+    norm subclass (``LogNorm``/``PowerNorm``/...) so non-linear scaling is not silently linearized.
     """
     base = cmap_params.norm
     vmin, vmax = base.vmin, base.vmax
@@ -130,7 +130,9 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
             vmin = data_min
         if vmax is None:
             vmax = data_max
-    return Normalize(vmin=vmin, vmax=vmax, clip=base.clip)
+    resolved = copy(base)
+    resolved.vmin, resolved.vmax = vmin, vmax
+    return resolved
 
 
 def _apply_mask_to_outline_vectors(
