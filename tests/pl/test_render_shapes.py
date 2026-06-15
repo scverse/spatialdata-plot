@@ -1121,6 +1121,17 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         self._as_points(sdata_blobs, "datashader").pl.show()
 
 
+def test_render_shapes_all_nan_outline_color_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
+    # Regression: an all-NaN outline column is the "none" colortype (na-array source); the outline
+    # legend path must not call .remove_unused_categories() on that ndarray.
+    sdata_blobs_shapes_annotated["blobs_polygons"]["nanout"] = [np.nan] * 5
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes(
+        "blobs_polygons", outline_alpha=1, outline_width=3, outline_color="nanout"
+    ).pl.show(ax=ax)
+    plt.close(fig)
+
+
 def test_render_shapes_all_nan_color_with_groups_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
     # Regression: all-NaN color is the "none" colortype (na-array source, not categorical); the
     # groups preamble must not feed it to _warn_missing_groups, which reads `.categories`.

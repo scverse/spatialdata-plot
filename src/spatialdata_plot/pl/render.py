@@ -341,9 +341,7 @@ def _add_legend_and_colorbar(
     fig_params: FigParams,
     adata: AnnData | None,
     col_for_color: str | None,
-    colortype: ColorType,
-    color_source_vector: pd.Series | None,
-    color_vector: Any,
+    color_spec: ColorSpec,
     palette: ListedColormap | list[str] | None,
     alpha: float,
     na_color: Color,
@@ -352,19 +350,21 @@ def _add_legend_and_colorbar(
     colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
     outline_col_for_color: str | None = None,
-    outline_color_source_vector: pd.Series | None = None,
-    outline_color_vector: Any | None = None,
+    outline_color_spec: ColorSpec | None = None,
     outline_cmap_params: CmapParams | None = None,
     na_in_legend_override: bool | None = None,
 ) -> None:
-    """Add legend and colorbar decorations if the color vector warrants them.
+    """Add legend and colorbar decorations if the color warrants them.
 
-    A continuous colorbar is requested for ``colortype == "continuous"``; ``na_in_legend_override``
-    lets labels adjust ``na_in_legend`` for groups while sharing this body.
+    A continuous colorbar is requested for a continuous fill; ``na_in_legend_override`` lets labels
+    adjust ``na_in_legend`` for groups while sharing this body.
     """
+    color_source_vector = color_spec.source_vector
+    color_vector = color_spec.color_vector
     fill_has_decorations = _want_decorations(color_vector, na_color) and col_for_color is not None
-    outline_has_decorations = outline_col_for_color is not None and (
-        outline_color_source_vector is not None or outline_color_vector is not None
+    # only a categorical/continuous outline decorates; the none state (na-array source) carries nothing
+    outline_has_decorations = (
+        outline_col_for_color is not None and outline_color_spec is not None and not outline_color_spec.is_none
     )
 
     if not fill_has_decorations and not outline_has_decorations:
@@ -377,17 +377,15 @@ def _add_legend_and_colorbar(
         color_source_vector = color_source_vector.remove_unused_categories()
 
     wants_colorbar = _should_request_colorbar(
-        colorbar,
-        has_mappable=cax is not None,
-        is_continuous=col_for_color is not None and colortype == "continuous",
+        colorbar, has_mappable=cax is not None, is_continuous=color_spec.is_continuous
     )
 
     if fill_has_decorations:
         # Auto-title the fill legend only when an outline legend will also be drawn.
-        outline_legend_will_render = outline_has_decorations and outline_color_source_vector is not None
+        outline_legend_will_render = outline_has_decorations and outline_color_spec.is_categorical
         if legend_params.legend_title is not None:
             fill_title: str | None = legend_params.legend_title or None
-        elif outline_legend_will_render and color_source_vector is not None:
+        elif outline_legend_will_render and color_spec.is_categorical:
             fill_title = "fill"
         else:
             fill_title = None
@@ -422,13 +420,12 @@ def _add_legend_and_colorbar(
             ax=ax,
             fig_params=fig_params,
             outline_col=cast(str, outline_col_for_color),
-            outline_color_source_vector=outline_color_source_vector,
-            outline_color_vector=outline_color_vector,
+            outline_color_spec=outline_color_spec,
             cmap_params=outline_cmap_params,
             colorbar_params=colorbar_params,
             colorbar_requests=colorbar_requests,
             legend_params=legend_params,
-            fill_has_legend=fill_has_decorations and color_source_vector is not None,
+            fill_has_legend=fill_has_decorations and color_spec.is_categorical,
             alpha=alpha,
         )
 
@@ -437,8 +434,7 @@ def _decorate_outline(
     ax: matplotlib.axes.SubplotBase,
     fig_params: FigParams,
     outline_col: str,
-    outline_color_source_vector: pd.Series | None,
-    outline_color_vector: Any,
+    outline_color_spec: ColorSpec,
     cmap_params: CmapParams,
     colorbar_params: dict[str, object] | None,
     colorbar_requests: list[ColorbarSpec] | None,
@@ -447,21 +443,21 @@ def _decorate_outline(
     alpha: float,
 ) -> None:
     """Dispatch a categorical legend or continuous colorbar for an outline column."""
-    if outline_color_source_vector is not None:
+    if outline_color_spec.is_categorical:
         _add_outline_legend(
             ax=ax,
             fig_params=fig_params,
             outline_col=outline_col,
-            outline_color_source_vector=outline_color_source_vector,
-            outline_color_vector=outline_color_vector,
+            outline_color_source_vector=outline_color_spec.source_vector,
+            outline_color_vector=outline_color_spec.color_vector,
             fill_has_legend=fill_has_legend,
             legend_params=legend_params,
         )
-    elif colorbar_requests is not None and legend_params.colorbar and outline_color_vector is not None:
+    elif colorbar_requests is not None and legend_params.colorbar:
         _append_outline_colorbar(
             colorbar_requests=colorbar_requests,
             ax=ax,
-            outline_color_vector=outline_color_vector,
+            outline_color_vector=outline_color_spec.color_vector,
             cmap_params=cmap_params,
             colorbar_params=colorbar_params,
             outline_col=outline_col,
@@ -1001,9 +997,7 @@ def _render_shapes(
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
-        colortype=colortype,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
+        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
         palette=palette,
         alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
@@ -1012,8 +1006,7 @@ def _render_shapes(
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
         outline_col_for_color=col_for_outline_color,
-        outline_color_source_vector=outline_color_source_vector,
-        outline_color_vector=outline_color_vector,
+        outline_color_spec=outline_color_spec,
         outline_cmap_params=render_params.cmap_params,
     )
 
@@ -1147,9 +1140,7 @@ def _render_centroids_as_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
-        colortype=colortype,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
+        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
         palette=palette,
         alpha=render_params.fill_alpha,
         na_color=na_color,
@@ -1518,9 +1509,7 @@ def _render_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
-        colortype=colortype,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
+        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
         palette=None,
         alpha=render_params.alpha,
         na_color=render_params.cmap_params.na_color,
@@ -2457,9 +2446,7 @@ def _render_labels(
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
-        colortype=colortype,
-        color_source_vector=color_source_vector,
-        color_vector=color_vector,
+        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
         palette=palette,
         alpha=alpha_to_decorate_ax,
         na_color=render_params.cmap_params.na_color,
@@ -2468,8 +2455,7 @@ def _render_labels(
         colorbar_params=render_params.colorbar_params,
         colorbar_requests=colorbar_requests,
         outline_col_for_color=col_for_outline_color,
-        outline_color_source_vector=outline_color_source_vector,
-        outline_color_vector=outline_color_vector,
+        outline_color_spec=outline_color_spec,
         outline_cmap_params=render_params.cmap_params,
         na_in_legend_override=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
     )
