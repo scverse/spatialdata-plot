@@ -34,7 +34,6 @@ from xarray import DataTree
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
     ColorSpec,
-    ColorType,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
     _map_color_seg,
@@ -325,16 +324,6 @@ def _should_request_colorbar(
     return bool(auto_condition)
 
 
-def _make_palette(
-    color_source_vector: pd.Series | None,
-    color_vector: Any,
-) -> ListedColormap:
-    """Build a ListedColormap from a color vector, filtering out NaN entries when categorical."""
-    if color_source_vector is None:
-        return ListedColormap(dict.fromkeys(color_vector))
-    return ListedColormap(dict.fromkeys(color_vector[~pd.Categorical(color_source_vector).isnull()]))
-
-
 def _add_legend_and_colorbar(
     ax: matplotlib.axes.SubplotBase,
     cax: ScalarMappable | None,
@@ -371,7 +360,7 @@ def _add_legend_and_colorbar(
         return
 
     if palette is None and fill_has_decorations:
-        palette = _make_palette(color_source_vector, color_vector)
+        palette = color_spec.make_palette()
 
     if color_source_vector is not None and hasattr(color_source_vector, "remove_unused_categories"):
         color_source_vector = color_source_vector.remove_unused_categories()
@@ -633,7 +622,6 @@ def _render_shapes(
         table_layer=table_layer,
         coordinate_system=coordinate_system,
     )
-    colortype = color_spec.colortype
 
     col_for_outline_color = render_params.col_for_outline_color
     outline_table_name = render_params.outline_table_name
@@ -692,24 +680,19 @@ def _render_shapes(
             outline_color_spec = outline_color_spec.filter(keep)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
-    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
-    outline_color_source_vector, outline_color_vector = (
-        (outline_color_spec.source_vector, outline_color_spec.color_vector)
-        if outline_color_spec is not None
-        else (None, None)
-    )
 
     norm = render_params.cmap_params.fresh_norm()
 
-    if len(color_vector) == 0:
-        color_vector = [render_params.cmap_params.na_color.get_hex_with_alpha()]
+    if len(color_spec.color_vector) == 0:
+        color_spec = color_spec.with_color_vector([render_params.cmap_params.na_color.get_hex_with_alpha()])
 
     # continuous case: leave NaNs as NaNs; utils maps them to na_color during draw
     if color_spec.is_continuous:
-        _series = color_vector if isinstance(color_vector, pd.Series) else pd.Series(color_vector)
+        cv = color_spec.color_vector
+        _series = cv if isinstance(cv, pd.Series) else pd.Series(cv)
 
         try:
-            color_vector = np.asarray(_series, dtype=float)
+            cv = np.asarray(_series, dtype=float)
         except (TypeError, ValueError):
             nan_count = int(_series.isna().sum())
             if nan_count:
@@ -717,24 +700,25 @@ def _render_shapes(
                     f"Found {nan_count} NaN values in color data. "
                     "These observations will be colored with the 'na_color'."
                 )
-            color_vector = _series.to_numpy()
+            cv = _series.to_numpy()
         else:
-            if np.isnan(color_vector).any():
-                nan_count = int(np.isnan(color_vector).sum())
+            if np.isnan(cv).any():
+                nan_count = int(np.isnan(cv).sum())
                 logger.warning(
                     f"Found {nan_count} NaN values in color data. "
                     "These observations will be colored with the 'na_color'."
                 )
+        color_spec = color_spec.with_color_vector(cv)
 
-    palette = _make_palette(color_source_vector, color_vector)
+    palette = color_spec.make_palette()
 
     has_valid_color = (
-        len(set(color_vector)) != 1
-        or list(set(color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
+        len(set(color_spec.color_vector)) != 1
+        or list(set(color_spec.color_vector))[0] != render_params.cmap_params.na_color.get_hex_with_alpha()
     )
-    if has_valid_color and color_source_vector is not None and col_for_color is not None:
+    if has_valid_color and color_spec.is_categorical and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table
-        color_source_vector = color_source_vector.remove_unused_categories()
+        color_spec = color_spec.with_source_vector(color_spec.source_vector.remove_unused_categories())
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -749,9 +733,7 @@ def _render_shapes(
             render_params,
             x=xy[:, 0],
             y=xy[:, 1],
-            color_vector=color_vector,
-            color_source_vector=color_source_vector,
-            colortype=colortype,
+            color_spec=color_spec,
             norm=norm,
             na_color=render_params.cmap_params.na_color,
             adata=table,
@@ -834,6 +816,10 @@ def _render_shapes(
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
+        # datashader consumes raw arrays; unpack the carrier for this leaf and re-wrap its result
+        color_vector = color_spec.color_vector
+        color_source_vector = color_spec.source_vector
+
         # in case we are coloring by a column in table
         if col_for_color is not None and col_for_color not in transformed_element.columns:
             # Ensure color vector length matches the number of shapes
@@ -875,6 +861,7 @@ def _render_shapes(
             default_reduction=_default_reduction,
             kind="shapes",
         )
+        color_spec = color_spec.with_color_vector(color_vector)
 
         _render_ds_outlines(
             cvs,
@@ -885,8 +872,8 @@ def _render_shapes(
             factor,
             x_min=x_ext[0],
             y_min=y_ext[0],
-            outline_color_vector=outline_color_vector,
-            outline_color_source_vector=outline_color_source_vector,
+            outline_color_vector=outline_color_spec.color_vector if outline_color_spec is not None else None,
+            outline_color_source_vector=outline_color_spec.source_vector if outline_color_spec is not None else None,
         )
 
         _cax = _render_ds_image(
@@ -988,7 +975,7 @@ def _render_shapes(
 
     if color_spec.is_continuous:
         # Colorbar range from the same resolved norm the fill pixels use.
-        used_norm = _resolve_continuous_norm(color_vector, render_params.cmap_params)
+        used_norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
         _cax.set_clim(vmin=used_norm.vmin, vmax=used_norm.vmax)
 
     _add_legend_and_colorbar(
@@ -997,7 +984,7 @@ def _render_shapes(
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
-        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
+        color_spec=color_spec,
         palette=palette,
         alpha=render_params.fill_alpha,
         na_color=render_params.cmap_params.na_color,
@@ -1077,9 +1064,7 @@ def _render_centroids_as_points(
     *,
     x: Any,
     y: Any,
-    color_vector: Any,
-    color_source_vector: pd.Series | None,
-    colortype: ColorType,
+    color_spec: ColorSpec,
     norm: Normalize | None,
     na_color: Any,
     adata: AnnData | None,
@@ -1100,12 +1085,12 @@ def _render_centroids_as_points(
     method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
     if method == "datashader":
         df = pd.DataFrame({"x": x, "y": y})
-        cax, color_vector, color_source_vector = _datashader_points(
+        cax, cv, csv = _datashader_points(
             ax,
             df,
             col_for_color=col_for_color,
-            color_vector=color_vector,
-            color_source_vector=color_source_vector,
+            color_vector=color_spec.color_vector,
+            color_source_vector=color_spec.source_vector,
             norm=norm,
             cmap_params=render_params.cmap_params,
             alpha=render_params.fill_alpha,
@@ -1121,12 +1106,13 @@ def _render_centroids_as_points(
             as_markers=True,
             axes_extent=axes_extent,
         )
+        color_spec = color_spec.with_source_vector(csv).with_color_vector(cv)
     else:
         cax = _scatter_points(
             ax,
             x,
             y,
-            color_vector,
+            color_spec.color_vector,
             size=render_params.size,
             cmap=render_params.cmap_params.cmap,
             norm=norm,
@@ -1140,7 +1126,7 @@ def _render_centroids_as_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
-        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
+        color_spec=color_spec,
         palette=palette,
         alpha=render_params.fill_alpha,
         na_color=na_color,
@@ -1405,7 +1391,6 @@ def _render_points(
         coordinate_system=coordinate_system,
         preloaded_color_data=_preloaded,
     )
-    colortype = color_spec.colortype
 
     if added_color_from_table and col_for_color is not None:
         _reparse_points(
@@ -1431,7 +1416,6 @@ def _render_points(
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
-    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
@@ -1464,12 +1448,12 @@ def _render_points(
             # any other elements on the axes.
             return
 
-        cax, color_vector, color_source_vector = _datashader_points(
+        cax, cv, csv = _datashader_points(
             ax,
             transformed_element,
             col_for_color=col_for_color,
-            color_vector=color_vector,
-            color_source_vector=color_source_vector,
+            color_vector=color_spec.color_vector,
+            color_source_vector=color_spec.source_vector,
             norm=norm,
             cmap_params=render_params.cmap_params,
             alpha=render_params.alpha,
@@ -1481,6 +1465,7 @@ def _render_points(
             fig_params=fig_params,
             default_reduction=_default_reduction,
         )
+        color_spec = color_spec.with_source_vector(csv).with_color_vector(cv)
 
     elif method == "matplotlib":
         # update axis limits if plot was empty before (necessary if datashader comes after)
@@ -1489,7 +1474,7 @@ def _render_points(
             ax,
             adata[:, 0].X.flatten(),
             adata[:, 1].X.flatten(),
-            color_vector,
+            color_spec.color_vector,
             size=render_params.size,
             cmap=render_params.cmap_params.cmap,
             norm=norm,
@@ -1509,7 +1494,7 @@ def _render_points(
         fig_params=fig_params,
         adata=adata,
         col_for_color=col_for_color,
-        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
+        color_spec=color_spec,
         palette=None,
         alpha=render_params.alpha,
         na_color=render_params.cmap_params.na_color,
@@ -2234,7 +2219,6 @@ def _render_labels(
         render_type="labels",
         coordinate_system=coordinate_system,
     )
-    colortype = color_spec.colortype
 
     # Outline color lookup must run BEFORE any masking so the returned vector aligns to
     # the original instance_id. The same masks applied to fill below are then applied
@@ -2288,7 +2272,7 @@ def _render_labels(
             outline_color_spec = outline_color_spec.filter(keep_vec)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
-    color_source_vector, color_vector = color_spec.source_vector, color_spec.color_vector
+    # outline still feeds the _map_color_seg leaf as loose arrays
     outline_color_source_vector, outline_color_vector = (
         (outline_color_spec.source_vector, outline_color_spec.color_vector)
         if outline_color_spec is not None
@@ -2320,10 +2304,10 @@ def _render_labels(
             point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
             point_color_source_vector = None
             allow_datashader = False
-        elif len(color_vector) == len(instance_id):
+        elif len(color_spec.color_vector) == len(instance_id):
             # data-driven colour is per-instance
-            point_color_vector = np.asarray(color_vector)[keep]
-            point_color_source_vector = None if color_source_vector is None else color_source_vector[keep]
+            point_color_vector = np.asarray(color_spec.color_vector)[keep]
+            point_color_source_vector = None if color_spec.source_vector is None else color_spec.source_vector[keep]
         else:
             # literal colour / user-set na_color -> one colour per centroid
             point_color_vector = np.full(len(point_ids), na_color.get_hex_with_alpha())
@@ -2335,9 +2319,7 @@ def _render_labels(
             render_params,
             x=xy[:, 0],
             y=xy[:, 1],
-            color_vector=point_color_vector,
-            color_source_vector=point_color_source_vector,
-            colortype=colortype,
+            color_spec=ColorSpec(color_spec.colortype, point_color_source_vector, point_color_vector),
             norm=render_params.cmap_params.fresh_norm(),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
             adata=table if table_name is not None else None,
@@ -2360,8 +2342,8 @@ def _render_labels(
         labels = _map_color_seg(
             seg=label.values,
             cell_id=instance_id,
-            color_vector=color_vector,
-            color_source_vector=color_source_vector,
+            color_vector=color_spec.color_vector,
+            color_source_vector=color_spec.source_vector,
             cmap_params=render_params.cmap_params,
             seg_erosionpx=seg_erosionpx,
             seg_boundaries=seg_boundaries,
@@ -2378,7 +2360,7 @@ def _render_labels(
             cmap=None if color_spec.is_categorical else render_params.cmap_params.cmap,
             norm=None
             if color_spec.is_categorical
-            else _resolve_continuous_norm(color_vector, render_params.cmap_params),
+            else _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params),
             alpha=alpha,
             origin="lower",
             zorder=render_params.zorder,
@@ -2446,7 +2428,7 @@ def _render_labels(
         fig_params=fig_params,
         adata=table,
         col_for_color=col_for_color,
-        color_spec=ColorSpec(colortype, color_source_vector, color_vector),
+        color_spec=color_spec,
         palette=palette,
         alpha=alpha_to_decorate_ax,
         na_color=render_params.cmap_params.na_color,
@@ -2457,7 +2439,9 @@ def _render_labels(
         outline_col_for_color=col_for_outline_color,
         outline_color_spec=outline_color_spec,
         outline_cmap_params=render_params.cmap_params,
-        na_in_legend_override=(legend_params.na_in_legend if groups is None else len(groups) == len(set(color_vector))),
+        na_in_legend_override=(
+            legend_params.na_in_legend if groups is None else len(groups) == len(set(color_spec.color_vector))
+        ),
     )
 
 

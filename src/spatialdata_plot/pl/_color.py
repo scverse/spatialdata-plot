@@ -702,6 +702,20 @@ class ColorSpec:
             return replace(self, color_vector=transfunc(self.color_vector))
         return self
 
+    def with_color_vector(self, color_vector: ArrayLike) -> ColorSpec:
+        """Return a copy with a replaced ``color_vector`` (a post-resolution rewrite: reprocess, compute)."""
+        return replace(self, color_vector=color_vector)
+
+    def with_source_vector(self, source_vector: ArrayLike | pd.Series | None) -> ColorSpec:
+        """Return a copy with a replaced ``source_vector`` (e.g. ``remove_unused_categories``, ``compute``)."""
+        return replace(self, source_vector=source_vector)
+
+    def make_palette(self) -> ListedColormap:
+        """Build a ``ListedColormap`` from the colors, dropping NaN categories when categorical."""
+        if self.source_vector is None:
+            return ListedColormap(dict.fromkeys(self.color_vector))
+        return ListedColormap(dict.fromkeys(self.color_vector[~pd.Categorical(self.source_vector).isnull()]))
+
     def groups_keep_mask(self, groups: Any, na_color: Color) -> Any | None:
         """Rows whose category is in ``groups``, or None when the groups filter does not apply.
 
