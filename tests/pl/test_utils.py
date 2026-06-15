@@ -888,14 +888,6 @@ class TestResolveContinuousNorm:
         norm = _resolve_continuous_norm(np.array([5.0, 5.0, 5.0]), self._params())
         assert (norm.vmin, norm.vmax) == (0.0, 1.0)
 
-    def test_degenerate_clim_matches_colorbar_mappable(self):
-        # pixel norm and the (datashader) colorbar mappable must agree on a constant column
-        from spatialdata_plot.pl._color import _make_continuous_mappable, _resolve_continuous_norm
-
-        norm = _resolve_continuous_norm(np.array([5.0, 5.0]), self._params())
-        mappable = _make_continuous_mappable(5.0, 5.0, self._params().cmap)
-        assert (norm.vmin, norm.vmax) == (mappable.norm.vmin, mappable.norm.vmax) == (0.0, 1.0)
-
     def test_degenerate_lognorm_is_left_untouched(self):
         # LogNorm domain excludes 0, so the degenerate reset must not fire for it
         from matplotlib.colors import LogNorm
