@@ -698,8 +698,7 @@ def _render_shapes(
         nan_count = int(pd.isna(cv).sum())
         if nan_count:
             logger.warning(
-                f"Found {nan_count} NaN values in color data. "
-                "These observations will be colored with the 'na_color'."
+                f"Found {nan_count} NaN values in color data. These observations will be colored with the 'na_color'."
             )
         color_spec = color_spec.evolve(color_vector=cv)
 
@@ -1416,7 +1415,14 @@ def _render_points(
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
-    norm = render_params.cmap_params.fresh_norm()
+    # Continuous points resolve their norm through the shared resolver so the fill and colorbar match
+    # the shapes/labels treatment (degenerate [0, 1] reset, LogNorm/PowerNorm preserved) instead of
+    # letting ax.scatter autoscale a fresh linear norm. Non-continuous keeps the un-scaled fresh norm.
+    norm = (
+        _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
+        if color_spec.is_continuous
+        else render_params.cmap_params.fresh_norm()
+    )
 
     method = render_params.method
 
