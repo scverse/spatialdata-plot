@@ -917,6 +917,43 @@ class TestResolveContinuousNorm:
         norm = _resolve_continuous_norm(np.array([1.0, "red", 9.0], dtype=object), self._params())
         assert (norm.vmin, norm.vmax) == (1.0, 9.0)
 
+    def test_lognorm_with_zero_derives_positive_vmin_and_does_not_raise(self):
+        # regression: deriving vmin from a LogNorm's data range must skip 0/negatives; otherwise the
+        # preserved LogNorm has vmin <= 0 and raises "Invalid vmin or vmax" when the renderer calls it
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        vals = np.array([0.0, 5.0, 50.0])
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(vals, params)
+        assert isinstance(norm, LogNorm)
+        assert norm.vmin == 5.0 and norm.vmax == 50.0  # smallest positive, not 0
+        norm(vals)  # must not raise
+
+    def test_lognorm_with_negatives_derives_positive_vmin(self):
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        vals = np.array([-10.0, 1.0, 100.0])
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(vals, params)
+        assert isinstance(norm, LogNorm)
+        assert norm.vmin == 1.0 and norm.vmax == 100.0
+        norm(vals)  # must not raise
+
+    def test_lognorm_all_nonpositive_falls_back_without_raising(self):
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(np.array([0.0, -1.0, np.nan]), params)
+        assert isinstance(norm, LogNorm)
+        assert (norm.vmin, norm.vmax) == (1.0, 1.0)
+        norm(np.array([1.0]))  # must not raise
+
     def test_same_values_give_identical_norm_and_never_mutate_shared(self):
         # the core #699 invariant: pixels and colorbar call this with the same vector -> same result,
         # and the shared CmapParams.norm is never autoscaled in place.

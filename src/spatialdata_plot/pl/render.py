@@ -34,6 +34,7 @@ from xarray import DataTree
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
     ColorSpec,
+    ColorType,
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
     _map_color_seg,
@@ -968,9 +969,11 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
     if color_spec.is_continuous:
-        # Colorbar range from the same resolved norm the fill pixels use.
+        # Colorbar uses the same resolved norm the fill pixels use, including its subclass
+        # (LogNorm/PowerNorm) — set_norm, not set_clim, which would leave the collection's
+        # default linear Normalize in place and mis-scale the bar for non-linear norms.
         used_norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
-        _cax.set_clim(vmin=used_norm.vmin, vmax=used_norm.vmax)
+        _cax.set_norm(used_norm)
 
     _add_legend_and_colorbar(
         ax=ax,
@@ -2297,15 +2300,18 @@ def _render_labels(
             # (`_map_color_seg` Case C) instead of collapsing every dot to a single na_color.
             point_color_vector = np.random.default_rng(42).random((len(point_ids), 3))
             point_color_source_vector = None
+            point_colortype: ColorType = "none"  # colour is not data-driven
             allow_datashader = False
         elif len(color_spec.color_vector) == len(instance_id):
-            # data-driven colour is per-instance
+            # data-driven colour is per-instance; carry the upstream classification (invariant under mask)
             point_color_vector = np.asarray(color_spec.color_vector)[keep]
             point_color_source_vector = None if color_spec.source_vector is None else color_spec.source_vector[keep]
+            point_colortype = color_spec.colortype
         else:
             # literal colour / user-set na_color -> one colour per centroid
             point_color_vector = np.full(len(point_ids), na_color.get_hex_with_alpha())
             point_color_source_vector = None
+            point_colortype = "none"  # colour is not data-driven
         # transform rendered-raster intrinsic centroids to coordinate-system coords
         xy = trans.transform(np.column_stack([centroids["x"].to_numpy(), centroids["y"].to_numpy()]))
         _render_centroids_as_points(
@@ -2313,9 +2319,10 @@ def _render_labels(
             render_params,
             x=xy[:, 0],
             y=xy[:, 1],
-            # point colours are derived fresh; classify by source so the spec stays self-consistent
+            # point colours are derived fresh; carry the resolved colortype so the spec invariant
+            # (categorical => pd.Categorical source) holds and `none` is not mislabelled categorical
             color_spec=ColorSpec(
-                "categorical" if point_color_source_vector is not None else "continuous",
+                point_colortype,
                 point_color_source_vector,
                 point_color_vector,
             ),
@@ -2352,20 +2359,17 @@ def _render_labels(
             outline_color_source_vector=outline_color_source_vector if seg_boundaries else None,
         )
 
-        # labels is pre-baked RGB; cmap/norm only drive the colorbar, so feed the same resolved norm.
-        cax = ax.imshow(
-            labels,
-            rasterized=True,
-            cmap=None if color_spec.is_categorical else render_params.cmap_params.cmap,
-            norm=None
-            if color_spec.is_categorical
-            else _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params),
-            alpha=alpha,
-            origin="lower",
-            zorder=render_params.zorder,
-        )
-        cax.set_transform(trans_data)
-        return cax
+        # labels is pre-baked RGB, so imshow ignores cmap/norm for display. Passing the resolved
+        # norm to imshow would make it try to normalize the RGBA array — which raises for a
+        # non-linear norm (LogNorm/PowerNorm). Display the RGB without a norm and build the
+        # continuous colorbar mappable separately from the resolved norm (mirrors the outline path),
+        # so the colorbar reflects the real norm subclass.
+        img = ax.imshow(labels, rasterized=True, alpha=alpha, origin="lower", zorder=render_params.zorder)
+        img.set_transform(trans_data)
+        if color_spec.is_categorical:
+            return img
+        used_norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
+        return ScalarMappable(norm=used_norm, cmap=render_params.cmap_params.cmap)
 
     # When color is a literal (col_for_color is None) and no explicit outline_color,
     # use the literal color for outlines so they are visible (e.g., color='white' on

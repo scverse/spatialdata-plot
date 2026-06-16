@@ -540,6 +540,45 @@ def test_render_labels_all_nan_color_renders_under_rasterize(sdata_blobs: Spatia
     plt.close(fig)
 
 
+def test_render_labels_as_points_all_nan_color_does_not_crash(sdata_blobs: SpatialData):
+    # Regression: as_points rebuilds the centroid ColorSpec; an all-NaN column is the "none" colortype
+    # and must not be re-classified "categorical" (which would later call Categorical-only methods on
+    # the na-array source). It must just render the centroids in na_color.
+    labels_name = "blobs_labels"
+    instances = get_element_instances(sdata_blobs[labels_name])
+    n_obs = len(instances)
+    adata = AnnData(np.zeros((n_obs, 1)))
+    adata.obs["instance_id"] = instances.values
+    adata.obs["nanvals"] = np.full(n_obs, np.nan)
+    adata.obs["region"] = labels_name
+    sdata_blobs["label_table"] = TableModel.parse(
+        adata=adata, region_key="region", instance_key="instance_id", region=labels_name
+    )
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(labels_name, color="nanvals", table_name="label_table", as_points=True).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_render_labels_lognorm_with_zeros_does_not_crash(sdata_blobs: SpatialData):
+    # Regression: a continuous LogNorm column containing 0 must derive a positive vmin instead of a
+    # LogNorm(vmin=0) that raises "Invalid vmin or vmax" when the segmentation colors are mapped.
+    from matplotlib.colors import LogNorm
+
+    labels_name = "blobs_labels"
+    instances = get_element_instances(sdata_blobs[labels_name])
+    n_obs = len(instances)
+    adata = AnnData(np.zeros((n_obs, 1)))
+    adata.obs["instance_id"] = instances.values
+    adata.obs["counts"] = np.linspace(0.0, 10.0, n_obs)  # includes 0
+    adata.obs["region"] = labels_name
+    sdata_blobs["label_table"] = TableModel.parse(
+        adata=adata, region_key="region", instance_key="instance_id", region=labels_name
+    )
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels(labels_name, color="counts", table_name="label_table", norm=LogNorm()).pl.show(ax=ax)
+    plt.close(fig)
+
+
 @pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64])
 def test_render_labels_rejects_float_dtype(dtype):
     # Regression test for #606: float-dtype labels must raise a clear

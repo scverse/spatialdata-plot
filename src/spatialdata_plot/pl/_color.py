@@ -124,8 +124,16 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
         if not np.issubdtype(arr.dtype, np.number):
             arr = pd.to_numeric(arr.ravel(), errors="coerce")
         finite = np.isfinite(arr)
-        data_min = float(np.nanmin(arr[finite])) if finite.any() else 0.0
-        data_max = float(np.nanmax(arr[finite])) if finite.any() else 1.0
+        if isinstance(base, LogNorm):
+            # LogNorm's domain excludes 0/negatives; derive the range from strictly-positive
+            # finite values only (mirrors matplotlib's LogNorm.autoscale_None). Otherwise a
+            # data_min <= 0 produces a LogNorm that raises "Invalid vmin or vmax" when called.
+            positive = arr[finite & (arr > 0)]
+            data_min = float(np.nanmin(positive)) if positive.size else 1.0
+            data_max = float(np.nanmax(positive)) if positive.size else 1.0
+        else:
+            data_min = float(np.nanmin(arr[finite])) if finite.any() else 0.0
+            data_max = float(np.nanmax(arr[finite])) if finite.any() else 1.0
         if vmin is None:
             vmin = data_min
         if vmax is None:
