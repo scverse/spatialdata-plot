@@ -11,14 +11,12 @@ import numpy as np
 import pandas as pd
 import shapely
 from geopandas import GeoDataFrame
-from matplotlib import colors
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ColorConverter
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
 
 from spatialdata_plot._logging import logger
-from spatialdata_plot.pl._color import _resolve_continuous_norm
 from spatialdata_plot.pl.render_params import ShapesRenderParams
 from spatialdata_plot.pl.utils import _extract_scalar_value
 
@@ -176,75 +174,20 @@ def _get_collection_shape(
     prebuilt_patches: tuple[list[mpatches.Patch], list[int], int] | None = None,
     **kwargs: Any,
 ) -> PatchCollection:
+    """Build a PatchCollection for shapes.
+
+    ``c`` is the per-row fill: an ``(N, 4)`` RGBA array (from :meth:`ColorSpec.to_rgba`) or a single
+    color / list of color specs (broadcast). ``outline_color`` may be an ``(N, 4)`` float RGBA array,
+    whose alpha channel is mutated in place to apply ``outline_alpha`` (pass a copy to retain it).
     """
-    Build a PatchCollection for shapes with correct handling of.
-
-      - continuous numeric vectors with NaNs,
-      - per-row RGBA arrays,
-      - a single color or a list of color specs.
-
-    Only NaNs are painted with na_color; finite values are mapped via norm+cmap.
-
-    .. note::
-       When ``outline_color`` is passed as an ``(N, 4)`` RGBA array of dtype ``float``,
-       its alpha channel is mutated in place to apply ``outline_alpha``. Pass a copy
-       if you need to retain the original buffer.
-    """
-    cmap = kwargs["cmap"]
-
-    # Resolve na color once
-    na_rgba = colors.to_rgba(render_params.cmap_params.na_color.get_hex_with_alpha())
-
-    # Try to interpret c as numpy array
+    # Per-row fill is pre-mapped to RGBA by ``ColorSpec.to_rgba`` (an (N, 4) float array, used
+    # as-is); otherwise ``c`` is a single color / list of color specs (e.g. the white outline
+    # placeholder), which ``to_rgba_array`` broadcasts.
     c_arr = np.asarray(c)
-    fill_c: np.ndarray
-
-    def _as_rgba_array(x: Any) -> np.ndarray:
-        return np.asarray(ColorConverter().to_rgba_array(x))
-
-    # Case A: per-row numeric colors given as Nx3 or Nx4 float array
-    if (
-        c_arr.ndim == 2
-        and c_arr.shape[0] == len(shapes)
-        and c_arr.shape[1] in (3, 4)
-        and np.issubdtype(c_arr.dtype, np.number)
-    ):
-        fill_c = _as_rgba_array(c_arr)
-
-    # Case B: continuous numeric vector len == n_shapes (possibly with NaNs)
-    elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and np.issubdtype(c_arr.dtype, np.number):
-        finite_mask = np.isfinite(c_arr)
-
-        # Map finite values through cmap(norm(.)); NaNs get na_color.
-        fill_c = np.empty((len(c_arr), 4), dtype=float)
-        fill_c[:] = na_rgba
-        if finite_mask.any():
-            used_norm = _resolve_continuous_norm(c_arr, render_params.cmap_params)
-            fill_c[finite_mask] = cmap(used_norm(c_arr[finite_mask]))
-
-    elif c_arr.ndim == 1 and len(c_arr) == len(shapes) and c_arr.dtype == object:
-        # Split into numeric vs color-like
-        c_series = pd.Series(c_arr, copy=False)
-        num = pd.to_numeric(c_series, errors="coerce").to_numpy()
-        is_num = np.isfinite(num)
-
-        # init with na color
-        fill_c = np.empty((len(c_series), 4), dtype=float)
-        fill_c[:] = na_rgba
-
-        # numeric entries via cmap(norm)
-        if is_num.any():
-            used_norm = _resolve_continuous_norm(num, render_params.cmap_params)
-            fill_c[is_num] = cmap(used_norm(num[is_num]))
-
-        # non-numeric, non-NaN entries as explicit colors
-        non_numeric_color_mask = (~is_num) & c_series.notna().to_numpy()
-        if non_numeric_color_mask.any():
-            fill_c[non_numeric_color_mask] = ColorConverter().to_rgba_array(c_series[non_numeric_color_mask].tolist())
-
-    # Case C: single color or list of color-like specs (strings or tuples)
+    if c_arr.shape == (len(shapes), 4) and np.issubdtype(c_arr.dtype, np.floating):
+        fill_c = c_arr
     else:
-        fill_c = _as_rgba_array(c)
+        fill_c = np.asarray(ColorConverter().to_rgba_array(c))
 
     # Apply optional fill alpha without destroying existing transparency
     if fill_alpha is not None:
@@ -259,7 +202,7 @@ def _get_collection_shape(
             # on the hot path; otherwise upcast to a fresh float buffer.
             outline_c_array = outline_arr if outline_arr.dtype == float else outline_arr.astype(float)
         else:
-            outline_c_array = _as_rgba_array(outline_color)
+            outline_c_array = np.asarray(ColorConverter().to_rgba_array(outline_color))
         outline_c_array[..., -1] = outline_alpha
         outline_c = outline_c_array.tolist()
     else:

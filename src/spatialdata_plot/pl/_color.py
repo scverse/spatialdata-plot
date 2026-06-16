@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import copy
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import matplotlib
@@ -16,10 +17,10 @@ from geopandas import GeoDataFrame
 from matplotlib import colors, rcParams
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import (
-    ColorConverter,
     Colormap,
     LinearSegmentedColormap,
     ListedColormap,
+    LogNorm,
     Normalize,
     to_rgba,
 )
@@ -110,11 +111,11 @@ def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMapp
 
 
 def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
-    """Resolve a concrete ``Normalize`` for continuous coloring.
+    """Resolve ``cmap_params.norm`` with concrete vmin/vmax for continuous coloring.
 
     Honor explicit ``norm`` vmin/vmax, else the finite-value data range of ``values``, else
-    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. A degenerate
-    ``vmin == vmax`` is left as-is (matplotlib expands it downstream), not reset to ``[0, 1]``.
+    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. Preserves the
+    norm subclass (``LogNorm``/``PowerNorm``/...) so non-linear scaling is not silently linearized.
     """
     base = cmap_params.norm
     vmin, vmax = base.vmin, base.vmax
@@ -129,104 +130,12 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
             vmin = data_min
         if vmax is None:
             vmax = data_max
-    return Normalize(vmin=vmin, vmax=vmax, clip=base.clip)
-
-
-def _apply_mask_to_outline_vectors(
-    outline_color_vector: Any,
-    outline_color_source_vector: pd.Series | None,
-    mask: Any,
-) -> tuple[Any, pd.Series | None]:
-    """Apply a boolean ``keep`` mask to outline color vector(s).
-
-    Used to keep outline data aligned with the fill data after a ``groups``
-    or rasterize-based filter is applied to the rendered element.
-    """
-    arr = np.asarray(mask)
-    if outline_color_source_vector is not None:
-        outline_color_source_vector = outline_color_source_vector[arr]
-    return outline_color_vector[arr], outline_color_source_vector
-
-
-def _align_outline_vector_to_length(
-    outline_color_vector: Any,
-    outline_color_source_vector: pd.Series | None,
-    n: int,
-) -> tuple[Any, pd.Series | None]:
-    """Pad or truncate the outline color vector(s) to length ``n``.
-
-    Used when the outline column annotates a different row count than the rendered
-    element (cross-table case, or rasterize-induced label drop). Missing entries
-    are padded with NaN so downstream code maps them to ``na_color``.
-    """
-    if outline_color_vector is None or len(outline_color_vector) == n:
-        return outline_color_vector, outline_color_source_vector
-    if len(outline_color_vector) > n:
-        if outline_color_source_vector is not None:
-            outline_color_source_vector = outline_color_source_vector[:n]
-        return outline_color_vector[:n], outline_color_source_vector
-    pad = n - len(outline_color_vector)
-    if outline_color_source_vector is not None:
-        # Categorical: downstream picks one hex per category from rows that *have* a
-        # category. NaN-padded rows contribute no category, so the per-row hex pad is
-        # immaterial; pad with NaN to skip the allocation.
-        padded_vec = np.concatenate([np.asarray(outline_color_vector), np.full(pad, np.nan, dtype=object)])
-        outline_color_source_vector = pd.Categorical(
-            list(outline_color_source_vector) + [None] * pad,
-            categories=outline_color_source_vector.categories,
-        )
-    else:
-        # Continuous: numeric vector, pad with NaN so cmap maps padded rows to na_color.
-        padded_vec = np.concatenate([np.asarray(outline_color_vector, dtype=float), np.full(pad, np.nan)])
-    return padded_vec, outline_color_source_vector
-
-
-def _color_vector_to_rgba(
-    color_vector: Any | None,
-    color_source_vector: pd.Series | None,
-    cmap_params: CmapParams,
-    n_rows: int,
-) -> np.ndarray:
-    """Convert a fill/outline `color_vector` (categorical hex strings or continuous numerics) to (N, 4) RGBA.
-
-    Mirrors the per-row mapping done inside :func:`_get_collection_shape` so that
-    callers can pre-materialize an outline-color array. NaN/non-finite entries are
-    painted with ``cmap_params.na_color``.
-    """
-    na_rgba = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
-    if color_vector is None:
-        rgba = np.empty((n_rows, 4), dtype=float)
-        rgba[:] = na_rgba
-        return rgba
-
-    if color_source_vector is not None:
-        # Categorical: color_vector contains hex strings aligned to color_source_vector
-        return np.asarray(ColorConverter().to_rgba_array(list(color_vector)))
-
-    arr = np.asarray(color_vector)
-    if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
-        return np.asarray(ColorConverter().to_rgba_array(arr))
-
-    rgba = np.empty((len(arr), 4), dtype=float)
-    rgba[:] = na_rgba
-    if np.issubdtype(arr.dtype, np.number):
-        finite_mask = np.isfinite(arr)
-        if finite_mask.any():
-            used_norm = _resolve_continuous_norm(arr, cmap_params)
-            rgba[finite_mask] = cmap_params.cmap(used_norm(arr[finite_mask]))
-        return rgba
-
-    # Object dtype: mix of numerics and color-like specs (apply cmap to the numeric subset only)
-    series = pd.Series(arr, copy=False)
-    num = pd.to_numeric(series, errors="coerce").to_numpy()
-    is_num = np.isfinite(num)
-    if is_num.any():
-        used_norm = _resolve_continuous_norm(num, cmap_params)
-        rgba[is_num] = cmap_params.cmap(used_norm(num[is_num]))
-    color_mask = (~is_num) & series.notna().to_numpy()
-    if color_mask.any():
-        rgba[color_mask] = ColorConverter().to_rgba_array(series[color_mask].tolist())
-    return rgba
+    if vmin == vmax and not isinstance(base, LogNorm):
+        # degenerate range collapses the cmap onto its floor; fall back to [0, 1]. LogNorm exempt (0 not in domain).
+        vmin, vmax = 0.0, 1.0
+    resolved = copy(base)
+    resolved.vmin, resolved.vmax = vmin, vmax
+    return resolved
 
 
 def _prepare_cmap_norm(
@@ -734,6 +643,153 @@ def _set_color_source_vec(
     raise KeyError(
         f"Unable to locate color key '{value_to_plot}' in table '{table_name}' for element '{element_name}'."
     )
+
+
+ColorType = Literal["categorical", "continuous", "none"]
+
+
+@dataclass(frozen=True, eq=False)
+class ColorSpec:
+    """Resolved color for one element layer, with the color-state made explicit.
+
+    ``colortype``: ``categorical`` (``source_vector`` is the Categorical), ``continuous``
+    (``source_vector`` is None, ``color_vector`` numeric), ``none`` (uncolorable -> ``color_vector`` is
+    na_color, ``source_vector`` a non-None na array). Trap: ``source_vector is not None`` means
+    categorical OR none, not categorical — branch on :attr:`is_categorical`.
+    """
+
+    colortype: ColorType
+    source_vector: ArrayLike | pd.Series | None
+    color_vector: ArrayLike
+
+    # Predicates on the invariant ``colortype`` (the vectors get mutated after resolution; the type does not).
+    @property
+    def is_categorical(self) -> bool:
+        return self.colortype == "categorical"
+
+    @property
+    def is_continuous(self) -> bool:
+        return self.colortype == "continuous"
+
+    @property
+    def is_none(self) -> bool:
+        return self.colortype == "none"
+
+    # Immutable transforms: return a new spec so renderers thread one ``color_spec``, not two vectors in lockstep.
+    def filter(self, mask: Any) -> ColorSpec:
+        """Row-subset both vectors by a boolean/index ``mask``; ``colortype`` is unchanged.
+
+        A categorical ``color_vector`` keeps its dtype and drops now-unused categories; otherwise it is
+        coerced to an array (matching the groups/transparent-na path). ``source_vector`` (None for
+        continuous) is masked as-is.
+        """
+        source = None if self.source_vector is None else self.source_vector[mask]
+        color = self.color_vector
+        if isinstance(getattr(color, "dtype", None), pd.CategoricalDtype):
+            color = color[mask].remove_unused_categories()
+        else:
+            color = np.asarray(color)[mask]
+        return replace(self, source_vector=source, color_vector=color)
+
+    def apply_transfunc(self, transfunc: Any) -> ColorSpec:
+        """Map ``color_vector`` through ``transfunc`` for continuous coloring; no-op otherwise."""
+        if self.is_continuous and transfunc is not None:
+            return replace(self, color_vector=transfunc(self.color_vector))
+        return self
+
+    def evolve(self, **changes: Any) -> ColorSpec:
+        """Return a copy with ``source_vector``/``color_vector`` replaced (post-resolution rewrites)."""
+        return replace(self, **changes)
+
+    def make_palette(self) -> ListedColormap:
+        """Build a ``ListedColormap`` from the colors, dropping NaN categories when categorical."""
+        if self.source_vector is None:
+            return ListedColormap(dict.fromkeys(self.color_vector))
+        return ListedColormap(dict.fromkeys(self.color_vector[~pd.Categorical(self.source_vector).isnull()]))
+
+    def groups_keep_mask(self, groups: Any, na_color: Color) -> Any | None:
+        """Rows whose category is in ``groups``, or None when the groups filter does not apply.
+
+        Does not apply when there is no ``groups``, the layer is not categorical, or ``na_color`` is a
+        visible override (which shows non-matching rows rather than dropping them).
+        """
+        if groups is None or not self.is_categorical:
+            return None
+        if not (na_color.default_color_set or na_color.is_fully_transparent()):
+            return None
+        return self.source_vector.isin(groups)
+
+    def to_rgba(self, cmap_params: CmapParams) -> np.ndarray:
+        """Map this layer's color to an ``(N, 4)`` RGBA array; the one fill+outline mapping.
+
+        Categorical/none ``color_vector`` is per-row hex -> straight to RGBA; continuous numerics map
+        via norm+cmap with NaN/non-finite rows painted ``na_color``; an object vector mixes the two.
+        """
+        if self.source_vector is not None:  # categorical or none: color_vector holds per-row hex
+            return np.asarray(colors.to_rgba_array(list(self.color_vector)))
+        arr = np.asarray(self.color_vector)
+        if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
+            return np.asarray(colors.to_rgba_array(arr))
+        rgba = np.empty((len(arr), 4), dtype=float)
+        rgba[:] = colors.to_rgba(cmap_params.na_color.get_hex_with_alpha())
+        if np.issubdtype(arr.dtype, np.number):
+            finite = np.isfinite(arr)
+            if finite.any():
+                norm = _resolve_continuous_norm(arr, cmap_params)
+                rgba[finite] = cmap_params.cmap(norm(arr[finite]))
+            return rgba
+        # object dtype: numeric subset via cmap(norm), explicit color-likes via to_rgba_array
+        series = pd.Series(arr, copy=False)
+        num = pd.to_numeric(series, errors="coerce").to_numpy()
+        is_num = np.isfinite(num)
+        if is_num.any():
+            norm = _resolve_continuous_norm(num, cmap_params)
+            rgba[is_num] = cmap_params.cmap(norm(num[is_num]))
+        color_mask = (~is_num) & series.notna().to_numpy()
+        if color_mask.any():
+            rgba[color_mask] = colors.to_rgba_array(series[color_mask].tolist())
+        return rgba
+
+    def align_to_length(self, n: int, na_color: Color) -> ColorSpec:
+        """Pad or truncate both vectors to ``n`` rows (cross-table / rasterize outline alignment).
+
+        Padded rows render as ``na_color``: continuous pads with NaN; categorical/none pad the hex
+        ``color_vector`` with the na_color hex (NaN would crash ``to_rgba_array``) and the
+        ``source_vector`` with an absent category / na entry.
+        """
+        vec = self.color_vector
+        if vec is None or len(vec) == n:
+            return self
+        if len(vec) > n:
+            source = None if self.source_vector is None else self.source_vector[:n]
+            return replace(self, source_vector=source, color_vector=vec[:n])
+        pad = n - len(vec)
+        if self.is_continuous:
+            padded = np.concatenate([np.asarray(vec, dtype=float), np.full(pad, np.nan)])
+            return replace(self, color_vector=padded)
+        na_hex = na_color.get_hex_with_alpha()
+        padded = np.concatenate([np.asarray(vec, dtype=object), np.full(pad, na_hex, dtype=object)])
+        if self.is_categorical:
+            source = pd.Categorical(list(self.source_vector) + [None] * pad, categories=self.source_vector.categories)
+        else:  # none: source is an na array, not a Categorical — extend it with na entries
+            source = np.concatenate([np.asarray(self.source_vector, dtype=object), np.full(pad, na_hex, dtype=object)])
+        return replace(self, source_vector=source, color_vector=padded)
+
+
+def resolve_color(*args: Any, **kwargs: Any) -> ColorSpec:
+    """Resolve an element's color into a typed :class:`ColorSpec`.
+
+    Pass-through wrapper over :func:`_set_color_source_vec` that classifies its result into an
+    explicit ``colortype`` so callers stop re-deriving the state from ``source is None``/``categorical``.
+    """
+    source_vector, color_vector, categorical = _set_color_source_vec(*args, **kwargs)
+    if categorical:
+        colortype: ColorType = "categorical"
+    elif source_vector is None:
+        colortype = "continuous"
+    else:
+        colortype = "none"
+    return ColorSpec(colortype=colortype, source_vector=source_vector, color_vector=color_vector)
 
 
 def _map_color_seg(

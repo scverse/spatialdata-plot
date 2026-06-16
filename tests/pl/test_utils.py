@@ -881,12 +881,35 @@ class TestResolveContinuousNorm:
         norm = _resolve_continuous_norm(np.array([np.nan, np.nan]), self._params())
         assert (norm.vmin, norm.vmax) == (0.0, 1.0)
 
-    def test_degenerate_range_is_not_expanded(self):
-        # behavior-preserving: a single distinct value stays degenerate (no invented +/-0.5)
+    def test_degenerate_range_resets_to_unit_interval(self):
+        # a single distinct value collapses the colormap onto its floor; reset to [0, 1] (#503)
         from spatialdata_plot.pl._color import _resolve_continuous_norm
 
         norm = _resolve_continuous_norm(np.array([5.0, 5.0, 5.0]), self._params())
+        assert (norm.vmin, norm.vmax) == (0.0, 1.0)
+
+    def test_degenerate_lognorm_is_left_untouched(self):
+        # LogNorm domain excludes 0, so the degenerate reset must not fire for it
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=5.0, vmax=5.0), na_color=Color())
+        norm = _resolve_continuous_norm(np.array([5.0, 5.0]), params)
+        assert isinstance(norm, LogNorm)
         assert (norm.vmin, norm.vmax) == (5.0, 5.0)
+
+    def test_preserves_norm_subclass_and_derives_range(self):
+        # regression: a LogNorm must stay a LogNorm (not be linearized) while still getting its
+        # vmin/vmax filled from the data range
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(np.array([1.0, 10.0, 1000.0]), params)
+        assert isinstance(norm, LogNorm)
+        assert (norm.vmin, norm.vmax) == (1.0, 1000.0)
 
     def test_object_dtype_coerces_color_strings_to_nan(self):
         from spatialdata_plot.pl._color import _resolve_continuous_norm
@@ -905,3 +928,164 @@ class TestResolveContinuousNorm:
         b = _resolve_continuous_norm(vals, params)
         assert (a.vmin, a.vmax) == (b.vmin, b.vmax) == (2.0, 7.0)
         assert params.norm.vmin is None and params.norm.vmax is None
+
+
+class TestResolveColor:
+    """resolve_color classifies each _set_color_source_vec return branch into a ColorType (#700)."""
+
+    @staticmethod
+    def _cmap_params() -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        return CmapParams(cmap=colormaps["viridis"], norm=Normalize(), na_color=Color())
+
+    def _resolve(self, sdata_blobs_shapes_annotated: SpatialData, value_to_plot: str | None):
+        from spatialdata_plot.pl._color import resolve_color
+
+        element_name = "blobs_polygons"
+        return resolve_color(
+            sdata=sdata_blobs_shapes_annotated,
+            element=sdata_blobs_shapes_annotated[element_name],
+            element_name=element_name,
+            value_to_plot=value_to_plot,
+            na_color=Color(),
+            cmap_params=self._cmap_params(),
+        )
+
+    def test_no_value_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
+        spec = self._resolve(sdata_blobs_shapes_annotated, None)
+        assert spec.colortype == "none"
+        assert spec.source_vector is not None  # na array, not None
+        assert (spec.is_categorical, spec.is_continuous, spec.is_none) == (False, False, True)
+
+    def test_all_nan_column_is_none_colortype(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated["blobs_polygons"]["nanvals"] = [np.nan] * 5
+        spec = self._resolve(sdata_blobs_shapes_annotated, "nanvals")
+        assert spec.colortype == "none"
+
+    def test_numeric_column_is_continuous(self, sdata_blobs_shapes_annotated: SpatialData):
+        spec = self._resolve(sdata_blobs_shapes_annotated, "value")  # fixture's [1..5]
+        assert spec.colortype == "continuous"
+        assert spec.source_vector is None  # the continuous marker
+        assert (spec.is_categorical, spec.is_continuous, spec.is_none) == (False, True, False)
+
+    def test_categorical_column_is_categorical(self, sdata_blobs_shapes_annotated: SpatialData):
+        sdata_blobs_shapes_annotated["blobs_polygons"]["cat"] = ["a", "b", "a", "b", "a"]
+        spec = self._resolve(sdata_blobs_shapes_annotated, "cat")
+        assert spec.colortype == "categorical"
+        assert isinstance(spec.source_vector, pd.Categorical)
+        assert (spec.is_categorical, spec.is_continuous, spec.is_none) == (True, False, False)
+
+
+class TestColorSpecTransforms:
+    """Immutable ColorSpec transforms reproduce the renderers' lockstep vector mutations (#700)."""
+
+    @staticmethod
+    def _cat_spec():
+        from spatialdata_plot.pl._color import ColorSpec
+
+        src = pd.Categorical(["a", "b", "a", "c"])
+        col = pd.Categorical(["#ff0000", "#00ff00", "#ff0000", "#0000ff"])
+        return ColorSpec("categorical", src, col)
+
+    @staticmethod
+    def _cont_spec():
+        from spatialdata_plot.pl._color import ColorSpec
+
+        return ColorSpec("continuous", None, np.array([1.0, 2.0, 3.0, 4.0]))
+
+    def test_filter_categorical_keeps_dtype_and_drops_unused(self):
+        out = self._cat_spec().filter(np.array([True, False, True, False]))  # keep the two "a"s
+        assert out.colortype == "categorical"
+        assert list(out.source_vector) == ["a", "a"]
+        assert isinstance(out.color_vector.dtype, pd.CategoricalDtype)
+        assert set(out.color_vector.categories) == {"#ff0000"}  # unused colors dropped
+
+    def test_filter_continuous_masks_color_and_keeps_source_none(self):
+        out = self._cont_spec().filter(np.array([True, False, True, False]))
+        assert out.source_vector is None
+        assert list(out.color_vector) == [1.0, 3.0]
+
+    def test_apply_transfunc_is_continuous_only(self):
+        out = self._cont_spec().apply_transfunc(lambda x: x * 10)
+        assert list(out.color_vector) == [10.0, 20.0, 30.0, 40.0]
+        cat = self._cat_spec()
+        assert cat.apply_transfunc(lambda x: x) is cat  # no-op for categorical
+        assert cat.apply_transfunc(None) is cat
+
+    def test_align_to_length_truncates_both_vectors(self):
+        out = self._cat_spec().align_to_length(2, Color())
+        assert list(out.source_vector) == ["a", "b"]
+        assert list(out.color_vector) == ["#ff0000", "#00ff00"]
+
+    def test_align_to_length_pads_categorical_with_na_color_hex(self):
+        # padded rows must carry the na_color hex, not NaN (NaN crashes to_rgba_array)
+        na = Color("#abcdefff")
+        out = self._cat_spec().align_to_length(6, na)
+        assert len(out.color_vector) == len(out.source_vector) == 6
+        assert list(out.color_vector[-2:]) == [na.get_hex_with_alpha()] * 2
+        assert pd.isna(out.source_vector[-2:]).all()  # padded rows carry no category
+
+    def test_align_to_length_pads_none_state_with_na(self):
+        # the trap: a `none` spec has a non-None na *array* source (not a Categorical); padding it
+        # must not take the categorical `.categories` branch
+        from spatialdata_plot.pl._color import ColorSpec
+
+        na = Color("#abcdefff")
+        na_hex = na.get_hex_with_alpha()
+        spec = ColorSpec("none", np.array([na_hex, na_hex], dtype=object), np.array([na_hex, na_hex], dtype=object))
+        out = spec.align_to_length(4, na)
+        assert len(out.color_vector) == len(out.source_vector) == 4
+        assert list(out.color_vector) == [na_hex] * 4
+
+    def test_align_to_length_pads_continuous_with_nan(self):
+        out = self._cont_spec().align_to_length(6, Color())
+        assert out.source_vector is None
+        assert np.isnan(np.asarray(out.color_vector, dtype=float)[-2:]).all()
+
+    def test_align_to_length_noop_when_already_matching(self):
+        spec = self._cont_spec()
+        assert spec.align_to_length(4, Color()) is spec
+
+
+class TestColorSpecToRgba:
+    """ColorSpec.to_rgba is the single fill+outline continuous/categorical -> RGBA mapping."""
+
+    @staticmethod
+    def _params() -> CmapParams:
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        # transparent-black na so the na rows are an unambiguous (0, 0, 0, 0)
+        return CmapParams(cmap=colormaps["viridis"], norm=Normalize(0.0, 10.0, clip=False), na_color=Color("#00000000"))
+
+    def test_continuous_maps_finite_via_norm_and_nan_to_na(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        p = self._params()
+        rgba = ColorSpec("continuous", None, np.array([0.0, 10.0, np.nan])).to_rgba(p)
+        np.testing.assert_allclose(rgba[0], p.cmap(0.0))
+        np.testing.assert_allclose(rgba[1], p.cmap(1.0))
+        np.testing.assert_allclose(rgba[2], (0.0, 0.0, 0.0, 0.0))
+
+    def test_categorical_hex_to_rgba(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        spec = ColorSpec("categorical", pd.Categorical(["a", "b"]), np.array(["#ff0000ff", "#00ff00ff"], dtype=object))
+        np.testing.assert_allclose(spec.to_rgba(self._params()), [[1, 0, 0, 1], [0, 1, 0, 1]])
+
+    def test_object_vector_mixes_numeric_and_colorlike(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        p = self._params()
+        rgba = ColorSpec("continuous", None, np.array([0.0, "#ff0000ff", np.nan], dtype=object)).to_rgba(p)
+        np.testing.assert_allclose(rgba[0], p.cmap(0.0))
+        np.testing.assert_allclose(rgba[1], (1.0, 0.0, 0.0, 1.0))
+        np.testing.assert_allclose(rgba[2], (0.0, 0.0, 0.0, 0.0))
+
+    def test_precomputed_rgba_passthrough(self):
+        from spatialdata_plot.pl._color import ColorSpec
+
+        arr = np.array([[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]])
+        np.testing.assert_allclose(ColorSpec("continuous", None, arr).to_rgba(self._params()), arr)
