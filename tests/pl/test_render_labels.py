@@ -7,6 +7,7 @@ import pytest
 import scanpy as sc
 from anndata import AnnData
 from matplotlib.colors import Normalize
+from matplotlib.legend import Legend
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
 from spatialdata.models import Labels2DModel, Labels3DModel, TableModel
@@ -95,6 +96,79 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             )
             .pl.show()
         )
+
+    def test_two_categorical_label_renders_make_two_distinct_legends(self, sdata_blobs: SpatialData):
+        # Regression test for #364: two render_labels calls coloring by two categorical columns
+        # must produce two separate, column-titled legends (not one merged/replaced legend), and
+        # the second render must not reuse the first's colors. State-based (no image comparison).
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+        sdata_blobs["table"].obs["cat0"] = pd.Categorical((["A", "B"] * ((n + 1) // 2))[:n])
+        sdata_blobs["table"].obs["cat1"] = pd.Categorical((["C", "D"] * ((n + 1) // 2))[:n])
+
+        (
+            sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
+            .pl.render_labels("blobs_labels", color="cat1")
+            .pl.show()
+        )
+
+        fig = plt.gcf()
+        ax = fig.axes[0]
+        legends = [c for c in ax.get_children() if isinstance(c, Legend)]
+        assert len(legends) == 2
+        entries = {leg.get_title().get_text(): {t.get_text() for t in leg.get_texts()} for leg in legends}
+        assert entries == {"cat0": {"A", "B"}, "cat1": {"C", "D"}}
+
+        # palette offset: the second categorical render must not reuse the first's colors
+        c0 = set(sdata_blobs["table"].uns["cat0_colors"])
+        c1 = set(sdata_blobs["table"].uns["cat1_colors"])
+        assert c0.isdisjoint(c1)
+
+        # legends are laid left-to-right (not stacked vertically): top-aligned, non-overlapping x
+        fig.canvas.draw()
+        inv = ax.transAxes.inverted()
+        boxes = sorted((leg.get_window_extent().transformed(inv) for leg in legends), key=lambda b: b.x0)
+        assert boxes[0].x1 <= boxes[1].x0  # no horizontal overlap
+        assert abs(boxes[0].y1 - boxes[1].y1) < 0.01  # tops aligned
+        plt.close()
+
+    def test_three_categorical_label_renders_make_three_legends(self, sdata_blobs: SpatialData):
+        # Regression test for #364: re-adding prior legends must not duplicate them; three renders
+        # yield exactly three distinct legends (not four with a repeat).
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+        for col, (a, b) in {"cat0": ("A", "B"), "cat1": ("C", "D"), "cat2": ("E", "F")}.items():
+            sdata_blobs["table"].obs[col] = pd.Categorical(([a, b] * ((n + 1) // 2))[:n])
+
+        (
+            sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
+            .pl.render_labels("blobs_labels", color="cat1")
+            .pl.render_labels("blobs_labels", color="cat2")
+            .pl.show()
+        )
+
+        ax = plt.gcf().axes[0]
+        titles = sorted(c.get_title().get_text() for c in ax.get_children() if isinstance(c, Legend))
+        assert titles == ["cat0", "cat1", "cat2"]
+        plt.close()
+
+    def test_single_categorical_label_render_legend_has_no_title(self, sdata_blobs: SpatialData):
+        # A lone categorical render produces exactly one, untitled legend: the column title is only
+        # added to disambiguate 2+ legends on an axis.
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+        sdata_blobs["table"].obs["cat0"] = pd.Categorical((["A", "B"] * ((n + 1) // 2))[:n])
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat0").pl.show()
+
+        ax = plt.gcf().axes[0]
+        legends = [c for c in ax.get_children() if isinstance(c, Legend)]
+        assert len(legends) == 1
+        assert legends[0].get_title().get_text() == ""
+        plt.close()
 
     def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
