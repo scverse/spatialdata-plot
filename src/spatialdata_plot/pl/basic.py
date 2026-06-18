@@ -1589,7 +1589,7 @@ class PlotAccessor:
         if fig_params.fig is not None:
             for panel_ax in fig_params.axs if fig_params.axs is not None else [fig_params.ax]:
                 if isinstance(panel_ax, Axes):
-                    _layout_panel_legends_rightward(panel_ax, fig_params.fig)
+                    _layout_panel_legends(panel_ax, fig_params.fig)
 
         _layout_pending_colorbars(pending_colorbars, fig_params, colorbar_params)
 
@@ -1877,40 +1877,43 @@ def _draw_colorbar(
     trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
-def _layout_panel_legends_rightward(ax: Axes, fig: Figure, gap: float = 0.01) -> None:
-    """Lay the per-render categorical legends (#364) left-to-right along the top of the right margin.
+def _layout_panel_legends(ax: Axes, fig: Figure, gap: float = 0.01) -> None:
+    """Title and stack the per-render categorical legends (#364) in the right margin.
 
     Only legends this code created (tagged ``_sdata_column``) are touched, so fill/outline and
-    channel legends keep their own placement. Layout is in figure-fraction so the axis shrink that
-    spreading them triggers under ``constrained_layout`` can't rescale the measured widths into overlap.
+    channel legends keep their own placement. Each legend is titled by its source column (matching
+    colorbars). When 2+ legends share an axis they are stacked top-to-bottom — the right-margin
+    convention — so wide legends grow the figure height on save instead of overflowing its right edge.
     """
     legends = [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
-    if len(legends) < 2:
+    if not legends:
         return
-    # 2+ legends share the axis: title each by its column so they can be told apart (an explicit
-    # title set earlier stays as-is).
+    # Title each legend by its source column so it reads like the colorbars (an explicit title set
+    # earlier stays as-is). A lone legend keeps scanpy's placement; only its title is added here.
     for leg in legends:
         if not leg.get_title().get_text():
             leg.set_title(leg._sdata_column)
-    # Let constrained_layout settle the axes, then freeze it: otherwise it shrinks the axes to
-    # "make room" for the margin legends (squashing the plot, leaving a gap). Frozen, the legends
-    # still count for `bbox_inches="tight"` on save. Reached only for panels with 2+ legends.
+    if len(legends) < 2:
+        return
+    # 2+ legends share the axis. Let constrained_layout settle, then freeze it: otherwise it shrinks
+    # the axes to "make room" for the margin legends (squashing the plot, leaving a gap). Frozen, the
+    # legends still count for `bbox_inches="tight"` on save.
     fig.canvas.draw()
     fig.set_layout_engine("none")
     invf = fig.transFigure.inverted()
     ax_bb = ax.get_window_extent().transformed(invf)
     left, top = ax_bb.x1 + gap, ax_bb.y1
-    # Anchor all at one point and settle, so widths are measured in a single consistent layout state.
+    # Anchor all at one point and settle, so heights are measured in a single consistent layout state.
     for leg in legends:
         leg.set_bbox_to_anchor((left, top), transform=fig.transFigure)
         if hasattr(leg, "set_loc"):
             leg.set_loc("upper left")
     fig.canvas.draw()
-    widths = [leg.get_window_extent().transformed(invf).width for leg in legends]
-    x = left
-    for leg, w in zip(legends, widths, strict=True):
-        leg.set_bbox_to_anchor((x, top), transform=fig.transFigure)
-        x += w + gap
+    heights = [leg.get_window_extent().transformed(invf).height for leg in legends]
+    y = top
+    for leg, h in zip(legends, heights, strict=True):
+        leg.set_bbox_to_anchor((left, y), transform=fig.transFigure)
+        y -= h + gap
 
 
 def _layout_pending_colorbars(

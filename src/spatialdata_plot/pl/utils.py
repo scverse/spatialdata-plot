@@ -430,13 +430,13 @@ def _stack_categorical_legend(
 ) -> None:
     """Build the 2nd+ categorical legend on a shared axes without dropping existing ones (#364).
 
-    Placement is finalized later by ``_layout_panel_legends_rightward``; the anchor here is provisional.
+    Placement and the column auto-title are finalized later by ``_layout_panel_legends``; the anchor
+    and (absent an explicit ``title``) the title here are provisional.
     """
     handles = _categorical_legend_handles(ax, color_mapping, na_hex)
     if (cur := ax.get_legend()) is not None:
         ax.add_artist(cur)  # only the current legend would be dropped by ax.legend() below
-    # Auto-title (by column) is applied in `_layout_panel_legends_rightward`, where the legend
-    # count is known, so a lone legend stays untitled; an explicit `title` still wins here.
+    # Auto-title (by column) is applied in `_layout_panel_legends`; an explicit `title` still wins here.
     new_leg = ax.legend(
         handles=handles,
         title=title,
@@ -522,8 +522,8 @@ def _decorate_axs(
                     na_in_legend=na_in_legend,
                     multi_panel=fig_params.axs is not None,
                 )
-                # Tag with the column; the column auto-title is applied only when 2+ legends share
-                # the axis (see `_layout_panel_legends_rightward`). An explicit title wins now.
+                # Tag with the column; the column auto-title is applied in `_layout_panel_legends`.
+                # An explicit title wins now.
                 if (legend := ax.get_legend()) is not None:
                     legend._sdata_column = value_to_plot  # type: ignore[attr-defined]
                     if legend_title is not None:
