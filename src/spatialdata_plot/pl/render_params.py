@@ -334,6 +334,7 @@ class ImageRenderParams(RenderParams):
     transfunc: Callable[[np.ndarray], np.ndarray] | list[Callable[[np.ndarray], np.ndarray]] | None = None
     grayscale: bool = False
     channels_as_legend: bool = False
+    multichannel_strategy: Literal["stack", "pca"] | None = None
     method: Literal["matplotlib", "datashader"] | None = None
     ds_reduction: _ImageDsReduction | None = None
 
