@@ -110,39 +110,82 @@ def _make_continuous_mappable(vmin: float, vmax: float, cmap: Any) -> ScalarMapp
     return ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
 
 
+class PercentileNormalize(Normalize):
+    """:class:`~matplotlib.colors.Normalize` that autoscales to data percentiles instead of min/max.
+
+    Heavy-tailed images (fluorescence, Xenium morphology) have a few very bright pixels, so the
+    default min/max mapping crushes the bulk of the signal into near-black. ``PercentileNormalize``
+    derives ``vmin``/``vmax`` from the ``pmin``/``pmax`` percentiles of the data instead, which
+    matches the per-channel contrast limits used by viewers like Xenium Explorer.
+
+    It plugs into the existing ``norm`` argument like any other ``Normalize``: a single instance is
+    autoscaled independently per channel, and a list applies channelwise limits.
+
+    Parameters
+    ----------
+    pmin
+        Lower percentile in ``[0, 100]`` (``pmin < pmax``) used to derive ``vmin``.
+    pmax
+        Upper percentile in ``[0, 100]`` used to derive ``vmax``.
+    clip
+        Forwarded to :class:`~matplotlib.colors.Normalize`.
+
+    Notes
+    -----
+    Explicitly setting ``vmin``/``vmax`` overrides the corresponding percentile.
+    """
+
+    def __init__(self, pmin: float = 0.0, pmax: float = 100.0, clip: bool = False) -> None:
+        if not 0.0 <= pmin < pmax <= 100.0:
+            raise ValueError(f"Require 0 <= pmin < pmax <= 100, got pmin={pmin}, pmax={pmax}.")
+        super().__init__(vmin=None, vmax=None, clip=clip)
+        self.pmin = pmin
+        self.pmax = pmax
+
+    def autoscale_None(self, A: Any) -> None:
+        """Fill unset ``vmin``/``vmax`` from the ``pmin``/``pmax`` percentiles of finite values."""
+        finite = np.asarray(A)
+        finite = finite[np.isfinite(finite)]
+        if finite.size:
+            if self.vmin is None:
+                self.vmin = float(np.percentile(finite, self.pmin))
+            if self.vmax is None:
+                self.vmax = float(np.percentile(finite, self.pmax))
+
+
 def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
     """Resolve ``cmap_params.norm`` with concrete vmin/vmax for continuous coloring.
 
-    Honor explicit ``norm`` vmin/vmax, else the finite-value data range of ``values``, else
-    ``[0, 1]``. Shared by the pixel and colorbar sites so both derive the same range. Preserves the
-    norm subclass (``LogNorm``/``PowerNorm``/...) so non-linear scaling is not silently linearized.
+    Honor explicit ``norm`` vmin/vmax, else delegate to the norm's own ``autoscale_None`` over the
+    finite values of ``values`` (so plain ``Normalize`` uses min/max, ``LogNorm`` uses its
+    positive-only range, and ``PercentileNormalize`` uses percentiles), else fall back to ``[0, 1]``.
+    Shared by the pixel and colorbar sites so both derive the same range; preserves the norm
+    subclass so non-linear scaling is not silently linearized.
     """
-    base = cmap_params.norm
-    vmin, vmax = base.vmin, base.vmax
-    if vmin is None or vmax is None:
+    resolved = copy(cmap_params.norm)
+    if resolved.vmin is None or resolved.vmax is None:
         arr = np.asarray(values)
         if not np.issubdtype(arr.dtype, np.number):
             arr = pd.to_numeric(arr.ravel(), errors="coerce")
-        finite = np.isfinite(arr)
-        if isinstance(base, LogNorm):
-            # LogNorm's domain excludes 0/negatives; derive the range from strictly-positive
-            # finite values only (mirrors matplotlib's LogNorm.autoscale_None). Otherwise a
-            # data_min <= 0 produces a LogNorm that raises "Invalid vmin or vmax" when called.
-            positive = arr[finite & (arr > 0)]
-            data_min = float(np.nanmin(positive)) if positive.size else 1.0
-            data_max = float(np.nanmax(positive)) if positive.size else 1.0
+        finite = arr[np.isfinite(arr)]
+        if finite.size:
+            resolved.autoscale_None(finite)
+        if isinstance(resolved, LogNorm):
+            # LogNorm needs strictly-positive bounds; all-nonpositive/empty data can't provide them
+            # (matplotlib leaves them at 0), so fall back to a valid domain instead of raising later.
+            if resolved.vmin is None or resolved.vmin <= 0:
+                resolved.vmin = 1.0
+            if resolved.vmax is None or resolved.vmax <= 0:
+                resolved.vmax = 1.0
         else:
-            data_min = float(np.nanmin(arr[finite])) if finite.any() else 0.0
-            data_max = float(np.nanmax(arr[finite])) if finite.any() else 1.0
-        if vmin is None:
-            vmin = data_min
-        if vmax is None:
-            vmax = data_max
-    if vmin == vmax and not isinstance(base, LogNorm):
+            # Empty/all-NaN data can't fill the bounds; fall back to the unit interval.
+            if resolved.vmin is None:
+                resolved.vmin = 0.0
+            if resolved.vmax is None:
+                resolved.vmax = 1.0
+    if resolved.vmin == resolved.vmax and not isinstance(resolved, LogNorm):
         # degenerate range collapses the cmap onto its floor; fall back to [0, 1]. LogNorm exempt (0 not in domain).
-        vmin, vmax = 0.0, 1.0
-    resolved = copy(base)
-    resolved.vmin, resolved.vmax = vmin, vmax
+        resolved.vmin, resolved.vmax = 0.0, 1.0
     return resolved
 
 
