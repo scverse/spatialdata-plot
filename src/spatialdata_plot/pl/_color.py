@@ -1160,6 +1160,29 @@ def _modify_categorical_color_mapping(
     return modified_mapping
 
 
+def _default_categorical_palette(n: int) -> list[str]:
+    """Return the scanpy default categorical palette sized for ``n`` categories (grey beyond 103)."""
+    if n <= 20:
+        return list(default_20)
+    if n <= 28:
+        return list(default_28)
+    if n <= len(default_102):
+        return list(default_102)
+    logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
+    return ["grey"] * n
+
+
+def _next_palette_colors(used_colors: set[str], n: int) -> list[str]:
+    """Pick ``n`` default-palette colors skipping ``used_colors``, keeping a 2nd categorical render distinct (#364)."""
+    used_norm = {to_hex(to_rgba(c)) for c in used_colors}
+    pool = _default_categorical_palette(n + len(used_norm))
+    unused = [c for c in pool if to_hex(to_rgba(c)) not in used_norm]
+    if len(unused) < n:  # palette exhausted; some colors will repeat an earlier render's
+        logger.warning("Not enough distinct default colors left; stacked legends may share colors.")
+        return pool[:n]
+    return unused[:n]
+
+
 def _get_default_categorial_color_mapping(
     color_source_vector: ArrayLike | pd.Series[CategoricalDtype],
     cmap_params: CmapParams | None = None,
@@ -1179,17 +1202,8 @@ def _get_default_categorial_color_mapping(
     else:
         palette = None
 
-    # Fall back to default palettes if needed
     if palette is None:
-        if len_cat <= 20:
-            palette = default_20
-        elif len_cat <= 28:
-            palette = default_28
-        elif len_cat <= len(default_102):  # 103 colors
-            palette = default_102
-        else:
-            palette = ["grey"] * len_cat
-            logger.info("input has more than 103 categories. Uniform 'grey' color will be used for all categories.")
+        palette = _default_categorical_palette(len_cat)
 
     return dict(zip(color_source_vector.categories, palette[:len_cat], strict=True))
 

@@ -26,6 +26,7 @@ from matplotlib.colors import (
 )
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from matplotlib.legend import Legend
 from matplotlib_scalebar.scalebar import ScaleBar
 from pandas.api.types import CategoricalDtype, is_numeric_dtype
 from pandas.core.arrays.categorical import Categorical
@@ -405,6 +406,47 @@ def _build_alignment_dtype_hint(
     return ""
 
 
+def _legend_ncol(n: int) -> int:
+    """Column count for a categorical legend with ``n`` entries."""
+    return 1 if n <= 14 else 2 if n <= 30 else 3
+
+
+def _categorical_legend_handles(ax: Axes, color_map: Mapping[Any, Any], na_hex: str | None = None) -> list[Any]:
+    """Empty-scatter handles (colored dots) for a categorical legend, with an optional NA entry."""
+    handles = [ax.scatter([], [], c=color, label=str(cat)) for cat, color in color_map.items()]
+    if na_hex is not None:
+        handles.append(ax.scatter([], [], c=na_hex, label="NA"))
+    return handles
+
+
+def _stack_categorical_legend(
+    ax: Axes,
+    color_mapping: Mapping[Any, Any],
+    *,
+    na_hex: str | None,
+    title: str | None,
+    column: str | None,
+    legend_fontsize: int | float | _FontSize | None,
+) -> None:
+    """Build the 2nd+ categorical legend on a shared axes without dropping existing ones (#364).
+
+    Placement and the column auto-title are finalized later by ``_setup_stacked_legends``.
+    """
+    handles = _categorical_legend_handles(ax, color_mapping, na_hex)
+    if (cur := ax.get_legend()) is not None:
+        ax.add_artist(cur)  # else ax.legend() below drops it
+    new_leg = ax.legend(
+        handles=handles,
+        title=title,
+        frameon=False,
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        fontsize=legend_fontsize,
+        ncol=_legend_ncol(len(handles)),
+    )
+    new_leg._sdata_column = column  # type: ignore[attr-defined]
+
+
 def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
@@ -449,22 +491,43 @@ def _decorate_axs(
                 }
             )
             color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
-            _add_categorical_legend(
-                ax,
-                pd.Categorical(values=color_source_vector, categories=clusters),
-                palette=color_mapping,
-                legend_loc=legend_loc,
-                legend_fontweight=legend_fontweight,
-                legend_fontsize=legend_fontsize,
-                legend_fontoutline=path_effect,
-                na_color=[na_color.get_hex()],
-                na_in_legend=na_in_legend,
-                multi_panel=fig_params.axs is not None,
-            )
-            # scanpy's helper doesn't accept a title; set it post-hoc so the user can
-            # disambiguate fill vs outline when both legends are drawn.
-            if legend_title is not None and (legend := ax.get_legend()) is not None:
-                legend.set_title(legend_title)
+            color_mapping = {k: v for k, v in color_mapping.items() if not pd.isnull(k)}  # NA handled separately
+            # A 2nd categorical render would make scanpy's bare `ax.legend()` merge every labeled
+            # artist into one legend and drop the first (#364), so route 2nd+ legends (i.e. when a
+            # tagged legend already exists) through a helper that keeps them separate.
+            tagged = (getattr(c, "_sdata_column", None) is not None for c in ax.get_children() if isinstance(c, Legend))
+            already = any(tagged)
+            if legend_loc in (None, "none"):
+                pass  # legend suppressed
+            elif already:
+                na_hex = na_color.get_hex() if (na_in_legend and pd.isnull(color_source_vector).any()) else None
+                _stack_categorical_legend(
+                    ax,
+                    color_mapping,
+                    na_hex=na_hex,
+                    title=legend_title,
+                    column=value_to_plot,
+                    legend_fontsize=legend_fontsize,
+                )
+            else:
+                _add_categorical_legend(
+                    ax,
+                    pd.Categorical(values=color_source_vector, categories=clusters),
+                    palette=color_mapping,
+                    legend_loc=legend_loc,
+                    legend_fontweight=legend_fontweight,
+                    legend_fontsize=legend_fontsize,
+                    legend_fontoutline=path_effect,
+                    na_color=[na_color.get_hex()],
+                    na_in_legend=na_in_legend,
+                    multi_panel=fig_params.axs is not None,
+                )
+                # Tag with the column; the column auto-title (when 2+ legends) is applied in
+                # `_setup_stacked_legends`. An explicit title wins now.
+                if (legend := ax.get_legend()) is not None:
+                    legend._sdata_column = value_to_plot  # type: ignore[attr-defined]
+                    if legend_title is not None:
+                        legend.set_title(legend_title)
         elif colorbar and colorbar_requests is not None and cax is not None:
             colorbar_requests.append(
                 ColorbarSpec(

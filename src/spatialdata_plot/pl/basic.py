@@ -22,6 +22,7 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
 from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
+from matplotlib.legend import Legend
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from spatialdata._utils import _deprecation_alias
 from spatialdata.transformations.operations import get_transformation
@@ -31,6 +32,7 @@ from spatialdata_plot._accessor import register_spatial_data_accessor
 from spatialdata_plot._logging import _log_context, logger
 from spatialdata_plot.pl._color import (
     _maybe_set_colors,
+    _next_palette_colors,
     _prepare_cmap_norm,
     _set_outline,
 )
@@ -1584,6 +1586,10 @@ class PlotAccessor:
 
             _draw_scalebar(ax, scalebar_params_obj, panel_idx=i)
 
+        if fig_params.fig is not None:
+            candidate_axes = fig_params.axs if fig_params.axs is not None else [fig_params.ax]
+            _setup_stacked_legends(fig_params.fig, [a for a in candidate_axes if isinstance(a, Axes)])
+
         _layout_pending_colorbars(pending_colorbars, fig_params, colorbar_params)
 
         if fig_params.fig is not None and save is not None:
@@ -1870,6 +1876,48 @@ def _draw_colorbar(
     trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
+def _stacked_legends(ax: Axes) -> list[Legend]:
+    """Return the per-render categorical legends (#364) this code tagged on ``ax``."""
+    return [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
+
+
+def _reposition_stacked_legends(fig: Figure, renderer: object, gap_px: float = 10.0) -> None:
+    """Lay each axis' 2+ tagged legends left-to-right along its right edge, measured at ``renderer``.
+
+    A legend is fixed-pixel (unlike a colorbar, which scales to fill its inset), so its axes-fraction
+    width shifts whenever the axes is rescaled; recompute the offsets per draw at the actual geometry.
+    """
+    for ax in fig.axes:
+        legends = _stacked_legends(ax)
+        if len(legends) < 2:
+            continue
+        ax_w = ax.get_window_extent().width or 1.0
+        x = 1.02
+        for leg in legends:
+            leg.set_bbox_to_anchor((x, 1.0), transform=ax.transAxes)
+            x += (leg.get_window_extent(renderer).width + gap_px) / ax_w
+
+
+def _setup_stacked_legends(fig: Figure, panel_axes: list[Axes]) -> None:
+    """Title 2+ same-axis categorical legends and keep them laid out side-by-side across redraws.
+
+    A single figure-level ``draw_event`` handler (connected once) repositions every panel using the
+    event's renderer, so it works on any backend and isn't re-registered when a figure is reused.
+    """
+    if not any(len(_stacked_legends(ax)) >= 2 for ax in panel_axes):
+        return
+    for ax in panel_axes:
+        for leg in _stacked_legends(ax):
+            if not leg.get_title().get_text():  # explicit title wins
+                leg.set_title(leg._sdata_column)
+            if hasattr(leg, "set_loc"):  # mpl >= 3.8
+                leg.set_loc("upper left")
+    if not getattr(fig, "_sdata_legend_cb", False):
+        fig._sdata_legend_cb = True  # type: ignore[attr-defined]
+        fig.canvas.mpl_connect("draw_event", lambda e: _reposition_stacked_legends(fig, e.renderer))
+    fig.canvas.draw()  # eager placement; the handler keeps it correct across later resizes/redraws
+
+
 def _layout_pending_colorbars(
     pending_colorbars: list[tuple[Axes, list[ColorbarSpec]]],
     fig_params: FigParams,
@@ -1944,19 +1992,32 @@ def _should_rasterize(
     return scale is None or (isinstance(scale, str) and scale != "full" and (dpi is not None or figsize is not None))
 
 
-def _maybe_set_label_colors(sdata: sd.SpatialData, render_params: LabelsRenderParams) -> None:
-    """Materialize a categorical palette on the table annotating a labels element, if applicable."""
+def _maybe_set_label_colors(
+    sdata: sd.SpatialData,
+    render_params: LabelsRenderParams,
+    used_colors: set[str] | None = None,
+) -> None:
+    """Materialize a categorical palette on the table annotating a labels element, if applicable.
+
+    ``used_colors`` accumulates the colors already taken by earlier categorical label renders on
+    the same panel. When a column's colors are auto-generated (no user palette, not already in
+    ``.uns``), they are shifted to skip ``used_colors`` so stacked legends stay distinct (#364).
+    """
     table = render_params.table_name
-    if table is None or render_params.col_for_color is None:
+    col = render_params.col_for_color
+    if table is None or col is None:
         return
-    colors = sc.get.obs_df(sdata[table], [render_params.col_for_color])
-    if isinstance(colors[render_params.col_for_color].dtype, pd.CategoricalDtype):
-        _maybe_set_colors(
-            source=sdata[table],
-            target=sdata[table],
-            key=render_params.col_for_color,
-            palette=render_params.palette,
-        )
+    colors = sc.get.obs_df(sdata[table], [col])
+    if not isinstance(colors[col].dtype, pd.CategoricalDtype):
+        return
+    adata = sdata[table]
+    color_key = f"{col}_colors"
+    if render_params.palette is None and used_colors and color_key not in adata.uns:
+        adata.uns[color_key] = _next_palette_colors(used_colors, len(colors[col].cat.categories))
+    else:
+        _maybe_set_colors(source=adata, target=adata, key=col, palette=render_params.palette)
+    if used_colors is not None and color_key in adata.uns:
+        used_colors.update(adata.uns[color_key])  # _next_palette_colors normalizes for comparison
 
 
 def _render_panel(
@@ -1985,6 +2046,9 @@ def _render_panel(
     """
     wants = dict.fromkeys(("images", "labels", "points", "shapes"), False)
     wanted_elements: list[str] = []
+    # Colors already taken by categorical label renders on this panel, so later renders can
+    # avoid reusing them and their stacked legends stay distinct (#364).
+    used_label_colors: set[str] = set()
 
     for cmd, params in render_cmds:
         # Skip render entries that belong to a different color panel. Entries with no
@@ -2033,7 +2097,7 @@ def _render_panel(
                         cast("ImageRenderParams | LabelsRenderParams", element_params), dpi, figsize
                     )
                 if cmd == "render_labels":
-                    _maybe_set_label_colors(sdata, cast(LabelsRenderParams, element_params))
+                    _maybe_set_label_colors(sdata, cast(LabelsRenderParams, element_params), used_label_colors)
                 _RENDERERS[cmd](**kwargs)
 
     # Panel finalization depends only on per-panel values, so run it once after the loop.

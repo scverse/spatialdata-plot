@@ -78,9 +78,11 @@ from spatialdata_plot.pl.render_params import (
     colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
+    _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
     _join_table_for_element,
+    _legend_ncol,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
     _pixel_to_coord,
@@ -505,7 +507,7 @@ def _add_outline_legend(
     )
     color_map = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
 
-    outline_handles = [ax.scatter([], [], c=color_map[c], label=str(c)) for c in cats]
+    outline_handles = _categorical_legend_handles(ax, {c: color_map[c] for c in cats})
 
     anchor_y: float | None = None
     if fill_has_legend:
@@ -548,7 +550,7 @@ def _add_outline_legend(
         loc=loc,
         bbox_to_anchor=anchor,
         fontsize=legend_params.legend_fontsize,
-        ncol=(1 if len(outline_handles) <= 14 else 2 if len(outline_handles) <= 30 else 3),
+        ncol=_legend_ncol(len(outline_handles)),
     )
 
 
@@ -697,8 +699,7 @@ def _render_shapes(
         nan_count = int(pd.isna(cv).sum())
         if nan_count:
             logger.warning(
-                f"Found {nan_count} NaN values in color data. "
-                "These observations will be colored with the 'na_color'."
+                f"Found {nan_count} NaN values in color data. These observations will be colored with the 'na_color'."
             )
         color_spec = color_spec.evolve(color_vector=cv)
 
