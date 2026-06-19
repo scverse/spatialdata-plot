@@ -132,7 +132,8 @@ class PercentileNormalize(Normalize):
 
     Notes
     -----
-    Explicitly setting ``vmin``/``vmax`` overrides the corresponding percentile.
+    Explicitly setting ``vmin``/``vmax`` overrides the corresponding percentile. On the datashader
+    backend contrast autoscales to the aggregate range rather than to these percentiles.
     """
 
     def __init__(self, pmin: float = 0.0, pmax: float = 100.0, clip: bool = False) -> None:
@@ -144,8 +145,7 @@ class PercentileNormalize(Normalize):
 
     def autoscale_None(self, A: Any) -> None:
         """Fill unset ``vmin``/``vmax`` from the ``pmin``/``pmax`` percentiles of finite values."""
-        finite = np.asarray(A)
-        finite = finite[np.isfinite(finite)]
+        finite = np.ma.masked_invalid(np.ma.asarray(A)).compressed()  # drops mask + NaN/inf
         if finite.size:
             if self.vmin is None:
                 self.vmin = float(np.percentile(finite, self.pmin))
@@ -178,13 +178,12 @@ def _resolve_continuous_norm(values: Any, cmap_params: CmapParams) -> Normalize:
             if resolved.vmax is None or resolved.vmax <= 0:
                 resolved.vmax = 1.0
         else:
-            # Empty/all-NaN data can't fill the bounds; fall back to the unit interval.
             if resolved.vmin is None:
                 resolved.vmin = 0.0
             if resolved.vmax is None:
                 resolved.vmax = 1.0
     if resolved.vmin == resolved.vmax and not isinstance(resolved, LogNorm):
-        # degenerate range collapses the cmap onto its floor; fall back to [0, 1]. LogNorm exempt (0 not in domain).
+        # a single distinct value would collapse the cmap onto its floor
         resolved.vmin, resolved.vmax = 0.0, 1.0
     return resolved
 

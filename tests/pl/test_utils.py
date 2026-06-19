@@ -1191,12 +1191,16 @@ class TestPercentileNormalize:
         with pytest.raises(ValueError):
             PercentileNormalize(pmin, pmax)
 
-    def test_nan_values_ignored(self):
+    def test_nan_and_masked_values_ignored(self):
         from spatialdata_plot import PercentileNormalize
 
         norm = PercentileNormalize(0, 100)
         norm.autoscale_None(np.array([np.nan, 1.0, 2.0, 3.0, np.inf, -np.inf]))
         assert (norm.vmin, norm.vmax) == (1.0, 3.0)
+        # masked entries must not leak into the percentiles (mask honored like matplotlib's Normalize)
+        masked = PercentileNormalize(0, 100)
+        masked.autoscale_None(np.ma.masked_array([1.0, 2.0, 3.0, 1000.0], mask=[False, False, False, True]))
+        assert (masked.vmin, masked.vmax) == (1.0, 3.0)
 
     def test_resolve_honors_percentile_norm(self):
         # _resolve_continuous_norm (colorbar/shapes path) must defer to the norm's percentile autoscale;
