@@ -175,6 +175,21 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         assert legends[0].get_title().get_text() == ""
         plt.close()
 
+    def test_two_legend_plot_saves_to_vector_backend(self, sdata_blobs: SpatialData, tmp_path):
+        # Regression for #364: the side-by-side legend layout runs on every draw, so it must use the
+        # draw event's renderer (valid on PDF/SVG) — not the Agg-only fig.canvas.get_renderer().
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+        sdata_blobs["table"].obs["cat0"] = pd.Categorical((["A", "B"] * ((n + 1) // 2))[:n])
+        sdata_blobs["table"].obs["cat1"] = pd.Categorical((["C", "D"] * ((n + 1) // 2))[:n])
+
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat0").pl.render_labels(
+            "blobs_labels", color="cat1"
+        ).pl.show()
+        plt.gcf().savefig(tmp_path / "out.pdf")  # must not raise on the Pdf canvas
+        plt.close()
+
     def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels("blobs_labels", color=[0.5, 0.5, 1.0, 0.5]).pl.show()
 

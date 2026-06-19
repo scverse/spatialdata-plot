@@ -20,7 +20,7 @@ from dask.dataframe import DataFrame as DaskDataFrame
 from geopandas import GeoDataFrame
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import RendererBase
-from matplotlib.colors import Colormap, LogNorm, Normalize, to_hex, to_rgba
+from matplotlib.colors import Colormap, LogNorm, Normalize
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -1587,9 +1587,8 @@ class PlotAccessor:
             _draw_scalebar(ax, scalebar_params_obj, panel_idx=i)
 
         if fig_params.fig is not None:
-            for panel_ax in fig_params.axs if fig_params.axs is not None else [fig_params.ax]:
-                if isinstance(panel_ax, Axes):
-                    _layout_panel_legends(panel_ax, fig_params.fig)
+            candidate_axes = fig_params.axs if fig_params.axs is not None else [fig_params.ax]
+            _setup_stacked_legends(fig_params.fig, [a for a in candidate_axes if isinstance(a, Axes)])
 
         _layout_pending_colorbars(pending_colorbars, fig_params, colorbar_params)
 
@@ -1877,40 +1876,46 @@ def _draw_colorbar(
     trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
-def _layout_panel_legends(ax: Axes, fig: Figure, gap_px: float = 10.0) -> None:
-    """Lay the per-render categorical legends (#364) left-to-right in the right margin.
+def _stacked_legends(ax: Axes) -> list[Legend]:
+    """Return the per-render categorical legends (#364) this code tagged on ``ax``."""
+    return [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
 
-    Only legends this code created (tagged ``_sdata_column``) are touched, so fill/outline and
-    channel legends keep their own placement. A lone legend is left exactly as scanpy placed it
-    (untitled). When 2+ legends share an axis they are titled by their color column and placed
-    side-by-side.
 
-    A legend is a fixed-pixel artist (unlike a colorbar, which scales to fill its inset), so its
-    axes-fraction footprint changes whenever the axes is rescaled — by ``constrained_layout`` or by
-    a later figure resize (e.g. the test harness). Placing once is therefore unstable. Instead we
-    recompute the side-by-side offsets on every draw via a ``draw_event`` callback, measuring each
-    legend at the geometry actually being rendered — the fixed-pixel analogue of the colorbar
-    inset's self-rescaling.
+def _reposition_stacked_legends(fig: Figure, renderer: object, gap_px: float = 10.0) -> None:
+    """Lay each axis' 2+ tagged legends left-to-right along its right edge, measured at ``renderer``.
+
+    A legend is fixed-pixel (unlike a colorbar, which scales to fill its inset), so its axes-fraction
+    width shifts whenever the axes is rescaled; recompute the offsets per draw at the actual geometry.
     """
-    legends = [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
-    if len(legends) < 2:
-        return
-    for leg in legends:
-        if not leg.get_title().get_text():  # explicit title wins
-            leg.set_title(leg._sdata_column)
-        leg.set_loc("upper left")
-
-    def _reposition(_event: object = None) -> None:
-        renderer = fig.canvas.get_renderer()
+    for ax in fig.axes:
+        legends = _stacked_legends(ax)
+        if len(legends) < 2:
+            continue
         ax_w = ax.get_window_extent().width or 1.0
         x = 1.02
         for leg in legends:
             leg.set_bbox_to_anchor((x, 1.0), transform=ax.transAxes)
             x += (leg.get_window_extent(renderer).width + gap_px) / ax_w
 
-    fig.canvas.draw()  # establish geometry for the initial placement
-    _reposition()
-    fig.canvas.mpl_connect("draw_event", _reposition)  # keep correct across resizes/redraws
+
+def _setup_stacked_legends(fig: Figure, panel_axes: list[Axes]) -> None:
+    """Title 2+ same-axis categorical legends and keep them laid out side-by-side across redraws.
+
+    A single figure-level ``draw_event`` handler (connected once) repositions every panel using the
+    event's renderer, so it works on any backend and isn't re-registered when a figure is reused.
+    """
+    if not any(len(_stacked_legends(ax)) >= 2 for ax in panel_axes):
+        return
+    for ax in panel_axes:
+        for leg in _stacked_legends(ax):
+            if not leg.get_title().get_text():  # explicit title wins
+                leg.set_title(leg._sdata_column)
+            if hasattr(leg, "set_loc"):  # mpl >= 3.8
+                leg.set_loc("upper left")
+    if not getattr(fig, "_sdata_legend_cb", False):
+        fig._sdata_legend_cb = True  # type: ignore[attr-defined]
+        fig.canvas.mpl_connect("draw_event", lambda e: _reposition_stacked_legends(fig, e.renderer))
+    fig.canvas.draw()  # eager placement; the handler keeps it correct across later resizes/redraws
 
 
 def _layout_pending_colorbars(
@@ -2012,7 +2017,7 @@ def _maybe_set_label_colors(
     else:
         _maybe_set_colors(source=adata, target=adata, key=col, palette=render_params.palette)
     if used_colors is not None and color_key in adata.uns:
-        used_colors.update(to_hex(to_rgba(c)) for c in adata.uns[color_key])
+        used_colors.update(adata.uns[color_key])  # _next_palette_colors normalizes for comparison
 
 
 def _render_panel(

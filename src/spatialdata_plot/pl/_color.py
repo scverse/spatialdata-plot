@@ -1173,14 +1173,14 @@ def _default_categorical_palette(n: int) -> list[str]:
 
 
 def _next_palette_colors(used_colors: set[str], n: int) -> list[str]:
-    """Pick ``n`` default-palette colors skipping ``used_colors`` (keeps a 2nd categorical render distinct, #364).
-
-    Falls back to the full palette if too few unused colors remain.
-    """
+    """Pick ``n`` default-palette colors skipping ``used_colors``, keeping a 2nd categorical render distinct (#364)."""
     used_norm = {to_hex(to_rgba(c)) for c in used_colors}
     pool = _default_categorical_palette(n + len(used_norm))
     unused = [c for c in pool if to_hex(to_rgba(c)) not in used_norm]
-    return (unused if len(unused) >= n else pool)[:n]
+    if len(unused) < n:  # palette exhausted; some colors will repeat an earlier render's
+        logger.warning("Not enough distinct default colors left; stacked legends may share colors.")
+        return pool[:n]
+    return unused[:n]
 
 
 def _get_default_categorial_color_mapping(

@@ -78,6 +78,7 @@ from spatialdata_plot.pl.render_params import (
     colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
+    _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
     _join_table_for_element,
@@ -506,7 +507,7 @@ def _add_outline_legend(
     )
     color_map = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
 
-    outline_handles = [ax.scatter([], [], c=color_map[c], label=str(c)) for c in cats]
+    outline_handles = _categorical_legend_handles(ax, {c: color_map[c] for c in cats})
 
     anchor_y: float | None = None
     if fill_has_legend:

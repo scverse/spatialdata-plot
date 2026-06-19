@@ -430,13 +430,11 @@ def _stack_categorical_legend(
 ) -> None:
     """Build the 2nd+ categorical legend on a shared axes without dropping existing ones (#364).
 
-    Placement and the column auto-title are finalized later by ``_layout_panel_legends``; the anchor
-    and (absent an explicit ``title``) the title here are provisional.
+    Placement and the column auto-title are finalized later by ``_setup_stacked_legends``.
     """
     handles = _categorical_legend_handles(ax, color_mapping, na_hex)
     if (cur := ax.get_legend()) is not None:
-        ax.add_artist(cur)  # only the current legend would be dropped by ax.legend() below
-    # Auto-title (by column) is applied in `_layout_panel_legends`; an explicit `title` still wins here.
+        ax.add_artist(cur)  # else ax.legend() below drops it
     new_leg = ax.legend(
         handles=handles,
         title=title,
@@ -494,12 +492,14 @@ def _decorate_axs(
             )
             color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
             color_mapping = {k: v for k, v in color_mapping.items() if not pd.isnull(k)}  # NA handled separately
-            # A lone categorical legend goes through scanpy unchanged. A 2nd categorical render would
-            # otherwise make scanpy's bare `ax.legend()` merge every labeled artist into one legend and
-            # drop the first (#364), so route 2nd+ legends through a helper that keeps them separate.
+            # A 2nd categorical render would make scanpy's bare `ax.legend()` merge every labeled
+            # artist into one legend and drop the first (#364), so route 2nd+ legends (i.e. when a
+            # tagged legend already exists) through a helper that keeps them separate.
+            tagged = (getattr(c, "_sdata_column", None) is not None for c in ax.get_children() if isinstance(c, Legend))
+            already = any(tagged)
             if legend_loc in (None, "none"):
-                pass
-            elif any(getattr(c, "_sdata_column", None) is not None for c in ax.get_children() if isinstance(c, Legend)):
+                pass  # legend suppressed
+            elif already:
                 na_hex = na_color.get_hex() if (na_in_legend and pd.isnull(color_source_vector).any()) else None
                 _stack_categorical_legend(
                     ax,
@@ -522,8 +522,8 @@ def _decorate_axs(
                     na_in_legend=na_in_legend,
                     multi_panel=fig_params.axs is not None,
                 )
-                # Tag with the column; the column auto-title is applied in `_layout_panel_legends`.
-                # An explicit title wins now.
+                # Tag with the column; the column auto-title (when 2+ legends) is applied in
+                # `_setup_stacked_legends`. An explicit title wins now.
                 if (legend := ax.get_legend()) is not None:
                     legend._sdata_column = value_to_plot  # type: ignore[attr-defined]
                     if legend_title is not None:
