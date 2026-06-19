@@ -1877,34 +1877,40 @@ def _draw_colorbar(
     trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
-def _layout_panel_legends(ax: Axes, fig: Figure, gap: float = 0.02) -> None:
-    """Title and stack the per-render categorical legends (#364) in the right margin.
+def _layout_panel_legends(ax: Axes, fig: Figure, gap_px: float = 10.0) -> None:
+    """Lay the per-render categorical legends (#364) left-to-right in the right margin.
 
     Only legends this code created (tagged ``_sdata_column``) are touched, so fill/outline and
-    channel legends keep their own placement. Each legend is titled by the column passed to its
-    render call (an explicit title wins). A lone legend keeps scanpy's placement (just titled); 2+
-    are stacked top-to-bottom along the axes' right edge.
+    channel legends keep their own placement. A lone legend is left exactly as scanpy placed it
+    (untitled). When 2+ legends share an axis they are titled by their color column and placed
+    side-by-side.
+
+    A legend is a fixed-pixel artist (unlike a colorbar, which scales to fill its inset), so its
+    axes-fraction footprint changes whenever the axes is rescaled — by ``constrained_layout`` or by
+    a later figure resize (e.g. the test harness). Placing once is therefore unstable. Instead we
+    recompute the side-by-side offsets on every draw via a ``draw_event`` callback, measuring each
+    legend at the geometry actually being rendered — the fixed-pixel analogue of the colorbar
+    inset's self-rescaling.
     """
     legends = [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
-    if not legends:
-        return
-    for leg in legends:
-        if not leg.get_title().get_text():
-            leg.set_title(leg._sdata_column)
     if len(legends) < 2:
         return
-    # Anchor in axes-fraction so the legends stay glued to the axes' right edge: when
-    # constrained_layout reserves margin space and rescales the axes, axes-anchored legends move with
-    # it (figure-fraction anchoring would leave a gap and squash the plot). Each is placed just below
-    # the previous one's measured bottom.
-    inv = ax.transAxes.inverted()
-    y = 1.0
     for leg in legends:
-        leg.set_bbox_to_anchor((1.02, y), transform=ax.transAxes)
-        if hasattr(leg, "set_loc"):
-            leg.set_loc("upper left")
-        fig.canvas.draw()
-        y = leg.get_window_extent().transformed(inv).y0 - gap
+        if not leg.get_title().get_text():  # explicit title wins
+            leg.set_title(leg._sdata_column)
+        leg.set_loc("upper left")
+
+    def _reposition(_event: object = None) -> None:
+        renderer = fig.canvas.get_renderer()
+        ax_w = ax.get_window_extent().width or 1.0
+        x = 1.02
+        for leg in legends:
+            leg.set_bbox_to_anchor((x, 1.0), transform=ax.transAxes)
+            x += (leg.get_window_extent(renderer).width + gap_px) / ax_w
+
+    fig.canvas.draw()  # establish geometry for the initial placement
+    _reposition()
+    fig.canvas.mpl_connect("draw_event", _reposition)  # keep correct across resizes/redraws
 
 
 def _layout_pending_colorbars(

@@ -125,13 +125,12 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         c1 = set(sdata_blobs["table"].uns["cat1_colors"])
         assert c0.isdisjoint(c1)
 
-        # legends are stacked vertically in the right margin (not left-to-right): left-aligned and
-        # non-overlapping in y, so the second can't overflow the figure's right edge (#364)
+        # legends are placed side-by-side in the right margin: top-aligned, non-overlapping in x (#364)
         fig.canvas.draw()
         inv = ax.transAxes.inverted()
-        boxes = sorted((leg.get_window_extent().transformed(inv) for leg in legends), key=lambda b: b.y0, reverse=True)
-        assert boxes[1].y1 <= boxes[0].y0  # no vertical overlap (lower legend's top <= upper's bottom)
-        assert abs(boxes[0].x0 - boxes[1].x0) < 0.01  # left edges aligned
+        boxes = sorted((leg.get_window_extent().transformed(inv) for leg in legends), key=lambda b: b.x0)
+        assert boxes[0].x1 <= boxes[1].x0  # no horizontal overlap
+        assert abs(boxes[0].y1 - boxes[1].y1) < 0.01  # tops aligned
         plt.close()
 
     def test_three_categorical_label_renders_make_three_legends(self, sdata_blobs: SpatialData):
@@ -160,9 +159,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         assert c0.isdisjoint(c1) and c1.isdisjoint(c2) and c0.isdisjoint(c2)
         plt.close()
 
-    def test_single_categorical_label_render_legend_titled_by_column(self, sdata_blobs: SpatialData):
-        # A lone categorical render produces exactly one legend titled by its source column, matching
-        # the colorbar's auto-title (#364).
+    def test_single_categorical_label_render_legend_has_no_title(self, sdata_blobs: SpatialData):
+        # A lone categorical render produces exactly one, untitled legend: the column title is only
+        # added to disambiguate 2+ legends on an axis (#364).
         n = sdata_blobs["table"].n_obs
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
         sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
@@ -173,7 +172,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ax = plt.gcf().axes[0]
         legends = [c for c in ax.get_children() if isinstance(c, Legend)]
         assert len(legends) == 1
-        assert legends[0].get_title().get_text() == "cat0"
+        assert legends[0].get_title().get_text() == ""
         plt.close()
 
     def test_plot_can_color_by_rgba_array(self, sdata_blobs: SpatialData):
