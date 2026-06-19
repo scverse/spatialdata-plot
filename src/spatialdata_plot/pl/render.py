@@ -1415,15 +1415,6 @@ def _render_points(
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
 
-    # Continuous points resolve their norm through the shared resolver so the fill and colorbar match
-    # the shapes/labels treatment (degenerate [0, 1] reset, LogNorm/PowerNorm preserved) instead of
-    # letting ax.scatter autoscale a fresh linear norm. Non-continuous keeps the un-scaled fresh norm.
-    norm = (
-        _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
-        if color_spec.is_continuous
-        else render_params.cmap_params.fresh_norm()
-    )
-
     method = render_params.method
 
     if render_params.density:
@@ -1435,6 +1426,11 @@ def _render_points(
     _default_reduction: _DsReduction = "sum"
 
     if method == "datashader":
+        # datashader colors the per-pixel AGGREGATE (count/sum/reduction), whose range differs from
+        # the per-point color vector. Pass an un-resolved norm so _apply_ds_norm autoscales to the
+        # aggregate (honoring any explicit vmin/vmax) — resolving from the color vector would mis-scale
+        # reductions and paint empty pixels.
+        norm = render_params.cmap_params.fresh_norm()
         _log_datashader_method(method, render_params.ds_reduction, _default_reduction)
 
         # Apply transformations and materialize to pandas immediately so
@@ -1471,6 +1467,14 @@ def _render_points(
         color_spec = color_spec.evolve(source_vector=csv, color_vector=cv)
 
     elif method == "matplotlib":
+        # matplotlib colors each point by its own value, so resolve the norm (degenerate [0, 1] reset,
+        # LogNorm/PowerNorm preserved) to match the shapes/labels treatment instead of letting
+        # ax.scatter autoscale a fresh linear norm. Non-continuous keeps the un-scaled fresh norm.
+        norm = (
+            _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
+            if color_spec.is_continuous
+            else render_params.cmap_params.fresh_norm()
+        )
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
         cax = _scatter_points(
