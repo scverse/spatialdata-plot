@@ -153,6 +153,11 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ax = plt.gcf().axes[0]
         titles = sorted(c.get_title().get_text() for c in ax.get_children() if isinstance(c, Legend))
         assert titles == ["cat0", "cat1", "cat2"]
+
+        # palette offset accumulates: every render skips all colors used by earlier ones, so all
+        # three palettes are mutually disjoint (not just cat0 vs cat1).
+        c0, c1, c2 = (set(sdata_blobs["table"].uns[f"cat{i}_colors"]) for i in range(3))
+        assert c0.isdisjoint(c1) and c1.isdisjoint(c2) and c0.isdisjoint(c2)
         plt.close()
 
     def test_single_categorical_label_render_legend_titled_by_column(self, sdata_blobs: SpatialData):

@@ -1877,43 +1877,34 @@ def _draw_colorbar(
     trackers_axes[location] = pad_axes + (bbox_axes.width if vertical else bbox_axes.height)
 
 
-def _layout_panel_legends(ax: Axes, fig: Figure, gap: float = 0.01) -> None:
+def _layout_panel_legends(ax: Axes, fig: Figure, gap: float = 0.02) -> None:
     """Title and stack the per-render categorical legends (#364) in the right margin.
 
     Only legends this code created (tagged ``_sdata_column``) are touched, so fill/outline and
-    channel legends keep their own placement. Each legend is titled by its source column (matching
-    colorbars). When 2+ legends share an axis they are stacked top-to-bottom — the right-margin
-    convention — so wide legends grow the figure height on save instead of overflowing its right edge.
+    channel legends keep their own placement. Each legend is titled by the column passed to its
+    render call (an explicit title wins). A lone legend keeps scanpy's placement (just titled); 2+
+    are stacked top-to-bottom along the axes' right edge.
     """
     legends = [c for c in ax.get_children() if isinstance(c, Legend) and hasattr(c, "_sdata_column")]
     if not legends:
         return
-    # Title each legend by its source column so it reads like the colorbars (an explicit title set
-    # earlier stays as-is). A lone legend keeps scanpy's placement; only its title is added here.
     for leg in legends:
         if not leg.get_title().get_text():
             leg.set_title(leg._sdata_column)
     if len(legends) < 2:
         return
-    # 2+ legends share the axis. Let constrained_layout settle, then freeze it: otherwise it shrinks
-    # the axes to "make room" for the margin legends (squashing the plot, leaving a gap). Frozen, the
-    # legends still count for `bbox_inches="tight"` on save.
-    fig.canvas.draw()
-    fig.set_layout_engine("none")
-    invf = fig.transFigure.inverted()
-    ax_bb = ax.get_window_extent().transformed(invf)
-    left, top = ax_bb.x1 + gap, ax_bb.y1
-    # Anchor all at one point and settle, so heights are measured in a single consistent layout state.
+    # Anchor in axes-fraction so the legends stay glued to the axes' right edge: when
+    # constrained_layout reserves margin space and rescales the axes, axes-anchored legends move with
+    # it (figure-fraction anchoring would leave a gap and squash the plot). Each is placed just below
+    # the previous one's measured bottom.
+    inv = ax.transAxes.inverted()
+    y = 1.0
     for leg in legends:
-        leg.set_bbox_to_anchor((left, top), transform=fig.transFigure)
+        leg.set_bbox_to_anchor((1.02, y), transform=ax.transAxes)
         if hasattr(leg, "set_loc"):
             leg.set_loc("upper left")
-    fig.canvas.draw()
-    heights = [leg.get_window_extent().transformed(invf).height for leg in legends]
-    y = top
-    for leg, h in zip(legends, heights, strict=True):
-        leg.set_bbox_to_anchor((left, y), transform=fig.transFigure)
-        y -= h + gap
+        fig.canvas.draw()
+        y = leg.get_window_extent().transformed(inv).y0 - gap
 
 
 def _layout_pending_colorbars(
