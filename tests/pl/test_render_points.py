@@ -1291,13 +1291,12 @@ def test_density_defaults_silent_and_force_datashader(sdata_blobs: SpatialData, 
 
 @pytest.mark.parametrize("size", [10.0, 30.0, 400.0])
 def test_marker_spread_px_layout_invariant(size):
-    """Datashader marker display radius must be constant across panel layouts (matches matplotlib).
+    """Datashader marker display radius stays ~constant across panel layouts (matches matplotlib).
 
-    A canvas px displays at factor/factor_axesbox display px, so the on-screen radius is
-    P * factor / factor_axesbox. With the figure-resolution canvas the only thing that changes between a
-    single panel and a 2x2 grid is the axes-box size (factor_axesbox); factor (figure canvas) is the same.
-    The spread rescaling must keep the displayed radius equal across both, and equal to the matplotlib
-    marker radius sqrt(size)*dpi/144. The pre-fix /100 formula had no layout term and halved in 2x2.
+    On-screen radius is P * factor / factor_axesbox; only factor_axesbox (axes-box size) changes between a
+    single panel and a 2x2 grid. The spread rescaling keeps the displayed radius at the matplotlib marker
+    radius sqrt(size)*dpi/144 to within spread-px rounding (<1px). The pre-fix /100 formula had no layout
+    term and halved in 2x2 (diff >> 1px).
     """
     dpi = 80
     rx = ry = 100.0

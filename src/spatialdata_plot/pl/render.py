@@ -1183,12 +1183,10 @@ def _render_centroids_as_points(
 
 
 def _marker_spread_px(size: float, dpi: float, factor: float, factor_axesbox: float) -> int:
-    """Spread radius (canvas px) reproducing a matplotlib marker of area ``size`` at any panel layout.
+    """Spread radius (canvas px) matching a matplotlib marker of area ``size`` at any panel layout.
 
-    The matplotlib marker radius is ``sqrt(size)*dpi/144`` display px regardless of layout. On the
-    figure-resolution datashader canvas one canvas px displays at ``factor_axesbox/factor`` of a display
-    px (``factor_axesbox`` = world units per axes-box px, ``factor`` = world units per canvas px), so we
-    rescale by that ratio to keep the on-screen radius constant. Ratio is 1 for the axes-box canvas.
+    The marker radius is ``sqrt(size)*dpi/144`` display px; one figure-resolution canvas px displays at
+    ``factor_axesbox/factor`` of a display px, so rescale by that ratio to keep the on-screen size constant.
     """
     return max(int(round(np.sqrt(size) * dpi / 144 * factor_axesbox / factor)), 0)
 
@@ -1209,7 +1207,7 @@ def _datashader_points(
     density: bool,
     density_how: str,
     fig_params: FigParams,
-    default_reduction: _DsReduction = "sum",
+    default_reduction: _DsReduction = "max",
     as_markers: bool = False,
     axes_extent: dict[str, tuple[float, float]] | None = None,
     radius: float | None = None,
@@ -1241,11 +1239,12 @@ def _datashader_points(
         # Faithful disc (circle fast-path): spread to the circle's on-screen pixel radius. ds.tf.spread's
         # footprint radius is ~px+0.5, so subtract 0.5 to match a filled disc of radius r.
         px = max(int(round(radius / factor - 0.5)), 0)
+    elif as_markers:
+        # Canvas is already the axes box (factor == factor_axesbox), so the spread is the marker radius.
+        px = _marker_spread_px(size, fig_params.fig.dpi, factor, factor)
     else:
-        # Spread radius = matplotlib marker radius (sqrt(size)*dpi/144 display px), made layout-invariant.
-        # The aggregation canvas is figure-resolution, so a canvas px displays at factor_axesbox/factor of
-        # a display px; rescaling by that ratio cancels the layout term (multi-panel subplots would
-        # otherwise shrink the dots). For as_markers the canvas is already the axes box, so the ratio is 1.
+        # Layout-invariant marker radius: the figure-resolution canvas shrinks dots in multi-panel
+        # subplots, so rescale the spread by the axes-box/canvas factor ratio to cancel that.
         bb = ax.get_window_extent()
         factor_axesbox = max((x_ext[1] - x_ext[0]) / bb.width, (y_ext[1] - y_ext[0]) / bb.height)
         px = _marker_spread_px(size, fig_params.fig.dpi, factor, factor_axesbox)

@@ -1933,6 +1933,7 @@ def test_circles_render_as_points_gate():
     assert gate(_uniform_circle_gdf(big, np.arange(big) + 1.0)) is False  # varying radius
     assert gate(_uniform_circle_gdf(big, 2.0), outline_alpha=(1.0, 0.0)) is False  # outline requested
     assert gate(_uniform_circle_gdf(big, 2.0), shape="square") is False  # custom shape
+    assert gate(_uniform_circle_gdf(big, np.where(np.arange(big) == 0, np.nan, 2.0))) is False  # NaN radius
 
 
 def test_circle_fast_path_renders_without_error(monkeypatch):
@@ -1940,8 +1941,19 @@ def test_circle_fast_path_renders_without_error(monkeypatch):
     import spatialdata_plot.pl.render as render_mod
 
     monkeypatch.setattr(render_mod, "_CIRCLE_FAST_PATH_MIN", 4)
+    # Spy on the centroid renderer: only the fast path routes circles through it (with a disc radius);
+    # the ordinary buffer path does not. This pins that the fast path actually fired, not just "an image".
+    seen = {}
+    real = render_mod._render_centroids_as_points
+
+    def spy(*args, **kwargs):
+        seen["radius"] = kwargs.get("radius")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(render_mod, "_render_centroids_as_points", spy)
     sdata = SpatialData(shapes={"circ": ShapesModel.parse(_uniform_circle_gdf(20, 2.0))})
     fig, ax = plt.subplots()
     sdata.pl.render_shapes("circ", method="datashader").pl.show(ax=ax)
+    assert seen.get("radius") is not None  # fast path ran and sized the dots to the disc radius
     assert len(ax.images) >= 1  # datashader raster produced
     plt.close(fig)
