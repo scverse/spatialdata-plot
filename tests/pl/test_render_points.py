@@ -57,7 +57,13 @@ _ = spatialdata_plot
 
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_points_render_permutations(self, sdata_blobs: SpatialData):
-        """2x2 of (no color / continuous color) x (matplotlib / datashader); columns should look alike."""
+        """2x2 of (no color / continuous color) x (matplotlib / datashader).
+
+        Note: in a single-panel figure at native size matplotlib and datashader markers agree; in this
+        squished multi-panel thumbnail the figure-resolution datashader raster scales with the shrunken
+        subplot while the point-sized matplotlib markers do not, so datashader dots look smaller here.
+        That is a harness/multi-panel artifact, not the real single-panel rendering.
+        """
         panels = [
             ("no color · matplotlib", {"method": "matplotlib"}),
             ("no color · datashader", {"method": "datashader"}),
