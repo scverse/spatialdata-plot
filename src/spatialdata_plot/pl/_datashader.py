@@ -716,6 +716,11 @@ def _ax_show_and_transform(
     return im
 
 
+def _pad_degenerate_extent(ext: list[Any]) -> list[Any]:
+    """Pad a zero-width extent to a unit window centered on its value; pass others through."""
+    return [ext[0] - 0.5, ext[1] + 0.5] if ext[1] == ext[0] else ext
+
+
 def _compute_datashader_canvas_params(
     x_ext: list[Any],
     y_ext: list[Any],
@@ -725,6 +730,10 @@ def _compute_datashader_canvas_params(
 
     Shared logic used by both the dask-based and pandas-based entry points.
     """
+    # A zero-width extent (single point, coincident points, axis-aligned line) has no scale to
+    # build a canvas from; pad it so the factor below doesn't divide by zero.
+    x_ext, y_ext = _pad_degenerate_extent(x_ext), _pad_degenerate_extent(y_ext)
+
     # Compute canvas size in pixels, capped at the figure's display resolution.
     # Using np.max ensures the canvas never exceeds display pixels on either axis,
     # preventing pixel-based operations (spread, line_width) from being downscaled
