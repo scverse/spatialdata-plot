@@ -1159,16 +1159,17 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     @staticmethod
     def _as_points(sdata_blobs: SpatialData, method: str):
-        # identical params for both backends; size=120 keeps dots non-overlapping, where the engines agree
-        # (they only diverge on overlap: matplotlib stacks markers, datashader aggregates)
+        # blobs_circles is uniform-radius: the datashader backend sizes the dots to the true disc radius
+        # (so as_points matches the geometry render), while matplotlib uses the marker `size` (scatter
+        # markers are display-sized, not data-sized). The two backends therefore differ for circles.
         return sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method=method, size=120)
 
     def test_plot_shapes_as_points_matplotlib(self, sdata_blobs: SpatialData):
-        """as_points draws one dot per shape at its centroid (matplotlib backend)."""
+        """as_points draws one dot per shape at its centroid; matplotlib uses the marker `size`."""
         self._as_points(sdata_blobs, "matplotlib").pl.show()
 
     def test_plot_shapes_as_points_datashader(self, sdata_blobs: SpatialData):
-        """Same render via datashader; should look maximally similar to the matplotlib baseline."""
+        """Datashader sizes uniform-circle as_points dots to the true radius, matching the geometry render."""
         self._as_points(sdata_blobs, "datashader").pl.show()
 
 
