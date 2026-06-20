@@ -48,6 +48,19 @@ _ = spatialdata_plot
 
 
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_points_render_permutations(self, sdata_blobs: SpatialData):
+        """2x2 of (no color / continuous color) x (matplotlib / datashader); columns should look alike."""
+        panels = [
+            ("no color · matplotlib", {"method": "matplotlib"}),
+            ("no color · datashader", {"method": "datashader"}),
+            ("color · matplotlib", {"color": "instance_id", "method": "matplotlib", "colorbar": False}),
+            ("color · datashader", {"color": "instance_id", "method": "datashader", "colorbar": False}),
+        ]
+        _, axs = plt.subplots(2, 2, figsize=(8, 8))
+        for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
+            sdata_blobs.pl.render_points("blobs_points", size=200, **kw).pl.show(ax=ax)
+            ax.set_title(title, fontsize=8)
+
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points").pl.show()
 

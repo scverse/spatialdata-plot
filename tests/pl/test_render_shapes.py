@@ -71,6 +71,20 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             sdata.pl.render_shapes("circ", **kw).pl.show(ax=ax)
             ax.set_title(title, fontsize=8)
 
+    def test_plot_polygon_render_permutations(self, sdata_blobs_shapes_annotated: SpatialData):
+        """2x2 of (geometry / as_points) x (matplotlib / datashader) for polygons; columns should look alike."""
+        panels = [
+            ("geometry · matplotlib", {"method": "matplotlib"}),
+            ("geometry · datashader", {"method": "datashader"}),
+            ("as_points · matplotlib", {"as_points": True, "size": 150, "method": "matplotlib"}),
+            ("as_points · datashader", {"as_points": True, "size": 150, "method": "datashader"}),
+        ]
+        annotated = sdata_blobs_shapes_annotated
+        _, axs = plt.subplots(2, 2, figsize=(8, 8))
+        for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
+            annotated.pl.render_shapes("blobs_polygons", color="value", colorbar=False, **kw).pl.show(ax=ax)
+            ax.set_title(title, fontsize=8)
+
     def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
 

@@ -40,6 +40,19 @@ def _annotate_labels_with_outline_columns(sdata: SpatialData) -> SpatialData:
 
 
 class TestLabels(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_labels_render_permutations(self, sdata_blobs: SpatialData):
+        """2x2 of (fill / as_points) x (matplotlib / datashader); fill is backend-invariant, as_points should match."""
+        panels = [
+            ("fill · matplotlib", {"method": "matplotlib"}),
+            ("fill · datashader", {"method": "datashader"}),
+            ("as_points · matplotlib", {"as_points": True, "size": 150, "method": "matplotlib"}),
+            ("as_points · datashader", {"as_points": True, "size": 150, "method": "datashader"}),
+        ]
+        _, axs = plt.subplots(2, 2, figsize=(8, 8))
+        for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
+            sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", colorbar=False, **kw).pl.show(ax=ax)
+            ax.set_title(title, fontsize=8)
+
     def test_plot_can_render_labels(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(element="blobs_labels").pl.show()
 
