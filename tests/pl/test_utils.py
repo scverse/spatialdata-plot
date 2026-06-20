@@ -917,6 +917,43 @@ class TestResolveContinuousNorm:
         norm = _resolve_continuous_norm(np.array([1.0, "red", 9.0], dtype=object), self._params())
         assert (norm.vmin, norm.vmax) == (1.0, 9.0)
 
+    def test_lognorm_with_zero_derives_positive_vmin_and_does_not_raise(self):
+        # regression: deriving vmin from a LogNorm's data range must skip 0/negatives; otherwise the
+        # preserved LogNorm has vmin <= 0 and raises "Invalid vmin or vmax" when the renderer calls it
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        vals = np.array([0.0, 5.0, 50.0])
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(vals, params)
+        assert isinstance(norm, LogNorm)
+        assert norm.vmin == 5.0 and norm.vmax == 50.0  # smallest positive, not 0
+        norm(vals)  # must not raise
+
+    def test_lognorm_with_negatives_derives_positive_vmin(self):
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        vals = np.array([-10.0, 1.0, 100.0])
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(vals, params)
+        assert isinstance(norm, LogNorm)
+        assert norm.vmin == 1.0 and norm.vmax == 100.0
+        norm(vals)  # must not raise
+
+    def test_lognorm_all_nonpositive_falls_back_without_raising(self):
+        from matplotlib.colors import LogNorm
+
+        from spatialdata_plot.pl._color import _resolve_continuous_norm
+
+        params = CmapParams(cmap=self._params().cmap, norm=LogNorm(vmin=None, vmax=None), na_color=Color())
+        norm = _resolve_continuous_norm(np.array([0.0, -1.0, np.nan]), params)
+        assert isinstance(norm, LogNorm)
+        assert (norm.vmin, norm.vmax) == (1.0, 1.0)
+        norm(np.array([1.0]))  # must not raise
+
     def test_same_values_give_identical_norm_and_never_mutate_shared(self):
         # the core #699 invariant: pixels and colorbar call this with the same vector -> same result,
         # and the shared CmapParams.norm is never autoscaled in place.
@@ -1089,3 +1126,89 @@ class TestColorSpecToRgba:
 
         arr = np.array([[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]])
         np.testing.assert_allclose(ColorSpec("continuous", None, arr).to_rgba(self._params()), arr)
+
+
+class TestPercentileNormalize:
+    """PercentileNormalize + _resolve_continuous_norm (issue #370: dim multichannel renders)."""
+
+    @staticmethod
+    def _three_channel_sdata() -> SpatialData:
+        from spatialdata.models import Image2DModel
+        from spatialdata.transformations import Identity
+
+        arr = np.zeros((3, 8, 8), dtype=np.uint16)
+        img = Image2DModel.parse(arr, dims=("c", "y", "x"), transformations={"global": Identity()})
+        return SpatialData(images={"img": img})
+
+    @pytest.mark.parametrize("norm_kind", ["normalize", "percentile"])
+    def test_norm_single_or_list_must_match_channels(self, norm_kind):
+        from matplotlib.colors import Normalize
+
+        from spatialdata_plot import PercentileNormalize
+        from spatialdata_plot.pl._validate import _validate_image_render_params
+
+        make = (lambda: Normalize(0, 200)) if norm_kind == "normalize" else (lambda: PercentileNormalize(1, 99))
+        sdata = self._three_channel_sdata()
+        kw = {
+            "element": "img",
+            "channel": None,
+            "alpha": 1.0,
+            "palette": None,
+            "cmap": None,
+            "scale": None,
+            "colorbar": True,
+            "colorbar_params": {},
+        }
+        # a single norm (broadcast) and a length-matching list are accepted; a mismatched list is rejected
+        _validate_image_render_params(sdata, norm=make(), **kw)
+        _validate_image_render_params(sdata, norm=[make() for _ in range(3)], **kw)
+        with pytest.raises(ValueError, match="must match the number of channels"):
+            _validate_image_render_params(sdata, norm=[make(), make()], **kw)
+
+    def test_autoscale_uses_percentiles(self):
+        from spatialdata_plot import PercentileNormalize
+
+        # heavy-tailed: one huge outlier should not set vmax under p99
+        data = np.concatenate([np.linspace(0, 100, 1000), [10000.0]])
+        norm = PercentileNormalize(1, 99)
+        norm.autoscale_None(data)
+        assert norm.vmin == pytest.approx(np.percentile(data, 1))
+        assert norm.vmax == pytest.approx(np.percentile(data, 99))
+        assert norm.vmax < 10000.0
+
+    def test_explicit_vmin_vmax_override_percentiles(self):
+        from spatialdata_plot import PercentileNormalize
+
+        norm = PercentileNormalize(1, 99)
+        norm.vmin, norm.vmax = 5.0, 50.0
+        norm.autoscale_None(np.linspace(0, 100, 100))
+        assert (norm.vmin, norm.vmax) == (5.0, 50.0)
+
+    @pytest.mark.parametrize("pmin,pmax", [(99, 1), (-1, 50), (50, 101), (5, 5)])
+    def test_invalid_percentiles_raise(self, pmin, pmax):
+        from spatialdata_plot import PercentileNormalize
+
+        with pytest.raises(ValueError):
+            PercentileNormalize(pmin, pmax)
+
+    def test_nan_and_masked_values_ignored(self):
+        from spatialdata_plot import PercentileNormalize
+
+        norm = PercentileNormalize(0, 100)
+        norm.autoscale_None(np.array([np.nan, 1.0, 2.0, 3.0, np.inf, -np.inf]))
+        assert (norm.vmin, norm.vmax) == (1.0, 3.0)
+        # masked entries must not leak into the percentiles (mask honored like matplotlib's Normalize)
+        masked = PercentileNormalize(0, 100)
+        masked.autoscale_None(np.ma.masked_array([1.0, 2.0, 3.0, 1000.0], mask=[False, False, False, True]))
+        assert (masked.vmin, masked.vmax) == (1.0, 3.0)
+
+    def test_resolve_honors_percentile_norm(self):
+        # _resolve_continuous_norm (colorbar/shapes path) must defer to the norm's percentile autoscale;
+        # min/max and degenerate/empty fallbacks for builtin norms are covered by TestResolveContinuousNorm.
+        from spatialdata_plot import PercentileNormalize
+        from spatialdata_plot.pl._color import _prepare_cmap_norm, _resolve_continuous_norm
+
+        values = np.concatenate([np.linspace(0, 100, 1000), [10000.0]])
+        resolved = _resolve_continuous_norm(values, _prepare_cmap_norm(norm=PercentileNormalize(0, 99)))
+        assert resolved.vmax == pytest.approx(np.percentile(values, 99))
+        assert resolved.vmax < 10000.0

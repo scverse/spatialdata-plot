@@ -10,6 +10,7 @@ from spatialdata import SpatialData
 from spatialdata.models import Image2DModel, Image3DModel
 
 import spatialdata_plot  # noqa: F401
+from spatialdata_plot import PercentileNormalize
 from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
 from spatialdata_plot.pl.render import _is_rgb_image
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
@@ -85,6 +86,15 @@ class TestImages(PlotTester, metaclass=PlotTesterMeta):
         sdata_blobs.pl.render_images(
             element="blobs_image", channel=0, norm=norm, cmap=_viridis_with_under_over()
         ).pl.show()
+
+    def test_plot_percentile_normalize_broadcast(self, sdata_blobs: SpatialData):
+        # single PercentileNormalize is broadcast and autoscaled per channel to its percentile range
+        sdata_blobs.pl.render_images(element="blobs_image", norm=PercentileNormalize(0, 90)).pl.show()
+
+    def test_plot_percentile_normalize_channelwise(self, sdata_blobs: SpatialData):
+        # a list applies channelwise percentile limits
+        norms = [PercentileNormalize(0, 99), PercentileNormalize(0, 90), PercentileNormalize(0, 80)]
+        sdata_blobs.pl.render_images(element="blobs_image", channel=[0, 1, 2], norm=norms).pl.show()
 
     def test_plot_can_pass_color_to_single_channel(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image", channel=1, palette="red").pl.show()

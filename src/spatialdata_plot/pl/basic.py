@@ -770,6 +770,10 @@ class PlotAccessor:
             A single :class:`~matplotlib.colors.Normalize` applies to all channels.
             A list of :class:`~matplotlib.colors.Normalize` objects applies per-channel
             (length must match the number of channels).
+            For heavy-tailed images (e.g. fluorescence/Xenium morphology) where min/max
+            scaling looks dim, pass :class:`~spatialdata_plot.PercentileNormalize` to clip each
+            channel to a percentile range (single instance for all channels, or a list for
+            channelwise limits).
         palette : list[str] | str | None
             Palette to color images. Can be a single palette name (broadcast to all channels) or a list
             matching the number of channels.

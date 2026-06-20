@@ -1150,6 +1150,29 @@ def test_render_shapes_all_nan_color_with_groups_does_not_crash(sdata_blobs_shap
     plt.close(fig)
 
 
+def test_render_shapes_lognorm_with_zeros_does_not_crash(sdata_blobs_shapes_annotated: SpatialData):
+    # Regression: a continuous LogNorm column containing 0 must derive a positive vmin instead of
+    # producing a LogNorm(vmin=0) that raises "Invalid vmin or vmax" when the fill is mapped.
+    from matplotlib.colors import LogNorm
+
+    sdata_blobs_shapes_annotated["blobs_polygons"]["counts"] = [0.0, 2.5, 5.0, 7.5, 10.0]
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="counts", norm=LogNorm()).pl.show(ax=ax)
+    plt.close(fig)
+
+
+def test_render_shapes_continuous_colorbar_reflects_norm_subclass(sdata_blobs_shapes_annotated: SpatialData):
+    # Regression: the fill colorbar must use the resolved norm subclass (LogNorm), not the
+    # collection's default linear Normalize — i.e. set_norm, not set_clim.
+    from matplotlib.colors import LogNorm
+
+    sdata_blobs_shapes_annotated["blobs_polygons"]["counts"] = [1.0, 2.5, 5.0, 7.5, 10.0]
+    fig, ax = plt.subplots()
+    sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="counts", norm=LogNorm()).pl.show(ax=ax)
+    assert any(isinstance(c.norm, LogNorm) for c in ax.collections), "fill colorbar norm was linearized"
+    plt.close(fig)
+
+
 def test_gene_symbols_auto_detect_table(sdata_blobs: SpatialData):
     """gene_symbols resolves correctly without explicit table_name (#247)."""
     sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_circles"] * sdata_blobs["table"].n_obs)

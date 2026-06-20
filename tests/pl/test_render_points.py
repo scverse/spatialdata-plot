@@ -666,6 +666,18 @@ def test_groups_na_color_none_no_match_points(sdata_blobs: SpatialData):
     ).pl.show()
 
 
+def test_render_points_lognorm_with_zeros_does_not_crash(sdata_blobs: SpatialData):
+    # Regression: matplotlib points resolve their continuous norm through the shared resolver, so a
+    # LogNorm column containing 0 must derive a positive vmin instead of a LogNorm(vmin=0) that raises.
+    from matplotlib.colors import LogNorm
+
+    n = len(sdata_blobs["blobs_points"])
+    sdata_blobs["blobs_points"]["counts"] = pd.Series(np.linspace(0.0, 10.0, n))  # includes 0
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_points("blobs_points", color="counts", norm=LogNorm(), method="matplotlib").pl.show(ax=ax)
+    plt.close(fig)
+
+
 @pytest.mark.parametrize("na_color", [None, "red"])
 def test_groups_warns_when_no_groups_match_points(sdata_blobs: SpatialData, caplog, na_color):
     """Warning fires regardless of na_color when no groups match."""
