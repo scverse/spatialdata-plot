@@ -1223,6 +1223,15 @@ def _datashader_points(
         plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
     else:
         plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
+        if len(df):
+            # Rescale the canvas to the AXES display box, not the figure: a figure-sized raster is
+            # imshow'd into a smaller axes (e.g. a subplot) and shrinks the markers, so point sizes
+            # would otherwise depend on the layout. With 1 canvas px == 1 axes px the spread matches
+            # the matplotlib marker in any layout. (Extent/degenerate handling kept from above.)
+            bb = ax.get_window_extent()
+            rx, ry = x_ext[1] - x_ext[0], y_ext[1] - y_ext[0]
+            factor = max(rx / bb.width, ry / bb.height)
+            plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
 
     if density:
         px: int | None = None
@@ -1231,9 +1240,10 @@ def _datashader_points(
         # ds.tf.spread's footprint radius is ~px+0.5, so subtract 0.5 to match a filled disc of radius r.
         px = max(int(round(radius / factor - 0.5)), 0)
     else:
-        # Spread radius = matplotlib marker radius: an 'o' marker has diameter sqrt(s)*dpi/72 px, so
-        # radius sqrt(s)*dpi/144. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
-        px = int(np.round(np.sqrt(size) * (fig_params.fig.dpi / (144 if as_markers else 100))))
+        # Spread radius = matplotlib marker radius: an 'o' marker of area `size` has diameter
+        # sqrt(size)*dpi/72 px, so radius sqrt(size)*dpi/144. Used for both render_points and as_markers
+        # so the datashader dot matches the matplotlib scatter marker exactly, in any layout.
+        px = int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 144)))
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment

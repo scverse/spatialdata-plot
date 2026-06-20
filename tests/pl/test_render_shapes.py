@@ -72,8 +72,8 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         panels = [
             (axs[0, 0], "geometry · matplotlib", {"method": "matplotlib"}),
             (axs[0, 1], "geometry · datashader", {"method": "datashader"}),
-            (axs[1, 0], "as_points · matplotlib", {"method": "matplotlib", "as_points": True, "size": 100}),
-            (axs[1, 1], "as_points · datashader", {"method": "datashader", "as_points": True, "size": 100}),
+            (axs[1, 0], "as_points · matplotlib", {"method": "matplotlib", "as_points": True, "size": 25}),
+            (axs[1, 1], "as_points · datashader", {"method": "datashader", "as_points": True, "size": 25}),
         ]
         for ax, title, kw in panels:
             sdata.pl.render_shapes("circ", **kw).pl.show(ax=ax)

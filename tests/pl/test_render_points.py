@@ -66,7 +66,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         ]
         _, axs = plt.subplots(2, 2, figsize=(CANVAS_WIDTH / DPI, CANVAS_HEIGHT / DPI), dpi=DPI)
         for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
-            sdata_blobs.pl.render_points("blobs_points", size=200, **kw).pl.show(ax=ax)
+            sdata_blobs.pl.render_points("blobs_points", size=30, **kw).pl.show(ax=ax)
             ax.set_title(title, fontsize=8)
 
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
