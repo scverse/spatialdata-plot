@@ -29,6 +29,7 @@ from spatialdata_plot.pl._datashader import (
     _build_datashader_color_key,
     _ds_aggregate,
     _ds_shade_categorical,
+    _pad_degenerate_extent,
 )
 from spatialdata_plot.pl.render import _warn_groups_ignored_continuous
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
@@ -1255,3 +1256,34 @@ def test_density_defaults_silent_and_force_datashader(sdata_blobs: SpatialData, 
     last = list(out.plotting_tree.values())[-1]
     assert (last.density, last.density_how, last.method) == (True, "linear", "datashader")
     assert not any("ignored when density=True" in str(w.message) for w in recwarn.list)
+
+
+# ---------------------------------------------------------------------------
+# Zero-extent datashader canvas (#724)
+# ---------------------------------------------------------------------------
+
+
+def test_pad_degenerate_extent():
+    # Regression test for #724: a zero-width extent expands to a unit window centered on the value,
+    # and a non-degenerate extent is passed through unchanged (so normal data is unaffected).
+    assert _pad_degenerate_extent([5.0, 5.0]) == [4.5, 5.5]
+    assert _pad_degenerate_extent([-3.0, -3.0]) == [-3.5, -2.5]
+    assert _pad_degenerate_extent([0.0, 10.0]) == [0.0, 10.0]
+
+
+@pytest.mark.parametrize(
+    "coords",
+    [
+        [[5.0, 5.0]],
+        [[5.0, 5.0], [5.0, 5.0], [5.0, 5.0]],
+        [[5.0, 0.0], [5.0, 1.0], [5.0, 2.0]],
+    ],
+    ids=["single_point", "coincident_points", "axis_aligned_line"],
+)
+def test_datashader_zero_extent_renders(coords):
+    # Regression test for #724: zero-extent point sets crashed the datashader backend with
+    # "cannot convert float NaN to integer". They must now render without raising.
+    df = pd.DataFrame(np.asarray(coords, dtype=float), columns=["x", "y"])
+    sdata = SpatialData(points={"points": PointsModel.parse(df)})
+    sdata.pl.render_points("points", method="datashader").pl.show()
+    plt.close("all")
