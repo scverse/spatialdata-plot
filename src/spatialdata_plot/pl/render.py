@@ -44,6 +44,7 @@ from spatialdata_plot.pl._color import (
     resolve_color,
 )
 from spatialdata_plot.pl._datashader import (
+    _affine_major_scale,
     _ax_show_and_transform,
     _build_ds_colorbar,
     _circle_buffer_quad_segs,
@@ -592,7 +593,7 @@ def _circles_render_as_points(shapes: gpd.GeoDataFrame, is_point: Any, render_pa
         or len(shapes) <= _CIRCLE_FAST_PATH_MIN
         or render_params.outline_alpha[0] > 0
         or render_params.outline_alpha[1] > 0
-        or not bool(is_point.all())
+        or not is_point.all()
     ):
         return False
     radius = pd.to_numeric(shapes["radius"], errors="coerce").to_numpy()
@@ -765,7 +766,6 @@ def _render_shapes(
         )
 
     if render_params.as_points:
-        # Fast mode: draw one dot per shape at its centroid instead of its geometry.
         logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
         centroids = shapes.geometry.centroid  # intrinsic; transform so dots land under non-identity transforms
         _draw_centroids(trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()])))
@@ -806,8 +806,9 @@ def _render_shapes(
         # pixel) the same as spread points, skipping the per-circle buffer/polygon-aggregation cost.
         if _circles_render_as_points(shapes, is_point, render_params):
             logger.info(f"Rendering {len(shapes)} uniform circles as datashader points (fast path).")
-            stretch = float(np.linalg.svd(tm[:2, :2], compute_uv=False).max())  # circle radius in CS units
-            radius_cs = float(pd.to_numeric(shapes["radius"], errors="coerce").iloc[0]) * render_params.scale * stretch
+            # radius is gate-guaranteed uniform + finite, so coerce only the first value (avoids an O(n) pass).
+            radius_one = float(pd.to_numeric(shapes["radius"].iloc[:1], errors="coerce").iloc[0])
+            radius_cs = radius_one * render_params.scale * _affine_major_scale(tm)
             xy = trans.transform(np.column_stack([_geometry.x.to_numpy(), _geometry.y.to_numpy()]))
             _draw_centroids(xy, radius=radius_cs)
             return

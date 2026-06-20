@@ -723,6 +723,11 @@ def _pad_degenerate_extent(ext: list[Any]) -> list[Any]:
     return [ext[0] - 0.5, ext[1] + 0.5] if ext[1] == ext[0] else ext
 
 
+def _affine_major_scale(tm: np.ndarray) -> float:
+    """Largest singular value of the affine's linear part — a circle's major-axis scale under ``tm``."""
+    return float(np.linalg.svd(tm[:2, :2], compute_uv=False).max())
+
+
 def _circle_quad_segs(max_radius_px: float) -> int:
     """Segments-per-quadrant for buffering circles to polygons, by the largest disc's pixel radius.
 
@@ -747,8 +752,7 @@ def _circle_buffer_quad_segs(
     transform turns the circle into an ellipse, so size to its largest stretch (major axis).
     """
     linear = tm[:2, :2]
-    stretch = float(np.linalg.svd(linear, compute_uv=False).max())  # circle -> ellipse major-axis scale
-    r_t = float(max_radius) * stretch
+    r_t = float(max_radius) * _affine_major_scale(tm)  # circle -> ellipse major-axis scale
     xy_t = centroids_xy @ linear.T + tm[:2, 2]
     ext_w = (xy_t[:, 0].max() + r_t) - (xy_t[:, 0].min() - r_t)
     ext_h = (xy_t[:, 1].max() + r_t) - (xy_t[:, 1].min() - r_t)
