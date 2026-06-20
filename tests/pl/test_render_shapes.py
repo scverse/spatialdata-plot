@@ -57,13 +57,7 @@ def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
 
 class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_circle_render_permutations(self, monkeypatch):
-        """2x2 of (geometry / as_points) x (matplotlib / datashader).
-
-        geometry: both backends render the true radius=3 discs. as_points: the datashader backend sizes the
-        dots to the circle radius (so it matches the geometry row), while the matplotlib backend uses the
-        marker ``size`` (scatter markers are display-sized, not data-sized, so it can't cheaply match a
-        world-radius disc) and therefore shows smaller dots — an expected backend difference.
-        """
+        """2x2 of (geometry / as_points) x (matplotlib / datashader); each row should look similar across backends."""
         import spatialdata_plot.pl.render as render_mod
 
         # exercise the datashader circle fast-path (points) on this small uniform set
@@ -1159,17 +1153,16 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
 
     @staticmethod
     def _as_points(sdata_blobs: SpatialData, method: str):
-        # blobs_circles is uniform-radius: the datashader backend sizes the dots to the true disc radius
-        # (so as_points matches the geometry render), while matplotlib uses the marker `size` (scatter
-        # markers are display-sized, not data-sized). The two backends therefore differ for circles.
+        # identical params for both backends; size=120 keeps dots non-overlapping, where the engines agree
+        # (they only diverge on overlap: matplotlib stacks markers, datashader aggregates)
         return sdata_blobs.pl.render_shapes("blobs_circles", as_points=True, method=method, size=120)
 
     def test_plot_shapes_as_points_matplotlib(self, sdata_blobs: SpatialData):
-        """as_points draws one dot per shape at its centroid; matplotlib uses the marker `size`."""
+        """as_points draws one dot per shape at its centroid (matplotlib backend)."""
         self._as_points(sdata_blobs, "matplotlib").pl.show()
 
     def test_plot_shapes_as_points_datashader(self, sdata_blobs: SpatialData):
-        """Datashader sizes uniform-circle as_points dots to the true radius, matching the geometry render."""
+        """Same render via datashader; should look maximally similar to the matplotlib baseline."""
         self._as_points(sdata_blobs, "datashader").pl.show()
 
 
