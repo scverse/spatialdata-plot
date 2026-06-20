@@ -722,19 +722,15 @@ def _pad_degenerate_extent(ext: list[Any]) -> list[Any]:
 
 
 def _circle_quad_segs(max_radius_px: float) -> int:
-    """Segments-per-quadrant for buffering circles, chosen by the largest disc's on-screen radius.
+    """Segments-per-quadrant for buffering circles, by the largest disc's on-screen pixel radius.
 
     Circles are stored as ``Point + radius`` and buffered to polygons before datashader rasterizes
-    them; shapely's default (``resolution=16`` = 65 vertices) is far more than a small disc needs and
-    dominates the render cost for large circle sets. Use fewer vertices when discs are small (their
-    extra vertices are sub-pixel and invisible) and only step up to the full default once discs are
-    large enough to show facets. ``NaN`` (e.g. all-NaN radius) falls through to the faithful default.
+    them; shapely's default (``resolution=16`` = 65 vertices) dominates the render cost for large
+    circle sets. The speedup only matters — and the coarsening is only invisible — when discs are
+    sub-pixel (e.g. dense Visium HD spots), so use a coarse polygon only there and otherwise keep the
+    full default so any *visible* disc stays round. ``NaN`` radius falls through to the default.
     """
-    if max_radius_px <= 8:
-        return 4
-    if max_radius_px <= 32:
-        return 8
-    return 16
+    return 4 if max_radius_px <= 2 else 16
 
 
 def _circle_buffer_quad_segs(

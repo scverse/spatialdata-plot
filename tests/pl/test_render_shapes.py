@@ -1892,10 +1892,10 @@ def test_continuous_fill_colorbar_matches_pixel_range(sdata_blobs_shapes_annotat
 
 
 def test_circle_quad_segs_step_rule():
-    """quad_segs steps up with on-screen disc radius: ≤8px→4, ≤32px→8, else 16 (NaN→faithful 16)."""
+    """Coarse polygon only for sub-pixel (≤2px) discs; any visible disc keeps the faithful default (16)."""
     from spatialdata_plot.pl._datashader import _circle_quad_segs
 
-    assert [_circle_quad_segs(r) for r in (0.5, 8.0, 8.1, 32.0, 33.0, 500.0)] == [4, 4, 8, 8, 16, 16]
+    assert [_circle_quad_segs(r) for r in (0.5, 2.0, 2.1, 8.0, 50.0)] == [4, 4, 16, 16, 16]
     assert _circle_quad_segs(float("nan")) == 16  # all-NaN radius falls back to the faithful default
 
 

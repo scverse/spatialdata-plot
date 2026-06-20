@@ -1212,38 +1212,35 @@ def _datashader_points(
     overrides ``size`` to spread each dot to a faithful disc of that radius (circle fast-path).
     """
     if as_markers and axes_extent is not None:
-        # Size the canvas to the AXES display box, not the figure: the datashader output is a
-        # data-coordinate image that scales with the (smaller) axes, so a figure-sized canvas shrinks the
-        # dots. With 1 canvas px == 1 axes-display px, the spread radius below matches the marker.
+        # Centroid markers (as_points): size the canvas to the AXES box so 1 canvas px == 1 display px
+        # and the spread radius below is directly in display pixels. Centroids are sparse, so the lower
+        # resolution doesn't change aggregation.
         x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
         y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
         bb = ax.get_window_extent()
         rx, ry = x_ext[1] - x_ext[0], y_ext[1] - y_ext[0]
         factor = max(rx / bb.width, ry / bb.height)
         plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
+        canvas_per_display = 1.0
     else:
+        # render_points: keep the figure-resolution canvas so point aggregation (counts, reductions,
+        # density) is unaffected. The raster is imshow'd into the axes, so one canvas px ends up as
+        # bb.width/plot_width display px; the marker spread below is scaled by the inverse so dot size
+        # is the matplotlib marker size in any layout (e.g. subplots) without changing the resolution.
         plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
-        if len(df):
-            # Rescale the canvas to the AXES display box, not the figure: a figure-sized raster is
-            # imshow'd into a smaller axes (e.g. a subplot) and shrinks the markers, so point sizes
-            # would otherwise depend on the layout. With 1 canvas px == 1 axes px the spread matches
-            # the matplotlib marker in any layout. (Extent/degenerate handling kept from above.)
-            bb = ax.get_window_extent()
-            rx, ry = x_ext[1] - x_ext[0], y_ext[1] - y_ext[0]
-            factor = max(rx / bb.width, ry / bb.height)
-            plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
+        bb = ax.get_window_extent()
+        canvas_per_display = plot_width / bb.width if (len(df) and bb.width) else 1.0
 
     if density:
         px: int | None = None
     elif radius is not None:
-        # Faithful disc: spread to the circle's on-screen pixel radius (factor = CS units per axes px).
+        # Faithful disc (circle fast-path, as_markers): spread to the circle's on-screen pixel radius.
         # ds.tf.spread's footprint radius is ~px+0.5, so subtract 0.5 to match a filled disc of radius r.
         px = max(int(round(radius / factor - 0.5)), 0)
     else:
-        # Spread radius = matplotlib marker radius: an 'o' marker of area `size` has diameter
-        # sqrt(size)*dpi/72 px, so radius sqrt(size)*dpi/144. Used for both render_points and as_markers
-        # so the datashader dot matches the matplotlib scatter marker exactly, in any layout.
-        px = int(np.round(np.sqrt(size) * (fig_params.fig.dpi / 144)))
+        # matplotlib 'o' marker of area `size` has radius sqrt(size)*dpi/144 display px; convert to canvas
+        # px so the datashader dot matches the scatter marker once the raster is drawn into the axes.
+        px = int(round(np.sqrt(size) * (fig_params.fig.dpi / 144) * canvas_per_display))
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment
