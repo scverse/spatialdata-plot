@@ -412,7 +412,9 @@ def _shade_datashader_aggregate(
             nan_agg,
             na_color_hex,
             spread_px=spread_px,
-            ds_reduction=ds_reduction,
+            # spread must follow the *resolved* reduction so it doesn't undo it (e.g. a "max" aggregate
+            # summed back up when spread defaults to "add"); ds_reduction=None falls back to default_reduction.
+            ds_reduction=ds_reduction if ds_reduction is not None else default_reduction,
             how=shade_how,
             uniform_alpha=uniform_alpha,
         )

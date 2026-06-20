@@ -632,7 +632,8 @@ class PlotAccessor:
             ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
-            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"sum"``.
+            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"max"``,
+            which keeps the per-pixel color close to the matplotlib backend (``"sum"`` inflates overlapping dots).
         density : bool, default False
             Render the points as a 2-D count density via datashader instead of plotting individual markers.
             When ``True``, ``method`` is forced to ``"datashader"`` (passing ``method="matplotlib"`` raises).

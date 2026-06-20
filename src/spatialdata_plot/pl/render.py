@@ -768,7 +768,18 @@ def _render_shapes(
         # Fast mode: draw one dot per shape at its centroid instead of its geometry.
         logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
         centroids = shapes.geometry.centroid  # intrinsic; transform so dots land under non-identity transforms
-        _draw_centroids(trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()])))
+        # Uniform-radius circles: size the datashader dots to the true disc so they match the geometry
+        # render. The matplotlib backend keeps the marker `size` (scatter markers are display-sized, not
+        # data-sized, so a world-radius disc there would mean re-drawing the geometry and lose the speedup).
+        radius_cs: float | None = None
+        if "radius" in shapes.columns and (shapes.geometry.type == "Point").all():
+            r = pd.to_numeric(shapes["radius"], errors="coerce").to_numpy()
+            if r.size and np.ptp(r) == 0 and np.isfinite(r[0]):
+                stretch = float(np.linalg.svd(trans.get_matrix()[:2, :2], compute_uv=False).max())
+                radius_cs = float(r[0]) * render_params.scale * stretch
+        _draw_centroids(
+            trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()])), radius=radius_cs
+        )
         return
 
     # convert shapes if necessary
@@ -1495,7 +1506,9 @@ def _render_points(
     elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
-    _default_reduction: _DsReduction = "sum"
+    # "max" keeps the per-pixel aggregate close to the matplotlib backend (each dot shows its own value);
+    # "sum" would inflate the normalization range where dots overlap and push single points to the dark end.
+    _default_reduction: _DsReduction = "max"
 
     if method == "datashader":
         # datashader colors the per-pixel aggregate (count/sum/reduction), not the per-point vector,

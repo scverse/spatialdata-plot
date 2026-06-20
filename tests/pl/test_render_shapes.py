@@ -57,7 +57,13 @@ def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
 
 class TestShapes(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_circle_render_permutations(self, monkeypatch):
-        """2x2 of (geometry / as_points) x (matplotlib / datashader); each row should look similar across backends."""
+        """2x2 of (geometry / as_points) x (matplotlib / datashader).
+
+        geometry: both backends render the true radius=3 discs. as_points: the datashader backend sizes the
+        dots to the circle radius (so it matches the geometry row), while the matplotlib backend uses the
+        marker ``size`` (scatter markers are display-sized, not data-sized, so it can't cheaply match a
+        world-radius disc) and therefore shows smaller dots — an expected backend difference.
+        """
         import spatialdata_plot.pl.render as render_mod
 
         # exercise the datashader circle fast-path (points) on this small uniform set
