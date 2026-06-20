@@ -721,6 +721,48 @@ def _pad_degenerate_extent(ext: list[Any]) -> list[Any]:
     return [ext[0] - 0.5, ext[1] + 0.5] if ext[1] == ext[0] else ext
 
 
+def _circle_quad_segs(max_radius_px: float) -> int:
+    """Segments-per-quadrant for buffering circles, chosen by the largest disc's on-screen radius.
+
+    Circles are stored as ``Point + radius`` and buffered to polygons before datashader rasterizes
+    them; shapely's default (``resolution=16`` = 65 vertices) is far more than a small disc needs and
+    dominates the render cost for large circle sets. Use fewer vertices when discs are small (their
+    extra vertices are sub-pixel and invisible) and only step up to the full default once discs are
+    large enough to show facets. ``NaN`` (e.g. all-NaN radius) falls through to the faithful default.
+    """
+    if max_radius_px <= 8:
+        return 4
+    if max_radius_px <= 32:
+        return 8
+    return 16
+
+
+def _circle_buffer_quad_segs(
+    centroids_xy: np.ndarray,
+    max_radius: float,
+    tm: np.ndarray,
+    fig_params: FigParams,
+) -> int:
+    """Pick the circle-buffer ``resolution`` from the largest circle's on-screen pixel radius.
+
+    Estimates the same world-units-per-pixel ``factor`` the datashader canvas will use (mirrors
+    ``_compute_datashader_canvas_params``), computed *before* buffering from the transformed centroids
+    expanded by the (major-axis) radius. ``tm`` is the coordinate-system affine; an anisotropic/shear
+    transform turns the circle into an ellipse, so size to its largest stretch (major axis).
+    """
+    linear = tm[:2, :2]
+    stretch = float(np.linalg.svd(linear, compute_uv=False).max())  # circle -> ellipse major-axis scale
+    r_t = float(max_radius) * stretch
+    xy_t = centroids_xy @ linear.T + tm[:2, 2]
+    ext_w = (xy_t[:, 0].max() + r_t) - (xy_t[:, 0].min() - r_t)
+    ext_h = (xy_t[:, 1].max() + r_t) - (xy_t[:, 1].min() - r_t)
+    fig = fig_params.fig
+    fig_px_w = fig.get_size_inches()[0] * fig.dpi
+    fig_px_h = fig.get_size_inches()[1] * fig.dpi
+    factor = max(ext_w / fig_px_w, ext_h / fig_px_h)
+    return _circle_quad_segs(r_t / factor if factor > 0 else 0.0)
+
+
 def _compute_datashader_canvas_params(
     x_ext: list[Any],
     y_ext: list[Any],

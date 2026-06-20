@@ -46,6 +46,7 @@ from spatialdata_plot.pl._color import (
 from spatialdata_plot.pl._datashader import (
     _ax_show_and_transform,
     _build_ds_colorbar,
+    _circle_buffer_quad_segs,
     _datashader_canvas_from_dataframe,
     _get_extent_and_range_for_datashader_canvas,
     _hex_no_alpha,
@@ -770,14 +771,19 @@ def _render_shapes(
     if method == "datashader":
         _geometry = shapes["geometry"]
         is_point = _geometry.type == "Point"
+        tm = trans.get_matrix()  # coordinate-system affine; reused for circle sizing and the transform below
 
         # Handle circles encoded as points with radius
         if is_point.any():
-            radius_values = shapes[is_point]["radius"]
             # Convert to numeric, replacing non-numeric values with NaN
-            radius_numeric = pd.to_numeric(radius_values, errors="coerce")
-            scale = radius_numeric * render_params.scale
-            shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
+            radius = (pd.to_numeric(shapes[is_point]["radius"], errors="coerce") * render_params.scale).to_numpy()
+            points = _geometry[is_point]
+            # Buffer at a vertex count matched to the largest disc's on-screen size: tiny discs don't
+            # need shapely's 65-vertex default, which otherwise dominates the render for large sets.
+            quad_segs = _circle_buffer_quad_segs(
+                np.column_stack([points.x.to_numpy(), points.y.to_numpy()]), float(np.nanmax(radius)), tm, fig_params
+            )
+            shapes.loc[is_point, "geometry"] = points.buffer(radius, resolution=quad_segs)
 
         # Handle polygon/multipolygon scaling
         is_polygon = _geometry.type.isin(["Polygon", "MultiPolygon"])
@@ -789,7 +795,6 @@ def _render_shapes(
             )
 
         # apply transformations to the individual points
-        tm = trans.get_matrix()
         transformed_geometry = shapes["geometry"].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )

@@ -1839,3 +1839,25 @@ def test_continuous_fill_colorbar_matches_pixel_range(sdata_blobs_shapes_annotat
     clims = [c.get_clim() for c in ax.collections if isinstance(c, PatchCollection)]
     plt.close(fig)
     assert clims == [(1.0, 5.0)]  # fixture's value column is [1, 2, 3, 4, 5]
+
+
+# ---------------------------------------------------------------------------
+# Adaptive circle buffer resolution (datashader perf)
+# ---------------------------------------------------------------------------
+
+
+def test_circle_quad_segs_step_rule():
+    """quad_segs steps up with on-screen disc radius: ≤8px→4, ≤32px→8, else 16 (NaN→faithful 16)."""
+    from spatialdata_plot.pl._datashader import _circle_quad_segs
+
+    assert [_circle_quad_segs(r) for r in (0.5, 8.0, 8.1, 32.0, 33.0, 500.0)] == [4, 4, 8, 8, 16, 16]
+    assert _circle_quad_segs(float("nan")) == 16  # all-NaN radius falls back to the faithful default
+
+
+def test_circle_buffer_fidelity_to_default():
+    """A reduced-vertex circle (quad_segs=4) still matches shapely's default (resolution=16) within 3%."""
+    c = Point(5.0, 5.0)
+    reduced = c.buffer(1.0, quad_segs=4)
+    full = c.buffer(1.0, quad_segs=16)
+    iou = reduced.intersection(full).area / reduced.union(full).area
+    assert iou >= 0.97
