@@ -18,7 +18,15 @@ from spatialdata.transformations._utils import _set_transformations
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot._logging import logger, logger_warns
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
+from tests.conftest import (
+    CANVAS_HEIGHT,
+    CANVAS_WIDTH,
+    DPI,
+    PlotTester,
+    PlotTesterMeta,
+    _viridis_with_under_over,
+    get_standard_RNG,
+)
 
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
@@ -60,7 +68,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
         gdf = gpd.GeoDataFrame({"radius": np.full(cx.size, 3.0)}, geometry=gpd.points_from_xy(cx, cy))
         sdata = SpatialData(shapes={"circ": ShapesModel.parse(gdf)})
 
-        _, axs = plt.subplots(2, 2, figsize=(6, 6))
+        _, axs = plt.subplots(2, 2, figsize=(CANVAS_WIDTH / DPI, CANVAS_HEIGHT / DPI), dpi=DPI)
         panels = [
             (axs[0, 0], "geometry · matplotlib", {"method": "matplotlib"}),
             (axs[0, 1], "geometry · datashader", {"method": "datashader"}),
@@ -80,7 +88,7 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             ("as_points · datashader", {"as_points": True, "size": 150, "method": "datashader"}),
         ]
         annotated = sdata_blobs_shapes_annotated
-        _, axs = plt.subplots(2, 2, figsize=(8, 8))
+        _, axs = plt.subplots(2, 2, figsize=(CANVAS_WIDTH / DPI, CANVAS_HEIGHT / DPI), dpi=DPI)
         for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
             annotated.pl.render_shapes("blobs_polygons", color="value", colorbar=False, **kw).pl.show(ax=ax)
             ax.set_title(title, fontsize=8)

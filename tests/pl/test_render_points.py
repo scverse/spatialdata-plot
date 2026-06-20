@@ -32,7 +32,15 @@ from spatialdata_plot.pl._datashader import (
     _pad_degenerate_extent,
 )
 from spatialdata_plot.pl.render import _warn_groups_ignored_continuous
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
+from tests.conftest import (
+    CANVAS_HEIGHT,
+    CANVAS_WIDTH,
+    DPI,
+    PlotTester,
+    PlotTesterMeta,
+    _viridis_with_under_over,
+    get_standard_RNG,
+)
 
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
@@ -56,7 +64,7 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
             ("color · matplotlib", {"color": "instance_id", "method": "matplotlib", "colorbar": False}),
             ("color · datashader", {"color": "instance_id", "method": "datashader", "colorbar": False}),
         ]
-        _, axs = plt.subplots(2, 2, figsize=(8, 8))
+        _, axs = plt.subplots(2, 2, figsize=(CANVAS_WIDTH / DPI, CANVAS_HEIGHT / DPI), dpi=DPI)
         for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
             sdata_blobs.pl.render_points("blobs_points", size=200, **kw).pl.show(ax=ax)
             ax.set_title(title, fontsize=8)
