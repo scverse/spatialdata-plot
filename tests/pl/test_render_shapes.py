@@ -48,6 +48,29 @@ def _annotate_polygons_with_outline_columns(sdata: SpatialData) -> SpatialData:
 
 
 class TestShapes(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_circle_render_permutations(self, monkeypatch):
+        """2x2 of (geometry / as_points) x (matplotlib / datashader); each row should look similar across backends."""
+        import spatialdata_plot.pl.render as render_mod
+
+        # exercise the datashader circle fast-path (points) on this small uniform set
+        monkeypatch.setattr(render_mod, "_CIRCLE_FAST_PATH_MIN", 1)
+
+        grid = np.arange(8) * 10.0
+        cx, cy = (a.ravel() for a in np.meshgrid(grid, grid))
+        gdf = gpd.GeoDataFrame({"radius": np.full(cx.size, 3.0)}, geometry=gpd.points_from_xy(cx, cy))
+        sdata = SpatialData(shapes={"circ": ShapesModel.parse(gdf)})
+
+        _, axs = plt.subplots(2, 2, figsize=(6, 6))
+        panels = [
+            (axs[0, 0], "geometry · matplotlib", {"method": "matplotlib"}),
+            (axs[0, 1], "geometry · datashader", {"method": "datashader"}),
+            (axs[1, 0], "as_points · matplotlib", {"method": "matplotlib", "as_points": True, "size": 100}),
+            (axs[1, 1], "as_points · datashader", {"method": "datashader", "as_points": True, "size": 100}),
+        ]
+        for ax, title, kw in panels:
+            sdata.pl.render_shapes("circ", **kw).pl.show(ax=ax)
+            ax.set_title(title, fontsize=8)
+
     def test_plot_can_render_circles(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show()
 
@@ -1861,3 +1884,42 @@ def test_circle_buffer_fidelity_to_default():
     full = c.buffer(1.0, quad_segs=16)
     iou = reduced.intersection(full).area / reduced.union(full).area
     assert iou >= 0.97
+
+
+def _uniform_circle_gdf(n: int, radius) -> gpd.GeoDataFrame:
+    import shapely
+
+    radii = radius if hasattr(radius, "__len__") else [radius] * n
+    geom = gpd.GeoSeries(shapely.points(np.column_stack([np.arange(n), np.zeros(n)])))
+    return gpd.GeoDataFrame({"radius": radii}, geometry=geom)
+
+
+def test_circles_render_as_points_gate():
+    """Phase 2 gate fires only for a large, uniform-radius, outline-free, default-shape circle element."""
+    from types import SimpleNamespace
+
+    from spatialdata_plot.pl.render import _CIRCLE_FAST_PATH_MIN, _circles_render_as_points
+
+    big = _CIRCLE_FAST_PATH_MIN + 1
+
+    def gate(gdf, **kw):
+        rp = SimpleNamespace(**{"shape": None, "outline_alpha": (0.0, 0.0), **kw})
+        return _circles_render_as_points(gdf, gdf.geometry.type == "Point", rp)
+
+    assert gate(_uniform_circle_gdf(big, 2.0)) is True
+    assert gate(_uniform_circle_gdf(10, 2.0)) is False  # too few
+    assert gate(_uniform_circle_gdf(big, np.arange(big) + 1.0)) is False  # varying radius
+    assert gate(_uniform_circle_gdf(big, 2.0), outline_alpha=(1.0, 0.0)) is False  # outline requested
+    assert gate(_uniform_circle_gdf(big, 2.0), shape="square") is False  # custom shape
+
+
+def test_circle_fast_path_renders_without_error(monkeypatch):
+    """A uniform circle element above the (patched-low) threshold renders via the datashader point path."""
+    import spatialdata_plot.pl.render as render_mod
+
+    monkeypatch.setattr(render_mod, "_CIRCLE_FAST_PATH_MIN", 4)
+    sdata = SpatialData(shapes={"circ": ShapesModel.parse(_uniform_circle_gdf(20, 2.0))})
+    fig, ax = plt.subplots()
+    sdata.pl.render_shapes("circ", method="datashader").pl.show(ax=ax)
+    assert len(ax.images) >= 1  # datashader raster produced
+    plt.close(fig)
