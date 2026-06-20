@@ -31,7 +31,7 @@ from spatialdata_plot.pl._datashader import (
     _ds_shade_categorical,
     _pad_degenerate_extent,
 )
-from spatialdata_plot.pl.render import _warn_groups_ignored_continuous
+from spatialdata_plot.pl.render import _marker_spread_px, _warn_groups_ignored_continuous
 from tests.conftest import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
@@ -59,10 +59,9 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_points_render_permutations(self, sdata_blobs: SpatialData):
         """2x2 of (no color / continuous color) x (matplotlib / datashader).
 
-        Note: in a single-panel figure at native size matplotlib and datashader markers agree; in this
-        squished multi-panel thumbnail the figure-resolution datashader raster scales with the shrunken
-        subplot while the point-sized matplotlib markers do not, so datashader dots look smaller here.
-        That is a harness/multi-panel artifact, not the real single-panel rendering.
+        Marker sizes agree between the matplotlib and datashader backends in any panel layout: the
+        datashader spread radius is rescaled by the axes-box/canvas factor ratio so it stays at the
+        matplotlib marker radius (sqrt(size)*dpi/144 display px) even in multi-panel subplots.
         """
         panels = [
             ("no color · matplotlib", {"method": "matplotlib"}),
@@ -1288,6 +1287,32 @@ def test_density_defaults_silent_and_force_datashader(sdata_blobs: SpatialData, 
 # ---------------------------------------------------------------------------
 # Zero-extent datashader canvas (#724)
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("size", [10.0, 30.0, 400.0])
+def test_marker_spread_px_layout_invariant(size):
+    """Datashader marker display radius must be constant across panel layouts (matches matplotlib).
+
+    A canvas px displays at factor/factor_axesbox display px, so the on-screen radius is
+    P * factor / factor_axesbox. With the figure-resolution canvas the only thing that changes between a
+    single panel and a 2x2 grid is the axes-box size (factor_axesbox); factor (figure canvas) is the same.
+    The spread rescaling must keep the displayed radius equal across both, and equal to the matplotlib
+    marker radius sqrt(size)*dpi/144. The pre-fix /100 formula had no layout term and halved in 2x2.
+    """
+    dpi = 80
+    rx = ry = 100.0
+    fig_px = 600.0
+    factor = rx / fig_px  # figure-resolution canvas, identical in both layouts
+
+    def displayed_radius(axes_box_px):
+        factor_axesbox = max(rx / axes_box_px, ry / axes_box_px)
+        return _marker_spread_px(size, dpi, factor, factor_axesbox) * factor / factor_axesbox
+
+    target = np.sqrt(size) * dpi / 144
+    d_single = displayed_radius(480.0)  # axes ~ full figure
+    d_grid = displayed_radius(240.0)  # 2x2 subplot, half the window
+    assert abs(d_single - d_grid) < 1.0, f"layout-dependent marker size: {d_single} vs {d_grid}"
+    assert abs(d_single - target) < 1.0 and abs(d_grid - target) < 1.0
 
 
 def test_pad_degenerate_extent():

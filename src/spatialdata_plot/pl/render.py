@@ -1182,6 +1182,17 @@ def _render_centroids_as_points(
     )
 
 
+def _marker_spread_px(size: float, dpi: float, factor: float, factor_axesbox: float) -> int:
+    """Spread radius (canvas px) reproducing a matplotlib marker of area ``size`` at any panel layout.
+
+    The matplotlib marker radius is ``sqrt(size)*dpi/144`` display px regardless of layout. On the
+    figure-resolution datashader canvas one canvas px displays at ``factor_axesbox/factor`` of a display
+    px (``factor_axesbox`` = world units per axes-box px, ``factor`` = world units per canvas px), so we
+    rescale by that ratio to keep the on-screen radius constant. Ratio is 1 for the axes-box canvas.
+    """
+    return max(int(round(np.sqrt(size) * dpi / 144 * factor_axesbox / factor)), 0)
+
+
 def _datashader_points(
     ax: matplotlib.axes.SubplotBase,
     df: pd.DataFrame,
@@ -1231,9 +1242,13 @@ def _datashader_points(
         # footprint radius is ~px+0.5, so subtract 0.5 to match a filled disc of radius r.
         px = max(int(round(radius / factor - 0.5)), 0)
     else:
-        # Spread radius = matplotlib marker radius: as_markers (centroid fast-mode, axes-box canvas) uses
-        # sqrt(size)*dpi/144; render_points keeps the looser sqrt(size)*dpi/100 it was calibrated with.
-        px = int(np.round(np.sqrt(size) * (fig_params.fig.dpi / (144 if as_markers else 100))))
+        # Spread radius = matplotlib marker radius (sqrt(size)*dpi/144 display px), made layout-invariant.
+        # The aggregation canvas is figure-resolution, so a canvas px displays at factor_axesbox/factor of
+        # a display px; rescaling by that ratio cancels the layout term (multi-panel subplots would
+        # otherwise shrink the dots). For as_markers the canvas is already the axes box, so the ratio is 1.
+        bb = ax.get_window_extent()
+        factor_axesbox = max((x_ext[1] - x_ext[0]) / bb.width, (y_ext[1] - y_ext[0]) / bb.height)
+        px = _marker_spread_px(size, fig_params.fig.dpi, factor, factor_axesbox)
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment
