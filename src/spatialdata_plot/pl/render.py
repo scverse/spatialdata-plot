@@ -19,7 +19,7 @@ import spatialdata as sd
 import xarray as xr
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Colormap, ListedColormap, Normalize
+from matplotlib.colors import BoundaryNorm, Colormap, ListedColormap, Normalize, to_rgba_array
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values
@@ -1056,12 +1056,28 @@ def _scatter_points(
     # scalar ``color=`` instead of a per-point ``c=`` array: matplotlib then skips its per-point colour
     # machinery — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
     # Numeric vectors keep the ``c=``/``cmap``/``norm`` path (they need the colormap).
-    cv = np.asarray(color_vector)
     color_kwargs: dict[str, Any]
-    if cv.ndim == 1 and cv.dtype.kind in "US" and _color_vector_is_uniform(cv):
-        color_kwargs = {"color": str(cv[0])}
+    if isinstance(color_vector, pd.Categorical) and (color_vector.codes >= 0).all():
+        # Categorical hex colours: pass the int codes + a ListedColormap of the (few) category colours
+        # instead of expanding to a per-point hex object array (~8x more memory at scale). BoundaryNorm
+        # edges at the half-integers map code i -> colormap entry i exactly, so the RGBA is identical.
+        # (_color.py bakes NaN into the na_color category, so codes >= 0; a stray -1 falls back below.)
+        categories = list(color_vector.categories)
+        if len(categories) == 1:
+            color_kwargs = {"color": str(categories[0])}  # uniform: scalar color=, skip per-point machinery
+        else:
+            n_cat = len(categories)
+            color_kwargs = {
+                "c": color_vector.codes,
+                "cmap": ListedColormap(to_rgba_array(categories)),
+                "norm": BoundaryNorm(np.arange(-0.5, n_cat, 1.0), ncolors=n_cat),
+            }
     else:
-        color_kwargs = {"c": color_vector, "cmap": cmap, "norm": norm}
+        cv = np.asarray(color_vector)
+        if cv.ndim == 1 and cv.dtype.kind in "US" and _color_vector_is_uniform(cv):
+            color_kwargs = {"color": str(cv[0])}
+        else:
+            color_kwargs = {"c": color_vector, "cmap": cmap, "norm": norm}
     return ax.scatter(
         x,
         y,

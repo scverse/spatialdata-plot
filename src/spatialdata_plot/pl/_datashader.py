@@ -97,11 +97,10 @@ def _build_datashader_color_key(
 ) -> dict[str, str]:
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
-    colors_arr = np.asarray(color_vector, dtype=object)
     categories = np.asarray(cat_series.categories, dtype=str)
     codes = np.asarray(cat_series.codes)
 
-    if len(colors_arr) != len(codes):
+    if len(color_vector) != len(codes):
         logger.warning(
             f"color_vector length ({len(color_vector)}) does not match categorical series length "
             f"({len(codes)}); some categories may receive the na_color fallback."
@@ -111,11 +110,13 @@ def _build_datashader_color_key(
     # avoiding a Python loop over all points.  See #379.
     unique_codes, first_indices = np.unique(codes, return_index=True)
 
+    # Index color_vector only at those first occurrences (one per category) rather than expanding the
+    # whole per-point vector to an object array — color_vector is a compact pd.Categorical at scale.
     first_color: dict[str, str] = {}
     for code, idx in zip(unique_codes, first_indices, strict=True):
-        if code < 0 or idx >= len(colors_arr):
+        if code < 0 or idx >= len(color_vector):
             continue
-        c = colors_arr[idx]
+        c = color_vector[idx]
         first_color[categories[code]] = _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
 
     return {cat: first_color.get(cat, na_hex) for cat in categories}
@@ -403,10 +404,17 @@ def _shade_datashader_aggregate(
         and isinstance(color_vector[0], str)
         and color_vector[0].startswith("#")
     ):
-        # Strip alpha on the unique colours and map back rather than parsing once per point; pd.factorize
-        # dedups in O(n) (hash, no sort) where np.unique would sort millions of strings.
-        codes, uniques = pd.factorize(np.asarray(color_vector))
-        color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
+        # Strip alpha on the unique colours, never on the per-point vector. color_vector is already a
+        # pd.Categorical (codes + a small palette) at scale: strip its k categories and remap the codes,
+        # staying compact. (Plain-array fallback factorizes in O(n) — hash, no sort.)
+        if isinstance(color_vector, pd.Categorical):
+            stripped = np.asarray([_hex_no_alpha(c) for c in color_vector.categories])
+            uniq_codes, uniques = pd.factorize(stripped)  # dedup over k categories, not n points
+            new_codes = np.where(color_vector.codes >= 0, uniq_codes[color_vector.codes], -1)
+            color_vector = pd.Categorical.from_codes(new_codes, categories=uniques)
+        else:
+            codes, uniques = pd.factorize(np.asarray(color_vector))
+            color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
 
     # density without a color column collapses to a sequential count gradient; everything else with no
     # explicit continuous value (categorical or no color) goes through the categorical shader.
