@@ -1877,11 +1877,11 @@ def test_render_shapes_as_points_default_is_matplotlib(sdata_blobs: SpatialData)
 
 def test_continuous_fill_colorbar_matches_pixel_range(sdata_blobs_shapes_annotated: SpatialData):
     """The fill colorbar clim is the resolved data range, so the bar matches the shapes."""
-    from matplotlib.collections import PatchCollection
+    from matplotlib.collections import PathCollection
 
     fig, ax = plt.subplots()
     sdata_blobs_shapes_annotated.pl.render_shapes("blobs_polygons", color="value").pl.show(ax=ax)
-    clims = [c.get_clim() for c in ax.collections if isinstance(c, PatchCollection)]
+    clims = [c.get_clim() for c in ax.collections if isinstance(c, PathCollection)]
     plt.close(fig)
     assert clims == [(1.0, 5.0)]  # fixture's value column is [1, 2, 3, 4, 5]
 
@@ -1957,3 +1957,24 @@ def test_circle_fast_path_renders_without_error(monkeypatch):
     assert seen.get("radius") is not None  # fast path ran and sized the dots to the disc radius
     assert len(ax.images) >= 1  # datashader raster produced
     plt.close(fig)
+
+
+def test_shapes_outline_does_not_double_apply_transform():
+    # The coordinate-system affine must be applied once regardless of outlines: the fill and outline
+    # PathCollections share the same Path objects, so applying it per-collection would double it.
+    gdf = ShapesModel.parse(gpd.GeoDataFrame({"geometry": [Polygon([(10, 10), (20, 10), (20, 20), (10, 20)])]}))
+    set_transformation(gdf, Scale([3, 3], axes=("x", "y")), "global")
+    sdata = SpatialData(shapes={"p": gdf})
+
+    def bbox(**kw):
+        fig, ax = plt.subplots()
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        sdata.pl.render_shapes("p", color="#3366cc", **kw).pl.show(ax=ax)
+        fig.canvas.draw()
+        buf = np.asarray(fig.canvas.buffer_rgba())
+        ys, xs = np.where((buf[:, :, :3] < 250).any(axis=2))
+        plt.close(fig)
+        return xs.min(), xs.max(), ys.min(), ys.max()
+
+    assert bbox() == bbox(outline_width=1.0, outline_alpha=1.0, outline_color="black")
