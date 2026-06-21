@@ -454,7 +454,6 @@ def _decorate_axs(
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype] | Categorical,
     color_vector: pd.Series[CategoricalDtype] | Categorical,
-    adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
     na_color: Color = Color("default"),
