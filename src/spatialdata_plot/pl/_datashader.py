@@ -412,7 +412,9 @@ def _shade_datashader_aggregate(
             nan_agg,
             na_color_hex,
             spread_px=spread_px,
-            ds_reduction=ds_reduction,
+            # spread must follow the *resolved* reduction so it doesn't undo it (e.g. a "max" aggregate
+            # summed back up when spread defaults to "add"); ds_reduction=None falls back to default_reduction.
+            ds_reduction=ds_reduction if ds_reduction is not None else default_reduction,
             how=shade_how,
             uniform_alpha=uniform_alpha,
         )
@@ -719,6 +721,46 @@ def _ax_show_and_transform(
 def _pad_degenerate_extent(ext: list[Any]) -> list[Any]:
     """Pad a zero-width extent to a unit window centered on its value; pass others through."""
     return [ext[0] - 0.5, ext[1] + 0.5] if ext[1] == ext[0] else ext
+
+
+def _affine_major_scale(tm: np.ndarray) -> float:
+    """Largest singular value of the affine's linear part — a circle's major-axis scale under ``tm``."""
+    return float(np.linalg.svd(tm[:2, :2], compute_uv=False).max())
+
+
+def _circle_quad_segs(max_radius_px: float) -> int:
+    """Segments-per-quadrant for buffering circles to polygons, by the largest disc's pixel radius.
+
+    Coarsen (4 vs shapely's default 16) only for sub-pixel discs, where buffering dominates the render
+    and the loss is invisible (e.g. dense Visium HD spots); any visible disc keeps the round default.
+    ``NaN`` radius falls through to the default.
+    """
+    return 4 if max_radius_px <= 2 else 16
+
+
+def _circle_buffer_quad_segs(
+    centroids_xy: np.ndarray,
+    max_radius: float,
+    tm: np.ndarray,
+    fig_params: FigParams,
+) -> int:
+    """Pick the circle-buffer ``resolution`` from the largest circle's on-screen pixel radius.
+
+    Estimates the same world-units-per-pixel ``factor`` the datashader canvas will use (mirrors
+    ``_compute_datashader_canvas_params``), computed *before* buffering from the transformed centroids
+    expanded by the (major-axis) radius. ``tm`` is the coordinate-system affine; an anisotropic/shear
+    transform turns the circle into an ellipse, so size to its largest stretch (major axis).
+    """
+    linear = tm[:2, :2]
+    r_t = float(max_radius) * _affine_major_scale(tm)  # circle -> ellipse major-axis scale
+    xy_t = centroids_xy @ linear.T + tm[:2, 2]
+    ext_w = (xy_t[:, 0].max() + r_t) - (xy_t[:, 0].min() - r_t)
+    ext_h = (xy_t[:, 1].max() + r_t) - (xy_t[:, 1].min() - r_t)
+    fig = fig_params.fig
+    fig_px_w = fig.get_size_inches()[0] * fig.dpi
+    fig_px_h = fig.get_size_inches()[1] * fig.dpi
+    factor = max(ext_w / fig_px_w, ext_h / fig_px_h)
+    return _circle_quad_segs(r_t / factor if factor > 0 else 0.0)
 
 
 def _compute_datashader_canvas_params(

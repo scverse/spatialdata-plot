@@ -31,8 +31,16 @@ from spatialdata_plot.pl._datashader import (
     _ds_shade_categorical,
     _pad_degenerate_extent,
 )
-from spatialdata_plot.pl.render import _warn_groups_ignored_continuous
-from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over, get_standard_RNG
+from spatialdata_plot.pl.render import _marker_spread_px, _warn_groups_ignored_continuous
+from tests.conftest import (
+    CANVAS_HEIGHT,
+    CANVAS_WIDTH,
+    DPI,
+    PlotTester,
+    PlotTesterMeta,
+    _viridis_with_under_over,
+    get_standard_RNG,
+)
 
 sc.pl.set_rcParams_defaults()
 sc.set_figure_params(dpi=DPI, color_map="viridis")
@@ -48,6 +56,24 @@ _ = spatialdata_plot
 
 
 class TestPoints(PlotTester, metaclass=PlotTesterMeta):
+    def test_plot_points_render_permutations(self, sdata_blobs: SpatialData):
+        """2x2 of (no color / continuous color) x (matplotlib / datashader).
+
+        Marker sizes agree between the matplotlib and datashader backends in any panel layout: the
+        datashader spread radius is rescaled by the axes-box/canvas factor ratio so it stays at the
+        matplotlib marker radius (sqrt(size)*dpi/144 display px) even in multi-panel subplots.
+        """
+        panels = [
+            ("no color · matplotlib", {"method": "matplotlib"}),
+            ("no color · datashader", {"method": "datashader"}),
+            ("color · matplotlib", {"color": "instance_id", "method": "matplotlib", "colorbar": False}),
+            ("color · datashader", {"color": "instance_id", "method": "datashader", "colorbar": False}),
+        ]
+        _, axs = plt.subplots(2, 2, figsize=(CANVAS_WIDTH / DPI, CANVAS_HEIGHT / DPI), dpi=DPI)
+        for ax, (title, kw) in zip(axs.ravel(), panels, strict=True):
+            sdata_blobs.pl.render_points("blobs_points", size=30, **kw).pl.show(ax=ax)
+            ax.set_title(title, fontsize=8)
+
     def test_plot_can_render_points(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_points(element="blobs_points").pl.show()
 
@@ -1261,6 +1287,31 @@ def test_density_defaults_silent_and_force_datashader(sdata_blobs: SpatialData, 
 # ---------------------------------------------------------------------------
 # Zero-extent datashader canvas (#724)
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("size", [10.0, 30.0, 400.0])
+def test_marker_spread_px_layout_invariant(size):
+    """Datashader marker display radius stays ~constant across panel layouts (matches matplotlib).
+
+    On-screen radius is P * factor / factor_axesbox; only factor_axesbox (axes-box size) changes between a
+    single panel and a 2x2 grid. The spread rescaling keeps the displayed radius at the matplotlib marker
+    radius sqrt(size)*dpi/144 to within spread-px rounding (<1px). The pre-fix /100 formula had no layout
+    term and halved in 2x2 (diff >> 1px).
+    """
+    dpi = 80
+    rx = ry = 100.0
+    fig_px = 600.0
+    factor = rx / fig_px  # figure-resolution canvas, identical in both layouts
+
+    def displayed_radius(axes_box_px):
+        factor_axesbox = max(rx / axes_box_px, ry / axes_box_px)
+        return _marker_spread_px(size, dpi, factor, factor_axesbox) * factor / factor_axesbox
+
+    target = np.sqrt(size) * dpi / 144
+    d_single = displayed_radius(480.0)  # axes ~ full figure
+    d_grid = displayed_radius(240.0)  # 2x2 subplot, half the window
+    assert abs(d_single - d_grid) < 1.0, f"layout-dependent marker size: {d_single} vs {d_grid}"
+    assert abs(d_single - target) < 1.0 and abs(d_grid - target) < 1.0
 
 
 def test_pad_degenerate_extent():

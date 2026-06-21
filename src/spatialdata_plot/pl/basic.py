@@ -444,10 +444,16 @@ class PlotAccessor:
             Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"max"``.
         transfunc : Callable[[float], float] | None, optional
             Optional transformation applied to the continuous color vector before normalization and colormap mapping.
+        as_points : bool
+            If ``True``, draw one ``size``-d dot per shape centroid instead of its full geometry
+            (faster for large sets; available on both the matplotlib and datashader backends).
 
         Notes
         -----
         - Empty geometries will be removed at the time of plotting.
+        - On the datashader backend, a large (>50k) uniform-radius, outline-free circle element is
+          rendered as radius-faithful points for speed (visually equivalent at that scale); pass
+          ``method="matplotlib"`` for a pixel-exact rendering of every circle.
         - An `outline_width` of 0.0 leads to no border being plotted.
         - If ``color`` is a string that is both a matplotlib color name and a column name in the
           element or an annotating table, a ``ValueError`` is raised. Disambiguate by passing
@@ -626,7 +632,8 @@ class PlotAccessor:
             ``var_names`` are e.g. ENSEMBL IDs but you want to refer to genes by their symbols stored
             in another column of ``var``. Mimics scanpy's ``gene_symbols`` parameter.
         datashader_reduction : Literal["sum", "mean", "any", "count", "std", "var", "max", "min"] | None, optional
-            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"sum"``.
+            Reduction method for datashader when coloring by continuous values. When ``None``, defaults to ``"max"``,
+            which keeps the per-pixel color close to the matplotlib backend (``"sum"`` inflates overlapping dots).
         density : bool, default False
             Render the points as a 2-D count density via datashader instead of plotting individual markers.
             When ``True``, ``method`` is forced to ``"datashader"`` (passing ``method="matplotlib"`` raises).

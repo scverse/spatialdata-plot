@@ -44,8 +44,10 @@ from spatialdata_plot.pl._color import (
     resolve_color,
 )
 from spatialdata_plot.pl._datashader import (
+    _affine_major_scale,
     _ax_show_and_transform,
     _build_ds_colorbar,
+    _circle_buffer_quad_segs,
     _datashader_canvas_from_dataframe,
     _get_extent_and_range_for_datashader_canvas,
     _hex_no_alpha,
@@ -572,6 +574,32 @@ def _check_instance_ids_overlap(
         )
 
 
+# Above this many circles, a uniform-radius outline-free element is a dot-field where buffering every
+# circle to a polygon dominates the render; rasterizing centroids as spread discs is far cheaper and
+# visually equivalent at that scale.
+_CIRCLE_FAST_PATH_MIN = 50_000
+
+
+def _circles_render_as_points(shapes: gpd.GeoDataFrame, is_point: Any, render_params: ShapesRenderParams) -> bool:
+    """Gate for the datashader circle fast-path: a large, uniform-radius, outline-free, default-shape element.
+
+    A datashader speed optimization (use ``method="matplotlib"`` for exact circles), restricted so the
+    point approximation never silently distorts: per-circle varying radii and outlines can't be
+    reproduced by a single uniform spread, and a custom ``shape`` is meaningless for points.
+    """
+    if (
+        render_params.shape is not None
+        or "radius" not in shapes.columns
+        or len(shapes) <= _CIRCLE_FAST_PATH_MIN
+        or render_params.outline_alpha[0] > 0
+        or render_params.outline_alpha[1] > 0
+        or not is_point.all()
+    ):
+        return False
+    radius = pd.to_numeric(shapes["radius"], errors="coerce").to_numpy()
+    return bool(np.isfinite(radius).all() and np.ptp(radius) == 0)
+
+
 def _render_shapes(
     sdata: sd.SpatialData,
     render_params: ShapesRenderParams,
@@ -717,12 +745,8 @@ def _render_shapes(
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
-    if render_params.as_points:
-        # Fast mode: draw one dot per shape at its centroid instead of its geometry.
-        logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
-        centroids = shapes.geometry.centroid  # intrinsic coords, positionally aligned to color_vector
-        # transform to coordinate-system coords so dots land correctly under non-identity transforms
-        xy = trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()]))
+    def _draw_centroids(xy: np.ndarray, radius: float | None = None) -> None:
+        """Render the element's centroids (coordinate-system coords) as dots; ``radius`` sizes the disc."""
         _render_centroids_as_points(
             ax,
             render_params,
@@ -738,7 +762,13 @@ def _render_shapes(
             legend_params=legend_params,
             colorbar_requests=colorbar_requests,
             axes_extent=_fast_extent(sdata_filt.shapes[element], coordinate_system),
+            radius=radius,
         )
+
+    if render_params.as_points:
+        logger.info("`as_points=True`: rendering shape centroids; `outline_*` and `shape` are ignored.")
+        centroids = shapes.geometry.centroid  # intrinsic; transform so dots land under non-identity transforms
+        _draw_centroids(trans.transform(np.column_stack([centroids.x.to_numpy(), centroids.y.to_numpy()])))
         return
 
     # convert shapes if necessary
@@ -770,14 +800,30 @@ def _render_shapes(
     if method == "datashader":
         _geometry = shapes["geometry"]
         is_point = _geometry.type == "Point"
+        tm = trans.get_matrix()  # coordinate-system affine; reused for circle sizing and the transform below
+
+        # Fast path: a large uniform-radius circle element with no outline rasterizes (to within a
+        # pixel) the same as spread points, skipping the per-circle buffer/polygon-aggregation cost.
+        if _circles_render_as_points(shapes, is_point, render_params):
+            logger.info(f"Rendering {len(shapes)} uniform circles as datashader points (fast path).")
+            # radius is gate-guaranteed uniform + finite, so coerce only the first value (avoids an O(n) pass).
+            radius_one = float(pd.to_numeric(shapes["radius"].iloc[:1], errors="coerce").iloc[0])
+            radius_cs = radius_one * render_params.scale * _affine_major_scale(tm)
+            xy = trans.transform(np.column_stack([_geometry.x.to_numpy(), _geometry.y.to_numpy()]))
+            _draw_centroids(xy, radius=radius_cs)
+            return
 
         # Handle circles encoded as points with radius
         if is_point.any():
-            radius_values = shapes[is_point]["radius"]
             # Convert to numeric, replacing non-numeric values with NaN
-            radius_numeric = pd.to_numeric(radius_values, errors="coerce")
-            scale = radius_numeric * render_params.scale
-            shapes.loc[is_point, "geometry"] = _geometry[is_point].buffer(scale.to_numpy())
+            radius = (pd.to_numeric(shapes[is_point]["radius"], errors="coerce") * render_params.scale).to_numpy()
+            points = _geometry[is_point]
+            # Buffer at a vertex count matched to the largest disc's on-screen size: tiny discs don't
+            # need shapely's 65-vertex default, which otherwise dominates the render for large sets.
+            quad_segs = _circle_buffer_quad_segs(
+                np.column_stack([points.x.to_numpy(), points.y.to_numpy()]), float(np.nanmax(radius)), tm, fig_params
+            )
+            shapes.loc[is_point, "geometry"] = points.buffer(radius, resolution=quad_segs)
 
         # Handle polygon/multipolygon scaling
         is_polygon = _geometry.type.isin(["Polygon", "MultiPolygon"])
@@ -789,7 +835,6 @@ def _render_shapes(
             )
 
         # apply transformations to the individual points
-        tm = trans.get_matrix()
         transformed_geometry = shapes["geometry"].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
@@ -1073,12 +1118,14 @@ def _render_centroids_as_points(
     colorbar_requests: list[ColorbarSpec] | None,
     axes_extent: dict[str, tuple[float, float]],
     allow_datashader: bool = True,
+    radius: float | None = None,
 ) -> None:
     """Render one dot per cell at ``(x, y)`` (coordinate-system coords), colored like the fill.
 
     Shared "fast mode" for shapes/labels; backend chosen by ``_resolve_as_points_method``. ``axes_extent``
     (the element's extent, i.e. the frame the axes will use) is what the datashader backend rasterizes over
-    so its dots match the matplotlib markers.
+    so its dots match the matplotlib markers. ``radius`` (coordinate-system units), when set, sizes the
+    datashader spread to a faithful disc of that radius instead of the marker ``size``.
     """
     method = _resolve_as_points_method(render_params, n=len(x), allow_datashader=allow_datashader)
     if method == "datashader":
@@ -1103,6 +1150,7 @@ def _render_centroids_as_points(
             fig_params=fig_params,
             as_markers=True,
             axes_extent=axes_extent,
+            radius=radius,
         )
         color_spec = color_spec.evolve(source_vector=csv, color_vector=cv)
     else:
@@ -1135,6 +1183,15 @@ def _render_centroids_as_points(
     )
 
 
+def _marker_spread_px(size: float, dpi: float, factor: float, factor_axesbox: float) -> int:
+    """Spread radius (canvas px) matching a matplotlib marker of area ``size`` at any panel layout.
+
+    The marker radius is ``sqrt(size)*dpi/144`` display px; one figure-resolution canvas px displays at
+    ``factor_axesbox/factor`` of a display px, so rescale by that ratio to keep the on-screen size constant.
+    """
+    return max(int(round(np.sqrt(size) * dpi / 144 * factor_axesbox / factor)), 0)
+
+
 def _datashader_points(
     ax: matplotlib.axes.SubplotBase,
     df: pd.DataFrame,
@@ -1151,26 +1208,23 @@ def _datashader_points(
     density: bool,
     density_how: str,
     fig_params: FigParams,
-    default_reduction: _DsReduction = "sum",
+    default_reduction: _DsReduction = "max",
     as_markers: bool = False,
     axes_extent: dict[str, tuple[float, float]] | None = None,
+    radius: float | None = None,
 ) -> tuple[Any, Any, Any]:
     """Datashade an x/y(+color) point frame onto ``ax``; return ``(cax, color_vector, color_source_vector)``.
 
     Shared by ``render_points`` and the centroid "fast mode" of shapes/labels; ``df`` holds ``x``/``y`` in
     coordinate-system coords. The (possibly recomputed) color vectors are returned so the caller's legend
     matches. ``as_markers`` mimics matplotlib markers: it rasterizes over ``axes_extent`` (the plot frame),
-    sizes the spread to the marker radius, and uses a uniform alpha.
+    sizes the spread to the marker radius, and uses a uniform alpha. ``radius`` (coordinate-system units)
+    overrides ``size`` to spread each dot to a faithful disc of that radius (circle fast-path).
     """
-    # Spread radius = matplotlib marker radius: an 'o' marker has diameter sqrt(s)*dpi/72 px, so radius
-    # sqrt(s)*dpi/144. render_points keeps the looser sqrt(s)*dpi/100 it was calibrated with.
-    px_div = 144 if as_markers else 100
-    px: int | None = None if density else int(np.round(np.sqrt(size) * (fig_params.fig.dpi / px_div)))
-
     if as_markers and axes_extent is not None:
-        # Size the canvas to the AXES display box, not the figure: the datashader output is a
-        # data-coordinate image that scales with the (smaller) axes, so a figure-sized canvas shrinks the
-        # dots. With 1 canvas px == 1 axes-display px, the spread radius above matches the marker.
+        # Centroid markers (as_points): size the canvas to the AXES box so 1 canvas px == 1 display px
+        # and the spread radius below is directly in display pixels (centroids are sparse, so the lower
+        # resolution doesn't affect aggregation).
         x_ext = [float(axes_extent["x"][0]), float(axes_extent["x"][1])]
         y_ext = [float(axes_extent["y"][0]), float(axes_extent["y"][1])]
         bb = ax.get_window_extent()
@@ -1179,6 +1233,22 @@ def _datashader_points(
         plot_width, plot_height = int(round(rx / factor)), int(round(ry / factor))
     else:
         plot_width, plot_height, x_ext, y_ext, factor = _datashader_canvas_from_dataframe(df, fig_params)
+
+    if density:
+        px: int | None = None
+    elif radius is not None:
+        # Faithful disc (circle fast-path): spread to the circle's on-screen pixel radius. ds.tf.spread's
+        # footprint radius is ~px+0.5, so subtract 0.5 to match a filled disc of radius r.
+        px = max(int(round(radius / factor - 0.5)), 0)
+    elif as_markers:
+        # Canvas is already the axes box (factor == factor_axesbox), so the spread is the marker radius.
+        px = _marker_spread_px(size, fig_params.fig.dpi, factor, factor)
+    else:
+        # Layout-invariant marker radius: the figure-resolution canvas shrinks dots in multi-panel
+        # subplots, so rescale the spread by the axes-box/canvas factor ratio to cancel that.
+        bb = ax.get_window_extent()
+        factor_axesbox = max((x_ext[1] - x_ext[0]) / bb.width, (y_ext[1] - y_ext[0]) / bb.height)
+        px = _marker_spread_px(size, fig_params.fig.dpi, factor, factor_axesbox)
     cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
 
     # ensure color column exists on the frame with positional alignment
@@ -1425,7 +1495,9 @@ def _render_points(
     elif method is None:
         method = "datashader" if n_points > 10000 else "matplotlib"
 
-    _default_reduction: _DsReduction = "sum"
+    # "max" keeps the per-pixel aggregate close to the matplotlib backend (each dot shows its own value);
+    # "sum" would inflate the normalization range where dots overlap and push single points to the dark end.
+    _default_reduction: _DsReduction = "max"
 
     if method == "datashader":
         # datashader colors the per-pixel aggregate (count/sum/reduction), not the per-point vector,
