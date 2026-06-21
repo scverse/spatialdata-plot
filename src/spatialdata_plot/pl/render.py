@@ -131,20 +131,12 @@ def _want_decorations(color_vector: Any, na_color: Color) -> bool:
     """
     if color_vector is None:
         return False
-    if isinstance(color_vector, pd.Categorical):  # compact fast path: int8 codes, no per-point expand
-        if len(color_vector) == 0:
-            return False
-        if not _color_vector_is_uniform(color_vector):
-            return True
-        first = color_vector[0]
-    else:  # numeric / object / 2-D RGBA arrays (e.g. labels as_points no-color)
-        cv = np.asarray(color_vector)
-        if cv.size == 0:
-            return False
-        if not (cv == cv.flat[0]).all():
-            return True
-        first = cv.flat[0]
-    # all one colour: decorations only if it isn't the na colour
+    cv = np.asarray(color_vector)
+    if cv.size == 0:
+        return False
+    first = cv.flat[0]
+    if not (cv == first).all():
+        return True
     na_hex = na_color.get_hex()
     if isinstance(first, str) and first.startswith("#") and na_hex.startswith("#"):
         return _hex_no_alpha(first) != _hex_no_alpha(na_hex)

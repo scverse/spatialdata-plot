@@ -463,15 +463,13 @@ def _first_color_per_category(source: pd.Categorical, color_vector: Any) -> dict
     omitted (callers add any na fallback); appearance order matches the old ``drop_duplicates`` first row.
     """
     cats = source.categories
-    codes = np.asarray(source.codes)
-    at = color_vector.iloc if isinstance(color_vector, pd.Series) else color_vector  # positional access
-    unique_codes, first_indices = np.unique(codes, return_index=True)
-    out: dict[Any, Any] = {}
-    for i in np.argsort(first_indices):  # appearance order
-        code, idx = unique_codes[i], first_indices[i]
-        if code >= 0 and idx < len(color_vector):
-            out[cats[code]] = at[idx]
-    return out
+    at = color_vector.iloc if isinstance(color_vector, pd.Series) else color_vector  # positional
+    unique_codes, first_indices = np.unique(np.asarray(source.codes), return_index=True)
+    return {
+        cats[code]: at[idx]
+        for idx, code in sorted(zip(first_indices, unique_codes, strict=True))  # appearance order
+        if code >= 0 and idx < len(color_vector)
+    }
 
 
 def _decorate_axs(

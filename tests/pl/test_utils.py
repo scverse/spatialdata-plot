@@ -13,12 +13,12 @@ from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableMod
 
 import spatialdata_plot
 from spatialdata_plot.pl import measure_obs
+from spatialdata_plot.pl._color import _set_outline
 from spatialdata_plot.pl._datashader import (
     _apply_cmap_alpha_to_datashader_result,
     _datashader_map_aggregate_to_color,
 )
 from spatialdata_plot.pl.render_params import CmapParams, Color, ColorLike, colormap_with_alpha
-from spatialdata_plot.pl._color import _set_outline
 from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
@@ -1240,3 +1240,12 @@ def test_first_color_per_category_positional_for_series():
     source = pd.Categorical(["a", "b", "a"], categories=["a", "b"])
     cv = pd.Series(["#111111", "#222222", "#111111"], index=[10, 20, 30])
     assert _first_color_per_category(source, cv) == {"a": "#111111", "b": "#222222"}
+
+
+def test_first_color_per_category_skips_nan_and_handles_numeric_categories():
+    from spatialdata_plot.pl.utils import _first_color_per_category
+
+    # NaN rows (code -1) contribute no entry; numeric categories key the dict by their value.
+    source = pd.Categorical([1, None, 2, 1], categories=[1, 2])
+    cv = ["#aaaaaa", "#ffffff", "#bbbbbb", "#aaaaaa"]
+    assert _first_color_per_category(source, cv) == {1: "#aaaaaa", 2: "#bbbbbb"}
