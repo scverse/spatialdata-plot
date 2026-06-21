@@ -448,10 +448,9 @@ def _stack_categorical_legend(
     new_leg._sdata_column = column  # type: ignore[attr-defined]
 
 
-# scanpy assigns distinguishable colors only up to len(default_102) categories; beyond that it warns
-# and colors every point uniform grey (_set_default_colors_for_categorical_obs). At that point a
-# per-entry legend is meaningless AND scanpy builds it in O(categories^2) (one autoscaling artist each,
-# dominating the render), so we skip it with a warning. Tied to scanpy's palette so the two stay in sync.
+# A per-entry legend past this many categories is unreadable, and scanpy builds it in O(categories^2)
+# (one autoscaling artist each), dominating the render — so skip it with a warning. Tied to scanpy's
+# default_102 palette, beyond which its *default* colors also stop being distinguishable (uniform grey).
 _MAX_LEGEND_CATEGORIES = len(palettes.default_102)
 
 
@@ -507,12 +506,12 @@ def _decorate_axs(
             if legend_loc in (None, "none"):
                 pass  # legend suppressed
             elif len(clusters) > _MAX_LEGEND_CATEGORIES:
-                # Past scanpy's palette limit the points are all uniform grey anyway, so a per-entry legend
-                # carries no information and (built in O(categories^2)) dominates the render. Skip it.
+                # A per-entry legend this large is unreadable and scanpy builds it in O(categories^2)
+                # (one autoscaling artist each), dominating the render. Skip it.
                 logger.warning(
                     f"Skipping the categorical legend for '{value_to_plot}': {len(clusters)} categories "
-                    f"exceed scanpy's {_MAX_LEGEND_CATEGORIES}-color palette (points are uniform grey past "
-                    f"that). Pass a `groups` subset to get a legend."
+                    f"exceed the {_MAX_LEGEND_CATEGORIES}-entry limit (unreadable and very slow to build). "
+                    f"Pass a `groups` subset to get a legend."
                 )
             elif already:
                 na_hex = na_color.get_hex() if (na_in_legend and pd.isnull(color_source_vector).any()) else None
