@@ -81,6 +81,7 @@ from spatialdata_plot.pl.utils import (
     _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
+    _first_color_per_category,
     _join_table_for_element,
     _legend_ncol,
     _mpl_ax_contains_elements,
@@ -130,12 +131,20 @@ def _want_decorations(color_vector: Any, na_color: Color) -> bool:
     """
     if color_vector is None:
         return False
-    cv = np.asarray(color_vector)
-    if cv.size == 0:
-        return False
-    first = cv.flat[0]
-    if not (cv == first).all():
-        return True
+    if isinstance(color_vector, pd.Categorical):  # compact fast path: int8 codes, no per-point expand
+        if len(color_vector) == 0:
+            return False
+        if not _color_vector_is_uniform(color_vector):
+            return True
+        first = color_vector[0]
+    else:  # numeric / object / 2-D RGBA arrays (e.g. labels as_points no-color)
+        cv = np.asarray(color_vector)
+        if cv.size == 0:
+            return False
+        if not (cv == cv.flat[0]).all():
+            return True
+        first = cv.flat[0]
+    # all one colour: decorations only if it isn't the na colour
     na_hex = na_color.get_hex()
     if isinstance(first, str) and first.startswith("#") and na_hex.startswith("#"):
         return _hex_no_alpha(first) != _hex_no_alpha(na_hex)
@@ -500,10 +509,7 @@ def _add_outline_legend(
     """
     cats = outline_color_source_vector.remove_unused_categories().unique()
     cats = cats[~cats.isnull()]
-    mapping_df = pd.DataFrame(
-        {"cats": outline_color_source_vector.remove_unused_categories(), "color": outline_color_vector}
-    )
-    color_map = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
+    color_map = _first_color_per_category(outline_color_source_vector.remove_unused_categories(), outline_color_vector)
 
     outline_handles = _categorical_legend_handles(ax, {c: color_map[c] for c in cats})
 

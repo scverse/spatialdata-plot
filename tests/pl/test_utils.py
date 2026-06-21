@@ -1212,3 +1212,31 @@ class TestPercentileNormalize:
         resolved = _resolve_continuous_norm(values, _prepare_cmap_norm(norm=PercentileNormalize(0, 99)))
         assert resolved.vmax == pytest.approx(np.percentile(values, 99))
         assert resolved.vmax < 10000.0
+
+
+def test_first_color_per_category_matches_drop_duplicates():
+    # Shared helper must reproduce the old drop_duplicates mapping: used categories only, in
+    # first-appearance order (the order the stacked-legend path iterates).
+    from spatialdata_plot.pl.utils import _first_color_per_category
+
+    # rows appear B, A, C (D never used); category order is A, B, C, D
+    source = pd.Categorical(["B", "A", "C", "B", "A"], categories=["A", "B", "C", "D"])
+    color_vector = pd.Categorical(["#00ff00", "#ff0000", "#0000ff", "#00ff00", "#ff0000"])
+
+    mapping_df = pd.DataFrame({"cats": source, "color": color_vector})
+    expected = mapping_df.drop_duplicates("cats").set_index("cats")["color"].to_dict()
+    expected = {k: v for k, v in expected.items() if not pd.isnull(k)}
+
+    got = _first_color_per_category(source, color_vector)
+    assert got == expected
+    assert list(got.items()) == list(expected.items())  # appearance order, not category order
+
+
+def test_first_color_per_category_positional_for_series():
+    # A pd.Series color_vector with a non-default index must be indexed positionally (matches the old
+    # np.asarray(...)[idx]), not by label.
+    from spatialdata_plot.pl.utils import _first_color_per_category
+
+    source = pd.Categorical(["a", "b", "a"], categories=["a", "b"])
+    cv = pd.Series(["#111111", "#222222", "#111111"], index=[10, 20, 30])
+    assert _first_color_per_category(source, cv) == {"a": "#111111", "b": "#222222"}

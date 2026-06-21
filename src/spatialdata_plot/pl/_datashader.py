@@ -43,6 +43,7 @@ from spatialdata_plot.pl._color import (
 from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams, _DsReduction
 from spatialdata_plot.pl.utils import (
     _fast_extent,
+    _first_color_per_category,
     to_hex,
 )
 
@@ -98,26 +99,19 @@ def _build_datashader_color_key(
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
     categories = np.asarray(cat_series.categories, dtype=str)
-    codes = np.asarray(cat_series.codes)
 
-    if len(color_vector) != len(codes):
+    if len(color_vector) != len(cat_series.codes):
         logger.warning(
             f"color_vector length ({len(color_vector)}) does not match categorical series length "
-            f"({len(codes)}); some categories may receive the na_color fallback."
+            f"({len(cat_series.codes)}); some categories may receive the na_color fallback."
         )
 
-    # Use np.unique to find the first occurrence of each category in one pass,
-    # avoiding a Python loop over all points.  See #379.
-    unique_codes, first_indices = np.unique(codes, return_index=True)
-
-    # Index only the first occurrence per category — color_vector is a compact pd.Categorical at scale.
-    first_color: dict[str, str] = {}
-    for code, idx in zip(unique_codes, first_indices, strict=True):
-        if code < 0 or idx >= len(color_vector):
-            continue
-        c = color_vector[idx]
-        first_color[categories[code]] = _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
-
+    # Shared first-colour-per-category pass; strip alpha on the (few) resolved hex colours and fall back
+    # to na_hex for any category not present.
+    first_color = {
+        str(cat): _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
+        for cat, c in _first_color_per_category(cat_series, color_vector).items()
+    }
     return {cat: first_color.get(cat, na_hex) for cat in categories}
 
 
@@ -343,6 +337,9 @@ def _color_vector_is_uniform(color_vector: Any) -> bool:
     """
     if color_vector is None or len(color_vector) == 0:
         return False
+    if isinstance(color_vector, pd.Categorical):  # compact form: compare int8 codes, never expand
+        codes = color_vector.codes
+        return bool((codes == codes[0]).all())
     arr = np.asarray(color_vector)
     if arr.dtype.kind in "US":  # fixed-width strings (the resolved-hex case): cheap vectorised compare
         return bool((arr == arr[0]).all())

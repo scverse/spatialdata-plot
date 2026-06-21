@@ -454,6 +454,26 @@ def _stack_categorical_legend(
 _MAX_LEGEND_CATEGORIES = len(palettes.default_102)
 
 
+def _first_color_per_category(source: pd.Categorical, color_vector: Any) -> dict[Any, Any]:
+    """Map each *used* category to the colour at its first occurrence, in appearance order.
+
+    One vectorised pass over the codes (no per-point Python loop, see #379), shared by the legend and
+    datashader colour-key builders so the "first colour per category" logic lives once. ``source`` is the
+    length-N categorical; ``color_vector`` is the aligned colour vector. Categories never present are
+    omitted (callers add any na fallback); appearance order matches the old ``drop_duplicates`` first row.
+    """
+    cats = source.categories
+    codes = np.asarray(source.codes)
+    at = color_vector.iloc if isinstance(color_vector, pd.Series) else color_vector  # positional access
+    unique_codes, first_indices = np.unique(codes, return_index=True)
+    out: dict[Any, Any] = {}
+    for i in np.argsort(first_indices):  # appearance order
+        code, idx = unique_codes[i], first_indices[i]
+        if code >= 0 and idx < len(color_vector):
+            out[cats[code]] = at[idx]
+    return out
+
+
 def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
@@ -490,13 +510,7 @@ def _decorate_axs(
             clusters = color_source_vector.remove_unused_categories().unique()
             clusters = clusters[~clusters.isnull()]
             # derive mapping from color_source_vector and color_vector
-            group_to_color_matching = pd.DataFrame(
-                {
-                    "cats": color_source_vector.remove_unused_categories(),
-                    "color": color_vector,
-                }
-            )
-            color_mapping = group_to_color_matching.drop_duplicates("cats").set_index("cats")["color"].to_dict()
+            color_mapping = _first_color_per_category(color_source_vector.remove_unused_categories(), color_vector)
             color_mapping = {k: v for k, v in color_mapping.items() if not pd.isnull(k)}  # NA handled separately
             # A 2nd categorical render would make scanpy's bare `ax.legend()` merge every labeled
             # artist into one legend and drop the first (#364), so route 2nd+ legends (i.e. when a
