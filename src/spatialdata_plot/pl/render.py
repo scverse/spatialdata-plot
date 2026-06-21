@@ -54,7 +54,7 @@ from spatialdata_plot.pl._datashader import (
     _shade_datashader_aggregate,
 )
 from spatialdata_plot.pl._geometry import (
-    _build_shape_patches,
+    _build_shape_paths,
     _convert_shapes,
     _get_collection_shape,
     _validate_polygons,
@@ -922,9 +922,12 @@ def _render_shapes(
         cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
-        # Build the matplotlib patches once and share them across the fill and outline
-        # collections; the geometry is identical, only colours/alpha/linewidth differ.
-        prebuilt_patches = _build_shape_patches(shapes, render_params.scale)
+        # Build the paths once and share them across the fill and outline collections (geometry is
+        # identical; only colours/alpha/linewidth differ), then apply the coordinate-system affine
+        # once to the shared Path objects rather than once per collection.
+        prebuilt_paths = _build_shape_paths(shapes, render_params.scale)
+        for path in prebuilt_paths[0]:
+            path.vertices = trans.transform(path.vertices)
 
         # render outlines separately to ensure they are always underneath the shape
         if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
@@ -939,13 +942,11 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=outline_rgba,
-                prebuilt_patches=prebuilt_patches,
+                prebuilt_paths=prebuilt_paths,
                 linewidth=render_params.outline_params.outer_outline_linewidth,
                 zorder=render_params.zorder,
             )
             ax.add_collection(_cax)
-            for path in _cax.get_paths():
-                path.vertices = trans.transform(path.vertices)
         elif render_params.outline_alpha[0] > 0 and isinstance(render_params.outline_params.outer_outline_color, Color):
             _cax = _get_collection_shape(
                 shapes=shapes,
@@ -957,15 +958,12 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
                 outline_color=render_params.outline_params.outer_outline_color.get_hex(),
-                prebuilt_patches=prebuilt_patches,
+                prebuilt_paths=prebuilt_paths,
                 linewidth=render_params.outline_params.outer_outline_linewidth,
                 zorder=render_params.zorder,
                 # **kwargs,
             )
             cax = ax.add_collection(_cax)
-            # Transform the paths in PatchCollection
-            for path in _cax.get_paths():
-                path.vertices = trans.transform(path.vertices)
         if render_params.outline_alpha[1] > 0 and isinstance(render_params.outline_params.inner_outline_color, Color):
             _cax = _get_collection_shape(
                 shapes=shapes,
@@ -977,21 +975,18 @@ def _render_shapes(
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[1],
                 outline_color=render_params.outline_params.inner_outline_color.get_hex(),
-                prebuilt_patches=prebuilt_patches,
+                prebuilt_paths=prebuilt_paths,
                 linewidth=render_params.outline_params.inner_outline_linewidth,
                 zorder=render_params.zorder,
                 # **kwargs,
             )
             cax = ax.add_collection(_cax)
-            # Transform the paths in PatchCollection
-            for path in _cax.get_paths():
-                path.vertices = trans.transform(path.vertices)
 
         _cax = _get_collection_shape(
             shapes=shapes,
             s=render_params.scale,
             c=color_spec.to_rgba(render_params.cmap_params),
-            prebuilt_patches=prebuilt_patches,
+            prebuilt_paths=prebuilt_paths,
             render_params=render_params,
             rasterized=sc_settings._vector_friendly,
             cmap=render_params.cmap_params.cmap,
@@ -1001,10 +996,6 @@ def _render_shapes(
             # **kwargs,
         )
         cax = ax.add_collection(_cax)
-
-        # Transform the paths in PatchCollection
-        for path in _cax.get_paths():
-            path.vertices = trans.transform(path.vertices)
 
     if color_spec.is_continuous:
         # Colorbar uses the same resolved norm the fill pixels use, including its subclass

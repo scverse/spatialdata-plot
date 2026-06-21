@@ -5,13 +5,12 @@ from __future__ import annotations
 import math
 from typing import Any
 
-import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import numpy as np
 import pandas as pd
 import shapely
 from geopandas import GeoDataFrame
-from matplotlib.collections import PatchCollection
+from matplotlib.collections import PathCollection
 from matplotlib.colors import ColorConverter
 from scipy.spatial import ConvexHull
 from shapely.errors import GEOSException
@@ -21,9 +20,7 @@ from spatialdata_plot.pl.render_params import ShapesRenderParams
 from spatialdata_plot.pl.utils import _extract_scalar_value
 
 
-def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, float]:
-    # Extract the vertices from the PathPatch
-    path = pathpatch.get_path()
+def _get_centroid_of_path(path: mpath.Path) -> tuple[float, float]:
     vertices = path.vertices
     x = vertices[:, 0]
     y = vertices[:, 1]
@@ -37,12 +34,10 @@ def _get_centroid_of_pathpatch(pathpatch: mpatches.PathPatch) -> tuple[float, fl
     return centroid_x, centroid_y
 
 
-def _scale_pathpatch_around_centroid(pathpatch: mpatches.PathPatch, scale_factor: float) -> None:
+def _scale_path_around_centroid(path: mpath.Path, scale_factor: float) -> None:
     scale_value = _extract_scalar_value(scale_factor, default=1.0)
-    centroid = _get_centroid_of_pathpatch(pathpatch)
-    vertices = pathpatch.get_path().vertices
-    scaled_vertices = np.array([centroid + (vertex - centroid) * scale_value for vertex in vertices])
-    pathpatch.get_path().vertices = scaled_vertices
+    centroid = np.asarray(_get_centroid_of_path(path))
+    path.vertices = centroid + (path.vertices - centroid) * scale_value
 
 
 def _normalize_geom(geom: Any) -> Any:
@@ -67,16 +62,16 @@ def _normalize_geom(geom: Any) -> Any:
     return geom
 
 
-def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> list[mpatches.PathPatch]:
+def _make_paths_from_multipolygon(mp: shapely.MultiPolygon) -> list[mpath.Path]:
     """
-    Create PathPatches from a MultiPolygon, preserving holes robustly.
+    Create matplotlib ``Path``s from a MultiPolygon, preserving holes robustly.
 
     This follows the same strategy as GeoPandas' internal Polygon plotting:
     each (multi)polygon part becomes a compound Path composed of the exterior
     ring and all interior rings. Orientation is handled by prior geometry
     normalization rather than manual ring reversal.
     """
-    patches: list[mpatches.PathPatch] = []
+    paths: list[mpath.Path] = []
 
     for poly in mp.geoms:
         if poly.is_empty:
@@ -88,36 +83,37 @@ def _make_patch_from_multipolygon(mp: shapely.MultiPolygon) -> list[mpatches.Pat
 
         if len(interiors) == 0:
             # Simple polygon without holes
-            patches.append(mpatches.Polygon(exterior, closed=True))
+            paths.append(mpath.Path(exterior, closed=True))
             continue
 
         # Build a compound path: exterior + all interior rings
-        compound_path = mpath.Path.make_compound_path(
-            mpath.Path(exterior, closed=True),
-            *[mpath.Path(ring, closed=True) for ring in interiors],
+        paths.append(
+            mpath.Path.make_compound_path(
+                mpath.Path(exterior, closed=True),
+                *[mpath.Path(ring, closed=True) for ring in interiors],
+            )
         )
-        patches.append(mpatches.PathPatch(compound_path))
 
-    return patches
+    return paths
 
 
-def _build_shape_patches(
+def _build_shape_paths(
     shapes: GeoDataFrame,
     scale: float,
-) -> tuple[list[mpatches.Patch], list[int], int]:
-    """Build matplotlib patches from shape geometries, once.
+) -> tuple[list[mpath.Path], list[int], int]:
+    """Build matplotlib ``Path``s from shape geometries, once.
 
-    Patch geometry is independent of colour/alpha, so it can be built a single time and
-    shared across the fill and outline ``PatchCollection``s in :func:`_render_shapes`
-    instead of being rebuilt per layer (the dominant cost for shape elements).
+    Built once and shared across the fill and outline ``PathCollection``s in :func:`_render_shapes`.
+    Emitting ``Path``s directly avoids constructing one ``matplotlib.patches.*`` object per shape — the
+    dominant cost for large shape elements.
 
     Returns
     -------
-    patches
-        The matplotlib patches (a MultiPolygon expands to several patches).
-    patch_row_idx
-        For each patch, the index into the empty-filtered, re-indexed shapes — used to
-        look up the per-shape colour.
+    paths
+        The matplotlib ``Path``s (a MultiPolygon expands to several paths).
+    row_idx
+        For each path, the index into the empty-filtered, re-indexed shapes — used to look up the
+        per-shape colour.
     n_shapes
         Number of shapes after empty filtering (used for the single-colour broadcast rule).
     """
@@ -139,27 +135,27 @@ def _build_shape_patches(
     # Resolve the scale scalar once instead of per shape.
     scale_value = _extract_scalar_value(scale, default=1.0)
 
-    patches: list[mpatches.Patch] = []
-    patch_row_idx: list[int] = []
+    paths: list[mpath.Path] = []
+    row_idx: list[int] = []
     for i, geom in enumerate(geoms):
         geom_type = geom.geom_type
         if geom_type == "Polygon":
             coords = np.asarray(geom.exterior.coords)
             centroid = np.mean(coords, axis=0)
             scaled = centroid + (coords - centroid) * scale_value
-            patches.append(mpatches.Polygon(scaled, closed=True))
-            patch_row_idx.append(i)
+            paths.append(mpath.Path(scaled, closed=True))
+            row_idx.append(i)
         elif geom_type == "MultiPolygon":
-            for m in _make_patch_from_multipolygon(geom):
-                _scale_pathpatch_around_centroid(m, scale_value)
-                patches.append(m)
-                patch_row_idx.append(i)
+            for p in _make_paths_from_multipolygon(geom):
+                _scale_path_around_centroid(p, scale_value)
+                paths.append(p)
+                row_idx.append(i)
         elif geom_type == "Point":
             radius_value = _extract_scalar_value(radii[i], default=0.0) if radii is not None else 0.0
-            patches.append(mpatches.Circle((geom.x, geom.y), radius=radius_value * scale_value))
-            patch_row_idx.append(i)
+            paths.append(mpath.Path.circle((geom.x, geom.y), radius_value * scale_value))
+            row_idx.append(i)
 
-    return patches, patch_row_idx, len(geoms)
+    return paths, row_idx, len(geoms)
 
 
 def _get_collection_shape(
@@ -171,10 +167,10 @@ def _get_collection_shape(
     outline_alpha: None | float = None,
     outline_color: None | str | list[float] | np.ndarray = "white",
     linewidth: float = 0.0,
-    prebuilt_patches: tuple[list[mpatches.Patch], list[int], int] | None = None,
+    prebuilt_paths: tuple[list[mpath.Path], list[int], int] | None = None,
     **kwargs: Any,
-) -> PatchCollection:
-    """Build a PatchCollection for shapes.
+) -> PathCollection:
+    """Build a PathCollection for shapes.
 
     ``c`` is the per-row fill: an ``(N, 4)`` RGBA array (from :meth:`ColorSpec.to_rgba`) or a single
     color / list of color specs (broadcast). ``outline_color`` may be an ``(N, 4)`` float RGBA array,
@@ -208,26 +204,22 @@ def _get_collection_shape(
     else:
         outline_c = [None] * fill_c.shape[0]
 
-    # Build (or reuse) the matplotlib patches. Geometry is colour-independent, so the
-    # caller can build it once via `_build_shape_patches` and share it across the fill
-    # and outline collections instead of rebuilding it on every call.
-    patches, patch_row_idx, n_shapes = (
-        prebuilt_patches if prebuilt_patches is not None else _build_shape_patches(shapes, s)
-    )
+    # Reuse the shared paths when provided (see _build_shape_paths), else build them.
+    paths, row_idx, n_shapes = prebuilt_paths if prebuilt_paths is not None else _build_shape_paths(shapes, s)
 
-    if not patches:
-        return PatchCollection([])
+    if not paths:
+        return PathCollection([])
 
-    # Expand the per-shape fill colours to per-patch (a MultiPolygon owns several
-    # patches). Preserve the single-colour broadcast used for multi-shape elements.
+    # Expand the per-shape fill colours to per-path (a MultiPolygon owns several
+    # paths). Preserve the single-colour broadcast used for multi-shape elements.
     broadcast_single = n_shapes > 1 and len(fill_c) == 1
-    patch_fill = np.repeat(fill_c, len(patches), axis=0) if broadcast_single else fill_c[patch_row_idx]
+    path_fill = np.repeat(fill_c, len(paths), axis=0) if broadcast_single else fill_c[row_idx]
 
-    return PatchCollection(
-        patches,
+    return PathCollection(
+        paths,
         snap=False,
         lw=linewidth,
-        facecolor=patch_fill,
+        facecolor=path_fill,
         edgecolor=None if all(o is None for o in outline_c) else outline_c,
         **kwargs,
     )
