@@ -922,12 +922,10 @@ def _render_shapes(
         cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
-        # Build the matplotlib paths once and share them across the fill and outline collections;
-        # the geometry is identical, only colours/alpha/linewidth differ.
+        # Build the paths once and share them across the fill and outline collections (geometry is
+        # identical; only colours/alpha/linewidth differ), then apply the coordinate-system affine
+        # once to the shared Path objects rather than once per collection.
         prebuilt_paths = _build_shape_paths(shapes, render_params.scale)
-        # Apply the coordinate-system affine ONCE to the shared paths. The fill and outline
-        # collections reference the same Path objects, so transforming per-collection (as the old
-        # PatchCollection path did) applied `trans` 2-3x — a latent double-transform for polygons.
         for path in prebuilt_paths[0]:
             path.vertices = trans.transform(path.vertices)
 

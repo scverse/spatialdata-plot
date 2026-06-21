@@ -103,10 +103,9 @@ def _build_shape_paths(
 ) -> tuple[list[mpath.Path], list[int], int]:
     """Build matplotlib ``Path``s from shape geometries, once.
 
-    Geometry is independent of colour/alpha, so it is built a single time and shared across the fill and
-    outline ``PathCollection``s in :func:`_render_shapes`. Using ``Path`` objects (the form a
-    ``PatchCollection`` bakes internally anyway) and a ``PathCollection`` avoids constructing one
-    ``matplotlib.patches.*`` object per shape — the dominant cost for large shape elements.
+    Built once and shared across the fill and outline ``PathCollection``s in :func:`_render_shapes`.
+    Emitting ``Path``s directly avoids constructing one ``matplotlib.patches.*`` object per shape — the
+    dominant cost for large shape elements.
 
     Returns
     -------
@@ -135,7 +134,6 @@ def _build_shape_paths(
 
     # Resolve the scale scalar once instead of per shape.
     scale_value = _extract_scalar_value(scale, default=1.0)
-    unit_circle = mpath.Path.unit_circle()
 
     paths: list[mpath.Path] = []
     row_idx: list[int] = []
@@ -154,10 +152,7 @@ def _build_shape_paths(
                 row_idx.append(i)
         elif geom_type == "Point":
             radius_value = _extract_scalar_value(radii[i], default=0.0) if radii is not None else 0.0
-            # unit circle scaled by radius and translated to the centre — identical to the path a
-            # PatchCollection bakes from mpatches.Circle((x, y), radius).
-            verts = unit_circle.vertices * (radius_value * scale_value) + (geom.x, geom.y)
-            paths.append(mpath.Path(verts, unit_circle.codes))
+            paths.append(mpath.Path.circle((geom.x, geom.y), radius_value * scale_value))
             row_idx.append(i)
 
     return paths, row_idx, len(geoms)
@@ -209,9 +204,7 @@ def _get_collection_shape(
     else:
         outline_c = [None] * fill_c.shape[0]
 
-    # Build (or reuse) the matplotlib paths. Geometry is colour-independent, so the
-    # caller can build it once via `_build_shape_paths` and share it across the fill
-    # and outline collections instead of rebuilding it on every call.
+    # Reuse the shared paths when provided (see _build_shape_paths), else build them.
     paths, row_idx, n_shapes = prebuilt_paths if prebuilt_paths is not None else _build_shape_paths(shapes, s)
 
     if not paths:
