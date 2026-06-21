@@ -336,6 +336,15 @@ def _ds_shade_categorical(
     return _apply_user_alpha(shaded, alpha)
 
 
+def _color_vector_is_uniform(color_vector: Any) -> bool:
+    """True if every entry of the per-point colour vector is the same (categorical compositing collapses)."""
+    if color_vector is None or len(color_vector) == 0:
+        return False
+    arr = np.asarray(color_vector)
+    # nunique via factorize is hash-based O(n) (no sort); short-circuits the expensive ds.by path below.
+    return pd.Series(arr).nunique(dropna=False) == 1
+
+
 def _shade_datashader_aggregate(
     cvs: ds.Canvas,
     frame: Any,
@@ -365,6 +374,14 @@ def _shade_datashader_aggregate(
     element-specific prep (geometry transform / point parse), outline rendering, ``_render_ds_image``
     and ``_build_ds_colorbar``.
     """
+    # Single-colour collapse: when every point resolves to the same colour (e.g. past scanpy's
+    # 102-colour palette all categories are uniform grey), the per-category ds.by aggregate + composite
+    # is wasted and byte-identical to a plain single-colour count render. Detect it from the colour
+    # vector and route to the cheap count path — ~14x faster on high-cardinality categoricals (Xenium
+    # points coloured by gene). _ds_shade_categorical then colours the count by color_vector[0].
+    if color_by_categorical and _color_vector_is_uniform(color_vector):
+        col_for_color, color_by_categorical = None, False
+
     agg, reduction_bounds, nan_agg = _ds_aggregate(
         cvs, frame, col_for_color, color_by_categorical, ds_reduction, default_reduction, kind
     )
