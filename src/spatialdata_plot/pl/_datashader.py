@@ -382,9 +382,10 @@ def _shade_datashader_aggregate(
         and color_vector[0].startswith("#")
     ):
         # color_vector usually holds only a few distinct hex strings (one per category), so strip
-        # alpha on the unique values and map back rather than parsing once per point.
-        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
+        # alpha on the unique values and map back rather than parsing once per point. pd.factorize
+        # dedups in O(n) (hash, no sort) — np.unique would sort millions of strings (argsort cost).
+        codes, uniques = pd.factorize(np.asarray(color_vector))
+        color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
 
     # density without a color column collapses to a sequential count gradient; everything else with no
     # explicit continuous value (categorical or no color) goes through the categorical shader.
