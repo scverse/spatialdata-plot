@@ -1057,11 +1057,11 @@ def _scatter_points(
     # machinery — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
     # Numeric vectors keep the ``c=``/``cmap``/``norm`` path (they need the colormap).
     color_kwargs: dict[str, Any]
-    if isinstance(color_vector, pd.Categorical) and (color_vector.codes >= 0).all():
+    if isinstance(color_vector, pd.Categorical) and len(color_vector) and (color_vector.codes >= 0).all():
         # Categorical hex colours: pass the int codes + a ListedColormap of the (few) category colours
         # instead of expanding to a per-point hex object array (~8x more memory at scale). BoundaryNorm
         # edges at the half-integers map code i -> colormap entry i exactly, so the RGBA is identical.
-        # (_color.py bakes NaN into the na_color category, so codes >= 0; a stray -1 falls back below.)
+        # _color.py bakes NaN into the na_color category, so codes >= 0 here; anything else takes the path below.
         categories = list(color_vector.categories)
         if len(categories) == 1:
             color_kwargs = {"color": str(categories[0])}  # uniform: scalar color=, skip per-point machinery

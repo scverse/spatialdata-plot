@@ -1349,22 +1349,17 @@ def _categorical_hex_vector(n: int, k: int, seed: int = 0) -> pd.Categorical:
     return pd.Categorical(pd.Series(src).map(palette))
 
 
+_SCATTER_KW = {"size": 10.0, "cmap": "viridis", "norm": Normalize(), "alpha": 1.0, "trans_data": None, "zorder": 1}
+
+
 def test_scatter_points_categorical_codes_match_per_point_hex():
     # The codes+ListedColormap path must produce byte-identical RGBA to passing the per-point hex array.
     cv = _categorical_hex_vector(400, k=6, seed=1)
     rng = np.random.default_rng(2)
     x, y = rng.random(400), rng.random(400)
-    common = {
-        "size": 10.0,
-        "cmap": plt.get_cmap("viridis"),
-        "norm": Normalize(),
-        "alpha": 1.0,
-        "trans_data": None,
-        "zorder": 1,
-    }
 
     fig, ax = plt.subplots()
-    sc_codes = _scatter_points(ax, x, y, cv, **common)  # exercises the new codes path
+    sc_codes = _scatter_points(ax, x, y, cv, **_SCATTER_KW)  # exercises the new codes path
     sc_codes.update_scalarmappable()
     fc_codes = sc_codes.get_facecolors()
     plt.close(fig)
@@ -1382,18 +1377,7 @@ def test_scatter_points_single_category_uses_scalar_color():
     cv = _categorical_hex_vector(300, k=1, seed=3)
     rng = np.random.default_rng(5)
     fig, ax = plt.subplots()
-    sc = _scatter_points(
-        ax,
-        rng.random(300),
-        rng.random(300),
-        cv,
-        size=10.0,
-        cmap=plt.get_cmap("viridis"),
-        norm=Normalize(),
-        alpha=1.0,
-        trans_data=None,
-        zorder=1,
-    )
+    sc = _scatter_points(ax, rng.random(300), rng.random(300), cv, **_SCATTER_KW)
     assert sc.get_facecolors().shape[0] == 1  # scalar color -> single facecolor
     plt.close(fig)
 

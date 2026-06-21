@@ -110,8 +110,7 @@ def _build_datashader_color_key(
     # avoiding a Python loop over all points.  See #379.
     unique_codes, first_indices = np.unique(codes, return_index=True)
 
-    # Index color_vector only at those first occurrences (one per category) rather than expanding the
-    # whole per-point vector to an object array — color_vector is a compact pd.Categorical at scale.
+    # Index only the first occurrence per category — color_vector is a compact pd.Categorical at scale.
     first_color: dict[str, str] = {}
     for code, idx in zip(unique_codes, first_indices, strict=True):
         if code < 0 or idx >= len(color_vector):
@@ -404,14 +403,17 @@ def _shade_datashader_aggregate(
         and isinstance(color_vector[0], str)
         and color_vector[0].startswith("#")
     ):
-        # Strip alpha on the unique colours, never on the per-point vector. color_vector is already a
-        # pd.Categorical (codes + a small palette) at scale: strip its k categories and remap the codes,
-        # staying compact. (Plain-array fallback factorizes in O(n) — hash, no sort.)
+        # Strip alpha on the k categories, never on the per-point vector — color_vector is a compact
+        # pd.Categorical at scale. (Plain-array fallback factorizes in O(n): hash, no sort.)
         if isinstance(color_vector, pd.Categorical):
-            stripped = np.asarray([_hex_no_alpha(c) for c in color_vector.categories])
-            uniq_codes, uniques = pd.factorize(stripped)  # dedup over k categories, not n points
-            new_codes = np.where(color_vector.codes >= 0, uniq_codes[color_vector.codes], -1)
-            color_vector = pd.Categorical.from_codes(new_codes, categories=uniques)
+            stripped = [_hex_no_alpha(c) for c in color_vector.categories]
+            uniq_codes, uniques = pd.factorize(np.asarray(stripped))
+            if len(uniques) == len(stripped):
+                color_vector = color_vector.rename_categories(stripped)  # no collisions: reuse the codes as-is
+            else:  # two categories share a stripped colour: remap, keeping the compact int width
+                remapped = uniq_codes[color_vector.codes].astype(color_vector.codes.dtype)
+                remapped[color_vector.codes < 0] = -1
+                color_vector = pd.Categorical.from_codes(remapped, categories=uniques)
         else:
             codes, uniques = pd.factorize(np.asarray(color_vector))
             color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
