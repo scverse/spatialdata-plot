@@ -1051,6 +1051,24 @@ def _scatter_points(
     Shared scatter primitive for points and the centroid "fast mode" of shapes/labels;
     ``color_vector`` is per-point hex strings or numeric values mapped through ``cmap``/``norm``.
     """
+    # When every marker is the same resolved colour (no-color / single colour / collapsed grey), pass a
+    # scalar ``color=`` instead of a per-point ``c=`` array: matplotlib then skips its per-point colour
+    # processing — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
+    # Restricted to fixed-width string colour arrays so the check is a cheap vectorised compare; numeric
+    # values keep the ``c=``/``cmap``/``norm`` path.
+    cv = np.asarray(color_vector)
+    if cv.ndim == 1 and cv.dtype.kind in "US" and cv.size > 0 and bool((cv == cv[0]).all()):
+        return ax.scatter(
+            x,
+            y,
+            s=size,
+            color=str(cv[0]),
+            rasterized=sc_settings._vector_friendly,
+            alpha=alpha,
+            transform=trans_data,
+            zorder=zorder,
+            plotnonfinite=True,
+        )
     return ax.scatter(
         x,
         y,
