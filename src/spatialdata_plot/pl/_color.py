@@ -52,6 +52,7 @@ from spatialdata_plot.pl.utils import (
     _MPL_SINGLE_LETTER_COLORS,
     _build_alignment_dtype_hint,
     _ensure_one_to_one_mapping,
+    _first_color_per_category,
     _format_element_name,
     to_hex,
 )
@@ -907,16 +908,10 @@ def _map_color_seg(
         #  - continuous: outline_color_source_vector is None; outline_color_vector is numeric.
         if outline_color_source_vector is not None:
             cat = pd.Categorical(outline_color_source_vector)
-            cat_codes = cat.codes
-            outline_val_im: ArrayLike = map_array(seg, cell_id, cat_codes + 1)
-            color_arr = np.asarray(outline_color_vector, dtype=object)
-            # Pick the first per-cell hex for each category in one vectorized pass
-            # (avoids `K × O(N)` Python loops on large label sets).
-            cat_colors: list[Any] = [na_color.get_hex_with_alpha()] * len(cat.categories)
-            unique_codes, first_indices = np.unique(cat_codes, return_index=True)
-            for code, idx in zip(unique_codes, first_indices, strict=True):
-                if code >= 0:
-                    cat_colors[code] = color_arr[idx]
+            outline_val_im: ArrayLike = map_array(seg, cell_id, cat.codes + 1)
+            # First per-cell hex for each category (shared one-pass helper); na_color for absent categories.
+            first = _first_color_per_category(cat, outline_color_vector)
+            cat_colors = [first.get(c, na_color.get_hex_with_alpha()) for c in cat.categories]
             outline_cols = colors.to_rgba_array(cat_colors)
         else:
             # Continuous: numeric values normalized via cmap

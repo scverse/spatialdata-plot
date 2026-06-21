@@ -43,6 +43,7 @@ from spatialdata_plot.pl._color import (
 from spatialdata_plot.pl.render_params import Color, FigParams, ShapesRenderParams, _DsReduction
 from spatialdata_plot.pl.utils import (
     _fast_extent,
+    _first_color_per_category,
     to_hex,
 )
 
@@ -97,27 +98,20 @@ def _build_datashader_color_key(
 ) -> dict[str, str]:
     """Build a datashader ``color_key`` dict from a categorical series and its color vector."""
     na_hex = _hex_no_alpha(na_color_hex) if na_color_hex.startswith("#") else na_color_hex
-    colors_arr = np.asarray(color_vector, dtype=object)
     categories = np.asarray(cat_series.categories, dtype=str)
-    codes = np.asarray(cat_series.codes)
 
-    if len(colors_arr) != len(codes):
+    if len(color_vector) != len(cat_series.codes):
         logger.warning(
             f"color_vector length ({len(color_vector)}) does not match categorical series length "
-            f"({len(codes)}); some categories may receive the na_color fallback."
+            f"({len(cat_series.codes)}); some categories may receive the na_color fallback."
         )
 
-    # Use np.unique to find the first occurrence of each category in one pass,
-    # avoiding a Python loop over all points.  See #379.
-    unique_codes, first_indices = np.unique(codes, return_index=True)
-
-    first_color: dict[str, str] = {}
-    for code, idx in zip(unique_codes, first_indices, strict=True):
-        if code < 0 or idx >= len(colors_arr):
-            continue
-        c = colors_arr[idx]
-        first_color[categories[code]] = _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
-
+    # Shared first-colour-per-category pass; strip alpha on the (few) resolved hex colours and fall back
+    # to na_hex for any category not present.
+    first_color = {
+        str(cat): _hex_no_alpha(c) if isinstance(c, str) and c.startswith("#") else c
+        for cat, c in _first_color_per_category(cat_series, color_vector).items()
+    }
     return {cat: first_color.get(cat, na_hex) for cat in categories}
 
 
@@ -343,6 +337,9 @@ def _color_vector_is_uniform(color_vector: Any) -> bool:
     """
     if color_vector is None or len(color_vector) == 0:
         return False
+    if isinstance(color_vector, pd.Categorical):  # compact form: compare int8 codes, never expand
+        codes = color_vector.codes
+        return bool((codes == codes[0]).all())
     arr = np.asarray(color_vector)
     if arr.dtype.kind in "US":  # fixed-width strings (the resolved-hex case): cheap vectorised compare
         return bool((arr == arr[0]).all())
@@ -403,10 +400,20 @@ def _shade_datashader_aggregate(
         and isinstance(color_vector[0], str)
         and color_vector[0].startswith("#")
     ):
-        # Strip alpha on the unique colours and map back rather than parsing once per point; pd.factorize
-        # dedups in O(n) (hash, no sort) where np.unique would sort millions of strings.
-        codes, uniques = pd.factorize(np.asarray(color_vector))
-        color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
+        # Strip alpha on the k categories, never on the per-point vector — color_vector is a compact
+        # pd.Categorical at scale. (Plain-array fallback factorizes in O(n): hash, no sort.)
+        if isinstance(color_vector, pd.Categorical):
+            stripped = [_hex_no_alpha(c) for c in color_vector.categories]
+            uniq_codes, uniques = pd.factorize(np.asarray(stripped))
+            if len(uniques) == len(stripped):
+                color_vector = color_vector.rename_categories(stripped)  # no collisions: reuse the codes as-is
+            else:  # two categories share a stripped colour: remap, keeping the compact int width
+                remapped = uniq_codes[color_vector.codes].astype(color_vector.codes.dtype)
+                remapped[color_vector.codes < 0] = -1
+                color_vector = pd.Categorical.from_codes(remapped, categories=uniques)
+        else:
+            codes, uniques = pd.factorize(np.asarray(color_vector))
+            color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
 
     # density without a color column collapses to a sequential count gradient; everything else with no
     # explicit continuous value (categorical or no color) goes through the categorical shader.

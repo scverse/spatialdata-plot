@@ -31,7 +31,7 @@ from spatialdata_plot.pl._datashader import (
     _ds_shade_categorical,
     _pad_degenerate_extent,
 )
-from spatialdata_plot.pl.render import _marker_spread_px, _warn_groups_ignored_continuous
+from spatialdata_plot.pl.render import _marker_spread_px, _scatter_points, _warn_groups_ignored_continuous
 from tests.conftest import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
@@ -1338,3 +1338,60 @@ def test_datashader_zero_extent_renders(coords):
     sdata = SpatialData(points={"points": PointsModel.parse(df)})
     sdata.pl.render_points("points", method="datashader").pl.show()
     plt.close("all")
+
+
+def _categorical_hex_vector(n: int, k: int, seed: int = 0) -> pd.Categorical:
+    """Per-point hex colour vector as _set_color_source_vec builds it: Categorical(source.map(palette))."""
+    rng = np.random.default_rng(seed)
+    cats = [f"ct{i}" for i in range(k)]
+    src = pd.Categorical(rng.choice(cats, n), categories=cats)
+    palette = {c: f"#{(i * 9973) % 0xFFFFFF:06x}ff" for i, c in enumerate(cats)}
+    return pd.Categorical(pd.Series(src).map(palette))
+
+
+_SCATTER_KW = {"size": 10.0, "cmap": "viridis", "norm": Normalize(), "alpha": 1.0, "trans_data": None, "zorder": 1}
+
+
+def test_scatter_points_categorical_codes_match_per_point_hex():
+    # The codes+ListedColormap path must produce byte-identical RGBA to passing the per-point hex array.
+    cv = _categorical_hex_vector(400, k=6, seed=1)
+    rng = np.random.default_rng(2)
+    x, y = rng.random(400), rng.random(400)
+
+    fig, ax = plt.subplots()
+    sc_codes = _scatter_points(ax, x, y, cv, **_SCATTER_KW)  # exercises the new codes path
+    sc_codes.update_scalarmappable()
+    fc_codes = sc_codes.get_facecolors()
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    sc_hex = ax.scatter(x, y, c=np.asarray(cv), s=10.0)  # reference: literal per-point hex
+    fc_hex = sc_hex.get_facecolors()
+    plt.close(fig)
+
+    assert np.abs(fc_codes - fc_hex).max() == 0.0
+
+
+def test_scatter_points_single_category_uses_scalar_color():
+    # A single resolved colour must keep the scalar color= fast path (one facecolor, not a per-point array).
+    cv = _categorical_hex_vector(300, k=1, seed=3)
+    rng = np.random.default_rng(5)
+    fig, ax = plt.subplots()
+    sc = _scatter_points(ax, rng.random(300), rng.random(300), cv, **_SCATTER_KW)
+    assert sc.get_facecolors().shape[0] == 1  # scalar color -> single facecolor
+    plt.close(fig)
+
+
+def test_build_datashader_color_key_categorical_indexes_palette():
+    # The color key must map each category to its alpha-stripped colour without expanding the full vector.
+    cv = _categorical_hex_vector(500, k=5, seed=4)
+    source = pd.Categorical([f"g{i % 5}" for i in range(500)], categories=[f"g{i}" for i in range(5)])
+    key = _build_datashader_color_key(source, cv, "#808080ff")
+    # equivalence with the previous object-array expansion:
+    colors_arr = np.asarray(cv, dtype=object)
+    codes = source.codes
+    expected = {}
+    for code, idx in zip(*np.unique(codes, return_index=True), strict=True):
+        c = colors_arr[idx]
+        expected[str(np.asarray(source.categories)[code])] = c[:7] if c.startswith("#") else c
+    assert key == expected
