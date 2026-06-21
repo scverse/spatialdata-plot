@@ -337,12 +337,16 @@ def _ds_shade_categorical(
 
 
 def _color_vector_is_uniform(color_vector: Any) -> bool:
-    """True if every entry of the per-point colour vector is the same (categorical compositing collapses)."""
+    """True if every entry of the per-point colour vector is identical (so per-point colouring collapses).
+
+    Shared by the datashader categorical collapse and the matplotlib scalar-colour fast path.
+    """
     if color_vector is None or len(color_vector) == 0:
         return False
     arr = np.asarray(color_vector)
-    # nunique via factorize is hash-based O(n) (no sort); short-circuits the expensive ds.by path below.
-    return pd.Series(arr).nunique(dropna=False) == 1
+    if arr.dtype.kind in "US":  # fixed-width strings (the resolved-hex case): cheap vectorised compare
+        return bool((arr == arr[0]).all())
+    return pd.Series(arr).nunique(dropna=False) == 1  # object/other: hash-based, no sort
 
 
 def _shade_datashader_aggregate(
@@ -393,14 +397,14 @@ def _shade_datashader_aggregate(
 
     if (
         strip_alpha_hex
+        and col_for_color is not None  # no-color/collapse: _ds_shade_categorical strips color_vector[0] itself
         and color_vector is not None
         and len(color_vector) > 0
         and isinstance(color_vector[0], str)
         and color_vector[0].startswith("#")
     ):
-        # color_vector usually holds only a few distinct hex strings (one per category), so strip
-        # alpha on the unique values and map back rather than parsing once per point. pd.factorize
-        # dedups in O(n) (hash, no sort) — np.unique would sort millions of strings (argsort cost).
+        # Strip alpha on the unique colours and map back rather than parsing once per point; pd.factorize
+        # dedups in O(n) (hash, no sort) where np.unique would sort millions of strings.
         codes, uniques = pd.factorize(np.asarray(color_vector))
         color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
 

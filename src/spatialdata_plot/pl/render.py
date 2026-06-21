@@ -44,6 +44,7 @@ from spatialdata_plot.pl._datashader import (
     _ax_show_and_transform,
     _build_ds_colorbar,
     _circle_buffer_quad_segs,
+    _color_vector_is_uniform,
     _datashader_canvas_from_dataframe,
     _get_extent_and_range_for_datashader_canvas,
     _hex_no_alpha,
@@ -1051,36 +1052,26 @@ def _scatter_points(
     Shared scatter primitive for points and the centroid "fast mode" of shapes/labels;
     ``color_vector`` is per-point hex strings or numeric values mapped through ``cmap``/``norm``.
     """
-    # When every marker is the same resolved colour (no-color / single colour / collapsed grey), pass a
+    # When every marker is the same resolved hex colour (no-color / single colour / collapsed grey), pass a
     # scalar ``color=`` instead of a per-point ``c=`` array: matplotlib then skips its per-point colour
-    # processing — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
-    # Restricted to fixed-width string colour arrays so the check is a cheap vectorised compare; numeric
-    # values keep the ``c=``/``cmap``/``norm`` path.
+    # machinery — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
+    # Numeric vectors keep the ``c=``/``cmap``/``norm`` path (they need the colormap).
     cv = np.asarray(color_vector)
-    if cv.ndim == 1 and cv.dtype.kind in "US" and cv.size > 0 and bool((cv == cv[0]).all()):
-        return ax.scatter(
-            x,
-            y,
-            s=size,
-            color=str(cv[0]),
-            rasterized=sc_settings._vector_friendly,
-            alpha=alpha,
-            transform=trans_data,
-            zorder=zorder,
-            plotnonfinite=True,
-        )
+    color_kwargs: dict[str, Any]
+    if cv.ndim == 1 and cv.dtype.kind in "US" and _color_vector_is_uniform(cv):
+        color_kwargs = {"color": str(cv[0])}
+    else:
+        color_kwargs = {"c": color_vector, "cmap": cmap, "norm": norm}
     return ax.scatter(
         x,
         y,
         s=size,
-        c=color_vector,
         rasterized=sc_settings._vector_friendly,
-        cmap=cmap,
-        norm=norm,
         alpha=alpha,
         transform=trans_data,
         zorder=zorder,
         plotnonfinite=True,  # nan points should be rendered as well
+        **color_kwargs,
     )
 
 
