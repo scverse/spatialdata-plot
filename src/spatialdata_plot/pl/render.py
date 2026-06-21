@@ -15,17 +15,14 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import spatialdata as sd
 import xarray as xr
-from anndata import AnnData
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Colormap, ListedColormap, Normalize
 from scanpy._settings import settings as sc_settings
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values
-from spatialdata._core.query.relational_query import match_table_to_element
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -38,7 +35,6 @@ from spatialdata_plot.pl._color import (
     _get_colors_for_categorical_obs,
     _get_linear_colormap,
     _map_color_seg,
-    _maybe_set_colors,
     _prepare_cmap_norm,
     _resolve_continuous_norm,
     resolve_color,
@@ -48,6 +44,7 @@ from spatialdata_plot.pl._datashader import (
     _ax_show_and_transform,
     _build_ds_colorbar,
     _circle_buffer_quad_segs,
+    _color_vector_is_uniform,
     _datashader_canvas_from_dataframe,
     _get_extent_and_range_for_datashader_canvas,
     _hex_no_alpha,
@@ -333,7 +330,6 @@ def _add_legend_and_colorbar(
     ax: matplotlib.axes.SubplotBase,
     cax: ScalarMappable | None,
     fig_params: FigParams,
-    adata: AnnData | None,
     col_for_color: str | None,
     color_spec: ColorSpec,
     palette: ListedColormap | list[str] | None,
@@ -387,7 +383,6 @@ def _add_legend_and_colorbar(
             ax=ax,
             cax=cax,
             fig_params=fig_params,
-            adata=adata,
             value_to_plot=col_for_color,
             color_source_vector=color_source_vector,
             color_vector=color_vector,
@@ -755,7 +750,6 @@ def _render_shapes(
             color_spec=color_spec,
             norm=norm,
             na_color=render_params.cmap_params.na_color,
-            adata=table,
             col_for_color=col_for_color,
             palette=palette,
             fig_params=fig_params,
@@ -1025,7 +1019,6 @@ def _render_shapes(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
-        adata=table,
         col_for_color=col_for_color,
         color_spec=color_spec,
         palette=palette,
@@ -1059,18 +1052,26 @@ def _scatter_points(
     Shared scatter primitive for points and the centroid "fast mode" of shapes/labels;
     ``color_vector`` is per-point hex strings or numeric values mapped through ``cmap``/``norm``.
     """
+    # When every marker is the same resolved hex colour (no-color / single colour / collapsed grey), pass a
+    # scalar ``color=`` instead of a per-point ``c=`` array: matplotlib then skips its per-point colour
+    # machinery — the dominant cost at scale (10M points: ~9s -> ~3.7s) — for a visually identical result.
+    # Numeric vectors keep the ``c=``/``cmap``/``norm`` path (they need the colormap).
+    cv = np.asarray(color_vector)
+    color_kwargs: dict[str, Any]
+    if cv.ndim == 1 and cv.dtype.kind in "US" and _color_vector_is_uniform(cv):
+        color_kwargs = {"color": str(cv[0])}
+    else:
+        color_kwargs = {"c": color_vector, "cmap": cmap, "norm": norm}
     return ax.scatter(
         x,
         y,
         s=size,
-        c=color_vector,
         rasterized=sc_settings._vector_friendly,
-        cmap=cmap,
-        norm=norm,
         alpha=alpha,
         transform=trans_data,
         zorder=zorder,
         plotnonfinite=True,  # nan points should be rendered as well
+        **color_kwargs,
     )
 
 
@@ -1110,7 +1111,6 @@ def _render_centroids_as_points(
     color_spec: ColorSpec,
     norm: Normalize | None,
     na_color: Any,
-    adata: AnnData | None,
     col_for_color: str | None,
     palette: Any,
     fig_params: FigParams,
@@ -1170,7 +1170,6 @@ def _render_centroids_as_points(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
-        adata=adata,
         col_for_color=col_for_color,
         color_spec=color_spec,
         palette=palette,
@@ -1382,49 +1381,14 @@ def _render_points(
         else points_pd_with_color
     )
 
-    # we construct an anndata to hack the plotting functions
-    if table_name is None:
-        adata = AnnData(
-            X=points[["x", "y"]].values,
-            obs=points[coords],
-            dtype=points[["x", "y"]].values.dtype,
-        )
-    else:
-        matched_table = match_table_to_element(sdata=sdata, element_name=element, table_name=table_name)
-        adata_obs = matched_table.obs.copy()
-        # if the points are colored by values in X (or a different layer), add the values to obs
-        if col_for_color in matched_table.var_names:
-            if table_layer is None:
-                adata_obs[col_for_color] = matched_table[:, col_for_color].X.flatten()
-            else:
-                adata_obs[col_for_color] = matched_table[:, col_for_color].layers[table_layer].flatten()
-        adata = AnnData(
-            X=points[["x", "y"]].values,
-            obs=adata_obs,
-            dtype=points[["x", "y"]].values.dtype,
-            uns=matched_table.uns,
-        )
-        sdata_filt[table_name] = adata
-
-    # we can modify the sdata because of dealing with a copy
+    # Color (from a points column, table obs, or table var/X) is already materialized on `points` via
+    # the get_values merge above; coordinates and the legend come straight from `points`/`color_spec`,
+    # so no AnnData round-trip is needed. resolve_color reads the original table (kept in sdata_filt)
+    # for any user-defined uns palette.
 
     # Convert back to dask dataframe to modify sdata
     transformation_in_cs = sdata_filt.points[element].attrs["transform"][coordinate_system]
     _reparse_points(sdata_filt, element, points_for_model, transformation_in_cs, coordinate_system, col_for_color)
-
-    if col_for_color is not None:
-        assert isinstance(col_for_color, str)
-        cols = sc.get.obs_df(adata, [col_for_color])
-        # maybe set color based on type
-        if isinstance(cols[col_for_color].dtype, pd.CategoricalDtype):
-            uns_color_key = f"{col_for_color}_colors"
-            if uns_color_key in adata.uns:
-                _maybe_set_colors(
-                    source=adata,
-                    target=adata,
-                    key=col_for_color,
-                    palette=palette,
-                )
 
     # when user specified a single color, we emulate the form of `na_color` and use it
     default_color = (
@@ -1478,9 +1442,8 @@ def _render_points(
         color_spec = color_spec.filter(keep)
         if int(keep.sum()) == 0:
             return
-        # filter the materialized points, adata, and re-register in sdata_filt
+        # filter the materialized points and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
-        adata = adata[keep]
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
@@ -1550,8 +1513,8 @@ def _render_points(
         update_parameters = not _mpl_ax_contains_elements(ax)
         cax = _scatter_points(
             ax,
-            adata[:, 0].X.flatten(),
-            adata[:, 1].X.flatten(),
+            points["x"].to_numpy(),
+            points["y"].to_numpy(),
             color_spec.color_vector,
             size=render_params.size,
             cmap=render_params.cmap_params.cmap,
@@ -1570,7 +1533,6 @@ def _render_points(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
-        adata=adata,
         col_for_color=col_for_color,
         color_spec=color_spec,
         palette=None,
@@ -2409,7 +2371,6 @@ def _render_labels(
             ),
             norm=render_params.cmap_params.fresh_norm(),  # ax.scatter autoscales in place; don't mutate the shared norm
             na_color=na_color,
-            adata=table if table_name is not None else None,
             col_for_color=col_for_color,
             palette=palette,
             fig_params=fig_params,
@@ -2510,7 +2471,6 @@ def _render_labels(
         ax=ax,
         cax=cax,
         fig_params=fig_params,
-        adata=table,
         col_for_color=col_for_color,
         color_spec=color_spec,
         palette=palette,

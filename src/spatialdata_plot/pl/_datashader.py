@@ -336,6 +336,19 @@ def _ds_shade_categorical(
     return _apply_user_alpha(shaded, alpha)
 
 
+def _color_vector_is_uniform(color_vector: Any) -> bool:
+    """True if every entry of the per-point colour vector is identical (so per-point colouring collapses).
+
+    Shared by the datashader categorical collapse and the matplotlib scalar-colour fast path.
+    """
+    if color_vector is None or len(color_vector) == 0:
+        return False
+    arr = np.asarray(color_vector)
+    if arr.dtype.kind in "US":  # fixed-width strings (the resolved-hex case): cheap vectorised compare
+        return bool((arr == arr[0]).all())
+    return pd.Series(arr).nunique(dropna=False) == 1  # object/other: hash-based, no sort
+
+
 def _shade_datashader_aggregate(
     cvs: ds.Canvas,
     frame: Any,
@@ -365,6 +378,14 @@ def _shade_datashader_aggregate(
     element-specific prep (geometry transform / point parse), outline rendering, ``_render_ds_image``
     and ``_build_ds_colorbar``.
     """
+    # Single-colour collapse: when every point resolves to the same colour (e.g. past scanpy's
+    # 102-colour palette all categories are uniform grey), the per-category ds.by aggregate + composite
+    # is wasted and byte-identical to a plain single-colour count render. Detect it from the colour
+    # vector and route to the cheap count path — ~14x faster on high-cardinality categoricals (Xenium
+    # points coloured by gene). _ds_shade_categorical then colours the count by color_vector[0].
+    if color_by_categorical and _color_vector_is_uniform(color_vector):
+        col_for_color, color_by_categorical = None, False
+
     agg, reduction_bounds, nan_agg = _ds_aggregate(
         cvs, frame, col_for_color, color_by_categorical, ds_reduction, default_reduction, kind
     )
@@ -376,15 +397,16 @@ def _shade_datashader_aggregate(
 
     if (
         strip_alpha_hex
+        and col_for_color is not None  # no-color/collapse: _ds_shade_categorical strips color_vector[0] itself
         and color_vector is not None
         and len(color_vector) > 0
         and isinstance(color_vector[0], str)
         and color_vector[0].startswith("#")
     ):
-        # color_vector usually holds only a few distinct hex strings (one per category), so strip
-        # alpha on the unique values and map back rather than parsing once per point.
-        unique_hex, inverse = np.unique(color_vector, return_inverse=True)
-        color_vector = np.asarray([_hex_no_alpha(c) for c in unique_hex])[inverse]
+        # Strip alpha on the unique colours and map back rather than parsing once per point; pd.factorize
+        # dedups in O(n) (hash, no sort) where np.unique would sort millions of strings.
+        codes, uniques = pd.factorize(np.asarray(color_vector))
+        color_vector = np.asarray([_hex_no_alpha(c) for c in uniques])[codes]
 
     # density without a color column collapses to a sequential count gradient; everything else with no
     # explicit continuous value (categorical or no color) goes through the categorical shader.

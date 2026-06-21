@@ -31,6 +31,7 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from pandas.api.types import CategoricalDtype, is_numeric_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
+from scanpy.plotting import palettes
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import (
     SpatialData,
@@ -447,6 +448,12 @@ def _stack_categorical_legend(
     new_leg._sdata_column = column  # type: ignore[attr-defined]
 
 
+# A per-entry legend past this many categories is unreadable, and scanpy builds it in O(categories^2)
+# (one autoscaling artist each), dominating the render — so skip it with a warning. Tied to scanpy's
+# default_102 palette, beyond which its *default* colors also stop being distinguishable (uniform grey).
+_MAX_LEGEND_CATEGORIES = len(palettes.default_102)
+
+
 def _decorate_axs(
     ax: Axes,
     cax: PatchCollection,
@@ -454,7 +461,6 @@ def _decorate_axs(
     value_to_plot: str | None,
     color_source_vector: pd.Series[CategoricalDtype] | Categorical,
     color_vector: pd.Series[CategoricalDtype] | Categorical,
-    adata: AnnData | None = None,
     palette: ListedColormap | str | list[str] | None = None,
     alpha: float = 1.0,
     na_color: Color = Color("default"),
@@ -499,6 +505,14 @@ def _decorate_axs(
             already = any(tagged)
             if legend_loc in (None, "none"):
                 pass  # legend suppressed
+            elif len(clusters) > _MAX_LEGEND_CATEGORIES:
+                # A per-entry legend this large is unreadable and scanpy builds it in O(categories^2)
+                # (one autoscaling artist each), dominating the render. Skip it.
+                logger.warning(
+                    f"Skipping the categorical legend for '{value_to_plot}': {len(clusters)} categories "
+                    f"exceed the {_MAX_LEGEND_CATEGORIES}-entry limit (unreadable and very slow to build). "
+                    f"Pass a `groups` subset to get a legend."
+                )
             elif already:
                 na_hex = na_color.get_hex() if (na_in_legend and pd.isnull(color_source_vector).any()) else None
                 _stack_categorical_legend(
