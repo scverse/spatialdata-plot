@@ -13,10 +13,9 @@ maintainers = [
 authors = [
   { name = "scverse" },
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -82,7 +81,7 @@ envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.hatch-test.dependency-groups = [ "test" ]
 envs.hatch-test.matrix = [
-  { deps = [ "stable" ], python = [ "3.11", "3.14" ] },
+  { deps = [ "stable" ], python = [ "3.12", "3.14" ] },
   { deps = [ "pre" ], python = [ "3.14" ] }
 ]
 envs.hatch-test.overrides.matrix.deps.env-vars = [
@@ -100,7 +99,7 @@ channels = [ "conda-forge" ]
 platforms = [ "linux-64", "osx-arm64" ]
 
 [tool.pixi.dependencies]
-python = ">=3.11"
+python = ">=3.12"
 
 [tool.pixi.pypi-dependencies]
 spatialdata-plot = { path = ".", editable = true }
@@ -122,8 +121,8 @@ pre-commit-run = "pre-commit run --all-files"
 test = "pytest -v --color=yes --tb=short --durations=10"
 
 # for gh-actions
-[tool.pixi.feature.py311.dependencies]
-python = "3.11.*"
+[tool.pixi.feature.py312.dependencies]
+python = "3.12.*"
 
 [tool.pixi.feature.py313.dependencies]
 python = "3.13.*"
@@ -131,11 +130,11 @@ python = "3.13.*"
 [tool.pixi.environments]
 # 3.13 lane
 default = { features = [ "py313" ], solve-group = "py313" }
-# 3.11 lane (for gh-actions)
-dev-py311 = { features = [ "dev", "test", "py311" ], solve-group = "py311" }
+# 3.12 lane (for gh-actions)
+dev-py312 = { features = [ "dev", "test", "py312" ], solve-group = "py312" }
 dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
 dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
-docs-py311 = { features = [ "doc", "py311" ], solve-group = "py311" }
+docs-py312 = { features = [ "doc", "py312" ], solve-group = "py312" }
 docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
 test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
 
