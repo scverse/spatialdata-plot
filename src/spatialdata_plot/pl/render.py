@@ -2400,7 +2400,16 @@ def _render_labels(
         # non-linear norm (LogNorm/PowerNorm). Display the RGB without a norm and build the
         # continuous colorbar mappable separately from the resolved norm (mirrors the outline path),
         # so the colorbar reflects the real norm subclass.
-        img = ax.imshow(labels, rasterized=True, alpha=alpha, origin="lower", zorder=render_params.zorder)
+        # Pixel-edge extent (0, W, 0, H) matching get_extent/the affine box; mpl's default
+        # pixel-center extent would offset labels half a pixel. Order follows origin="lower".
+        img = ax.imshow(
+            labels,
+            rasterized=True,
+            alpha=alpha,
+            origin="lower",
+            extent=(0.0, labels.shape[1], 0.0, labels.shape[0]),
+            zorder=render_params.zorder,
+        )
         img.set_transform(trans_data)
         if color_spec.is_categorical:
             return img

@@ -61,6 +61,22 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum", colorbar=False, **kw).pl.show(ax=ax)
             ax.set_title(title, fontsize=8)
 
+    def test_plot_label_centroids_sit_at_pixel_centers(self):
+        # Regression for #216: on a tiny grid each data-pixel spans many display pixels, so a
+        # half-pixel image/overlay shift is blatant. Centroids (spatialdata's pixel-edge
+        # convention) must sit dead-center on their label pixels, not on the pixel corners.
+        from spatialdata import get_centroids
+        from spatialdata.models import PointsModel
+        from spatialdata.transformations import Identity
+
+        arr = np.zeros((6, 6), dtype=np.int32)
+        for label, (row, col) in enumerate([(1, 1), (1, 4), (4, 1), (4, 4), (2, 3)], start=1):
+            arr[row, col] = label
+        sdata = SpatialData(labels={"lab": Labels2DModel.parse(arr, dims=("y", "x"))})
+        centroids = get_centroids(sdata["lab"], coordinate_system="global").compute()
+        sdata["centroids"] = PointsModel.parse(centroids[["x", "y"]], transformations={"global": Identity()})
+        sdata.pl.render_labels("lab").pl.render_points("centroids", color="red", size=100).pl.show()
+
     def test_plot_can_render_labels(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(element="blobs_labels").pl.show()
 

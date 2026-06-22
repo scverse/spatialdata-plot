@@ -1286,3 +1286,64 @@ def test_first_color_per_category_skips_nan_and_handles_numeric_categories():
     source = pd.Categorical([1, None, 2, 1], categories=[1, 2])
     cv = ["#aaaaaa", "#ffffff", "#bbbbbb", "#aaaaaa"]
     assert _first_color_per_category(source, cv) == {1: "#aaaaaa", 2: "#bbbbbb"}
+
+
+def _rendered_image_world_box(im, ax) -> tuple[float, float, float, float]:
+    """World-space (x0, x1, y0, y1) the AxesImage's pixel grid actually occupies."""
+    left, right, bottom, top = im.get_extent()
+    element_affine = im.get_transform() - ax.transData
+    (x0, y0), (x1, y1) = element_affine.transform([(left, bottom), (right, top)])
+    return float(x0), float(x1), float(y0), float(y1)
+
+
+@pytest.mark.parametrize("transform_name", ["identity", "scale"])
+@pytest.mark.parametrize("element", ["image", "labels"])
+def test_rasterized_artist_aligns_with_get_extent(transform_name, element):
+    # Regression test for #216: a rasterized image/labels artist must occupy the
+    # same world box as get_extent (which sets the axis limits). The old pixel-center
+    # extent left it half a pixel off, amplified by the affine (Scale -> hundreds of px).
+    from spatialdata import get_extent
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Identity, Scale
+
+    transform = Identity() if transform_name == "identity" else Scale([1000.0, 1000.0], axes=("x", "y"))
+    if element == "image":
+        el = Image2DModel.parse(np.zeros((1, 4, 8)), dims=("c", "y", "x"), transformations={"global": transform})
+        sdata = SpatialData(images={"el": el})
+        ax = sdata.pl.render_images().pl.show(return_ax=True)
+    else:
+        el = Labels2DModel.parse(
+            np.zeros((4, 8), dtype=np.int32), dims=("y", "x"), transformations={"global": transform}
+        )
+        sdata = SpatialData(labels={"el": el})
+        ax = sdata.pl.render_labels().pl.show(return_ax=True)
+
+    ext = get_extent(sdata["el"], coordinate_system="global")
+    x0, x1, y0, y1 = _rendered_image_world_box(ax.get_images()[0], ax)
+    assert (min(x0, x1), max(x0, x1)) == pytest.approx(ext["x"])
+    assert (min(y0, y1), max(y0, y1)) == pytest.approx(ext["y"])
+    plt.close("all")
+
+
+def test_datashader_points_image_aligns_with_points_extent():
+    # Regression test for #216 (Sonja's case): the rasterized datashader-points image
+    # must occupy the points' world extent, matching where matplotlib scatters them.
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Identity
+
+    sdata = SpatialData(
+        images={"img": Image2DModel.parse(np.full((10, 10, 3), 128, dtype=np.uint8), dims=("y", "x", "c"))},
+        points={
+            "pts": PointsModel.parse(
+                pd.DataFrame({"x": [0.1, 0.9, 0.9, 0.1], "y": [0.1, 0.1, 0.9, 0.9]}),
+                transformations={"global": Identity()},
+            )
+        },
+    )
+    ax = sdata.pl.render_images().pl.render_points("pts", method="datashader", size=40).pl.show(return_ax=True)
+
+    # second image on the axis is the rasterized points (first is the background image)
+    x0, x1, y0, y1 = _rendered_image_world_box(ax.get_images()[1], ax)
+    assert (min(x0, x1), max(x0, x1)) == pytest.approx((0.1, 0.9))
+    assert (min(y0, y1), max(y0, y1)) == pytest.approx((0.1, 0.9))
+    plt.close("all")

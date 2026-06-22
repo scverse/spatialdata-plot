@@ -730,9 +730,10 @@ def _ax_show_and_transform(
     norm: Normalize | None = None,
     interpolation: str | None = None,
 ) -> matplotlib.image.AxesImage:
-    # ``extent`` uses mpl's pixel-grid convention; world placement happens via
-    # ``set_transform(trans_data)`` afterwards.
-    image_extent = (-0.5, array.shape[1] - 0.5, array.shape[0] - 0.5, -0.5)
+    # Pixel-edge extent [0, W] x [0, H], matching get_extent (which sets the axis limits)
+    # and the affine's data box (placement is via set_transform below). mpl's default
+    # pixel-center extent (-0.5, W-0.5, ...) offsets by half a pixel, amplified by the affine.
+    image_extent = (0.0, array.shape[1], array.shape[0], 0.0)
     # ``alpha`` is applied only when no cmap is set, so RGBA arrays already
     # carrying per-pixel alpha (e.g. datashader output) are not double-attenuated.
     imshow_kwargs: dict[str, Any] = {"zorder": zorder, "extent": image_extent, "norm": norm}
