@@ -777,7 +777,16 @@ class ColorSpec:
         via norm+cmap with NaN/non-finite rows painted ``na_color``; an object vector mixes the two.
         """
         if self.source_vector is not None:  # categorical or none: color_vector holds per-row hex
-            return np.asarray(colors.to_rgba_array(list(self.color_vector)))
+            cv = self.color_vector
+            if isinstance(getattr(cv, "dtype", None), pd.CategoricalDtype):
+                # categories are hex (resolution fills NaN with an na_color category -> codes >= 0),
+                # so parse the few categories once and gather by code instead of parsing every row
+                lut = np.asarray(colors.to_rgba_array(cv.categories.to_numpy()))
+                return lut[cv.codes]
+            # object vector (align_to_length pad / uniform na): factorize the distinct colours and
+            # gather back (factorize keeps any NaN as a real code, so the gather stays in-bounds)
+            codes, uniq = pd.factorize(np.asarray(cv, dtype=object), sort=False, use_na_sentinel=False)
+            return np.asarray(colors.to_rgba_array(list(uniq)))[codes]
         arr = np.asarray(self.color_vector)
         if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
             return np.asarray(colors.to_rgba_array(arr))
