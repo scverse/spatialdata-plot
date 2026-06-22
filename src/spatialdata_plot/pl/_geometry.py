@@ -268,6 +268,40 @@ def _validate_polygons(shapes: GeoDataFrame) -> GeoDataFrame:
     return shapes
 
 
+def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+    verts = [
+        (
+            center.x + radius * math.cos(math.radians(a)),
+            center.y + radius * math.sin(math.radians(a)),
+        )
+        for a in range(30, 390, 60)
+    ]
+    return shapely.Polygon(verts), None
+
+
+def _circle_to_square(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
+    verts = [
+        (
+            center.x + radius * math.cos(math.radians(a)),
+            center.y + radius * math.sin(math.radians(a)),
+        )
+        for a in range(45, 360, 90)
+    ]
+    return shapely.Polygon(verts), None
+
+
+def _circle_to_circle(center: shapely.Point, radius: float) -> tuple[shapely.Point, float]:
+    return center, radius
+
+
+def _enclosing_circle(coords: np.ndarray) -> tuple[shapely.Point, float]:
+    """Enclosing circle from a point cloud: centroid of the convex hull and the max vertex distance."""
+    hull_pts = coords[ConvexHull(coords).vertices]
+    center = np.mean(hull_pts, axis=0)
+    radius = float(np.max(np.linalg.norm(hull_pts - center, axis=1)))
+    return shapely.Point(center), radius
+
+
 def _convert_shapes(
     shapes: GeoDataFrame,
     target_shape: str,
@@ -282,67 +316,32 @@ def _convert_shapes(
     # work on a copy with a clean positional index
     shapes = shapes.reset_index(drop=True).copy()
 
-    def _circle_to_hexagon(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
-        verts = [
-            (
-                center.x + radius * math.cos(math.radians(a)),
-                center.y + radius * math.sin(math.radians(a)),
-            )
-            for a in range(30, 390, 60)
-        ]
-        return shapely.Polygon(verts), None
-
-    def _circle_to_square(center: shapely.Point, radius: float) -> tuple[shapely.Polygon, None]:
-        verts = [
-            (
-                center.x + radius * math.cos(math.radians(a)),
-                center.y + radius * math.sin(math.radians(a)),
-            )
-            for a in range(45, 360, 90)
-        ]
-        return shapely.Polygon(verts), None
-
-    def _circle_to_circle(center: shapely.Point, radius: float) -> tuple[shapely.Point, float]:
+    def _polygon_to_circle(polygon: shapely.Polygon) -> tuple[shapely.Point, float]:
+        center, radius = _enclosing_circle(np.array(polygon.exterior.coords))
+        nonlocal warn_shape_size
+        if 2 * radius > max_extent * warn_above_extent_fraction:
+            warn_shape_size = True
         return center, radius
 
-    def _polygon_to_circle(polygon: shapely.Polygon) -> tuple[shapely.Point, float]:
-        coords = np.array(polygon.exterior.coords)
-        hull_pts = coords[ConvexHull(coords).vertices]
-        center = np.mean(hull_pts, axis=0)
-        radius = float(np.max(np.linalg.norm(hull_pts - center, axis=1)))
-        nonlocal warn_shape_size
-        if 2 * radius > max_extent * warn_above_extent_fraction:
-            warn_shape_size = True
-        return shapely.Point(center), radius
-
     def _polygon_to_hexagon(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
-        c, r = _polygon_to_circle(polygon)
-        return _circle_to_hexagon(c, r)
+        return _circle_to_hexagon(*_polygon_to_circle(polygon))
 
     def _polygon_to_square(polygon: shapely.Polygon) -> tuple[shapely.Polygon, None]:
-        c, r = _polygon_to_circle(polygon)
-        return _circle_to_square(c, r)
+        return _circle_to_square(*_polygon_to_circle(polygon))
 
     def _multipolygon_to_circle(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Point, float]:
-        pts = []
-        for poly in multipolygon.geoms:
-            pts.extend(poly.exterior.coords)
-        pts_array = np.array(pts)
-        hull_pts = pts_array[ConvexHull(pts_array).vertices]
-        center = np.mean(hull_pts, axis=0)
-        radius = float(np.max(np.linalg.norm(hull_pts - center, axis=1)))
+        coords = np.array([pt for poly in multipolygon.geoms for pt in poly.exterior.coords])
+        center, radius = _enclosing_circle(coords)
         nonlocal warn_shape_size
         if 2 * radius > max_extent * warn_above_extent_fraction:
             warn_shape_size = True
-        return shapely.Point(center), radius
+        return center, radius
 
     def _multipolygon_to_hexagon(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
-        c, r = _multipolygon_to_circle(multipolygon)
-        return _circle_to_hexagon(c, r)
+        return _circle_to_hexagon(*_multipolygon_to_circle(multipolygon))
 
     def _multipolygon_to_square(multipolygon: shapely.MultiPolygon) -> tuple[shapely.Polygon, None]:
-        c, r = _multipolygon_to_circle(multipolygon)
-        return _circle_to_square(c, r)
+        return _circle_to_square(*_multipolygon_to_circle(multipolygon))
 
     # choose conversion methods
     conversion_methods: dict[str, Any]
