@@ -1127,6 +1127,28 @@ class TestColorSpecToRgba:
         arr = np.array([[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]])
         np.testing.assert_allclose(ColorSpec("continuous", None, arr).to_rgba(self._params()), arr)
 
+    def test_codes_gather_matches_per_row_parse(self):
+        # the categorical codes-gather and the object factorize-gather must equal to_rgba_array(list(...))
+        from matplotlib import colors
+
+        from spatialdata_plot.pl._color import ColorSpec
+
+        hexes = ["#e41a1cff", "#377eb8ff", "#4daf4aff", "#984ea3ff"]
+        na = "#cccccc00"
+        rng = np.random.default_rng(0)
+        clean = pd.Categorical.from_codes(rng.integers(0, len(hexes), 2000), categories=hexes)
+        with_na = pd.Categorical.from_codes(rng.integers(0, len(hexes) + 1, 2000), categories=[*hexes, na])
+        variants = [
+            clean,  # categorical fast-path
+            with_na,  # NaN replaced with an na_color category -> codes still >= 0
+            clean[:800].remove_unused_categories(),  # filtered -> remapped codes
+            np.full(500, na, dtype=object),  # uniform na (object vector)
+            np.concatenate([np.asarray(list(clean[:300]), dtype=object), np.full(100, na, dtype=object)]),  # padded
+        ]
+        for cv in variants:  # cv doubles as the (only-checked-for-not-None) source_vector
+            spec = ColorSpec("categorical" if hasattr(cv, "codes") else "none", cv, cv)
+            np.testing.assert_array_equal(spec.to_rgba(self._params()), np.asarray(colors.to_rgba_array(list(cv))))
+
 
 class TestPercentileNormalize:
     """PercentileNormalize + _resolve_continuous_norm (issue #370: dim multichannel renders)."""
