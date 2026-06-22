@@ -593,6 +593,20 @@ def _circles_render_as_points(shapes: gpd.GeoDataFrame, is_point: Any, render_pa
     return bool(np.isfinite(radius).all() and np.ptp(radius) == 0)
 
 
+def _scale_geometries(geometries: np.ndarray, scale: float) -> np.ndarray:
+    """Scale each geometry about its bounding-box centre (``shapely.affinity.scale``'s default origin).
+
+    Vectorised over all coordinates at once; a per-geometry ``affinity.scale`` loop is pure Python and
+    dominates large polygon renders.
+    """
+    import shapely
+
+    bbox = shapely.bounds(geometries)  # (n, 4): minx, miny, maxx, maxy
+    centre = np.column_stack([(bbox[:, 0] + bbox[:, 2]) / 2, (bbox[:, 1] + bbox[:, 3]) / 2])
+    coords, idx = shapely.get_coordinates(geometries, return_index=True)
+    return shapely.set_coordinates(geometries.copy(), (coords - centre[idx]) * scale + centre[idx])
+
+
 def _render_shapes(
     sdata: sd.SpatialData,
     render_params: ShapesRenderParams,
@@ -817,10 +831,8 @@ def _render_shapes(
         # Handle polygon/multipolygon scaling
         is_polygon = _geometry.type.isin(["Polygon", "MultiPolygon"])
         if is_polygon.any() and render_params.scale != 1.0:
-            from shapely import affinity
-
-            shapes.loc[is_polygon, "geometry"] = _geometry[is_polygon].apply(
-                lambda geom: affinity.scale(geom, xfact=render_params.scale, yfact=render_params.scale)
+            shapes.loc[is_polygon, "geometry"] = _scale_geometries(
+                _geometry[is_polygon].to_numpy(), render_params.scale
             )
 
         # apply transformations to the individual points

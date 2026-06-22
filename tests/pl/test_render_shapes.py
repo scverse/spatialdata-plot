@@ -1978,3 +1978,30 @@ def test_shapes_outline_does_not_double_apply_transform():
         return xs.min(), xs.max(), ys.min(), ys.max()
 
     assert bbox() == bbox(outline_width=1.0, outline_alpha=1.0, outline_color="black")
+
+
+def test_scale_geometries_matches_affinity_scale():
+    # The vectorised datashader polygon scale must equal shapely.affinity.scale's default
+    # (bounding-box-centre) origin, including for asymmetric shapes, multipolygons and holes.
+    import shapely
+    from shapely import affinity
+    from shapely.geometry import MultiPolygon
+
+    from spatialdata_plot.pl.render import _scale_geometries
+
+    rng = np.random.default_rng(0)
+    geoms = []
+    for cx, cy in rng.random((50, 2)) * 100:
+        # asymmetric exterior (bbox-centre != centroid) with a hole
+        poly = Polygon(
+            [(cx, cy), (cx + 6, cy + 1), (cx + 5, cy + 4), (cx + 1, cy + 3)],
+            [[(cx + 2, cy + 2), (cx + 3, cy + 2), (cx + 3, cy + 3), (cx + 2, cy + 3)][::-1]],
+        )
+        geoms.append(poly)
+    geoms.append(MultiPolygon([geoms[0], affinity.translate(geoms[1], 10, 10)]))  # multi-part
+    arr = np.array(geoms, dtype=object)
+
+    for scale in (0.6, 2.0):
+        expected = np.array([affinity.scale(g, xfact=scale, yfact=scale) for g in geoms], dtype=object)
+        result = _scale_geometries(arr, scale)
+        assert all(shapely.equals_exact(a, b, tolerance=1e-9) for a, b in zip(expected, result, strict=True))
