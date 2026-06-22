@@ -57,6 +57,7 @@ from spatialdata_plot.pl._geometry import (
     _build_shape_paths,
     _convert_shapes,
     _get_collection_shape,
+    _scale_geometries,
     _validate_polygons,
 )
 from spatialdata_plot.pl._validate import (
@@ -820,10 +821,8 @@ def _render_shapes(
         # Handle polygon/multipolygon scaling
         is_polygon = _geometry.type.isin(["Polygon", "MultiPolygon"])
         if is_polygon.any() and render_params.scale != 1.0:
-            from shapely import affinity
-
-            shapes.loc[is_polygon, "geometry"] = _geometry[is_polygon].apply(
-                lambda geom: affinity.scale(geom, xfact=render_params.scale, yfact=render_params.scale)
+            shapes.loc[is_polygon, "geometry"] = _scale_geometries(
+                _geometry[is_polygon].to_numpy(), render_params.scale
             )
 
         # apply transformations to the individual points

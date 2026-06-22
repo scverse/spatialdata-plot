@@ -40,6 +40,17 @@ def _scale_path_around_centroid(path: mpath.Path, scale_factor: float) -> None:
     path.vertices = centroid + (path.vertices - centroid) * scale_value
 
 
+def _scale_geometries(geometries: np.ndarray, scale: float) -> np.ndarray:
+    """Scale each geometry about its bounding-box centre (``shapely.affinity.scale``'s default origin).
+
+    Vectorised over all coordinates at once — a per-geometry ``affinity.scale`` loop dominates large renders.
+    """
+    bbox = shapely.bounds(geometries)  # (n, 4): minx, miny, maxx, maxy
+    centre = np.column_stack([(bbox[:, 0] + bbox[:, 2]) / 2, (bbox[:, 1] + bbox[:, 3]) / 2])
+    coords, idx = shapely.get_coordinates(geometries, return_index=True)
+    return shapely.set_coordinates(geometries.copy(), (coords - centre[idx]) * scale + centre[idx])
+
+
 def _normalize_geom(geom: Any) -> Any:
     """Canonicalize ring orientation so matplotlib's fill rules render holes correctly.
 
