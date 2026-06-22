@@ -618,13 +618,10 @@ def _render_shapes(
     )
 
     table_name = render_params.table_name
-    if table_name is None:
-        table = None
-    else:
+    if table_name is not None:
         # No join/copy: _set_color_source_vec resolves each shape's color from the table (region-masked
         # and reindexed to the element), so unannotated shapes keep their place and render with na_color.
         _check_instance_ids_overlap(sdata_filt, table_name, element, sdata_filt[element].index)
-        table = sdata_filt[table_name]
 
     shapes = sdata_filt[element]
 
@@ -1709,6 +1706,22 @@ def _draw_channel_legend(
     )
 
 
+def _composite_channels(
+    channel_cmaps: list[Colormap],
+    layers: dict[Any, np.ndarray],
+    channels: list[Any],
+) -> np.ndarray:
+    """Sum per-channel RGB into one ``(H, W, 3)`` buffer.
+
+    Holds O(1) full-resolution buffers instead of the full ``(n_channels, H, W, 4)`` cube;
+    byte-identical to stacking then summing because the reduction is sequential.
+    """
+    acc = channel_cmaps[0](layers[channels[0]])[:, :, :3].copy()
+    for cmap, ch in zip(channel_cmaps[1:], channels[1:], strict=True):
+        acc += cmap(layers[ch])[:, :, :3]
+    return acc
+
+
 def _render_images(
     sdata: sd.SpatialData,
     render_params: ImageRenderParams,
@@ -2008,14 +2021,7 @@ def _render_images(
                 legend_colors = ["red", "green", "blue"]
             else:  # -> use given cmap for each channel
                 channel_cmaps = [render_params.cmap_params.cmap] * n_channels
-                stacked = (
-                    np.stack(
-                        [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                        0,
-                    ).sum(0)
-                    / n_channels
-                )
-                stacked = stacked[:, :, :3]
+                stacked = _composite_channels(channel_cmaps, layers, channels) / n_channels
                 logger.warning(
                     "One cmap was given for multiple channels and is now used for each channel. "
                     + _MULTI_CMAP_BLENDING_WARNING
@@ -2036,19 +2042,11 @@ def _render_images(
             if n_channels == 2:
                 seed_colors = ["#ff0000ff", "#00ff00ff"]
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-                colored = np.stack(
-                    [channel_cmaps[ch_ind](layers[ch]) for ch_ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                colored = np.clip(colored[:, :, :3], 0, 1)
+                colored = np.clip(_composite_channels(channel_cmaps, layers, channels), 0, 1)
             elif n_channels == 3:
                 seed_colors = _get_colors_for_categorical_obs(list(range(n_channels)))
                 channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in seed_colors]
-                colored = np.stack(
-                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                colored = np.clip(colored[:, :, :3], 0, 1)
+                colored = np.clip(_composite_channels(channel_cmaps, layers, channels), 0, 1)
             else:
                 if isinstance(render_params.cmap_params, list):
                     cmap_is_default = render_params.cmap_params[0].cmap_is_default
@@ -2102,8 +2100,7 @@ def _render_images(
                 raise ValueError("If 'palette' is provided, its length must match the number of channels.")
 
             channel_cmaps = [_get_linear_colormap([c], "k")[0] for c in palette if isinstance(c, str)]
-            colored = np.stack([channel_cmaps[i](layers[c]) for i, c in enumerate(channels)], 0).sum(0)
-            colored = np.clip(colored[:, :, :3], 0, 1)
+            colored = np.clip(_composite_channels(channel_cmaps, layers, channels), 0, 1)
 
             legend_colors = list(palette)
 
@@ -2118,14 +2115,7 @@ def _render_images(
 
         elif palette is None and got_multiple_cmaps:
             channel_cmaps = [cp.cmap for cp in render_params.cmap_params]  # type: ignore[union-attr]
-            colored = (
-                np.stack(
-                    [channel_cmaps[ind](layers[ch]) for ind, ch in enumerate(channels)],
-                    0,
-                ).sum(0)
-                / n_channels
-            )
-            colored = colored[:, :, :3]
+            colored = _composite_channels(channel_cmaps, layers, channels) / n_channels
 
             legend_colors = [matplotlib.colors.to_hex(cm(0.75)) for cm in channel_cmaps]
 

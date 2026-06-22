@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import scanpy as sc
-from matplotlib.colors import LogNorm, Normalize
+from matplotlib.colors import LinearSegmentedColormap, LogNorm, Normalize
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData
 from spatialdata.models import Image2DModel, Image3DModel
@@ -12,7 +12,7 @@ from spatialdata.models import Image2DModel, Image3DModel
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot import PercentileNormalize
 from spatialdata_plot._logging import logger, logger_no_warns, logger_warns
-from spatialdata_plot.pl.render import _is_rgb_image
+from spatialdata_plot.pl.render import _composite_channels, _is_rgb_image
 from tests.conftest import DPI, PlotTester, PlotTesterMeta, _viridis_with_under_over
 
 sc.pl.set_rcParams_defaults()
@@ -937,3 +937,33 @@ class TestRenderImagesDatashader:
                 plt.close(fig)
 
         np.testing.assert_array_equal(_render_and_grab(), _render_and_grab(method="matplotlib"))
+
+
+class TestCompositeChannels:
+    """`_composite_channels` must be byte-identical to the materialized stack-and-sum it replaces."""
+
+    @staticmethod
+    def _stack_sum(channel_cmaps, layers, channels):
+        return np.stack([channel_cmaps[i](layers[ch]) for i, ch in enumerate(channels)], 0).sum(0)[:, :, :3]
+
+    @pytest.mark.parametrize("n", [2, 3, 129, 200])  # 129/200 cross numpy's 128-element pairwise threshold
+    def test_streaming_matches_stack_sum(self, n: int):
+        rng = np.random.default_rng(0)
+        channels = list(range(n))
+        layers = {ch: rng.random((32, 24)) for ch in channels}
+        cmaps = [LinearSegmentedColormap.from_list("x", ["k", rng.random(3)], N=256) for _ in channels]
+
+        result = _composite_channels(cmaps, layers, channels)
+
+        np.testing.assert_array_equal(result, self._stack_sum(cmaps, layers, channels))
+
+    def test_returns_owned_rgb_buffer(self):
+        rng = np.random.default_rng(1)
+        channels = [0, 1]
+        layers = {ch: rng.random((8, 8)) for ch in channels}
+        cmaps = [LinearSegmentedColormap.from_list("x", ["k", "r"], N=256) for _ in channels]
+
+        result = _composite_channels(cmaps, layers, channels)
+        assert result.shape == (8, 8, 3)
+        assert result.dtype == np.float64
+        assert result.flags["C_CONTIGUOUS"]  # owns its buffer -> the (H,W,4) cmap temps are freed each step
