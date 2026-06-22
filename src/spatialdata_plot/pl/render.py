@@ -618,13 +618,10 @@ def _render_shapes(
     )
 
     table_name = render_params.table_name
-    if table_name is None:
-        table = None
-    else:
+    if table_name is not None:
         # No join/copy: _set_color_source_vec resolves each shape's color from the table (region-masked
         # and reindexed to the element), so unannotated shapes keep their place and render with na_color.
         _check_instance_ids_overlap(sdata_filt, table_name, element, sdata_filt[element].index)
-        table = sdata_filt[table_name]
 
     shapes = sdata_filt[element]
 
