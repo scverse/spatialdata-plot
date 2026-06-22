@@ -273,6 +273,21 @@ def test_extract_scalar_value():
     assert _extract_scalar_value([], default=1.0) == 1.0
 
 
+def test_type_check_params_preserves_validation_order():
+    """#716: decomposition must preserve call order, so the first error for a multiply-invalid input is
+    unchanged -- `color` is validated before the `contour_px < 2` range check.
+    """
+    from spatialdata_plot.pl._validate import _type_check_params
+
+    # color=5 raises in the color block, before the contour_px range check -> color error wins.
+    with pytest.raises(TypeError, match="Parameter 'color' must be a string or a tuple/list of floats."):
+        _type_check_params({"element": "x", "color": 5, "contour_px": 1, "sdata": None}, "labels")
+
+    # a valid RGB tuple (no sdata-dependent collision check) lets the same input reach contour_px.
+    with pytest.raises(ValueError, match="Parameter 'contour_px' must be >= 2"):
+        _type_check_params({"element": "x", "color": (1.0, 0.0, 0.0), "contour_px": 1, "sdata": None}, "labels")
+
+
 def test_plot_can_handle_rgba_color_specifications(sdata_blobs: SpatialData):
     """Test handling of RGBA color specifications."""
     # Test with RGBA tuple
