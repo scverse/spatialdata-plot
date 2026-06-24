@@ -44,6 +44,16 @@ selection for images, and the `datashader` backend for large collections
 of shapes and points.
 :::
 
+:::{grid-item-card} Normalization and contrast
+:link: notebooks/tutorials/normalization_and_contrast
+:link-type: doc
+:img-top: _static/gallery/normalization_and_contrast.png
+
+How `norm=` maps data to colours: fixed contrast limits, clipping,
+logarithmic and percentile scaling with `PercentileNormalize`, and
+per-channel norms for images.
+:::
+
 ::::
 
 ## Examples
