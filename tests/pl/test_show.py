@@ -101,6 +101,24 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
             mock_show.assert_called_once()
         plt.close("all")
 
+    @pytest.mark.parametrize("interactive,expected_calls", [(False, 1), (True, 0)])
+    def test_show_default_keys_off_is_interactive(
+        self, sdata_blobs: SpatialData, monkeypatch, interactive: bool, expected_calls: int
+    ):
+        """show=None calls plt.show() iff matplotlib is non-interactive, ignoring sys.ps1.
+
+        sys.ps1 is set in both cases to simulate a REPL; only matplotlib.is_interactive() may
+        decide, so a plain (non-interactive) REPL still displays the figure (regression for #68).
+        """
+        monkeypatch.setattr("sys.ps1", ">>> ", raising=False)
+        with (
+            patch("spatialdata_plot.pl.basic.matplotlib.is_interactive", return_value=interactive),
+            patch("spatialdata_plot.pl.basic.plt.show") as mock_show,
+        ):
+            sdata_blobs.pl.render_images(element="blobs_image").pl.show()
+            assert mock_show.call_count == expected_calls
+        plt.close("all")
+
     def test_frameon_false_hides_axes_decorations(self, sdata_blobs: SpatialData):
         """frameon=False should turn off axes decorations (regression for #204)."""
         ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False, return_ax=True, show=False)
