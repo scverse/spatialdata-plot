@@ -2005,3 +2005,31 @@ def test_scale_geometries_matches_affinity_scale():
         expected = np.array([affinity.scale(g, xfact=scale, yfact=scale) for g in geoms], dtype=object)
         result = _scale_geometries(arr, scale)
         assert all(shapely.equals_exact(a, b, tolerance=1e-9) for a, b in zip(expected, result, strict=True))
+
+
+# Regression tests for #748: the `outline` bool convenience toggle on render_shapes.
+# It resolves onto the outline_* detail params; outline is authoritative over inference.
+def test_outline_toggle_true_draws_outline_like_alpha(sdata_blobs: SpatialData):
+    # outline=True must not raise (the reported regression) and must draw an outline
+    # equivalent to setting outline_alpha=1.0 explicitly.
+    on = sdata_blobs.pl.render_shapes("blobs_polygons", outline=True)
+    explicit = sdata_blobs.pl.render_shapes("blobs_polygons", outline_alpha=1.0)
+    on_alpha = list(on.plotting_tree.values())[-1].outline_alpha
+    explicit_alpha = list(explicit.plotting_tree.values())[-1].outline_alpha
+    assert on_alpha[0] > 0
+    assert on_alpha == explicit_alpha
+
+
+def test_outline_toggle_none_preserves_inference(sdata_blobs: SpatialData):
+    # Default (outline=None) keeps current behavior: no outline unless a detail param is set.
+    off = sdata_blobs.pl.render_shapes("blobs_polygons")
+    inferred = sdata_blobs.pl.render_shapes("blobs_polygons", outline_alpha=1.0)
+    assert list(off.plotting_tree.values())[-1].outline_alpha[0] == 0
+    assert list(inferred.plotting_tree.values())[-1].outline_alpha[0] > 0
+
+
+def test_outline_toggle_false_forces_off_and_warns(sdata_blobs: SpatialData):
+    # outline=False wins over explicit detail params and warns about the conflict.
+    with pytest.warns(UserWarning, match="outline=False"):
+        out = sdata_blobs.pl.render_shapes("blobs_polygons", outline=False, outline_color="red")
+    assert list(out.plotting_tree.values())[-1].outline_alpha[0] == 0
