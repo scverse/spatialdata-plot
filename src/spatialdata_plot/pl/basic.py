@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
@@ -1606,15 +1605,13 @@ class PlotAccessor:
         if fig_params.fig is not None and save is not None:
             save_fig(fig_params.fig, path=save)
 
-        # Show the plot unless the caller opted out.
-        # Default (show=None): display in non-interactive mode (scripts), suppress in interactive
-        # sessions. We check both sys.ps1 (standard REPL) and matplotlib.is_interactive()
-        # (covers IPython, Jupyter, plt.ion(), and IDE consoles like PyCharm).
-        # When the user supplies their own axes, they manage the figure lifecycle, so we
-        # default to not calling plt.show(). This allows multiple .pl.show(ax=...) calls
-        # to accumulate content on the same axes (see #362, #71).
+        # Default (show=None): show only when matplotlib is non-interactive. Interactive backends
+        # (Jupyter, IPython, plt.ion()) auto-render, so plt.show() is redundant; scripts and a plain
+        # REPL don't -- and a REPL sets sys.ps1 while staying non-interactive, so we can't key off
+        # sys.ps1. With a user-supplied ax the caller owns the figure, so default to no show (lets
+        # repeated .pl.show(ax=...) accumulate on one axes).
         if show is None:
-            show = False if user_supplied_ax else (not hasattr(sys, "ps1") and not matplotlib.is_interactive())
+            show = False if user_supplied_ax else not matplotlib.is_interactive()
         if show:
             plt.show()
         return (fig_params.ax if fig_params.axs is None else fig_params.axs) if return_ax else None  # shuts up ruff
