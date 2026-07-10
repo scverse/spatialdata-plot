@@ -341,11 +341,9 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         ).pl.show()
 
     def test_plot_outline_toggle_true_draws_outline(self, sdata_blobs: SpatialData):
-        # #748: outline=True is a shortcut for outline_alpha=1 (must draw a contour).
         sdata_blobs.pl.render_labels("blobs_labels", outline=True, fill_alpha=0.0, contour_px=15).pl.show()
 
     def test_plot_outline_toggle_false_suppresses_outline(self, sdata_blobs: SpatialData):
-        # #748: outline=False wins over the outline_* params (no contour drawn).
         with pytest.warns(UserWarning, match="outline=False"):
             sdata_blobs.pl.render_labels(
                 "blobs_labels", outline=False, outline_color="red", outline_alpha=1.0, contour_px=15
@@ -936,7 +934,6 @@ def test_resolve_as_points_method_threshold_and_fallback():
 
 # Regression tests for #748: the `outline` bool convenience toggle on render_labels.
 def test_outline_toggle_true_draws_outline(sdata_blobs: SpatialData):
-    # outline=True must not raise (the reported regression) and forces outline_alpha to 1.0.
     on = sdata_blobs.pl.render_labels("blobs_labels", outline=True, contour_px=15)
     assert list(on.plotting_tree.values())[-1].outline_alpha == 1.0
 

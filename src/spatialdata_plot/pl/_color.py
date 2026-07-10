@@ -318,11 +318,9 @@ def _resolve_outline_toggle(
     outline_alpha: float | int | tuple[float | int, float | int] | None,
     detail_params_set: bool,
 ) -> float | int | tuple[float | int, float | int] | None:
-    """Resolve the ``outline`` bool toggle onto an effective ``outline_alpha``.
+    """Map the tri-state ``outline`` toggle onto an effective ``outline_alpha``.
 
-    - ``None``  -> ``outline_alpha`` unchanged (visibility inferred from the ``outline_*`` params).
-    - ``True``  -> force on: 1.0 if ``outline_alpha`` is unset/zero, else the given value.
-    - ``False`` -> force off: 0.0, warning if any ``outline_*`` param was also set.
+    ``None`` leaves it unchanged; ``True`` forces on (1.0 if unset/zero); ``False`` forces off and warns on conflict.
     """
     if outline is None:
         return outline_alpha

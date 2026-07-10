@@ -1092,7 +1092,6 @@ class PlotAccessor:
         """
         if as_points:
             _validate_as_points_size(size)
-        # labels outline_alpha is always scalar; cast narrows the helper's wider return union
         outline_alpha = cast("float | int", _resolve_outline_toggle(outline, outline_alpha, outline_color is not None))
         panel_param_dicts = _expand_color_panels(
             self._sdata,
