@@ -377,7 +377,7 @@ def _get_scalebar(
     len_lib: int | None = None,
 ) -> tuple[Sequence[float] | None, Sequence[str] | None]:
     if scalebar_dx is not None:
-        _scalebar_dx = _get_list(scalebar_dx, _type=float, ref_len=len_lib, name="scalebar_dx")
+        _scalebar_dx = _get_list(scalebar_dx, _type=(int, float), ref_len=len_lib, name="scalebar_dx")
         scalebar_units = "um" if scalebar_units is None else scalebar_units
         _scalebar_units = _get_list(scalebar_units, _type=str, ref_len=len_lib, name="scalebar_units")
     else:
