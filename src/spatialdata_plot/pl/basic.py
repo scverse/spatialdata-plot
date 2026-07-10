@@ -33,6 +33,7 @@ from spatialdata_plot.pl._color import (
     _maybe_set_colors,
     _next_palette_colors,
     _prepare_cmap_norm,
+    _resolve_outline_toggle,
     _set_outline,
 )
 from spatialdata_plot.pl._validate import (
@@ -324,6 +325,7 @@ class PlotAccessor:
         groups: list[str] | str | None = None,
         palette: dict[str, str] | list[str] | str | None = None,
         na_color: ColorLike | None = "default",
+        outline: bool | None = None,
         outline_width: float | int | tuple[float | int, float | int] | None = None,
         outline_color: ColorLike | tuple[ColorLike] | None = None,
         outline_alpha: float | int | tuple[float | int, float | int] | None = None,
@@ -387,6 +389,10 @@ class PlotAccessor:
             elements are hidden. Pass any explicit color (e.g. ``"lightgray"``) to show them in that color instead.
             Accepts a named color (``"red"``), a hex string (``"#000000ff"``), or an RGB/RGBA list
             (``[1.0, 0.0, 0.0, 1.0]``). Pass ``None`` to make NA values fully transparent.
+        outline : bool | None, default None
+            Convenience on/off switch. ``None`` infers visibility from the ``outline_*`` params;
+            ``True`` forces an outline on (defaults fill in any unset width/color/alpha); ``False``
+            forces it off, overriding and warning about any ``outline_*`` you set.
         outline_width : float | int | tuple[float | int, float | int], optional
             Width of the border. If 2 values are given (tuple), 2 borders are shown with these widths (outer & inner).
             If `outline_color` and/or `outline_alpha` are used to indicate that one/two outlines should be drawn, the
@@ -465,6 +471,9 @@ class PlotAccessor:
         """
         if as_points:
             _validate_as_points_size(size)
+        outline_alpha = _resolve_outline_toggle(
+            outline, outline_alpha, outline_width is not None or outline_color is not None
+        )
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,
@@ -967,6 +976,7 @@ class PlotAccessor:
         cmap: Colormap | str | None = None,
         norm: Normalize | None = None,
         na_color: ColorLike | None = "default",
+        outline: bool | None = None,
         outline_alpha: float | int = 0.0,
         fill_alpha: float | int | None = None,
         outline_color: ColorLike | None = None,
@@ -1028,6 +1038,10 @@ class PlotAccessor:
             labels are hidden. Pass any explicit color (e.g. ``"lightgray"``) to show them in that color instead.
             Accepts a named color (``"red"``), a hex string (``"#000000ff"``), or an RGB/RGBA list
             (``[1.0, 0.0, 0.0, 1.0]``). Pass ``None`` to make NA values fully transparent.
+        outline : bool | None, default None
+            Convenience on/off switch; thickness is set by ``contour_px``. ``None`` infers visibility from
+            ``outline_color``/``outline_alpha``; ``True`` forces on (alpha defaults to 1.0); ``False``
+            forces it off, overriding and warning about any params you set.
         outline_alpha : float | int, default 0.0
             Alpha value for the outline of the labels. Invisible by default.
         fill_alpha : float | int | None, optional
@@ -1077,6 +1091,7 @@ class PlotAccessor:
         """
         if as_points:
             _validate_as_points_size(size)
+        outline_alpha = cast("float | int", _resolve_outline_toggle(outline, outline_alpha, outline_color is not None))
         panel_param_dicts = _expand_color_panels(
             self._sdata,
             color,

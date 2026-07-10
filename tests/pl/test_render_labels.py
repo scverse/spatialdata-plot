@@ -340,6 +340,15 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             contour_px=15,
         ).pl.show()
 
+    def test_plot_outline_toggle_true_draws_outline(self, sdata_blobs: SpatialData):
+        sdata_blobs.pl.render_labels("blobs_labels", outline=True, fill_alpha=0.0, contour_px=15).pl.show()
+
+    def test_plot_outline_toggle_false_suppresses_outline(self, sdata_blobs: SpatialData):
+        with pytest.warns(UserWarning, match="outline=False"):
+            sdata_blobs.pl.render_labels(
+                "blobs_labels", outline=False, outline_color="red", outline_alpha=1.0, contour_px=15
+            ).pl.show()
+
     def test_plot_can_control_label_infill(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(
             "blobs_labels",
@@ -921,3 +930,20 @@ def test_resolve_as_points_method_threshold_and_fallback():
     # explicit matplotlib always matplotlib; empty always matplotlib
     assert _resolve_as_points_method(rp_mpl, n=10**9, allow_datashader=True) == "matplotlib"
     assert _resolve_as_points_method(rp_auto, n=0, allow_datashader=True) == "matplotlib"
+
+
+# Regression tests for #748: the `outline` bool convenience toggle on render_labels.
+def test_outline_toggle_true_draws_outline(sdata_blobs: SpatialData):
+    on = sdata_blobs.pl.render_labels("blobs_labels", outline=True, contour_px=15)
+    assert list(on.plotting_tree.values())[-1].outline_alpha == 1.0
+
+
+def test_outline_toggle_none_preserves_default_off(sdata_blobs: SpatialData):
+    off = sdata_blobs.pl.render_labels("blobs_labels")
+    assert list(off.plotting_tree.values())[-1].outline_alpha == 0.0
+
+
+def test_outline_toggle_false_forces_off_and_warns(sdata_blobs: SpatialData):
+    with pytest.warns(UserWarning, match="outline=False"):
+        out = sdata_blobs.pl.render_labels("blobs_labels", outline=False, outline_color="red")
+    assert list(out.plotting_tree.values())[-1].outline_alpha == 0.0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import dataclass, replace
@@ -310,6 +311,29 @@ def _set_outline(
         outline_color[1],
         outline_width[1],
     )
+
+
+def _resolve_outline_toggle(
+    outline: bool | None,
+    outline_alpha: float | int | tuple[float | int, float | int] | None,
+    detail_params_set: bool,
+) -> float | int | tuple[float | int, float | int] | None:
+    """Map the tri-state ``outline`` toggle onto an effective ``outline_alpha``.
+
+    ``None`` leaves it unchanged; ``True`` forces on (1.0 if unset/zero); ``False`` forces off and warns on conflict.
+    """
+    if outline is None:
+        return outline_alpha
+    alpha_is_zero = outline_alpha is None or bool(np.all(np.asarray(outline_alpha, dtype=float) == 0.0))
+    if outline:
+        return 1.0 if alpha_is_zero else outline_alpha
+    if detail_params_set or not alpha_is_zero:
+        warnings.warn(
+            "`outline=False` overrides the `outline_*` parameters you set; no outline will be drawn.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return 0.0
 
 
 def _get_colors_for_categorical_obs(
