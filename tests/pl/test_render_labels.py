@@ -340,6 +340,17 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
             contour_px=15,
         ).pl.show()
 
+    def test_plot_outline_toggle_true_draws_outline(self, sdata_blobs: SpatialData):
+        # #748: outline=True is a shortcut for outline_alpha=1 (must draw a contour).
+        sdata_blobs.pl.render_labels("blobs_labels", outline=True, fill_alpha=0.0, contour_px=15).pl.show()
+
+    def test_plot_outline_toggle_false_suppresses_outline(self, sdata_blobs: SpatialData):
+        # #748: outline=False wins over the outline_* params (no contour drawn).
+        with pytest.warns(UserWarning, match="outline=False"):
+            sdata_blobs.pl.render_labels(
+                "blobs_labels", outline=False, outline_color="red", outline_alpha=1.0, contour_px=15
+            ).pl.show()
+
     def test_plot_can_control_label_infill(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_labels(
             "blobs_labels",
