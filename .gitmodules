@@ -1,4 +1,4 @@
 [submodule "docs/notebooks"]
 	path = docs/notebooks
-	url = https://github.com/scverse/spatialdata-plot-notebooks.git
+	url = https://github.com/scverse/spatialdata-plot-tutorials.git
 	branch = main
