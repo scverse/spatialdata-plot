@@ -253,6 +253,19 @@ class TestPoints(PlotTester, metaclass=PlotTesterMeta):
         with pytest.raises(KeyError, match="does not annotate element"):
             blob.pl.render_points(element="blobs_points", color="table_value", table_name="other_table")
 
+    def test_render_points_markers_have_no_edge_stroke(self, sdata_blobs: SpatialData) -> None:
+        # Regression test for #756: matplotlib's default scatter edge stroke (linewidths=1pt) turns
+        # small markers at high dpi into hollow "outlined" circles. The scatter collection must carry
+        # a zero linewidth so markers stay solid fills at every size.
+        # A literal colour avoids the categorical legend's own (linewidth-1) scatter handles.
+        sdata_blobs.pl.render_points("blobs_points", color="red", size=0.1, method="matplotlib").pl.show(dpi=300)
+        ax = plt.gca()
+        collections = [c for c in ax.collections if isinstance(c, matplotlib.collections.PathCollection)]
+        assert collections, "no scatter collection was drawn"
+        for coll in collections:
+            assert np.all(coll.get_linewidths() == 0)
+        plt.close()
+
     def test_plot_datashader_colors_from_table_obs(self, sdata_blobs: SpatialData):
         n_obs = len(sdata_blobs["blobs_points"])
         obs = pd.DataFrame(
