@@ -710,23 +710,6 @@ def test_render_labels_lognorm_with_zeros_does_not_crash(sdata_blobs: SpatialDat
     plt.close(fig)
 
 
-@pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64])
-def test_render_labels_rejects_float_dtype(dtype):
-    # Regression test for #606: float-dtype labels must raise a clear
-    # ValueError naming the element and dtype, not a cryptic skimage TypeError.
-    arr = np.zeros((20, 20), dtype=dtype)
-    arr[3:8, 3:8] = 1
-    arr[12:17, 12:17] = 2
-    sdata = SpatialData(labels={"lbl": Labels2DModel.parse(arr, dims=["y", "x"])})
-
-    fig, ax = plt.subplots()
-    try:
-        with pytest.raises(ValueError, match=r"Label element 'lbl'.*integer dtype"):
-            sdata.pl.render_labels("lbl").pl.show(ax=ax)
-    finally:
-        plt.close(fig)
-
-
 def test_render_labels_rejects_background_instance_id_in_table():
     # Regression test for #607: table row with instance_id=0 (background)
     # used to crash with obnscure error.

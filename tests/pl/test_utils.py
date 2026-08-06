@@ -628,12 +628,20 @@ class TestMeasureObs:
             measure_obs(sdata_blobs, "blobs_labels")
         assert np.isnan(table.obsm["spatial"]).all()
 
-    def test_float_dtype_labels_supported(self, sdata_blobs: SpatialData) -> None:
-        # #3: a float-typed (but integer-valued) labels raster must not crash np.bincount.
-        arr = np.asarray(sdata_blobs["blobs_labels"].data).astype(np.float32)
-        sd = _labels_sdata(arr)
-        measure_obs(sd, "lab", table_name="t")
-        assert np.isfinite(sd["t"].obsm["spatial"]).all()
+    def test_float_dtype_labels_handled_by_centroid_stats(self, sdata_blobs: SpatialData) -> None:
+        # #3: an integer-valued but float-typed raster must be cast to int, not crash np.bincount.
+        # spatialdata now rejects float labels at the model boundary, so this can no longer reach
+        # `measure_obs` through a SpatialData; the cast lives in `_stream_label_centroid_stats`, so
+        # exercise it there: a float raster must yield exactly what its integer counterpart yields.
+        from spatialdata_plot.pl.utils import _stream_label_centroid_stats
+
+        arr_int = np.asarray(sdata_blobs["blobs_labels"].data).astype(np.int64)
+        lbl_i, x_i, y_i, area_i = _stream_label_centroid_stats(arr_int)
+        lbl_f, x_f, y_f, area_f = _stream_label_centroid_stats(arr_int.astype(np.float32))
+        np.testing.assert_array_equal(lbl_f, lbl_i)
+        np.testing.assert_allclose(x_f, x_i)
+        np.testing.assert_allclose(y_f, y_i)
+        np.testing.assert_array_equal(area_f, area_i)
 
     def test_existing_nonnumeric_column_raises_before_any_write(self, sdata_blobs: SpatialData) -> None:
         # #4: a non-numeric collision raises BEFORE obsm is mutated (no half-written table).
