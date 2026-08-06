@@ -28,7 +28,8 @@ dependencies = [
   "matplotlib-scalebar",
   "scanpy",
   "scikit-learn",
-  "spatialdata>=0.3",
+  # TEMPORARY (#1150): track the get_centroids branch for testing; revert to spatialdata>=<release> before merge.
+  "spatialdata @ git+https://github.com/scverse/spatialdata.git@feature/get-centroids-area-persist",
 ]
 optional-dependencies.interactive = [
   "anybioimage>=0.3,<0.4",
