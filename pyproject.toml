@@ -42,7 +42,7 @@ urls.Source = "https://github.com/scverse/spatialdata-plot.git"
 
 [dependency-groups]
 dev = [
-  "pre-commit",
+  "prek",
   "twine>=4.0.2",
 ]
 test = [
@@ -60,83 +60,71 @@ doc = [
   "ipykernel",
   "ipython>=8.6",
   "myst-nb>=1.1",
+  "pandas",
+  "scverse-misc[sphinx]>=0.1.2",
   "sphinx>=8.1",
   "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
   "sphinx-design",
-  "sphinx-tabs",
   "sphinxcontrib-bibtex>=1",
   "sphinxcontrib-katex",
   "sphinxext-opengraph",
 ]
+
 [tool.hatch]
+version.source = "vcs"
+metadata.allow-direct-references = true
 build.hooks.vcs.version-file = "_version.py"
 build.targets.wheel.packages = [ "src/spatialdata_plot" ]
 envs.default.installer = "uv"
 envs.default.dependency-groups = [ "dev" ]
-envs.docs.dependency-groups = [ "doc" ]
 envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
-envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
-envs.hatch-test.dependency-groups = [ "test" ]
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
+envs.docs.dependency-groups = [ "doc" ]
+envs.hatch-test.scripts.cov-combine = "coverage combine"
+envs.hatch-test.scripts.cov-report = [ "coverage report", "coverage xml -o coverage.xml" ]
+envs.hatch-test.scripts.run = "pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
+envs.hatch-test.scripts.run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
 envs.hatch-test.matrix = [
   { deps = [ "stable" ], python = [ "3.12", "3.14" ] },
   { deps = [ "pre" ], python = [ "3.14" ] }
 ]
 envs.hatch-test.overrides.matrix.deps.env-vars = [
-  { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
+  { value = "allow", key = "UV_PRERELEASE", if = [ "pre" ] },
 ]
-envs.hatch-test.scripts.run = "pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
-envs.hatch-test.scripts.run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} -p no:cov {args}"
-envs.hatch-test.scripts.cov-combine = "coverage combine"
-envs.hatch-test.scripts.cov-report = [ "coverage report", "coverage xml -o coverage.xml" ]
-metadata.allow-direct-references = true
-version.source = "vcs"
+envs.hatch-test.dependency-groups = [ "test" ]
 
-[tool.pixi.workspace]
-channels = [ "conda-forge" ]
-platforms = [ "linux-64", "osx-arm64" ]
-
-[tool.pixi.dependencies]
-python = ">=3.12"
-
-[tool.pixi.pypi-dependencies]
-spatialdata-plot = { path = ".", editable = true }
-
+[tool.pixi]
+workspace.channels = [ "conda-forge" ]
+workspace.platforms = [ "linux-64", "osx-arm64" ]
+dependencies.python = ">=3.12"
+pypi-dependencies.spatialdata-plot = { path = ".", editable = true }
+tasks.format = "ruff format ."
+tasks.kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
+tasks.kernel-install-interactive = "python -m ipykernel install --user --name sdata-plot-interactive --display-name \"sdata-plot (interactive)\""
+tasks.lab = "jupyter lab"
+tasks.lint = "ruff check ."
+tasks.pre-commit-install = "pre-commit install"
+tasks.pre-commit-run = "pre-commit run --all-files"
+tasks.test = "pytest -v --color=yes --tb=short --durations=10"
 # When the `interactive` feature is active, install the package with the
 # `interactive` PyPI extra (anywidget, ipykernel, ipywidgets) so the pixi
 # env mirrors what `pip install spatialdata-plot[interactive]` would give.
-[tool.pixi.feature.interactive.pypi-dependencies]
-spatialdata-plot = { path = ".", editable = true, extras = [ "interactive" ] }
-
-[tool.pixi.tasks]
-format = "ruff format ."
-kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
-kernel-install-interactive = 'python -m ipykernel install --user --name sdata-plot-interactive --display-name "sdata-plot (interactive)"'
-lab = "jupyter lab"
-lint = "ruff check ."
-pre-commit-install = "pre-commit install"
-pre-commit-run = "pre-commit run --all-files"
-test = "pytest -v --color=yes --tb=short --durations=10"
-
+feature.interactive.pypi-dependencies.spatialdata-plot = { path = ".", extras = [ "interactive" ], editable = true }
 # for gh-actions
-[tool.pixi.feature.py312.dependencies]
-python = "3.12.*"
-
-[tool.pixi.feature.py313.dependencies]
-python = "3.13.*"
-
-[tool.pixi.environments]
+feature.py312.dependencies.python = "3.12.*"
+feature.py313.dependencies.python = "3.13.*"
 # 3.13 lane
-default = { features = [ "py313" ], solve-group = "py313" }
+environments.default = { features = [ "py313" ], solve-group = "py313" }
+environments.dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
 # 3.12 lane (for gh-actions)
-dev-py312 = { features = [ "dev", "test", "py312" ], solve-group = "py312" }
-dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
-dev-interactive-py313 = { features = [ "dev", "test", "interactive", "py313" ], solve-group = "py313" }
-docs-py312 = { features = [ "doc", "py312" ], solve-group = "py312" }
-docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
-test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
+environments.dev-py312 = { features = [ "dev", "test", "py312" ], solve-group = "py312" }
+environments.dev-py313 = { features = [ "dev", "test", "py313" ], solve-group = "py313" }
+environments.docs-py312 = { features = [ "doc", "py312" ], solve-group = "py312" }
+environments.docs-py313 = { features = [ "doc", "py313" ], solve-group = "py313" }
+environments.test-py313 = { features = [ "test", "py313" ], solve-group = "py313" }
 
 [tool.ruff]
 line-length = 120
@@ -194,12 +182,12 @@ lint.pydocstyle.convention = "numpy"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
-ini_options.xfail_strict = true
 ini_options.addopts = [
   # "-Werror",  # if 3rd party libs raise DeprecationWarnings, just use filterwarnings below
   "--import-mode=importlib", # allow using test files with same name
   "-s",                      # print output from tests
 ]
+ini_options.xfail_strict = true
 # info on how to use this https://stackoverflow.com/questions/57925071/how-do-i-avoid-getting-deprecationwarning-from-inside-dependencies-with-pytest
 ini_options.filterwarnings = [
   # "ignore:.*U.*mode is deprecated:DeprecationWarning",
@@ -217,11 +205,9 @@ paths.source = [
   "*/site-packages/spatialdata_plot",
 ]
 
-[tool.jupytext]
-formats = "ipynb,md"
-
 [tool.cruft]
 skip = [
+  ".git",
   "tests",
   "src/**/__init__.py",
   "src/**/basic.py",

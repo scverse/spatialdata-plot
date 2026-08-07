@@ -9,7 +9,7 @@ the [scientific Python tutorials][], or the [scanpy developer guide][].
 
 [pyopensci tutorials]: https://www.pyopensci.org/learn.html
 [scientific Python tutorials]: https://learn.scientific-python.org/development/tutorials/
-[scanpy developer guide]: https://scanpy.readthedocs.io/en/latest/dev/index.html
+[scanpy developer guide]: https://scanpy.scverse.org/page/dev/
 
 :::{tip} The *hatch* project manager
 
@@ -33,8 +33,9 @@ it is still possible to use different tools to manage dependencies, such as `uv`
 In addition to the packages needed to _use_ this package,
 you need additional python packages to [run tests](#writing-tests) and [build the documentation](#docs-building).
 
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
 
 On the command line, you typically interact with hatch through its command line interface (CLI).
 Running one of the following commands will automatically resolve the environments for testing and
@@ -45,43 +46,75 @@ hatch test  # defined in the table [tool.hatch.envs.hatch-test] in pyproject.tom
 hatch run docs:build  # defined in the table [tool.hatch.envs.docs]
 ```
 
-When using an IDE such as VS Code,
-you'll have to point the editor at the paths to the virtual environments manually.
-The environment you typically want to use as your main development environment is the `hatch-test`
-environment with the latest Python version.
+### VS Code
 
+If you are using VS code, install the [hatch-code][] extension.
+Additionally, make sure that the `vscode-python-environments` extension is installed (should be by default)
+and `"python.useEnvironmentsExtension": true` is activated in your `settings.json`.
+
+Next, open the "Python Environment Managers" sidebar.
+You can do so by opening the command palette (Ctrl+Shift+P) and searching for `Python: Focus on Environment Managers View`.
+It will show a collapsible list where you can expand "Hatch"
+and activate an environment by clicking on the checkmark next to it.
+As the main development environment, we recommend to use `hatch-test` with the latest supported Python version.
+
+### Other IDEs
+
+For other IDEs, you’ll have to point the editor at the paths to the virtual environments manually.
 To get a list of all environments for your projects, run
 
 ```bash
 hatch env show -i
 ```
 
+This will list “Standalone” environments and a table of “Matrix” environments like the following:
+
+```
++------------+---------+--------------------------+----------+---------------------------------+-------------+
+| Name       | Type    | Envs                     | Features | Dependencies                    | Scripts     |
++------------+---------+--------------------------+----------+---------------------------------+-------------+
+| hatch-test | virtual | hatch-test.py3.12-stable | dev      | coverage-enable-subprocess==1.0 | cov-combine |
+|            |         | hatch-test.py3.14-stable | test     | coverage[toml]~=7.4             | cov-report  |
+|            |         | hatch-test.py3.14-pre    |          | pytest-mock~=3.12               | run         |
+|            |         |                          |          | pytest-randomly~=3.15           | run-cov     |
+|            |         |                          |          | pytest-rerunfailures~=14.0      |             |
+|            |         |                          |          | pytest-xdist[psutil]~=3.5       |             |
+|            |         |                          |          | pytest~=8.1                     |             |
++------------+---------+--------------------------+----------+---------------------------------+-------------+
+```
+
 From the `Envs` column, select the environment name you want to use for development.
+As the main development environment, we recommend to use `hatch-test` with the latest supported Python version.
+In this example, it would be `hatch-test.py3.14-stable`.
 
 Next, create the environment with
 
 ```bash
-hatch env create <env-name>
+hatch env create hatch-test.py3.14-stable
 ```
 
 Then, obtain the path to the environment using
 
 ```bash
-hatch env find <env-name>
+hatch env find hatch-test.py3.14-stable
 ```
 
-In case you are using VScode, now open the command palette (Ctrl+Shift+P) and search for `Python: Select Interpreter`.
-Choose `Enter Interpreter Path` and paste the path to the virtual environment from above.
+and manually point it to the python binary.
+
 
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
 
 A popular choice for managing virtual environments is [uv][].
 The main disadvantage compared to hatch is that it supports only a single environment per project at a time,
 which requires you to mix the dependencies for running tests and building docs.
+This can have undesired side-effects,
+such as requiring to install a lower version of a library your project depends on,
+only because an outdated sphinx plugin pins an older version.
 
-To initalize a virtual environment in the `.venv` directory of your project, simply run
+To initialize a virtual environment in the `.venv` directory of your project, simply run
 
 ```bash
 uv sync --all-extras
@@ -91,10 +124,11 @@ The `.venv` directory is typically automatically discovered by IDEs such as VS C
 
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
 
-Pip is nowadays mostly superseded by environment managers such as [hatch][].
-However, for the sake of completeness, and since it's ubiquitously available,
+Pip is nowadays mostly superseded by environment manager such as [hatch][].
+However, for the sake of completeness, and since it’s ubiquitously available,
 we describe how you can manage environments manually using `pip`:
 
 ```bash
@@ -109,24 +143,26 @@ The `.venv` directory is typically automatically discovered by IDEs such as VS C
 :::::
 
 [hatch environments]: https://hatch.pypa.io/latest/tutorials/environment/basic-usage/
+[hatch-code]: https://marketplace.visualstudio.com/items?itemName=PyPA.hatch
 [uv]: https://docs.astral.sh/uv/
 
 ## Code-style
 
-This package uses [pre-commit][] to enforce consistent code-styles.
-On every commit, pre-commit checks will either automatically fix issues with the code, or raise an error message.
+This package uses [pre-commit][]-style hooks to enforce consistent code-styles.
+We recommend running them with [prek][], a fast, drop-in replacement for `pre-commit` that reads the same `.pre-commit-config.yaml`.
+On every commit, the checks will either automatically fix issues with the code, or raise an error message.
 
-To enable pre-commit locally, simply run
+To enable the checks locally, install [prek][] (e.g. with `uv tool install prek`) and run
 
 ```bash
-pre-commit install
+prek install
 ```
 
 in the root of the repository.
-Pre-commit will automatically download all dependencies when it is run for the first time.
+prek will automatically download all dependencies when it is run for the first time.
 
 Alternatively, you can rely on the [pre-commit.ci][] service enabled on GitHub.
-If you didn't run `pre-commit` before pushing changes to GitHub it will automatically commit fixes to your pull request, or show an error message.
+If you didn’t run the checks before pushing changes to GitHub it will automatically commit fixes to your pull request, or show an error message.
 
 If pre-commit.ci added a commit on a branch you still have been working on locally, simply use
 
@@ -135,12 +171,13 @@ git pull --rebase
 ```
 
 to integrate the changes into yours.
-While the [pre-commit.ci][] is useful, we strongly encourage installing and running pre-commit locally first to understand its usage.
+While the [pre-commit.ci][] is useful, we strongly encourage installing and running the checks locally first to understand their usage.
 
 Finally, most editors have an _autoformat on save_ feature.
 Consider enabling this option for [ruff][ruff-editors] and [biome][biome-editors].
 
 [pre-commit]: https://pre-commit.com/
+[prek]: https://prek.j178.dev/
 [pre-commit.ci]: https://pre-commit.ci/
 [ruff-editors]: https://docs.astral.sh/ruff/integrations/
 [biome-editors]: https://biomejs.dev/guides/integrate-in-editor/
@@ -153,17 +190,14 @@ This package uses [pytest][] for automated testing.
 Please write {doc}`scanpy:dev/testing` for every function added to the package.
 
 Most IDEs integrate with pytest and provide a GUI to run tests.
-Just point yours to one of the environments returned by
-
-```bash
-hatch env create hatch-test  # create test environments for all supported versions
-hatch env find hatch-test  # list all possible test environment paths
-```
+If you set up your virtual environments as described in [installing dev dependencies](#installing-dev-dependencies),
+test cases should be automatically discovered by your IDE.
 
 Alternatively, you can run all tests from the command line by executing
 
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
 
 ```bash
 hatch test  # test with the highest supported Python version
@@ -173,7 +207,8 @@ hatch test --all  # test with all supported Python versions
 
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
 
 ```bash
 uv run pytest
@@ -181,7 +216,8 @@ uv run pytest
 
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
 
 ```bash
 source .venv/bin/activate
@@ -195,23 +231,12 @@ in the root of the repository.
 
 [pytest]: https://docs.pytest.org/
 
-### Testing the correctness of the plots
-
-Many tests will produce plots and check that they are correct by comparing them with a previously saved and serialized version of the same plots. The ground truth images are located in `tests/_images`. Different OS/versions may produce similar but not identical plots (for instance the ticks/padding could vary). To take into account for this please consider the following:
-
-- you should not use locally generated plots as ground truth images, but you should commit images that have been generated by a GitHub Action. The recommended workflow is to go to the ["actions" page for the repo](https://github.com/scverse/spatialdata-plot/actions/workflows/test.yaml), download the artifacts, and upload them as ground truth (after having reviewed them).
-- the ground truth images need to be updated when a new test is passing, or when a test starts producing a slightly different (but consistent) plot.
-- please never replace the ground truth images without having manually reviewed them.
-- if you run the tests locally in macOS or Windows they will likely fail because the ground truth images are generated using Ubuntu. To overcome this you can use `act`, which will generate a Docker reproducing the environment used in the GitHub Action. After the Docker container is generated you can use it within IDEs to run tests and debug code.
-- in the case of PyCharm, it is easier to create a container from a `Dockerfile` instead of using `act`. Please in such case use the `Dockerfile` made available in the repository. In this [thread](https://github.com/scverse/spatialdata-plot/pull/397) you can find extra details, and the process is shown [in this Loom recording](https://www.loom.com/share/172e309e5803419bb3b3107eee1f3a4e).
-- If you are encountering problems with `act` or `docker`, please [get in touch with the developers via Zulip](https://scverse.zulipchat.com/#narrow/channel/443514-spatialdata-dev) and we will help troubleshoot the issue.
-
 ### Continuous integration
 
 Continuous integration via GitHub actions will automatically run the tests on all pull requests and test
 against the minimum and maximum supported Python version.
 
-Additionally, there's a CI job that tests against pre-releases of all dependencies (if there are any).
+Additionally, there’s a CI job that tests against pre-releases of all dependencies (if there are any).
 The purpose of this check is to detect incompatibilities of new package versions early on and
 gives you time to fix the issue or reach out to the developers of the dependency before the package
 is released to a wider audience.
@@ -250,62 +275,30 @@ Please write documentation for new or changed features and use-cases.
 This project uses [sphinx][] with the following features:
 
 - The [myst][] extension allows to write documentation in markdown/Markedly Structured Text
-- [Numpy-style docstrings][numpydoc] (through the [napoleon][numpydoc-napoleon] extension).
-- Jupyter notebooks as tutorials through [myst-nb][] (See [Gallery notebooks (submodule)](#gallery-notebooks-submodule))
+- [Numpy-style docstrings][numpydoc] (through the [napoloen][numpydoc-napoleon] extension).
+- Jupyter notebooks as tutorials through [myst-nb][] (See [Tutorials with myst-nb](#tutorials-with-myst-nb-and-jupyter-notebooks))
 - [sphinx-autodoc-typehints][], to automatically reference annotated input and output types
 - Citations (like {cite:p}`Virshup_2023`) can be included with [sphinxcontrib-bibtex](https://sphinxcontrib-bibtex.readthedocs.io/)
 
-See scanpy's {doc}`scanpy:dev/documentation` for more information on how to write your own.
+See scanpy’s {doc}`scanpy:dev/documentation` for more information on how to write your own.
 
-[sphinx]: https://www.sphinx-doc.org/en/master/
-[myst]: https://myst-parser.readthedocs.io/en/latest/intro.html
-[myst-nb]: https://myst-nb.readthedocs.io/en/latest/
-[numpydoc-napoleon]: https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
-[numpydoc]: https://numpydoc.readthedocs.io/en/latest/format.html
+[sphinx]: https://www.sphinx-doc.org/
+[myst]: https://myst-parser.readthedocs.io/page/intro.html
+[myst-nb]: https://myst-nb.readthedocs.io/
+[numpydoc-napoleon]: https://www.sphinx-doc.org/page/usage/extensions/napoleon.html
+[numpydoc]: https://numpydoc.readthedocs.io/page/format.html
 [sphinx-autodoc-typehints]: https://github.com/tox-dev/sphinx-autodoc-typehints
 
-### Gallery notebooks (submodule)
+### Tutorials with myst-nb and jupyter notebooks
 
-The gallery rendered into the docs lives in a separate repository,
-[`scverse/spatialdata-plot-notebooks`][notebooks-repo], mounted here as a git
-submodule at `docs/notebooks/`. This follows the scverse convention used by
-`anndata`, `spatialdata`, `scvi-tools`, and `squidpy`.
+The documentation is set-up to render jupyter notebooks stored in the `docs/notebooks` directory using [myst-nb][].
+Currently, only notebooks in `.ipynb` format are supported that will be included with both their input and output cells.
+It is your responsibility to update and re-run the notebook whenever necessary.
 
-Notebooks are pre-executed by humans and committed with their outputs; the
-docs build performs no execution and pulls no data. A scheduled CI job in the
-notebooks repo re-executes every notebook against the latest
-`spatialdata-plot` release and fails on output drift.
+If you are interested in automatically running notebooks as part of the continuous integration,
+please check out [this feature request][issue-render-notebooks] in the `cookiecutter-scverse` repository.
 
-#### Working with the gallery locally
-
-```bash
-# First-time clone — pull this repo with submodules
-git clone --recurse-submodules https://github.com/scverse/spatialdata-plot.git
-
-# Already cloned without submodules — initialise after the fact
-git submodule update --init --recursive
-
-# Pull the latest gallery content from the notebooks repo's main branch
-git submodule update --remote docs/notebooks
-```
-
-ReadTheDocs is configured (`submodules: include: all` in `.readthedocs.yaml`)
-to fetch the submodule on every build, so PR previews always render the
-current pinned gallery content.
-
-#### Adding or editing a notebook
-
-Notebook changes are made in the [notebooks repo][notebooks-repo], not here.
-See its `CONTRIBUTING.md` for the workflow. After your notebook PR merges
-there, open a small follow-up PR in this repo bumping the submodule pin:
-
-```bash
-git submodule update --remote docs/notebooks
-git add docs/notebooks
-git commit -m "Bump notebooks submodule"
-```
-
-[notebooks-repo]: https://github.com/scverse/spatialdata-plot-notebooks
+[issue-render-notebooks]: https://github.com/scverse/cookiecutter-scverse/issues/40
 
 #### Hints
 
@@ -318,19 +311,9 @@ git commit -m "Bump notebooks submodule"
 
 ### Building the docs locally
 
-:::{important}
-The docs include a git submodule (`docs/notebooks` → `spatialdata-plot-notebooks`).
-If you cloned this repo without `--recurse-submodules`, initialise it once before building:
-
-```bash
-git submodule update --init --recursive
-```
-
-Without the submodule, the gallery pages will be missing and sphinx will warn about broken toctree entries.
-:::
-
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
 
 ```bash
 hatch run docs:build
@@ -339,7 +322,8 @@ hatch run docs:open
 
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
 
 ```bash
 cd docs
@@ -349,7 +333,8 @@ uv run sphinx-build -M html . _build -W
 
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
 
 ```bash
 source .venv/bin/activate
