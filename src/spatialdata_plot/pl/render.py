@@ -1067,6 +1067,11 @@ def _scatter_points(
         x,
         y,
         s=size,
+        # No edge stroke: matplotlib's default (edgecolors="face", linewidths=1pt) strokes each
+        # circle marker with a fixed points-unit ring. When the fill disk goes sub-pixel (tiny
+        # `size` at high dpi) only that ring survives, rendering markers as hollow outlines.
+        # linewidths=0 keeps them solid fills whose radius honours `size`.
+        linewidths=0,
         rasterized=sc_settings._vector_friendly,
         alpha=alpha,
         transform=trans_data,
