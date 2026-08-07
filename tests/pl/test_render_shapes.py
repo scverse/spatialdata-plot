@@ -564,6 +564,12 @@ class TestShapes(PlotTester, metaclass=PlotTesterMeta):
             filter_table=True,
         )
 
+        # spatialdata's query returns the cropped geometries in a version-dependent order (0.8's
+        # relational-query refactor reorders them), which flips the draw/z-order of the overlapping
+        # circles and so the rendered image. Sort by index for a deterministic draw order, so the
+        # baseline matches across the supported spatialdata range.
+        sdata_cropped["blobs_circles"] = sdata_cropped["blobs_circles"].sort_index()
+
         sdata_cropped.pl.render_shapes("blobs_circles", color="annotation").pl.show()
 
     def test_plot_can_color_two_shapes_elements_by_annotation(self, sdata_blobs: SpatialData):
