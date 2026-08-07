@@ -20,8 +20,6 @@ import xarray as xr
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import BoundaryNorm, Colormap, ListedColormap, Normalize, to_rgba_array
-from scanpy._settings import settings as sc_settings
-from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import get_extent, get_values
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
@@ -60,6 +58,7 @@ from spatialdata_plot.pl._geometry import (
     _scale_geometries,
     _validate_polygons,
 )
+from spatialdata_plot.pl._scanpy_compat import _add_categorical_legend, vector_friendly
 from spatialdata_plot.pl._validate import (
     _check_obs_var_shadow,
 )
@@ -933,7 +932,7 @@ def _render_shapes(
                 s=render_params.scale,
                 c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
                 render_params=render_params,
-                rasterized=sc_settings._vector_friendly,
+                rasterized=vector_friendly(),
                 cmap=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
@@ -949,7 +948,7 @@ def _render_shapes(
                 s=render_params.scale,
                 c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
                 render_params=render_params,
-                rasterized=sc_settings._vector_friendly,
+                rasterized=vector_friendly(),
                 cmap=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[0],
@@ -966,7 +965,7 @@ def _render_shapes(
                 s=render_params.scale,
                 c=np.array(["white"]),  # hack, will be invisible bc fill_alpha=0
                 render_params=render_params,
-                rasterized=sc_settings._vector_friendly,
+                rasterized=vector_friendly(),
                 cmap=None,
                 fill_alpha=0.0,
                 outline_alpha=render_params.outline_alpha[1],
@@ -984,7 +983,7 @@ def _render_shapes(
             c=color_spec.to_rgba(render_params.cmap_params),
             prebuilt_paths=prebuilt_paths,
             render_params=render_params,
-            rasterized=sc_settings._vector_friendly,
+            rasterized=vector_friendly(),
             cmap=render_params.cmap_params.cmap,
             fill_alpha=render_params.fill_alpha,
             outline_alpha=0.0,
@@ -1072,7 +1071,7 @@ def _scatter_points(
         # `size` at high dpi) only that ring survives, rendering markers as hollow outlines.
         # linewidths=0 keeps them solid fills whose radius honours `size`.
         linewidths=0,
-        rasterized=sc_settings._vector_friendly,
+        rasterized=vector_friendly(),
         alpha=alpha,
         transform=trans_data,
         zorder=zorder,

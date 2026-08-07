@@ -31,7 +31,6 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from pandas.api.types import CategoricalDtype, is_numeric_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
-from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import (
     SpatialData,
     get_element_annotators,
@@ -56,7 +55,7 @@ from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
-from spatialdata_plot.pl._scanpy_palettes import default_102
+from spatialdata_plot.pl._scanpy_compat import _add_categorical_legend, default_102
 from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
