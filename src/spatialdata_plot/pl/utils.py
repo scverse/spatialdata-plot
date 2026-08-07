@@ -31,7 +31,6 @@ from matplotlib_scalebar.scalebar import ScaleBar
 from pandas.api.types import CategoricalDtype, is_numeric_dtype
 from pandas.core.arrays.categorical import Categorical
 from scanpy import settings
-from scanpy.plotting import palettes
 from scanpy.plotting._tools.scatterplots import _add_categorical_legend
 from spatialdata import (
     SpatialData,
@@ -57,6 +56,7 @@ from spatialdata.transformations.operations import get_transformation
 from xarray import DataArray, DataTree
 
 from spatialdata_plot._logging import logger
+from spatialdata_plot.pl._scanpy_palettes import default_102
 from spatialdata_plot.pl.render_params import (
     Color,
     ColorbarSpec,
@@ -451,7 +451,7 @@ def _stack_categorical_legend(
 # A per-entry legend past this many categories is unreadable, and scanpy builds it in O(categories^2)
 # (one autoscaling artist each), dominating the render — so skip it with a warning. Tied to scanpy's
 # default_102 palette, beyond which its *default* colors also stop being distinguishable (uniform grey).
-_MAX_LEGEND_CATEGORIES = len(palettes.default_102)
+_MAX_LEGEND_CATEGORIES = len(default_102)
 
 
 def _first_color_per_category(source: pd.Categorical, color_vector: Any) -> dict[Any, Any]:

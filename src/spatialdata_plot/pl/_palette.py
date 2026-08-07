@@ -20,7 +20,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import ListedColormap, to_hex, to_rgb
 from matplotlib.pyplot import colormaps as mpl_colormaps
-from scanpy.plotting.palettes import default_20, default_28, default_102
+
+from spatialdata_plot.pl._scanpy_palettes import default_20, default_28, default_102
 
 if TYPE_CHECKING:
     import spatialdata as sd
