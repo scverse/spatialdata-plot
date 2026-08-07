@@ -197,7 +197,9 @@ class TestMakePaletteFromData:
         assert all(v.startswith("#") for v in result.values())
 
     def test_default_matches_scanpy_order(self, clustered_sdata: SpatialData):
-        from scanpy.plotting.palettes import default_20
+        # Import via the compat shim so this resolves across scanpy versions (1.13 moved the
+        # palettes to scanpy.plotting.legacy.palettes); it's the same source make_palette uses.
+        from spatialdata_plot.pl._scanpy_compat import default_20
 
         result = make_palette_from_data(clustered_sdata, "cells", "cell_type")
         for i, cat in enumerate(sorted(result.keys())):

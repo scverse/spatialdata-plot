@@ -28,7 +28,6 @@ from matplotlib.colors import (
 from numpy.random import default_rng
 from pandas.api.types import CategoricalDtype, is_bool_dtype, is_numeric_dtype, is_string_dtype
 from pandas.core.arrays.categorical import Categorical
-from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from skimage.color import label2rgb
 from skimage.morphology import erosion, footprint_rectangle
 from skimage.util import map_array
@@ -42,7 +41,12 @@ from spatialdata.models import (
 )
 
 from spatialdata_plot._logging import logger
-from spatialdata_plot.pl._scanpy_palettes import default_20, default_28, default_102
+from spatialdata_plot.pl._scanpy_compat import (
+    add_colors_for_categorical_sample_annotation,
+    default_20,
+    default_28,
+    default_102,
+)
 from spatialdata_plot.pl.render_params import (
     CmapParams,
     Color,
