@@ -3,10 +3,13 @@ from unittest.mock import patch
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 from matplotlib.figure import Figure
 from spatialdata import SpatialData
+from spatialdata.models import PointsModel
 from spatialdata.transformations import Identity, set_transformation
 
 import spatialdata_plot  # noqa: F401
@@ -136,6 +139,99 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(title="", return_ax=True, show=False)
         assert ax.get_title() == ""
         plt.close("all")
+
+
+def test_crop_sets_exact_axis_limits(sdata_blobs: SpatialData):
+    """crop=(xmin, xmax, ymin, ymax) pins the view to the box; y is inverted (top-left origin)."""
+    ax = sdata_blobs.pl.render_points().pl.show(crop=(100, 300, 120, 260), return_ax=True, show=False)
+    assert ax.get_xlim() == pytest.approx((100, 300))
+    assert ax.get_ylim() == pytest.approx((260, 120))  # set_ylim(ymax, ymin)
+    plt.close("all")
+
+
+def test_crop_ignores_pad_extent(sdata_blobs: SpatialData):
+    """pad_extent must not widen a crop box (the view is exactly the box)."""
+    ax = sdata_blobs.pl.render_points().pl.show(crop=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False)
+    assert ax.get_xlim() == pytest.approx((100, 300))
+    assert ax.get_ylim() == pytest.approx((260, 120))
+    plt.close("all")
+
+
+def test_crop_reduces_points_drawn(sdata_blobs: SpatialData):
+    """The fast subset draws fewer points than the full render."""
+
+    def n_offsets(ax):
+        return sum(len(c.get_offsets()) for c in ax.collections if hasattr(c, "get_offsets"))
+
+    full = sdata_blobs.pl.render_points().pl.show(return_ax=True, show=False)
+    cropped = sdata_blobs.pl.render_points().pl.show(crop=(100, 300, 120, 260), return_ax=True, show=False)
+    assert 0 < n_offsets(cropped) < n_offsets(full)
+    plt.close("all")
+
+
+def test_crop_continuous_color_domain_from_full_element():
+    """Auto-scaled color range must come from the full element, so cropped colors match uncropped."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"x": rng.uniform(0, 100, 2000), "y": rng.uniform(0, 100, 2000), "val": rng.uniform(0, 1, 2000)})
+    df.loc[0, ["x", "y", "val"]] = [90, 90, 10.0]  # an extreme value far outside the crop box
+    sdata = SpatialData(points={"p": PointsModel.parse(df, transformations={"global": Identity()})})
+
+    def vrange(ax):
+        for c in ax.collections:
+            if getattr(c, "norm", None) is not None and c.norm.vmax is not None:
+                return (c.norm.vmin, c.norm.vmax)
+        return None
+
+    full = sdata.pl.render_points("p", color="val").pl.show(return_ax=True, show=False)
+    cropped = sdata.pl.render_points("p", color="val").pl.show(crop=(20, 50, 30, 60), return_ax=True, show=False)
+    assert vrange(cropped) == pytest.approx(vrange(full))
+    plt.close("all")
+
+
+def test_crop_image_rasterizes_only_window():
+    """A cropped large image is rasterized to the window at figure resolution, not the full image then clipped.
+
+    Regression for #764: rasterize() maps the crop bbox through the element transform, so placement is
+    correct even under a Scale+Translation (which a naive .sel would mis-place) and only the window is read.
+    """
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 3000
+    rng = np.random.default_rng(0)
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    img = Image2DModel.parse(
+        rng.random((1, n, n), dtype=np.float32), dims=("c", "y", "x"), transformations={"global": transform}
+    )
+    sdata = SpatialData(images={"img": img})
+    # full world extent x=(1000, 7000), y=(500, 6500); crop a small central window
+    ax = sdata.pl.render_images("img").pl.show(crop=(3500, 3900, 3500, 3900), return_ax=True, show=False)
+
+    assert ax.get_xlim() == pytest.approx((3500, 3900))
+    assert ax.get_ylim() == pytest.approx((3900, 3500))  # inverted y
+    # the rendered raster covers the window at ~figure resolution, not the 3000-px source
+    (im,) = ax.get_images()
+    assert max(im.get_array().shape[:2]) < n // 2
+    plt.close("all")
+
+
+def test_crop_invalid_order_raises(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="xmin < xmax and ymin < ymax"):
+        sdata_blobs.pl.render_points().pl.show(crop=(300, 100, 120, 260), show=False)
+
+
+def test_crop_wrong_length_raises(sdata_blobs: SpatialData):
+    with pytest.raises(TypeError, match="tuple of four numbers"):
+        sdata_blobs.pl.render_points().pl.show(crop=(100, 300, 120), show=False)
+
+
+def test_crop_multiple_coordinate_systems_raises(sdata_blobs: SpatialData):
+    """crop is one box in one CS's units; rendering several CS at once is rejected."""
+    set_transformation(sdata_blobs["blobs_points"], Identity(), to_coordinate_system="other")
+    with pytest.raises(ValueError, match="single coordinate system"):
+        sdata_blobs.pl.render_points().pl.show(
+            coordinate_systems=["global", "other"], crop=(100, 300, 120, 260), show=False
+        )
 
 
 def test_fig_parameter_emits_deprecation_warning(sdata_blobs: SpatialData):

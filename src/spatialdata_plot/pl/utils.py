@@ -812,6 +812,7 @@ def _rasterize_if_necessary(
     height: float,
     coordinate_system: str,
     extent: dict[str, tuple[float, float]],
+    crop: tuple[float, float, float, float] | None = None,
 ) -> DataArray:
     """Ensure fast rendering by adapting the resolution if necessary.
 
@@ -849,24 +850,34 @@ def _rasterize_if_necessary(
     target_y_dims = dpi * height
     target_x_dims = dpi * width
 
-    # Rasterize when the source image is substantially larger than what the
-    # current figure DPI × size requires.  The +100 margin avoids rasterizing
-    # when the image is only slightly larger than the target.
-    do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
+    if crop is not None:
+        # Restrict rasterization to the crop window. ``rasterize`` maps the target bbox
+        # through the element transform internally, so the window is placed correctly
+        # without a transform rewrite, only its source pixels are read (cost bounded by
+        # the window, not the full image), and the zoom keeps full figure resolution.
+        # ``crop`` is (x0, y0, x1, y1) in coordinate-system units.
+        raster_extent = {"x": (crop[0], crop[2]), "y": (crop[1], crop[3])}
+        do_rasterization = True
+    else:
+        raster_extent = extent
+        # Rasterize when the source image is substantially larger than what the
+        # current figure DPI × size requires.  The +100 margin avoids rasterizing
+        # when the image is only slightly larger than the target.
+        do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
 
     if do_rasterization:
         logger.info("Rasterizing image for faster rendering.")
         # ``rasterize`` interprets ``target_unit_to_pixels`` in world units, not
         # intrinsic pixels. Dividing by world extent keeps the result correct
         # for any transformation (translation, scale, etc.).
-        world_x = float(extent["x"][1]) - float(extent["x"][0])
-        world_y = float(extent["y"][1]) - float(extent["y"][0])
+        world_x = float(raster_extent["x"][1]) - float(raster_extent["x"][0])
+        world_y = float(raster_extent["y"][1]) - float(raster_extent["y"][0])
         target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)
         image = rasterize(
             image,
             ("y", "x"),
-            [extent["y"][0], extent["x"][0]],
-            [extent["y"][1], extent["x"][1]],
+            [raster_extent["y"][0], raster_extent["x"][0]],
+            [raster_extent["y"][1], raster_extent["x"][1]],
             coordinate_system,
             target_unit_to_pixels=target_unit_to_pixels,
         )
@@ -1457,6 +1468,61 @@ def _element_extent_fast(
     corners = np.array([[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]])
     tc = corners @ affine.T + matrix[:2, 2]
     return {"x": (float(tc[:, 0].min()), float(tc[:, 0].max())), "y": (float(tc[:, 1].min()), float(tc[:, 1].max()))}
+
+
+# --- Fast bbox subset for on-the-fly cropping (points/shapes only) ---------------------------------
+# Drop rows/geometries outside a coordinate-system bbox before the expensive draw, without rebuilding
+# a SpatialData object or re-joining tables (which is what makes spatialdata.bounding_box_query slow).
+# Images/labels are not subset here: slicing a DataArray does not update what get_extent/imshow read,
+# so a sliced image is drawn in the wrong place; they rely on axis-limit clipping instead.
+
+
+def _bbox_to_element_space(
+    element: Any, coordinate_system: str, bbox: tuple[float, float, float, float]
+) -> tuple[float, float, float, float] | None:
+    """Map a coordinate-system bbox ``(x0, y0, x1, y1)`` to element-native coords.
+
+    Inverts the axis-aligned affine on the box corners and re-sorts so the result has ``x0 <= x1`` and
+    ``y0 <= y1`` even when the transform flips an axis (a negative scale would otherwise yield a
+    reversed box that silently empties ``.cx``/``.sel``). Returns ``None`` for rotation/shear, where a
+    box does not map to a box; the caller then skips the fast subset.
+    """
+    matrix = get_transformation(element, get_all=True)[coordinate_system].to_affine_matrix(("x", "y"), ("x", "y"))
+    affine = matrix[:2, :2]
+    if not _is_axis_aligned(affine):
+        return None
+    x0, y0, x1, y1 = bbox
+    corners = np.array([[x0, y0], [x1, y0], [x0, y1], [x1, y1]], dtype=float)
+    elem = (corners - matrix[:2, 2]) @ np.linalg.inv(affine).T
+    return (float(elem[:, 0].min()), float(elem[:, 1].min()), float(elem[:, 0].max()), float(elem[:, 1].max()))
+
+
+def _bbox_mask_points(x: ArrayLike, y: ArrayLike, elem_bbox: tuple[float, float, float, float]) -> ArrayLike:
+    """Boolean keep-mask for points whose element-native ``(x, y)`` fall inside ``elem_bbox``."""
+    x0, y0, x1, y1 = elem_bbox
+    x, y = np.asarray(x), np.asarray(y)
+    return (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
+
+
+def _bbox_mask_shapes(shapes: GeoDataFrame, elem_bbox: tuple[float, float, float, float]) -> ArrayLike:
+    """Boolean keep-mask for shapes whose bounds intersect ``elem_bbox`` (element-native coords).
+
+    Bbox-intersect, not clip: a boundary-crossing shape is kept whole (axis-limit clipping trims it
+    visually). Circles are stored as ``Point`` + ``radius``, so their bounds are the centre expanded by
+    the radius; a centroid-only test would drop circles whose body overlaps the box. Polygons use the
+    geometry's own bounds. This is the masking form of geopandas ``.cx`` (which returns a frame, not a
+    mask we can align to ``color_spec``).
+    """
+    x0, y0, x1, y1 = elem_bbox
+    geom = shapes.geometry
+    if (geom.geom_type == "Point").all():  # circles: Point + radius column
+        cx, cy = geom.x.to_numpy(), geom.y.to_numpy()
+        r = np.asarray(shapes[ShapesModel.RADIUS_KEY], dtype=float)
+        minx, miny, maxx, maxy = cx - r, cy - r, cx + r, cy + r
+    else:  # polygons / multipolygons (also valid for plain points: degenerate bounds)
+        b = geom.bounds  # C-level; columns minx, miny, maxx, maxy
+        minx, miny, maxx, maxy = (b[c].to_numpy() for c in ("minx", "miny", "maxx", "maxy"))
+    return (maxx >= x0) & (minx <= x1) & (maxy >= y0) & (miny <= y1)
 
 
 def _fast_extent(element: Any, coordinate_system: str) -> dict[str, tuple[float, float]]:

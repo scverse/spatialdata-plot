@@ -78,6 +78,9 @@ from spatialdata_plot.pl.render_params import (
     colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
+    _bbox_mask_points,
+    _bbox_mask_shapes,
+    _bbox_to_element_space,
     _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
@@ -103,6 +106,23 @@ _MULTI_CMAP_BLENDING_WARNING = (
     "Therefore, the 'white' of higher layers will overlay the lower layers. "
     "Consider using 'palette' instead."
 )
+
+
+def _pin_norm_to_full_data(color_spec: ColorSpec, cmap_params: CmapParams) -> None:
+    """Pin ``cmap_params.norm`` vmin/vmax from the full (pre-crop) continuous color vector.
+
+    Cropping happens after color resolution but the norm autoscales later at draw time from the
+    (cropped) color vector, which would recolor the visible data and shift the colorbar. Pinning the
+    range here keeps the matplotlib per-element coloring identical to the uncropped plot. No-op for
+    categorical color or when the user already supplied explicit vmin/vmax. Datashader colors the
+    per-pixel aggregate, not this vector, so its range still reflects the visible region.
+    """
+    if not color_spec.is_continuous:
+        return
+    if cmap_params.norm.vmin is not None and cmap_params.norm.vmax is not None:
+        return
+    resolved = _resolve_continuous_norm(color_spec.color_vector, cmap_params)
+    cmap_params.norm.vmin, cmap_params.norm.vmax = resolved.vmin, resolved.vmax
 
 
 def _get_top_data_array(element: xr.DataArray | DataTree) -> xr.DataArray:
@@ -601,6 +621,7 @@ def _render_shapes(
     fig_params: FigParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> None:
     _log_context.set("render_shapes")
     element = render_params.element
@@ -699,6 +720,21 @@ def _render_shapes(
         sdata_filt[element] = shapes
         if outline_color_spec is not None:
             outline_color_spec = outline_color_spec.filter(keep)
+
+    # On-the-fly crop: drop shapes outside the box *after* color resolution, so the (continuous) norm
+    # and categorical palette stay derived from the full element and colors match the uncropped plot.
+    if crop is not None:
+        elem_bbox = _bbox_to_element_space(sdata_filt.shapes[element], coordinate_system, crop)
+        if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
+            _pin_norm_to_full_data(color_spec, render_params.cmap_params)
+            keep_crop = _bbox_mask_shapes(shapes, elem_bbox)
+            color_spec = color_spec.filter(keep_crop)
+            shapes = shapes[keep_crop].reset_index(drop=True)
+            if len(shapes) == 0:
+                return
+            sdata_filt[element] = shapes
+            if outline_color_spec is not None:
+                outline_color_spec = outline_color_spec.filter(keep_crop)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
 
@@ -1313,6 +1349,7 @@ def _render_points(
     fig_params: FigParams,
     legend_params: LegendParams,
     colorbar_requests: list[ColorbarSpec] | None = None,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> None:
     _log_context.set("render_points")
     element = render_params.element
@@ -1450,6 +1487,20 @@ def _render_points(
         # filter the materialized points and re-register in sdata_filt
         points = points[keep].reset_index(drop=True)
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
+
+    # On-the-fly crop: drop points outside the box *after* color resolution so the (continuous) norm
+    # and categorical palette stay derived from the full element and colors match the uncropped plot.
+    if crop is not None:
+        elem_bbox = _bbox_to_element_space(sdata.points[element], coordinate_system, crop)
+        if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
+            _pin_norm_to_full_data(color_spec, render_params.cmap_params)
+            keep_crop = _bbox_mask_points(points["x"].to_numpy(), points["y"].to_numpy(), elem_bbox)
+            if not keep_crop.any():
+                return
+            color_spec = color_spec.filter(keep_crop)
+            points = points[keep_crop].reset_index(drop=True)
+            n_points = len(points)  # method auto-threshold below should see the drawn count
+            _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
 
@@ -1735,6 +1786,7 @@ def _render_images(
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
     channel_legend_entries: list[ChannelLegendEntry] | None = None,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> None:
     _log_context.set("render_images")
     sdata_filt = sdata.filter_by_coordinate_system(
@@ -1783,6 +1835,7 @@ def _render_images(
             height=fig_params.fig.get_size_inches()[1],
             coordinate_system=coordinate_system,
             extent=extent,
+            crop=crop,
         )
 
     channels = img.coords["c"].values.tolist() if render_params.channel is None else render_params.channel

@@ -1316,6 +1316,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: list[str] | str | None = None,
         pad_extent: int | float = 0,
+        crop: tuple[float, float, float, float] | None = None,
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
@@ -1379,7 +1380,17 @@ class PlotAccessor:
             of panels. If ``None``, each panel is titled with its coordinate system name, or, in multi-panel
             color mode, with its color key.
         pad_extent : int | float, default 0
-            Padding added around the computed spatial extent on all sides.
+            Padding added around the computed spatial extent on all sides. Ignored when ``crop`` is set.
+        crop : tuple[float, float, float, float] | None, default None
+            Restrict the plot to a bounding box ``(xmin, xmax, ymin, ymax)`` in the rendered coordinate
+            system's units (same order as :meth:`matplotlib.axes.Axes.axis`). Points and shapes are
+            subsetted before drawing for speed; large images are rasterized to the window only, so the
+            full image is never materialized (fast at Visium HD scale) and the zoom keeps full figure
+            resolution; labels are drawn in full and clipped to the box. For points and shapes,
+            auto-scaled color ranges are computed from the full element so colors match the uncropped
+            plot; a cropped image's contrast auto-scales over the window (pass explicit ``vmin``/``vmax``
+            or a ``norm`` to fix it). Requires a single coordinate system (pass ``coordinate_systems``
+            with one entry if several would otherwise be rendered).
         ax : list[Axes] | Axes | None
             Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
             matching the number of coordinate systems. If ``None``, a new figure and axes are created.
@@ -1441,6 +1452,7 @@ class PlotAccessor:
             fig=fig,
             title=title,
             pad_extent=pad_extent,
+            crop=crop,
             ax=ax,
             return_ax=return_ax,
             save=save,
@@ -1493,6 +1505,19 @@ class PlotAccessor:
             cs_index=cs_index,
             ax=ax,
         )
+
+        # `crop` is one box in one coordinate system's units; applying the same numbers across
+        # coordinate systems with different scales/units would be incoherent.
+        crop_box: tuple[float, float, float, float] | None = None
+        if crop is not None:
+            if len(coordinate_systems) > 1:
+                raise ValueError(
+                    f"`crop` requires a single coordinate system, but {len(coordinate_systems)} would be "
+                    f"rendered ({coordinate_systems}). Pass `coordinate_systems=` with exactly one entry."
+                )
+            # show()'s `crop` is (xmin, xmax, ymin, ymax); the subset helpers expect (x0, y0, x1, y1).
+            xmin, xmax, ymin, ymax = crop
+            crop_box = (xmin, ymin, xmax, ymax)
 
         panels = _plan_panels(
             coordinate_systems=coordinate_systems,
@@ -1567,6 +1592,7 @@ class PlotAccessor:
                 title=title,
                 dpi=dpi,
                 figsize=figsize,
+                crop=crop_box,
             )
 
             if has_shapes and wants["shapes"]:
@@ -1581,27 +1607,34 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
-            extent = _get_extent_fast(
-                sdata,
-                coordinate_system=cs,
-                has_images=has_images and wants["images"],
-                has_labels=has_labels and wants["labels"],
-                has_points=has_points and wants["points"],
-                has_shapes=has_shapes and wants["shapes"],
-                elements=wanted_elements,
-            )
-            cs_x_min, cs_x_max = extent["x"]
-            cs_y_min, cs_y_max = extent["y"]
+            if crop_box is not None:
+                # `crop` pins the view to the exact box: set limits directly (bypassing the
+                # expand-don't-overwrite merge, which would expand back out to any pre-existing
+                # axes limits) and ignore `pad_extent`. crop_box is (x0, y0, x1, y1).
+                ax.set_xlim(crop_box[0], crop_box[2])
+                ax.set_ylim(crop_box[3], crop_box[1])  # (0, 0) is top-left
+            else:
+                # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
+                extent = _get_extent_fast(
+                    sdata,
+                    coordinate_system=cs,
+                    has_images=has_images and wants["images"],
+                    has_labels=has_labels and wants["labels"],
+                    has_points=has_points and wants["points"],
+                    has_shapes=has_shapes and wants["shapes"],
+                    elements=wanted_elements,
+                )
+                cs_x_min, cs_x_max = extent["x"]
+                cs_y_min, cs_y_max = extent["y"]
 
-            if any([has_images, has_labels, has_points, has_shapes]):
-                # If the axis already has limits, only expand them but not overwrite
-                x_min = min(ax_x_min, cs_x_min) - pad_extent
-                x_max = max(ax_x_max, cs_x_max) + pad_extent
-                y_min = min(ax_y_min, cs_y_min) - pad_extent
-                y_max = max(ax_y_max, cs_y_max) + pad_extent
-                ax.set_xlim(x_min, x_max)
-                ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
+                if any([has_images, has_labels, has_points, has_shapes]):
+                    # If the axis already has limits, only expand them but not overwrite
+                    x_min = min(ax_x_min, cs_x_min) - pad_extent
+                    x_max = max(ax_x_max, cs_x_max) + pad_extent
+                    y_min = min(ax_y_min, cs_y_min) - pad_extent
+                    y_max = max(ax_y_max, cs_y_max) + pad_extent
+                    ax.set_xlim(x_min, x_max)
+                    ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
             if legend_params_obj.colorbar and axis_colorbar_requests:
                 pending_colorbars.append((ax, axis_colorbar_requests))
@@ -2058,6 +2091,7 @@ def _render_panel(
     title: list[str] | None,
     dpi: int | None,
     figsize: tuple[float, float] | None,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> tuple[list[str], dict[str, bool]]:
     """Render every applicable render command into a single panel's axes.
 
@@ -2115,6 +2149,8 @@ def _render_panel(
                 }
                 if cmd == "render_images":
                     kwargs["channel_legend_entries"] = axis_channel_legend_entries
+                if cmd in {"render_points", "render_shapes", "render_images"}:
+                    kwargs["crop"] = crop
                 if cmd in {"render_images", "render_labels"}:
                     kwargs["rasterize"] = _should_rasterize(
                         cast("ImageRenderParams | LabelsRenderParams", element_params), dpi, figsize
