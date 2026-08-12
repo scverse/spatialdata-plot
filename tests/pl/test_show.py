@@ -266,6 +266,7 @@ def test_crop_multiscale_selects_finer_level():
     """A crop must pick a pyramid level fine enough for the WINDOW, not the whole image (Visium HD)."""
     from spatialdata.models import Image2DModel
 
+    from spatialdata_plot.pl.render_params import BBox
     from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
 
     n = 800
@@ -274,7 +275,7 @@ def test_crop_multiscale_selects_finer_level():
     extent = {"x": (0.0, float(n)), "y": (0.0, float(n))}
     coarse = _multiscale_to_spatial_image(tree, dpi=10, width=5, height=5)  # target ~50px over the full image
     fine = _multiscale_to_spatial_image(
-        tree, dpi=10, width=5, height=5, crop=(0.0, 0.0, 80.0, 80.0), extent=extent  # 10% window -> 10x boost
+        tree, dpi=10, width=5, height=5, crop=BBox(0.0, 0.0, 80.0, 80.0), extent=extent  # 10% window -> 10x boost
     )
     assert fine.shape[-1] > coarse.shape[-1]
 

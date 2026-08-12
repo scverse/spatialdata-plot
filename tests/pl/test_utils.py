@@ -1433,3 +1433,52 @@ def test_bbox_mask_shapes_polygon_intersect_and_empty():
     gdf = ShapesModel.parse(gpd.GeoDataFrame({"geometry": polys}), transformations={"g": Identity()})
     np.testing.assert_array_equal(_bbox_mask_shapes(gdf, (1.0, 1.0, 5.0, 5.0)), [True, False])
     np.testing.assert_array_equal(_bbox_mask_shapes(gdf, (200.0, 200.0, 210.0, 210.0)), [False, False])
+
+
+# --- datashader image windowing (crop) ------------------------------------------------------------
+
+
+def _bright_block_image(n=200):
+    """A single-channel n×n image (Identity transform) with a bright block at y∈[120,140), x∈[40,60)."""
+    from spatialdata.models import Image2DModel
+
+    arr = np.zeros((1, n, n), dtype=np.float32)
+    arr[0, 120:140, 40:60] = 1.0
+    return Image2DModel.parse(arr, dims=("c", "y", "x"), transformations={"g": Identity()})
+
+
+def test_datashader_window_image_places_block_at_correct_relative_position():
+    """The windowed aggregate must land the bright block where the crop box puts it (alignment fix)."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    # window x[20,80] y[100,160]; block centre world (x=50, y=130) -> rel (0.5, 0.5) -> output centre
+    out = _datashader_window_image(img, BBox(20, 100, 80, 160), "g", 60, 60, "max")
+    assert out is not None
+    a = np.asarray(out.values[0])
+    ys, xs = np.where(a > 0.5)
+    assert ys.size > 0
+    oy, ox = a.shape
+    assert 0.3 * oy <= ys.mean() <= 0.7 * oy  # near vertical centre, not shifted to an edge
+    assert 0.3 * ox <= xs.mean() <= 0.7 * ox
+
+
+def test_datashader_window_image_clamps_at_image_edge():
+    """A window straddling the image edge still returns a raster (source is clamped, not dropped)."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    out = _datashader_window_image(img, BBox(-50, 100, 50, 160), "g", 60, 60, "max")  # left half outside
+    assert out is not None
+    assert np.asarray(out.values[0]).max() > 0.5  # the in-bounds part of the block survives
+
+
+def test_datashader_window_image_none_when_fully_outside():
+    """A window with no source pixels falls back (returns None) instead of building an empty canvas."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    assert _datashader_window_image(img, BBox(500, 500, 600, 600), "g", 60, 60, "max") is None

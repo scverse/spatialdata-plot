@@ -57,6 +57,7 @@ from xarray import DataArray, DataTree
 from spatialdata_plot._logging import logger
 from spatialdata_plot.pl._scanpy_compat import _add_categorical_legend, default_102
 from spatialdata_plot.pl.render_params import (
+    BBox,
     Color,
     ColorbarSpec,
     FigParams,
@@ -807,12 +808,12 @@ def _get_valid_cs(
 
 def _rasterize_to_bbox(
     image: DataArray,
-    bbox: tuple[float, float, float, float],
+    bbox: BBox,
     coordinate_system: str,
     target_x_dims: float,
     target_y_dims: float,
 ) -> DataArray:
-    """Rasterize ``image`` to the world bbox ``(x0, y0, x1, y1)`` at ~``target_*_dims`` figure pixels.
+    """Rasterize ``image`` to the world ``bbox`` at ~``target_*_dims`` figure pixels.
 
     ``rasterize`` interprets ``target_unit_to_pixels`` in world units (not intrinsic pixels), so
     dividing the target pixel count by the world span keeps placement correct for any transformation
@@ -830,7 +831,7 @@ def _rasterize_if_necessary(
     height: float,
     coordinate_system: str,
     extent: dict[str, tuple[float, float]],
-    crop: tuple[float, float, float, float] | None = None,
+    crop: BBox | None = None,
 ) -> DataArray:
     """Ensure fast rendering by adapting the resolution if necessary.
 
@@ -870,13 +871,12 @@ def _rasterize_if_necessary(
 
     if crop is not None:
         # Restrict rasterization to the crop window: only its source pixels are read (cost bounded by
-        # the window, not the full image), and the zoom keeps full figure resolution. ``crop`` is
-        # (x0, y0, x1, y1) in coordinate-system units.
+        # the window, not the full image), and the zoom keeps full figure resolution.
         bbox = crop
     elif y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100:
         # Rasterize when the source is substantially larger than the figure DPI × size requires; the
         # +100 margin avoids rasterizing when the image is only slightly larger than the target.
-        bbox = (extent["x"][0], extent["y"][0], extent["x"][1], extent["y"][1])
+        bbox = BBox(extent["x"][0], extent["y"][0], extent["x"][1], extent["y"][1])
     else:
         return image
 
@@ -891,7 +891,7 @@ def _rasterize_if_necessary(
 
 def _datashader_window_image(
     image: DataArray,
-    crop: tuple[float, float, float, float],
+    crop: BBox,
     coordinate_system: str,
     target_x_dims: int,
     target_y_dims: int,
@@ -899,36 +899,44 @@ def _datashader_window_image(
 ) -> DataArray | None:
     """Datashader-aggregate only the crop window of an image; ``None`` to fall back to the full path.
 
-    ``rasterize`` produces the target grid with correct world coords/transform for the ``crop`` box;
-    the source is sliced to the window in element-pixel space and aggregated with the datashader
-    reduction in that pixel space, then index-assigned onto the grid. The full image is never read.
-    Returns ``None`` for rotation/shear (box does not map to a box) or an empty window.
+    ``base`` and the aggregate are made to cover the *same* integer pixel window (the fractional crop
+    box, clamped to the image), so the aggregated grid is index-assigned onto ``base`` without a
+    sub-pixel shift: ``base`` is rasterized over that window mapped back to world (correct coords /
+    transform) and datashader aggregates the sliced source over its own pixel extent. The full image is
+    never read. Returns ``None`` for rotation/shear (box does not map to a box) or an empty window.
+    Images always carry a ``c`` dim (``Image2DModel``) and this path is images-only, so no 2D branch.
     """
-    has_c_dim = len(image.shape) == 3
-    y_dims, x_dims = (image.shape[1], image.shape[2]) if has_c_dim else image.shape
-    elem_bbox = _bbox_to_element_space(image, coordinate_system, crop)
-    if elem_bbox is None:
+    y_dims, x_dims = image.shape[1], image.shape[2]
+    elem = _bbox_to_element_space(image, coordinate_system, crop)
+    if elem is None:
         return None
-    px0, py0, px1, py1 = (int(round(v)) for v in elem_bbox)
-    px0, py0 = max(px0, 0), max(py0, 0)
-    px1, py1 = min(px1, x_dims), min(py1, y_dims)
+    # Integer pixel window: floor/ceil brackets the fractional element box, clamped to the image bounds.
+    px0, py0 = max(int(np.floor(elem.x0)), 0), max(int(np.floor(elem.y0)), 0)
+    px1, py1 = min(int(np.ceil(elem.x1)), x_dims), min(int(np.ceil(elem.y1)), y_dims)
     if px1 <= px0 or py1 <= py0:
         return None
 
-    base = _rasterize_to_bbox(image, crop, coordinate_system, target_x_dims, target_y_dims)
-    out_y, out_x = (base.shape[1], base.shape[2]) if has_c_dim else base.shape
+    # World box of that integer window (forward affine on its corners), so ``base`` covers exactly the
+    # region the aggregate does — not the fractional crop box, which would shift and (when clamped at an
+    # edge) overrun the sliced source.
+    matrix = get_transformation(image, get_all=True)[coordinate_system].to_affine_matrix(("x", "y"), ("x", "y"))
+    corners = np.array([[px0, py0], [px1, py0], [px0, py1], [px1, py1]], dtype=float)
+    world = corners @ matrix[:2, :2].T + matrix[:2, 2]
+    world_box = BBox(world[:, 0].min(), world[:, 1].min(), world[:, 0].max(), world[:, 1].max())
+
+    base = _rasterize_to_bbox(image, world_box, coordinate_system, target_x_dims, target_y_dims)
+    if hasattr(base.data, "compute"):
+        base = base.copy(data=base.data.compute())  # materialize before we overwrite .values
+    out_y, out_x = base.shape[1], base.shape[2]
     src = image.isel(x=slice(px0, px1), y=slice(py0, py1))
     src = src.compute() if hasattr(src.data, "compute") else src
-    # Canvas is in the sliced source's own (pixel) coordinate space; the aggregated grid is
-    # index-assigned onto base, which already carries the correct world coords/transform.
+    # Canvas spans the sliced source's own pixel extent, so datashader places every source pixel; the
+    # aggregated grid then lines up with ``base`` (same window, same resolution).
     cvs = ds.Canvas(plot_width=out_x, plot_height=out_y, x_range=(px0, px1), y_range=(py0, py1))
-    if has_c_dim:
-        agg = np.stack(
-            [np.asarray(cvs.raster(src.isel(c=i), downsample_method=downsample_method).values) for i in range(src.sizes["c"])],
-            axis=0,
-        )
-    else:
-        agg = np.asarray(cvs.raster(src, downsample_method=downsample_method).values)
+    agg = np.stack(
+        [np.asarray(cvs.raster(src.isel(c=i), downsample_method=downsample_method).values) for i in range(src.sizes["c"])],
+        axis=0,
+    )
     base.values = agg.astype(base.dtype, copy=False)
     return base
 
@@ -941,7 +949,7 @@ def _rasterize_if_necessary_datashader(
     coordinate_system: str,
     extent: dict[str, tuple[float, float]],
     downsample_method: str,
-    crop: tuple[float, float, float, float] | None = None,
+    crop: BBox | None = None,
 ) -> DataArray:
     """Downsample to canvas resolution with a configurable datashader reduction.
 
@@ -1007,7 +1015,7 @@ def _multiscale_to_spatial_image(
     height: float,
     scale: str | None = None,
     is_label: bool = False,
-    crop: tuple[float, float, float, float] | None = None,
+    crop: BBox | None = None,
     extent: dict[str, tuple[float, float]] | None = None,
 ) -> DataArray:
     """Extract the DataArray to be rendered from a multiscale image.
@@ -1064,7 +1072,7 @@ def _multiscale_to_spatial_image(
             # portion reaches the target — scale the target up by full/window per axis.
             full_x = float(extent["x"][1]) - float(extent["x"][0])
             full_y = float(extent["y"][1]) - float(extent["y"][0])
-            win_x, win_y = crop[2] - crop[0], crop[3] - crop[1]
+            win_x, win_y = crop.x1 - crop.x0, crop.y1 - crop.y0
             if win_x > 0 and win_y > 0:
                 optimal_x *= full_x / win_x
                 optimal_y *= full_y / win_y
@@ -1548,10 +1556,8 @@ def _element_extent_fast(
 # so a sliced image is drawn in the wrong place; they rely on axis-limit clipping instead.
 
 
-def _bbox_to_element_space(
-    element: Any, coordinate_system: str, bbox: tuple[float, float, float, float]
-) -> tuple[float, float, float, float] | None:
-    """Map a coordinate-system bbox ``(x0, y0, x1, y1)`` to element-native coords.
+def _bbox_to_element_space(element: Any, coordinate_system: str, bbox: BBox) -> BBox | None:
+    """Map a coordinate-system ``bbox`` to element-native coords.
 
     Inverts the axis-aligned affine on the box corners and re-sorts so the result has ``x0 <= x1`` and
     ``y0 <= y1`` even when the transform flips an axis (a negative scale would otherwise yield a
@@ -1565,17 +1571,17 @@ def _bbox_to_element_space(
     x0, y0, x1, y1 = bbox
     corners = np.array([[x0, y0], [x1, y0], [x0, y1], [x1, y1]], dtype=float)
     elem = (corners - matrix[:2, 2]) @ np.linalg.inv(affine).T
-    return (float(elem[:, 0].min()), float(elem[:, 1].min()), float(elem[:, 0].max()), float(elem[:, 1].max()))
+    return BBox(float(elem[:, 0].min()), float(elem[:, 1].min()), float(elem[:, 0].max()), float(elem[:, 1].max()))
 
 
-def _bbox_mask_points(x: ArrayLike, y: ArrayLike, elem_bbox: tuple[float, float, float, float]) -> ArrayLike:
+def _bbox_mask_points(x: ArrayLike, y: ArrayLike, elem_bbox: BBox) -> ArrayLike:
     """Boolean keep-mask for points whose element-native ``(x, y)`` fall inside ``elem_bbox``."""
     x0, y0, x1, y1 = elem_bbox
     x, y = np.asarray(x), np.asarray(y)
     return (x >= x0) & (x <= x1) & (y >= y0) & (y <= y1)
 
 
-def _bbox_mask_shapes(shapes: GeoDataFrame, elem_bbox: tuple[float, float, float, float]) -> ArrayLike:
+def _bbox_mask_shapes(shapes: GeoDataFrame, elem_bbox: BBox) -> ArrayLike:
     """Boolean keep-mask for shapes whose bounds intersect ``elem_bbox`` (element-native coords).
 
     Bbox-intersect, not clip: a boundary-crossing shape is kept whole (axis-limit clipping trims it

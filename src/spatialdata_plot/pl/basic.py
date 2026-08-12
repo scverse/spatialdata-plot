@@ -56,6 +56,7 @@ from spatialdata_plot.pl.render import (
     _split_colorbar_params,
 )
 from spatialdata_plot.pl.render_params import (
+    BBox,
     CBAR_DEFAULT_FRACTION,
     CBAR_DEFAULT_LOCATION,
     CBAR_DEFAULT_PAD,
@@ -1511,17 +1512,17 @@ class PlotAccessor:
         )
 
         # `crop_coord` is one box in one coordinate system's units; applying the same numbers across
-        # coordinate systems with different scales/units would be incoherent.
-        crop_box: tuple[float, float, float, float] | None = None
+        # coordinate systems with different scales/units would be incoherent. Convert the public
+        # (xmin, xmax, ymin, ymax) order into the internal BBox once, here at the boundary.
+        crop_box: BBox | None = None
         if crop_coord is not None:
             if len(coordinate_systems) > 1:
                 raise ValueError(
                     f"`crop_coord` requires a single coordinate system, but {len(coordinate_systems)} would be "
                     f"rendered ({coordinate_systems}). Pass `coordinate_systems=` with exactly one entry."
                 )
-            # show()'s `crop_coord` is (xmin, xmax, ymin, ymax); the subset helpers expect (x0, y0, x1, y1).
             xmin, xmax, ymin, ymax = crop_coord
-            crop_box = (xmin, ymin, xmax, ymax)
+            crop_box = BBox(xmin, ymin, xmax, ymax)
 
         panels = _plan_panels(
             coordinate_systems=coordinate_systems,
@@ -1555,6 +1556,7 @@ class PlotAccessor:
             scalebar_units=scalebar_units,
             scalebar_kwargs=scalebar_params,
         )
+        fig_params.crop = crop_box
         legend_params_obj = _build_legend_params(
             legend_params=legend_params,
             legend_fontsize=legend_fontsize,
@@ -1596,7 +1598,6 @@ class PlotAccessor:
                 title=title,
                 dpi=dpi,
                 figsize=figsize,
-                crop=crop_box,
             )
 
             if has_shapes and wants["shapes"]:
@@ -1611,12 +1612,11 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            if crop_coord is not None:
-                # `crop_coord` pins the view to the exact box: set limits directly (bypassing the
-                # expand-don't-overwrite merge, which would expand back out to any pre-existing
-                # axes limits) and ignore `pad_extent`. crop_coord is (xmin, xmax, ymin, ymax).
-                ax.set_xlim(crop_coord[0], crop_coord[1])
-                ax.set_ylim(crop_coord[3], crop_coord[2])  # (0, 0) is top-left
+            if crop_box is not None:
+                # `crop_coord` pins the view to the exact box: bypass the expand-don't-overwrite merge
+                # (which would expand back out to any pre-existing axes limits) and ignore `pad_extent`.
+                x_min, x_max, y_min, y_max = crop_box.x0, crop_box.x1, crop_box.y0, crop_box.y1
+                set_limits = True
             else:
                 # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
                 extent = _get_extent_fast(
@@ -1630,15 +1630,17 @@ class PlotAccessor:
                 )
                 cs_x_min, cs_x_max = extent["x"]
                 cs_y_min, cs_y_max = extent["y"]
-
-                if any([has_images, has_labels, has_points, has_shapes]):
+                set_limits = any([has_images, has_labels, has_points, has_shapes])
+                if set_limits:
                     # If the axis already has limits, only expand them but not overwrite
                     x_min = min(ax_x_min, cs_x_min) - pad_extent
                     x_max = max(ax_x_max, cs_x_max) + pad_extent
                     y_min = min(ax_y_min, cs_y_min) - pad_extent
                     y_max = max(ax_y_max, cs_y_max) + pad_extent
-                    ax.set_xlim(x_min, x_max)
-                    ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
+
+            if set_limits:
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylim(y_max, y_min)  # (0, 0) is top-left
 
             if legend_params_obj.colorbar and axis_colorbar_requests:
                 pending_colorbars.append((ax, axis_colorbar_requests))
@@ -2095,7 +2097,6 @@ def _render_panel(
     title: list[str] | None,
     dpi: int | None,
     figsize: tuple[float, float] | None,
-    crop: tuple[float, float, float, float] | None = None,
 ) -> tuple[list[str], dict[str, bool]]:
     """Render every applicable render command into a single panel's axes.
 
@@ -2153,8 +2154,6 @@ def _render_panel(
                 }
                 if cmd == "render_images":
                     kwargs["channel_legend_entries"] = axis_channel_legend_entries
-                if cmd in {"render_points", "render_shapes", "render_images", "render_labels"}:
-                    kwargs["crop"] = crop
                 if cmd in {"render_images", "render_labels"}:
                     kwargs["rasterize"] = _should_rasterize(
                         cast("ImageRenderParams | LabelsRenderParams", element_params), dpi, figsize
