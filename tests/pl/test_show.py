@@ -32,6 +32,34 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
 
+    def test_plot_crop_image(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord windows an image to the box (#764)."""
+        sdata_blobs.pl.render_images("blobs_image").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_points(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord subsets points to the box, colours from the full element (#764)."""
+        sdata_blobs.pl.render_points("blobs_points", color="genes", size=20).pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_shapes(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord subsets polygons to the box (#764)."""
+        sdata_blobs.pl.render_shapes("blobs_polygons").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_circles(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord keeps circles whose body overlaps the box (radius-aware, #764)."""
+        sdata_blobs.pl.render_shapes("blobs_circles").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_labels(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord windows a labels layer to the box (#764)."""
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_layered_elements(self, sdata_blobs: SpatialData):
+        """Visual test: layered image + labels both clip to the same crop box (#764)."""
+        (
+            sdata_blobs.pl.render_images("blobs_image")
+            .pl.render_labels("blobs_labels", fill_alpha=0.5)
+            .pl.show(crop_coord=(150, 400, 150, 400))
+        )
+
     def test_plot_frameon_false_single_panel(self, sdata_blobs: SpatialData):
         """Visual test: frameon=False hides axes decorations on a single panel (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
