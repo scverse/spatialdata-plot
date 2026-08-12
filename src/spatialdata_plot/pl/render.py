@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections import abc
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import copy
 from typing import Any, Literal, cast
 
@@ -108,21 +108,24 @@ _MULTI_CMAP_BLENDING_WARNING = (
 )
 
 
-def _pin_norm_to_full_data(color_spec: ColorSpec, cmap_params: CmapParams) -> None:
-    """Pin ``cmap_params.norm`` vmin/vmax from the full (pre-crop) continuous color vector.
+def _full_element_norm_range(
+    color_spec: ColorSpec, cmap_params: CmapParams, transfunc: Callable[..., Any] | None
+) -> tuple[float, float] | None:
+    """``(vmin, vmax)`` over the full (pre-crop) continuous color vector, after ``transfunc``.
 
-    Cropping happens after color resolution but the norm autoscales later at draw time from the
-    (cropped) color vector, which would recolor the visible data and shift the colorbar. Pinning the
-    range here keeps the matplotlib per-element coloring identical to the uncropped plot. No-op for
-    categorical color or when the user already supplied explicit vmin/vmax. Datashader colors the
-    per-pixel aggregate, not this vector, so its range still reflects the visible region.
+    A crop drops rows before drawing, but the matplotlib backend must keep the uncropped colour range
+    so the zoom matches the full plot. Returns the range resolved over the full element's transfunc'd
+    values (what the uncropped plot autoscales to), or ``None`` for categorical color or when the user
+    already fixed vmin/vmax. Non-mutating and applied only on the matplotlib path: the datashader and
+    image backends never receive it and autoscale over the visible window instead.
     """
     if not color_spec.is_continuous:
-        return
+        return None
     if cmap_params.norm.vmin is not None and cmap_params.norm.vmax is not None:
-        return
-    resolved = _resolve_continuous_norm(color_spec.color_vector, cmap_params)
-    cmap_params.norm.vmin, cmap_params.norm.vmax = resolved.vmin, resolved.vmax
+        return (cmap_params.norm.vmin, cmap_params.norm.vmax)
+    vec = color_spec.apply_transfunc(transfunc).color_vector if transfunc is not None else color_spec.color_vector
+    resolved = _resolve_continuous_norm(vec, cmap_params)
+    return (float(resolved.vmin), float(resolved.vmax))
 
 
 def _get_top_data_array(element: xr.DataArray | DataTree) -> xr.DataArray:
@@ -721,12 +724,13 @@ def _render_shapes(
         if outline_color_spec is not None:
             outline_color_spec = outline_color_spec.filter(keep)
 
-    # On-the-fly crop: drop shapes outside the box *after* color resolution, so the (continuous) norm
-    # and categorical palette stay derived from the full element and colors match the uncropped plot.
+    # On-the-fly crop: drop shapes outside the box. Capture the full-element colour range first so the
+    # matplotlib backend keeps the uncropped norm (datashader autoscales over the window instead).
+    crop_norm_range: tuple[float, float] | None = None
     if crop is not None:
         elem_bbox = _bbox_to_element_space(sdata_filt.shapes[element], coordinate_system, crop)
         if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
-            _pin_norm_to_full_data(color_spec, render_params.cmap_params)
+            crop_norm_range = _full_element_norm_range(color_spec, render_params.cmap_params, render_params.transfunc)
             keep_crop = _bbox_mask_shapes(shapes, elem_bbox)
             color_spec = color_spec.filter(keep_crop)
             shapes = shapes[keep_crop].reset_index(drop=True)
@@ -953,6 +957,10 @@ def _render_shapes(
         cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
+        # Under crop, pin the norm to the full-element range so the zoom matches the uncropped plot
+        # (datashader, handled above, autoscales over the window instead).
+        if crop_norm_range is not None:
+            norm.vmin, norm.vmax = crop_norm_range
         # Build the paths once and share them across the fill and outline collections (geometry is
         # identical; only colours/alpha/linewidth differ), then apply the coordinate-system affine
         # once to the shared Path objects rather than once per collection.
@@ -1488,12 +1496,13 @@ def _render_points(
         points = points[keep].reset_index(drop=True)
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
-    # On-the-fly crop: drop points outside the box *after* color resolution so the (continuous) norm
-    # and categorical palette stay derived from the full element and colors match the uncropped plot.
+    # On-the-fly crop: drop points outside the box. Capture the full-element colour range first so the
+    # matplotlib backend keeps the uncropped norm (datashader autoscales over the window instead).
+    crop_norm_range: tuple[float, float] | None = None
     if crop is not None:
         elem_bbox = _bbox_to_element_space(sdata.points[element], coordinate_system, crop)
         if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
-            _pin_norm_to_full_data(color_spec, render_params.cmap_params)
+            crop_norm_range = _full_element_norm_range(color_spec, render_params.cmap_params, render_params.transfunc)
             keep_crop = _bbox_mask_points(points["x"].to_numpy(), points["y"].to_numpy(), elem_bbox)
             if not keep_crop.any():
                 return
@@ -1560,11 +1569,13 @@ def _render_points(
     elif method == "matplotlib":
         # matplotlib colors each point by its own value, so resolve the norm to match shapes/labels
         # instead of letting ax.scatter autoscale a fresh one. Non-continuous keeps the fresh norm.
-        norm = (
-            _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
-            if color_spec.is_continuous
-            else render_params.cmap_params.fresh_norm()
-        )
+        # Under crop, pin to the full-element range so the zoom matches the uncropped plot.
+        if color_spec.is_continuous:
+            norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
+            if crop_norm_range is not None:
+                norm.vmin, norm.vmax = crop_norm_range
+        else:
+            norm = render_params.cmap_params.fresh_norm()
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
         cax = _scatter_points(
@@ -1808,6 +1819,8 @@ def _render_images(
             width=fig_params.fig.get_size_inches()[0],
             height=fig_params.fig.get_size_inches()[1],
             scale=scale,
+            crop=crop,
+            extent=extent,
         )
     # rasterize spatial image if necessary to speed up performance
     use_datashader = render_params.method == "datashader"

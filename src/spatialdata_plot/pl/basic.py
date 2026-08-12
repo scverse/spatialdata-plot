@@ -1316,7 +1316,7 @@ class PlotAccessor:
         fig: Figure | None = None,
         title: list[str] | str | None = None,
         pad_extent: int | float = 0,
-        crop: tuple[float, float, float, float] | None = None,
+        crop_coord: tuple[float, float, float, float] | None = None,
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
         save: str | Path | None = None,
@@ -1380,17 +1380,19 @@ class PlotAccessor:
             of panels. If ``None``, each panel is titled with its coordinate system name, or, in multi-panel
             color mode, with its color key.
         pad_extent : int | float, default 0
-            Padding added around the computed spatial extent on all sides. Ignored when ``crop`` is set.
-        crop : tuple[float, float, float, float] | None, default None
+            Padding added around the computed spatial extent on all sides. Ignored when ``crop_coord`` is set.
+        crop_coord : tuple[float, float, float, float] | None, default None
             Restrict the plot to a bounding box ``(xmin, xmax, ymin, ymax)`` in the rendered coordinate
-            system's units (same order as :meth:`matplotlib.axes.Axes.axis`). Points and shapes are
-            subsetted before drawing for speed; large images are rasterized to the window only, so the
-            full image is never materialized (fast at Visium HD scale) and the zoom keeps full figure
-            resolution; labels are drawn in full and clipped to the box. For points and shapes,
-            auto-scaled color ranges are computed from the full element so colors match the uncropped
-            plot; a cropped image's contrast auto-scales over the window (pass explicit ``vmin``/``vmax``
-            or a ``norm`` to fix it). Requires a single coordinate system (pass ``coordinate_systems``
-            with one entry if several would otherwise be rendered).
+            system's units (same order as :meth:`matplotlib.axes.Axes.axis` and as ``crop_coord`` in
+            :func:`scanpy.pl.spatial` / :func:`squidpy.pl.spatial_scatter`). Points and shapes are
+            subsetted before drawing for speed; large images on the default matplotlib backend are
+            rasterized to the window only, so the full image is never materialized (fast at Visium HD
+            scale) and the zoom keeps full figure resolution; labels, and ``method='datashader'`` images,
+            are drawn in full and clipped to the box. For points and shapes, auto-scaled color ranges are
+            computed from the full element so colors match the uncropped plot; a cropped image's contrast
+            auto-scales over the window (pass explicit ``vmin``/``vmax`` or a ``norm`` to fix it).
+            Requires a single coordinate system (pass ``coordinate_systems`` with one entry if several
+            would otherwise be rendered).
         ax : list[Axes] | Axes | None
             Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
             matching the number of coordinate systems. If ``None``, a new figure and axes are created.
@@ -1452,7 +1454,7 @@ class PlotAccessor:
             fig=fig,
             title=title,
             pad_extent=pad_extent,
-            crop=crop,
+            crop_coord=crop_coord,
             ax=ax,
             return_ax=return_ax,
             save=save,
@@ -1506,17 +1508,17 @@ class PlotAccessor:
             ax=ax,
         )
 
-        # `crop` is one box in one coordinate system's units; applying the same numbers across
+        # `crop_coord` is one box in one coordinate system's units; applying the same numbers across
         # coordinate systems with different scales/units would be incoherent.
         crop_box: tuple[float, float, float, float] | None = None
-        if crop is not None:
+        if crop_coord is not None:
             if len(coordinate_systems) > 1:
                 raise ValueError(
-                    f"`crop` requires a single coordinate system, but {len(coordinate_systems)} would be "
+                    f"`crop_coord` requires a single coordinate system, but {len(coordinate_systems)} would be "
                     f"rendered ({coordinate_systems}). Pass `coordinate_systems=` with exactly one entry."
                 )
-            # show()'s `crop` is (xmin, xmax, ymin, ymax); the subset helpers expect (x0, y0, x1, y1).
-            xmin, xmax, ymin, ymax = crop
+            # show()'s `crop_coord` is (xmin, xmax, ymin, ymax); the subset helpers expect (x0, y0, x1, y1).
+            xmin, xmax, ymin, ymax = crop_coord
             crop_box = (xmin, ymin, xmax, ymax)
 
         panels = _plan_panels(
@@ -1607,12 +1609,12 @@ class PlotAccessor:
                         "all geometries are empty. Drop the element or restore at least one non-empty geometry."
                     )
 
-            if crop_box is not None:
-                # `crop` pins the view to the exact box: set limits directly (bypassing the
+            if crop_coord is not None:
+                # `crop_coord` pins the view to the exact box: set limits directly (bypassing the
                 # expand-don't-overwrite merge, which would expand back out to any pre-existing
-                # axes limits) and ignore `pad_extent`. crop_box is (x0, y0, x1, y1).
-                ax.set_xlim(crop_box[0], crop_box[2])
-                ax.set_ylim(crop_box[3], crop_box[1])  # (0, 0) is top-left
+                # axes limits) and ignore `pad_extent`. crop_coord is (xmin, xmax, ymin, ymax).
+                ax.set_xlim(crop_coord[0], crop_coord[1])
+                ax.set_ylim(crop_coord[3], crop_coord[2])  # (0, 0) is top-left
             else:
                 # fast path for axis-aligned transforms; identical result, falls back to get_extent otherwise
                 extent = _get_extent_fast(

@@ -951,11 +951,16 @@ def _multiscale_to_spatial_image(
     height: float,
     scale: str | None = None,
     is_label: bool = False,
+    crop: tuple[float, float, float, float] | None = None,
+    extent: dict[str, tuple[float, float]] | None = None,
 ) -> DataArray:
     """Extract the DataArray to be rendered from a multiscale image.
 
     From the `DataTree`, the scale that fits the given image size and dpi most is selected
     and returned. In case the lowest resolution is still too high, a rasterization step is added.
+    When ``crop`` (a cs-space ``(x0, y0, x1, y1)`` box) and the full ``extent`` are given, only the
+    crop window is shown, so the level is chosen so the *window* reaches the target resolution rather
+    than the full image — otherwise a Visium-HD crop would upsample a coarse pyramid level.
 
     Parameters
     ----------
@@ -997,6 +1002,16 @@ def _multiscale_to_spatial_image(
 
         optimal_x = width * dpi
         optimal_y = height * dpi
+
+        if crop is not None and extent is not None:
+            # Only the crop window is drawn, so the full image needs enough pixels that the window
+            # portion reaches the target — scale the target up by full/window per axis.
+            full_x = float(extent["x"][1]) - float(extent["x"][0])
+            full_y = float(extent["y"][1]) - float(extent["y"][0])
+            win_x, win_y = crop[2] - crop[0], crop[3] - crop[1]
+            if win_x > 0 and win_y > 0:
+                optimal_x *= full_x / win_x
+                optimal_y *= full_y / win_y
 
         # Pick the lowest-resolution scale where both x and y are >= the
         # target pixel count.  Falls back to highest available resolution.
@@ -1508,20 +1523,23 @@ def _bbox_mask_shapes(shapes: GeoDataFrame, elem_bbox: tuple[float, float, float
     """Boolean keep-mask for shapes whose bounds intersect ``elem_bbox`` (element-native coords).
 
     Bbox-intersect, not clip: a boundary-crossing shape is kept whole (axis-limit clipping trims it
-    visually). Circles are stored as ``Point`` + ``radius``, so their bounds are the centre expanded by
-    the radius; a centroid-only test would drop circles whose body overlaps the box. Polygons use the
-    geometry's own bounds. This is the masking form of geopandas ``.cx`` (which returns a frame, not a
-    mask we can align to ``color_spec``).
+    visually). Circles are stored as ``Point`` + ``radius``, so a centroid-only test would drop circles
+    whose body overlaps the box. Rows are handled per-geometry (a frame may mix circles and polygons):
+    polygons use the geometry's own bounds; circle rows expand their degenerate ``Point`` bounds by the
+    radius. This is the masking form of geopandas ``.cx`` (which returns a frame, not a mask we can align
+    to ``color_spec``).
     """
     x0, y0, x1, y1 = elem_bbox
     geom = shapes.geometry
-    if (geom.geom_type == "Point").all():  # circles: Point + radius column
-        cx, cy = geom.x.to_numpy(), geom.y.to_numpy()
+    b = geom.bounds  # C-level; columns minx, miny, maxx, maxy (degenerate minx==maxx==cx for Points)
+    minx, miny, maxx, maxy = (b[c].to_numpy() for c in ("minx", "miny", "maxx", "maxy"))
+    is_point = (geom.geom_type == "Point").to_numpy()
+    if is_point.any() and ShapesModel.RADIUS_KEY in shapes:  # expand circle rows by their radius
         r = np.asarray(shapes[ShapesModel.RADIUS_KEY], dtype=float)
-        minx, miny, maxx, maxy = cx - r, cy - r, cx + r, cy + r
-    else:  # polygons / multipolygons (also valid for plain points: degenerate bounds)
-        b = geom.bounds  # C-level; columns minx, miny, maxx, maxy
-        minx, miny, maxx, maxy = (b[c].to_numpy() for c in ("minx", "miny", "maxx", "maxy"))
+        minx = np.where(is_point, minx - r, minx)
+        miny = np.where(is_point, miny - r, miny)
+        maxx = np.where(is_point, maxx + r, maxx)
+        maxy = np.where(is_point, maxy + r, maxy)
     return (maxx >= x0) & (minx <= x1) & (maxy >= y0) & (miny <= y1)
 
 

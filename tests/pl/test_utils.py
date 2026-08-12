@@ -1418,6 +1418,16 @@ def test_bbox_mask_shapes_keeps_circle_near_edge():
     assert len(circ.cx[1:2, 1:2]) == 0
 
 
+def test_bbox_mask_shapes_mixed_circle_and_polygon():
+    # a frame mixing a circle (Point+radius) and a polygon must stay radius-aware per row:
+    # the r=3 circle body reaches the box; the distant polygon does not.
+    gdf = gpd.GeoDataFrame(
+        {"geometry": [Point(0, 0), Polygon([(100, 100), (101, 100), (101, 101)])], "radius": [3.0, np.nan]}
+    )
+    shapes = ShapesModel.parse(gdf, transformations={"g": Identity()})
+    np.testing.assert_array_equal(_bbox_mask_shapes(shapes, (1.0, 1.0, 2.0, 2.0)), [True, False])
+
+
 def test_bbox_mask_shapes_polygon_intersect_and_empty():
     polys = [Polygon([(0, 0), (10, 0), (10, 10), (0, 10)]), Polygon([(100, 100), (110, 100), (110, 110), (100, 110)])]
     gdf = ShapesModel.parse(gpd.GeoDataFrame({"geometry": polys}), transformations={"g": Identity()})
