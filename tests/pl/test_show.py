@@ -172,35 +172,38 @@ def test_title_count_validation(sdata_blobs: SpatialData):
     plt.close("all")
 
 
-def test_axis_label(sdata_blobs: SpatialData):
-    """axis_label sets x/y labels on every panel; None keeps them empty (feature for #763)."""
+def test_xlabel_ylabel(sdata_blobs: SpatialData):
+    """xlabel/ylabel set the axis labels on every panel; None keeps them empty (feature for #763)."""
     base = sdata_blobs.pl.render_images(element="blobs_image")
 
     ax = base.pl.show(return_ax=True, show=False)  # default: no labels
     assert ax.get_xlabel() == "" and ax.get_ylabel() == ""
     plt.close("all")
 
-    ax = base.pl.show(axis_label="µm", return_ax=True, show=False)  # single str -> both axes
-    assert ax.get_xlabel() == "µm" and ax.get_ylabel() == "µm"
+    ax = base.pl.show(xlabel="x (µm)", ylabel="y (µm)", return_ax=True, show=False)
+    assert ax.get_xlabel() == "x (µm)" and ax.get_ylabel() == "y (µm)"
     plt.close("all")
 
-    ax = base.pl.show(axis_label=("x (µm)", "y (µm)"), return_ax=True, show=False)  # (x, y) pair
-    assert ax.get_xlabel() == "x (µm)" and ax.get_ylabel() == "y (µm)"
+    ax = base.pl.show(xlabel="µm", return_ax=True, show=False)  # one axis only
+    assert ax.get_xlabel() == "µm" and ax.get_ylabel() == ""
     plt.close("all")
 
     # broadcast to every panel of a multi-panel plot
     set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
-    axs = sdata_blobs.pl.render_images(element="blobs_image").pl.show(axis_label="µm", return_ax=True, show=False)
+    axs = sdata_blobs.pl.render_images(element="blobs_image").pl.show(
+        xlabel="µm", ylabel="µm", return_ax=True, show=False
+    )
     assert all(a.get_xlabel() == "µm" and a.get_ylabel() == "µm" for a in axs)
     plt.close("all")
 
 
-def test_axis_label_validation(sdata_blobs: SpatialData):
-    """axis_label must be a str or an (x, y) pair of strings (feature for #763)."""
+def test_xlabel_ylabel_validation(sdata_blobs: SpatialData):
+    """xlabel/ylabel must each be a string or None (feature for #763)."""
     base = sdata_blobs.pl.render_images(element="blobs_image")
-    for bad in [("x",), 1, ("x", 2), ["x", "y", "z"]]:
-        with pytest.raises(TypeError, match="axis_label"):
-            base.pl.show(axis_label=bad, show=False)
+    with pytest.raises(TypeError, match="xlabel"):
+        base.pl.show(xlabel=1, show=False)
+    with pytest.raises(TypeError, match="ylabel"):
+        base.pl.show(ylabel=("y",), show=False)
     plt.close("all")
 
 
