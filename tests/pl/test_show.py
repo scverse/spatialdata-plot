@@ -300,6 +300,85 @@ def test_crop_datashader_image_rasterizes_only_window():
     plt.close("all")
 
 
+def _grid_labels_sdata():
+    """A 2000x2000 label raster of 400 block-instances with a Scale+Translation, plus a table with a
+    categorical and a plain-string colour column. Large enough that rasterize()/windowing engages."""
+    import anndata as ad
+    from spatialdata.models import Labels2DModel, TableModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 2000
+    rng = np.random.default_rng(1)
+    lab = np.zeros((n, n), dtype=np.int32)
+    k = 0
+    for i in range(20):
+        for j in range(20):
+            k += 1
+            lab[i * 100 : (i + 1) * 100, j * 100 : (j + 1) * 100] = k
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    labels = Labels2DModel.parse(lab, dims=("y", "x"), transformations={"global": transform})
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(1, 401),
+            "region": pd.Categorical(["labels"] * 400),
+            "ct_cat": pd.Categorical(rng.choice(list("ABCDE"), size=400), categories=list("ABCDE")),
+            "ct_str": rng.choice(list("ABCDE"), size=400).astype(object),
+        }
+    )
+    table = TableModel.parse(ad.AnnData(obs=obs), region="labels", region_key="region", instance_key="instance_id")
+    return SpatialData(labels={"labels": labels}, tables={"table": table})
+
+
+def _legend_colors(ax):
+    leg = ax.get_legend()
+    out = {}
+    if leg is None:
+        return out
+    for text, handle in zip(leg.get_texts(), leg.legend_handles):
+        for attr in ("get_facecolor", "get_color"):
+            try:
+                v = np.ravel(getattr(handle, attr)())
+                if v.size >= 3:
+                    out[text.get_text()] = tuple(np.round(v[:3], 3))
+                    break
+            except (AttributeError, TypeError):
+                pass
+    return out
+
+
+def test_crop_labels_placement_and_empty_window():
+    """Labels crop pins the view to the box; a window with no labels renders without crashing."""
+    sdata = _grid_labels_sdata()
+    ax = sdata.pl.render_labels("labels", color="ct_cat").pl.show(
+        crop_coord=(2600, 3000, 2200, 2600), return_ax=True, show=False
+    )
+    assert ax.get_xlim() == pytest.approx((2600, 3000))
+    assert ax.get_ylim() == pytest.approx((2600, 2200))  # inverted y
+    plt.close("all")
+    # a box far outside the data must not raise (empty-window guard)
+    sdata.pl.render_labels("labels", color="ct_cat").pl.show(crop_coord=(99000, 99400, 99000, 99400), show=False)
+    plt.close("all")
+
+
+@pytest.mark.parametrize("col", ["ct_cat", "ct_str"])
+def test_crop_labels_no_color_reshuffle(col):
+    """Cropped label colours must match the uncropped plot for shared categories (windowed dtype-Categorical;
+    plain-string falls back to full render so it stays stable too)."""
+    sdata = _grid_labels_sdata()
+    full = sdata.pl.render_labels("labels", color=col).pl.show(return_ax=True, show=False)
+    full_colors = _legend_colors(full)
+    plt.close("all")
+    cropped = sdata.pl.render_labels("labels", color=col).pl.show(
+        crop_coord=(2600, 3000, 2200, 2600), return_ax=True, show=False
+    )
+    crop_colors = _legend_colors(cropped)
+    plt.close("all")
+    shared = [c for c in set(full_colors) & set(crop_colors)]
+    assert shared  # the window keeps several categories
+    for c in shared:
+        assert full_colors[c] == pytest.approx(crop_colors[c], abs=0.02)
+
+
 def test_crop_invalid_order_raises(sdata_blobs: SpatialData):
     with pytest.raises(ValueError, match="xmin < xmax and ymin < ymax"):
         sdata_blobs.pl.render_points().pl.show(crop_coord=(300, 100, 120, 260), show=False)

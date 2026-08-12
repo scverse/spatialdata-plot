@@ -2219,6 +2219,7 @@ def _render_labels(
     legend_params: LegendParams,
     rasterize: bool,
     colorbar_requests: list[ColorbarSpec] | None = None,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> None:
     _log_context.set("render_labels")
     element = render_params.element
@@ -2249,6 +2250,21 @@ def _render_labels(
     _guard_2d_only(label, element, "labels")
     extent = get_extent(label, coordinate_system=coordinate_system)
 
+    # Windowing the label raster under `crop` drops off-window instances before colours are resolved.
+    # That is colour-stable for numeric (continuous) columns, pandas-Categorical columns (fixed levels),
+    # and when an explicit palette is given; but a plain-string column with the default palette would
+    # reshuffle colours as whole categories drop out of the window (their sorted positions shift). Fall
+    # back to full render + axis-clip for that case so cropped colours always match the uncropped plot.
+    crop_labels = crop
+    if crop is not None and col_for_color is not None and palette is None and table_name is not None:
+        _color_col = sdata[table_name].obs.get(col_for_color)
+        if (
+            _color_col is not None
+            and not pd.api.types.is_numeric_dtype(_color_col)
+            and not isinstance(_color_col.dtype, pd.CategoricalDtype)
+        ):
+            crop_labels = None
+
     # get best scale out of multiscale label
     if isinstance(label, DataTree):
         label = _multiscale_to_spatial_image(
@@ -2258,6 +2274,8 @@ def _render_labels(
             height=fig_params.fig.get_size_inches()[1],
             scale=scale,
             is_label=True,
+            crop=crop_labels,
+            extent=extent,
         )
 
     # spatialdata >= 0.8 rejects non-integer label rasters at the model boundary, but the library
@@ -2279,6 +2297,7 @@ def _render_labels(
             height=fig_params.fig.get_size_inches()[1],
             coordinate_system=coordinate_system,
             extent=extent,
+            crop=crop_labels,
         )
 
         # the above adds a useless c dimension of 1 (y, x) -> (1, y, x)
@@ -2287,6 +2306,11 @@ def _render_labels(
     # Unique label values are needed for the instance ids, the overlap check, and the
     # rasterize mask below; compute them once over the (possibly rasterized) raster.
     unique_labels = np.unique(label.values)
+
+    if crop_labels is not None and not np.any(unique_labels != 0):
+        # The crop window covers no labels (only background). Nothing to draw; the panel's axis
+        # limits already clip to the box, so return before the instance-overlap/colour machinery.
+        return
 
     if table_name is None:
         instance_id = unique_labels

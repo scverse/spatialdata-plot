@@ -1386,13 +1386,15 @@ class PlotAccessor:
             system's units (same order as :meth:`matplotlib.axes.Axes.axis` and as ``crop_coord`` in
             :func:`scanpy.pl.spatial` / :func:`squidpy.pl.spatial_scatter`). Points and shapes are
             subsetted before drawing for speed; large images (both the matplotlib and ``datashader``
-            backends) are rasterized to the window only, so the full image is never materialized (fast
-            at Visium HD scale) and the zoom keeps full figure resolution; labels are drawn in full and
-            clipped to the box. For points and shapes, auto-scaled color ranges are computed from the
-            full element so colors match the uncropped plot; a cropped image's contrast auto-scales over
-            the window (pass explicit ``vmin``/``vmax`` or a ``norm`` to fix it). Requires a single
-            coordinate system (pass ``coordinate_systems`` with one entry if several would otherwise be
-            rendered).
+            backends) and labels are rasterized to the window only, so the full array is never
+            materialized (fast at Visium HD scale) and the zoom keeps full figure resolution. For points
+            and shapes, auto-scaled color ranges are computed from the full element so colors match the
+            uncropped plot; a cropped image's contrast auto-scales over the window (pass explicit
+            ``vmin``/``vmax`` or a ``norm`` to fix it). Labels coloured by a plain-string column with the
+            default palette fall back to full render + clip (windowing could otherwise reshuffle
+            colours); use a categorical dtype or an explicit palette to keep the windowed fast path.
+            Requires a single coordinate system (pass ``coordinate_systems`` with one entry if several
+            would otherwise be rendered).
         ax : list[Axes] | Axes | None
             Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
             matching the number of coordinate systems. If ``None``, a new figure and axes are created.
@@ -2151,7 +2153,7 @@ def _render_panel(
                 }
                 if cmd == "render_images":
                     kwargs["channel_legend_entries"] = axis_channel_legend_entries
-                if cmd in {"render_points", "render_shapes", "render_images"}:
+                if cmd in {"render_points", "render_shapes", "render_images", "render_labels"}:
                     kwargs["crop"] = crop
                 if cmd in {"render_images", "render_labels"}:
                     kwargs["rasterize"] = _should_rasterize(
