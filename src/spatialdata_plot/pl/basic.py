@@ -1315,6 +1315,7 @@ class PlotAccessor:
         dpi: int | None = None,
         fig: Figure | None = None,
         title: list[str] | str | None = None,
+        axis_label: str | tuple[str, str] | None = None,
         pad_extent: int | float = 0,
         ax: list[Axes] | Axes | None = None,
         return_ax: bool = False,
@@ -1378,6 +1379,10 @@ class PlotAccessor:
             Title(s) for the plot. A single string is applied to all panels; a list must match the number
             of panels. If ``None``, each panel is titled with its coordinate system name, or, in multi-panel
             color mode, with its color key.
+        axis_label : str | tuple[str, str] | None, default None
+            Axis label(s) applied to every rendered panel (matches ``axis_label`` in
+            :func:`squidpy.pl.spatial_scatter`). A single string labels both the x and y axis;
+            an ``(x, y)`` pair labels them separately. ``None`` keeps the default (no labels).
         pad_extent : int | float, default 0
             Padding added around the computed spatial extent on all sides.
         ax : list[Axes] | Axes | None
@@ -1440,6 +1445,7 @@ class PlotAccessor:
             dpi=dpi,
             fig=fig,
             title=title,
+            axis_label=axis_label,
             pad_extent=pad_extent,
             ax=ax,
             return_ax=return_ax,
@@ -1565,6 +1571,7 @@ class PlotAccessor:
                 axis_channel_legend_entries=axis_channel_legend_entries,
                 cs_row=cs_row,
                 title=title,
+                axis_label=axis_label,
                 dpi=dpi,
                 figsize=figsize,
             )
@@ -1982,15 +1989,17 @@ def _finalize_panel(
     ax: Axes,
     panel_idx: int,
     title: list[str] | None,
+    axis_label: str | tuple[str, str] | None,
     panel_key: str | None,
     cs: str,
     frameon: bool | None,
 ) -> None:
-    """Set a panel's title, equal aspect ratio and frame visibility.
+    """Set a panel's title, axis labels, equal aspect ratio and frame visibility.
 
     With no explicit ``title`` the panel is labelled with its color key (multi-panel color mode)
     or its coordinate-system name; a single-element list applies to every panel, otherwise the
-    title at ``panel_idx`` is used.
+    title at ``panel_idx`` is used. ``axis_label`` (a single string for both axes, or an
+    ``(x, y)`` pair) is applied to every panel; ``None`` leaves the axes unlabelled.
     """
     if title is None:
         t = panel_key if panel_key is not None else cs
@@ -2000,6 +2009,10 @@ def _finalize_panel(
         # len(title) == num_panels is guaranteed by the up-front check in show().
         t = title[panel_idx]
     ax.set_title(t)
+    if axis_label is not None:
+        xlabel, ylabel = (axis_label, axis_label) if isinstance(axis_label, str) else axis_label
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
     ax.set_aspect("equal")
     if frameon is False:
         ax.axis("off")
@@ -2056,6 +2069,7 @@ def _render_panel(
     axis_channel_legend_entries: list[ChannelLegendEntry],
     cs_row: pd.Series,
     title: list[str] | None,
+    axis_label: str | tuple[str, str] | None,
     dpi: int | None,
     figsize: tuple[float, float] | None,
 ) -> tuple[list[str], dict[str, bool]]:
@@ -2124,5 +2138,5 @@ def _render_panel(
                 _RENDERERS[cmd](**kwargs)
 
     # Panel finalization depends only on per-panel values, so run it once after the loop.
-    _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
+    _finalize_panel(ax, panel_idx, title, axis_label, panel_key, cs, fig_params.frameon)
     return wanted_elements, wants

@@ -96,6 +96,7 @@ def _validate_show_parameters(
     dpi: int | None,
     fig: Figure | None,
     title: list[str] | str | None,
+    axis_label: str | tuple[str, str] | None,
     pad_extent: int | float,
     ax: list[Axes] | Axes | None,
     return_ax: bool,
@@ -182,6 +183,14 @@ def _validate_show_parameters(
 
     if title is not None and not isinstance(title, list | str):
         raise TypeError("Parameter 'title' must be a string or a list of strings.")
+
+    is_str_pair = (
+        isinstance(axis_label, tuple | list)
+        and len(axis_label) == 2
+        and all(isinstance(a, str) for a in axis_label)
+    )
+    if axis_label is not None and not (isinstance(axis_label, str) or is_str_pair):
+        raise TypeError("Parameter 'axis_label' must be a string or an (x, y) pair of strings.")
 
     if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")

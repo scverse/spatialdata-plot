@@ -172,6 +172,38 @@ def test_title_count_validation(sdata_blobs: SpatialData):
     plt.close("all")
 
 
+def test_axis_label(sdata_blobs: SpatialData):
+    """axis_label sets x/y labels on every panel; None keeps them empty (feature for #763)."""
+    base = sdata_blobs.pl.render_images(element="blobs_image")
+
+    ax = base.pl.show(return_ax=True, show=False)  # default: no labels
+    assert ax.get_xlabel() == "" and ax.get_ylabel() == ""
+    plt.close("all")
+
+    ax = base.pl.show(axis_label="µm", return_ax=True, show=False)  # single str -> both axes
+    assert ax.get_xlabel() == "µm" and ax.get_ylabel() == "µm"
+    plt.close("all")
+
+    ax = base.pl.show(axis_label=("x (µm)", "y (µm)"), return_ax=True, show=False)  # (x, y) pair
+    assert ax.get_xlabel() == "x (µm)" and ax.get_ylabel() == "y (µm)"
+    plt.close("all")
+
+    # broadcast to every panel of a multi-panel plot
+    set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
+    axs = sdata_blobs.pl.render_images(element="blobs_image").pl.show(axis_label="µm", return_ax=True, show=False)
+    assert all(a.get_xlabel() == "µm" and a.get_ylabel() == "µm" for a in axs)
+    plt.close("all")
+
+
+def test_axis_label_validation(sdata_blobs: SpatialData):
+    """axis_label must be a str or an (x, y) pair of strings (feature for #763)."""
+    base = sdata_blobs.pl.render_images(element="blobs_image")
+    for bad in [("x",), 1, ("x", 2), ["x", "y", "z"]]:
+        with pytest.raises(TypeError, match="axis_label"):
+            base.pl.show(axis_label=bad, show=False)
+    plt.close("all")
+
+
 def test_fig_parameter_warns_with_ax_list(sdata_blobs: SpatialData):
     """Passing fig= alongside a list of axes should also emit the deprecation (regression for #625)."""
     set_transformation(sdata_blobs["blobs_image"], Identity(), "second_cs")
