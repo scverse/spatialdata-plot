@@ -99,6 +99,7 @@ def _validate_show_parameters(
     xlabel: str | None,
     ylabel: str | None,
     pad_extent: int | float,
+    crop_coord: tuple[float, float, float, float] | None,
     ax: list[Axes] | Axes | None,
     return_ax: bool,
     save: str | Path | None,
@@ -191,6 +192,20 @@ def _validate_show_parameters(
 
     if not isinstance(pad_extent, int | float):
         raise TypeError("Parameter 'pad_extent' must be numeric.")
+
+    if crop_coord is not None:
+        if (
+            not isinstance(crop_coord, tuple)
+            or len(crop_coord) != 4
+            or not all(isinstance(v, int | float) for v in crop_coord)
+        ):
+            raise TypeError("Parameter 'crop_coord' must be a tuple of four numbers (xmin, xmax, ymin, ymax).")
+        xmin, xmax, ymin, ymax = crop_coord
+        if not (xmin < xmax and ymin < ymax):
+            raise ValueError(
+                f"Parameter 'crop_coord' must satisfy xmin < xmax and ymin < ymax, got (xmin={xmin}, xmax={xmax}, "
+                f"ymin={ymin}, ymax={ymax})."
+            )
 
     if ax is not None and not isinstance(ax, Axes | list):
         raise TypeError("Parameter 'ax' must be a matplotlib.axes.Axes or a list of Axes.")

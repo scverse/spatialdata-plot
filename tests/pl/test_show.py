@@ -3,10 +3,13 @@ from unittest.mock import patch
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import pytest
 import scanpy as sc
 from matplotlib.figure import Figure
 from spatialdata import SpatialData
+from spatialdata.models import PointsModel
 from spatialdata.transformations import Identity, set_transformation
 
 import spatialdata_plot  # noqa: F401
@@ -28,6 +31,34 @@ _ = spatialdata_plot
 class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
+
+    def test_plot_crop_image(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord windows an image to the box (#764)."""
+        sdata_blobs.pl.render_images("blobs_image").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_points(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord subsets points to the box, colours from the full element (#764)."""
+        sdata_blobs.pl.render_points("blobs_points", color="genes", size=20).pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_shapes(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord subsets polygons to the box (#764)."""
+        sdata_blobs.pl.render_shapes("blobs_polygons").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_circles(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord keeps circles whose body overlaps the box (radius-aware, #764)."""
+        sdata_blobs.pl.render_shapes("blobs_circles").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_labels(self, sdata_blobs: SpatialData):
+        """Visual test: crop_coord windows a labels layer to the box (#764)."""
+        sdata_blobs.pl.render_labels("blobs_labels", color="channel_0_sum").pl.show(crop_coord=(150, 400, 150, 400))
+
+    def test_plot_crop_layered_elements(self, sdata_blobs: SpatialData):
+        """Visual test: layered image + labels both clip to the same crop box (#764)."""
+        (
+            sdata_blobs.pl.render_images("blobs_image")
+            .pl.render_labels("blobs_labels", fill_alpha=0.5)
+            .pl.show(crop_coord=(150, 400, 150, 400))
+        )
 
     def test_plot_xlabel_ylabel(self, sdata_blobs: SpatialData):
         """Visual test: xlabel/ylabel label the axes (feature for #763)."""
@@ -140,6 +171,264 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
         ax = sdata_blobs.pl.render_images(element="blobs_image").pl.show(title="", return_ax=True, show=False)
         assert ax.get_title() == ""
         plt.close("all")
+
+
+def test_crop_sets_exact_axis_limits(sdata_blobs: SpatialData):
+    """crop_coord=(xmin, xmax, ymin, ymax) pins the view to the box; y is inverted (top-left origin)."""
+    ax = sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120, 260), return_ax=True, show=False)
+    assert ax.get_xlim() == pytest.approx((100, 300))
+    assert ax.get_ylim() == pytest.approx((260, 120))  # set_ylim(ymax, ymin)
+    plt.close("all")
+
+
+def test_crop_ignores_pad_extent(sdata_blobs: SpatialData):
+    """pad_extent must not widen a crop box (the view is exactly the box)."""
+    ax = sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False)
+    assert ax.get_xlim() == pytest.approx((100, 300))
+    assert ax.get_ylim() == pytest.approx((260, 120))
+    plt.close("all")
+
+
+def test_crop_reduces_points_drawn(sdata_blobs: SpatialData):
+    """The fast subset draws fewer points than the full render."""
+
+    def n_offsets(ax):
+        return sum(len(c.get_offsets()) for c in ax.collections if hasattr(c, "get_offsets"))
+
+    full = sdata_blobs.pl.render_points().pl.show(return_ax=True, show=False)
+    cropped = sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120, 260), return_ax=True, show=False)
+    assert 0 < n_offsets(cropped) < n_offsets(full)
+    plt.close("all")
+
+
+def test_crop_continuous_color_domain_from_full_element():
+    """Auto-scaled color range must come from the full element, so cropped colors match uncropped."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"x": rng.uniform(0, 100, 2000), "y": rng.uniform(0, 100, 2000), "val": rng.uniform(0, 1, 2000)})
+    df.loc[0, ["x", "y", "val"]] = [90, 90, 10.0]  # an extreme value far outside the crop box
+    sdata = SpatialData(points={"p": PointsModel.parse(df, transformations={"global": Identity()})})
+
+    def vrange(ax):
+        for c in ax.collections:
+            if getattr(c, "norm", None) is not None and c.norm.vmax is not None:
+                return (c.norm.vmin, c.norm.vmax)
+        return None
+
+    full = sdata.pl.render_points("p", color="val").pl.show(return_ax=True, show=False)
+    cropped = sdata.pl.render_points("p", color="val").pl.show(crop_coord=(20, 50, 30, 60), return_ax=True, show=False)
+    assert vrange(cropped) == pytest.approx(vrange(full))
+    plt.close("all")
+
+
+def test_crop_transfunc_norm_matches_uncropped():
+    """The pinned norm must use the transfunc'd full-element range, so crop+transfunc matches uncropped."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"x": rng.uniform(0, 100, 3000), "y": rng.uniform(0, 100, 3000), "val": rng.uniform(0, 1, 3000)})
+    df.loc[0, ["x", "y", "val"]] = [90, 90, 10.0]  # extreme value outside the crop box
+    sdata = SpatialData(points={"p": PointsModel.parse(df, transformations={"global": Identity()})})
+
+    def vrange(ax):
+        for c in ax.collections:
+            if getattr(c, "norm", None) is not None and c.norm.vmax is not None:
+                return (c.norm.vmin, c.norm.vmax)
+        return None
+
+    full = sdata.pl.render_points("p", color="val", transfunc=np.log1p, method="matplotlib").pl.show(
+        return_ax=True, show=False
+    )
+    cropped = sdata.pl.render_points("p", color="val", transfunc=np.log1p, method="matplotlib").pl.show(
+        crop_coord=(20, 50, 30, 60), return_ax=True, show=False
+    )
+    assert vrange(cropped) == pytest.approx(vrange(full))  # log1p range, not the raw range
+    plt.close("all")
+
+
+def test_crop_datashader_autoscales_over_window():
+    """Datashader crop autoscales over the visible window: a value far outside the box can't recolor it."""
+    rng = np.random.default_rng(0)
+    base = pd.DataFrame({"x": rng.uniform(20, 50, 12000), "y": rng.uniform(30, 60, 12000), "val": rng.uniform(0, 1, 12000)})
+    outside = pd.DataFrame({"x": [200.0], "y": [200.0], "val": [1000.0]})  # far outside the crop window
+    s_a = SpatialData(points={"p": PointsModel.parse(base, transformations={"global": Identity()})})
+    s_b = SpatialData(
+        points={"p": PointsModel.parse(pd.concat([base, outside], ignore_index=True), transformations={"global": Identity()})}
+    )
+
+    def raster(s):
+        ax = s.pl.render_points("p", color="val", method="datashader").pl.show(
+            crop_coord=(20, 50, 30, 60), return_ax=True, show=False
+        )
+        (im,) = ax.get_images()
+        arr = np.asarray(im.get_array()).copy()
+        plt.close("all")
+        return arr
+
+    # If the norm leaked the full-data range (old bug), the extreme value would squish the window's colors.
+    np.testing.assert_array_equal(raster(s_a), raster(s_b))
+
+
+def test_crop_multiscale_selects_finer_level():
+    """A crop must pick a pyramid level fine enough for the WINDOW, not the whole image (Visium HD)."""
+    from spatialdata.models import Image2DModel
+
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _multiscale_to_spatial_image
+
+    n = 800
+    rng = np.random.default_rng(0)
+    tree = Image2DModel.parse(rng.random((1, n, n), dtype=np.float32), dims=("c", "y", "x"), scale_factors=[2, 2])
+    extent = {"x": (0.0, float(n)), "y": (0.0, float(n))}
+    coarse = _multiscale_to_spatial_image(tree, dpi=10, width=5, height=5)  # target ~50px over the full image
+    fine = _multiscale_to_spatial_image(
+        tree, dpi=10, width=5, height=5, crop=BBox(0.0, 0.0, 80.0, 80.0), extent=extent  # 10% window -> 10x boost
+    )
+    assert fine.shape[-1] > coarse.shape[-1]
+
+
+def test_crop_image_rasterizes_only_window():
+    """A cropped large image is rasterized to the window at figure resolution, not the full image then clipped.
+
+    Regression for #764: rasterize() maps the crop bbox through the element transform, so placement is
+    correct even under a Scale+Translation (which a naive .sel would mis-place) and only the window is read.
+    """
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 3000
+    rng = np.random.default_rng(0)
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    img = Image2DModel.parse(
+        rng.random((1, n, n), dtype=np.float32), dims=("c", "y", "x"), transformations={"global": transform}
+    )
+    sdata = SpatialData(images={"img": img})
+    # full world extent x=(1000, 7000), y=(500, 6500); crop a small central window
+    ax = sdata.pl.render_images("img").pl.show(crop_coord=(3500, 3900, 3500, 3900), return_ax=True, show=False)
+
+    assert ax.get_xlim() == pytest.approx((3500, 3900))
+    assert ax.get_ylim() == pytest.approx((3900, 3500))  # inverted y
+    # the rendered raster covers the window at ~figure resolution, not the 3000-px source
+    (im,) = ax.get_images()
+    assert max(im.get_array().shape[:2]) < n // 2
+    plt.close("all")
+
+
+def test_crop_datashader_image_rasterizes_only_window():
+    """method='datashader' images are windowed under crop too, not full-rendered then clipped (#764 F4)."""
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 3000
+    rng = np.random.default_rng(0)
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    img = Image2DModel.parse(
+        rng.random((1, n, n), dtype=np.float32), dims=("c", "y", "x"), transformations={"global": transform}
+    )
+    sdata = SpatialData(images={"img": img})
+    ax = sdata.pl.render_images("img", method="datashader").pl.show(
+        crop_coord=(3500, 3900, 3500, 3900), return_ax=True, show=False
+    )
+    assert ax.get_xlim() == pytest.approx((3500, 3900))
+    assert ax.get_ylim() == pytest.approx((3900, 3500))  # inverted y
+    (im,) = ax.get_images()
+    assert max(im.get_array().shape[:2]) < n // 2  # window at figure resolution, not the full source
+    plt.close("all")
+
+
+def _grid_labels_sdata():
+    """A 2000x2000 label raster of 400 block-instances with a Scale+Translation, plus a table with a
+    categorical and a plain-string colour column. Large enough that rasterize()/windowing engages."""
+    import anndata as ad
+    from spatialdata.models import Labels2DModel, TableModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 2000
+    rng = np.random.default_rng(1)
+    lab = np.zeros((n, n), dtype=np.int32)
+    k = 0
+    for i in range(20):
+        for j in range(20):
+            k += 1
+            lab[i * 100 : (i + 1) * 100, j * 100 : (j + 1) * 100] = k
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    labels = Labels2DModel.parse(lab, dims=("y", "x"), transformations={"global": transform})
+    obs = pd.DataFrame(
+        {
+            "instance_id": np.arange(1, 401),
+            "region": pd.Categorical(["labels"] * 400),
+            "ct_cat": pd.Categorical(rng.choice(list("ABCDE"), size=400), categories=list("ABCDE")),
+            "ct_str": rng.choice(list("ABCDE"), size=400).astype(object),
+        }
+    )
+    table = TableModel.parse(ad.AnnData(obs=obs), region="labels", region_key="region", instance_key="instance_id")
+    return SpatialData(labels={"labels": labels}, tables={"table": table})
+
+
+def _legend_colors(ax):
+    leg = ax.get_legend()
+    out = {}
+    if leg is None:
+        return out
+    for text, handle in zip(leg.get_texts(), leg.legend_handles):
+        for attr in ("get_facecolor", "get_color"):
+            try:
+                v = np.ravel(getattr(handle, attr)())
+                if v.size >= 3:
+                    out[text.get_text()] = tuple(np.round(v[:3], 3))
+                    break
+            except (AttributeError, TypeError):
+                pass
+    return out
+
+
+def test_crop_labels_placement_and_empty_window():
+    """Labels crop pins the view to the box; a window with no labels renders without crashing."""
+    sdata = _grid_labels_sdata()
+    ax = sdata.pl.render_labels("labels", color="ct_cat").pl.show(
+        crop_coord=(2600, 3000, 2200, 2600), return_ax=True, show=False
+    )
+    assert ax.get_xlim() == pytest.approx((2600, 3000))
+    assert ax.get_ylim() == pytest.approx((2600, 2200))  # inverted y
+    plt.close("all")
+    # a box far outside the data must not raise (empty-window guard)
+    sdata.pl.render_labels("labels", color="ct_cat").pl.show(crop_coord=(99000, 99400, 99000, 99400), show=False)
+    plt.close("all")
+
+
+@pytest.mark.parametrize("col", ["ct_cat", "ct_str"])
+def test_crop_labels_no_color_reshuffle(col):
+    """Cropped label colours must match the uncropped plot for shared categories (windowed dtype-Categorical;
+    plain-string falls back to full render so it stays stable too)."""
+    sdata = _grid_labels_sdata()
+    full = sdata.pl.render_labels("labels", color=col).pl.show(return_ax=True, show=False)
+    full_colors = _legend_colors(full)
+    plt.close("all")
+    cropped = sdata.pl.render_labels("labels", color=col).pl.show(
+        crop_coord=(2600, 3000, 2200, 2600), return_ax=True, show=False
+    )
+    crop_colors = _legend_colors(cropped)
+    plt.close("all")
+    shared = [c for c in set(full_colors) & set(crop_colors)]
+    assert shared  # the window keeps several categories
+    for c in shared:
+        assert full_colors[c] == pytest.approx(crop_colors[c], abs=0.02)
+
+
+def test_crop_invalid_order_raises(sdata_blobs: SpatialData):
+    with pytest.raises(ValueError, match="xmin < xmax and ymin < ymax"):
+        sdata_blobs.pl.render_points().pl.show(crop_coord=(300, 100, 120, 260), show=False)
+
+
+def test_crop_wrong_length_raises(sdata_blobs: SpatialData):
+    with pytest.raises(TypeError, match="tuple of four numbers"):
+        sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120), show=False)
+
+
+def test_crop_multiple_coordinate_systems_raises(sdata_blobs: SpatialData):
+    """crop is one box in one CS's units; rendering several CS at once is rejected."""
+    set_transformation(sdata_blobs["blobs_points"], Identity(), to_coordinate_system="other")
+    with pytest.raises(ValueError, match="single coordinate system"):
+        sdata_blobs.pl.render_points().pl.show(
+            coordinate_systems=["global", "other"], crop_coord=(100, 300, 120, 260), show=False
+        )
 
 
 def test_fig_parameter_emits_deprecation_warning(sdata_blobs: SpatialData):

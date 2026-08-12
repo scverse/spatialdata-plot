@@ -7,9 +7,10 @@ import pytest
 import scanpy as sc
 import xarray as xr
 from anndata import AnnData
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 from spatialdata import SpatialData, get_centroids
 from spatialdata.models import Labels2DModel, PointsModel, ShapesModel, TableModel
+from spatialdata.transformations import Affine, Identity, Scale, Sequence, Translation
 
 import spatialdata_plot
 from spatialdata_plot.pl import measure_obs
@@ -19,7 +20,12 @@ from spatialdata_plot.pl._datashader import (
     _datashader_map_aggregate_to_color,
 )
 from spatialdata_plot.pl.render_params import CmapParams, Color, ColorLike, colormap_with_alpha
-from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
+from spatialdata_plot.pl.utils import (
+    _bbox_mask_points,
+    _bbox_mask_shapes,
+    _bbox_to_element_space,
+    set_zero_in_cmap_to_transparent,
+)
 from tests.conftest import DPI, PlotTester, PlotTesterMeta
 
 sc.pl.set_rcParams_defaults()
@@ -1355,3 +1361,124 @@ def test_datashader_points_image_aligns_with_points_extent():
     assert (min(x0, x1), max(x0, x1)) == pytest.approx((0.1, 0.9))
     assert (min(y0, y1), max(y0, y1)) == pytest.approx((0.1, 0.9))
     plt.close("all")
+
+
+# --- bbox-subset helpers (on-the-fly crop) --------------------------------------------------------
+
+
+def _points(x, y):
+    return PointsModel.parse(pd.DataFrame({"x": x, "y": y}), transformations={"g": Identity()})
+
+
+def test_bbox_to_element_space_identity_round_trips():
+    pts = _points([0.0, 1.0], [0.0, 1.0])
+    assert _bbox_to_element_space(pts, "g", (2.0, 3.0, 8.0, 9.0)) == pytest.approx((2.0, 3.0, 8.0, 9.0))
+
+
+def test_bbox_to_element_space_inverts_scale_and_translation():
+    t = Sequence([Scale([2, 2], axes=("x", "y")), Translation([100, 50], axes=("x", "y"))])
+    pts = PointsModel.parse(pd.DataFrame({"x": [0.0], "y": [0.0]}), transformations={"g": t})
+    # cs box x[110,126] y[110,116] -> element x[5,13] y[30,33]
+    assert _bbox_to_element_space(pts, "g", (110.0, 110.0, 126.0, 116.0)) == pytest.approx((5.0, 30.0, 13.0, 33.0))
+
+
+def test_bbox_to_element_space_resorts_under_axis_flip():
+    # a negative x-scale flips the axis; the element box must keep x0 < x1 so .sel/mask don't empty
+    flip = Scale([-1, 1], axes=("x", "y"))
+    pts = PointsModel.parse(pd.DataFrame({"x": [0.0], "y": [0.0]}), transformations={"g": flip})
+    x0, y0, x1, y1 = _bbox_to_element_space(pts, "g", (2.0, 1.0, 6.0, 3.0))
+    assert x0 < x1 and y0 < y1
+
+
+def test_bbox_to_element_space_none_for_rotation():
+    theta = 0.3
+    rot = Affine(
+        [[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]],
+        input_axes=("x", "y"),
+        output_axes=("x", "y"),
+    )
+    pts = PointsModel.parse(pd.DataFrame({"x": [0.0], "y": [0.0]}), transformations={"g": rot})
+    assert _bbox_to_element_space(pts, "g", (0.0, 0.0, 1.0, 1.0)) is None
+
+
+def test_bbox_mask_points_matches_numpy_predicate():
+    x = np.array([1.0, 5.0, 9.0, 15.0])
+    y = np.array([1.0, 5.0, 9.0, 15.0])
+    mask = _bbox_mask_points(x, y, (2.0, 2.0, 8.0, 8.0))
+    np.testing.assert_array_equal(mask, [False, True, False, False])
+
+
+def test_bbox_mask_shapes_keeps_circle_near_edge():
+    # circle centred at (0,0) r=3: centroid outside box (1..2) but body overlaps -> must be kept
+    circ = ShapesModel.parse(
+        gpd.GeoDataFrame({"geometry": [Point(0, 0)], "radius": [3.0]}), transformations={"g": Identity()}
+    )
+    assert _bbox_mask_shapes(circ, (1.0, 1.0, 2.0, 2.0)).tolist() == [True]
+    # a centroid-only test (geopandas .cx) would have dropped it
+    assert len(circ.cx[1:2, 1:2]) == 0
+
+
+def test_bbox_mask_shapes_mixed_circle_and_polygon():
+    # a frame mixing a circle (Point+radius) and a polygon must stay radius-aware per row:
+    # the r=3 circle body reaches the box; the distant polygon does not.
+    gdf = gpd.GeoDataFrame(
+        {"geometry": [Point(0, 0), Polygon([(100, 100), (101, 100), (101, 101)])], "radius": [3.0, np.nan]}
+    )
+    shapes = ShapesModel.parse(gdf, transformations={"g": Identity()})
+    np.testing.assert_array_equal(_bbox_mask_shapes(shapes, (1.0, 1.0, 2.0, 2.0)), [True, False])
+
+
+def test_bbox_mask_shapes_polygon_intersect_and_empty():
+    polys = [Polygon([(0, 0), (10, 0), (10, 10), (0, 10)]), Polygon([(100, 100), (110, 100), (110, 110), (100, 110)])]
+    gdf = ShapesModel.parse(gpd.GeoDataFrame({"geometry": polys}), transformations={"g": Identity()})
+    np.testing.assert_array_equal(_bbox_mask_shapes(gdf, (1.0, 1.0, 5.0, 5.0)), [True, False])
+    np.testing.assert_array_equal(_bbox_mask_shapes(gdf, (200.0, 200.0, 210.0, 210.0)), [False, False])
+
+
+# --- datashader image windowing (crop) ------------------------------------------------------------
+
+
+def _bright_block_image(n=200):
+    """A single-channel n×n image (Identity transform) with a bright block at y∈[120,140), x∈[40,60)."""
+    from spatialdata.models import Image2DModel
+
+    arr = np.zeros((1, n, n), dtype=np.float32)
+    arr[0, 120:140, 40:60] = 1.0
+    return Image2DModel.parse(arr, dims=("c", "y", "x"), transformations={"g": Identity()})
+
+
+def test_datashader_window_image_places_block_at_correct_relative_position():
+    """The windowed aggregate must land the bright block where the crop box puts it (alignment fix)."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    # window x[20,80] y[100,160]; block centre world (x=50, y=130) -> rel (0.5, 0.5) -> output centre
+    out = _datashader_window_image(img, BBox(20, 100, 80, 160), "g", 60, 60, "max")
+    assert out is not None
+    a = np.asarray(out.values[0])
+    ys, xs = np.where(a > 0.5)
+    assert ys.size > 0
+    oy, ox = a.shape
+    assert 0.3 * oy <= ys.mean() <= 0.7 * oy  # near vertical centre, not shifted to an edge
+    assert 0.3 * ox <= xs.mean() <= 0.7 * ox
+
+
+def test_datashader_window_image_clamps_at_image_edge():
+    """A window straddling the image edge still returns a raster (source is clamped, not dropped)."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    out = _datashader_window_image(img, BBox(-50, 100, 50, 160), "g", 60, 60, "max")  # left half outside
+    assert out is not None
+    assert np.asarray(out.values[0]).max() > 0.5  # the in-bounds part of the block survives
+
+
+def test_datashader_window_image_none_when_fully_outside():
+    """A window with no source pixels falls back (returns None) instead of building an empty canvas."""
+    from spatialdata_plot.pl.render_params import BBox
+    from spatialdata_plot.pl.utils import _datashader_window_image
+
+    img = _bright_block_image()
+    assert _datashader_window_image(img, BBox(500, 500, 600, 600), "g", 60, 60, "max") is None

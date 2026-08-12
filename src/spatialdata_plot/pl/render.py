@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections import abc
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import copy
 from typing import Any, Literal, cast
 
@@ -78,6 +78,9 @@ from spatialdata_plot.pl.render_params import (
     colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
+    _bbox_mask_points,
+    _bbox_mask_shapes,
+    _bbox_to_element_space,
     _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
@@ -103,6 +106,55 @@ _MULTI_CMAP_BLENDING_WARNING = (
     "Therefore, the 'white' of higher layers will overlay the lower layers. "
     "Consider using 'palette' instead."
 )
+
+
+def _full_element_norm_range(
+    color_spec: ColorSpec, cmap_params: CmapParams, transfunc: Callable[..., Any] | None
+) -> tuple[float, float] | None:
+    """``(vmin, vmax)`` over the full (pre-crop) continuous color vector, after ``transfunc``.
+
+    A crop drops rows before drawing, but the matplotlib backend must keep the uncropped colour range
+    so the zoom matches the full plot. Returns the range resolved over the full element's transfunc'd
+    values (what the uncropped plot autoscales to), or ``None`` for categorical color or when the user
+    already fixed vmin/vmax. Non-mutating and applied only on the matplotlib path: the datashader and
+    image backends never receive it and autoscale over the visible window instead.
+    """
+    if not color_spec.is_continuous:
+        return None
+    if cmap_params.norm.vmin is not None and cmap_params.norm.vmax is not None:
+        return (cmap_params.norm.vmin, cmap_params.norm.vmax)
+    vec = color_spec.apply_transfunc(transfunc).color_vector if transfunc is not None else color_spec.color_vector
+    resolved = _resolve_continuous_norm(vec, cmap_params)
+    return (float(resolved.vmin), float(resolved.vmax))
+
+
+def _pin_norm_to_full_range(
+    norm: Normalize,
+    full_color_spec: ColorSpec | None,
+    cmap_params: CmapParams,
+    transfunc: Callable[..., Any] | None,
+) -> None:
+    """Pin ``norm`` in place to the full (pre-crop) continuous range so a cropped matplotlib zoom keeps
+    the uncropped plot's colours. No-op when uncropped (``full_color_spec is None``) or categorical.
+    """
+    if full_color_spec is None:
+        return
+    full_range = _full_element_norm_range(full_color_spec, cmap_params, transfunc)
+    if full_range is not None:
+        norm.vmin, norm.vmax = full_range
+
+
+def _crop_color_is_stable(color_col: pd.Series | None, palette: Any) -> bool:
+    """Whether windowing a labels raster keeps colours stable (else the caller full-renders + clips).
+
+    Windowing drops off-window instances before colours resolve. That is colour-stable for numeric
+    (continuous) columns, pandas-Categorical columns (fixed levels), and explicit palettes; a plain-string
+    column with the default palette would reshuffle colours as whole categories drop out of the window
+    (their sorted positions shift), so windowing is unsafe there.
+    """
+    if palette is not None or color_col is None:
+        return True
+    return pd.api.types.is_numeric_dtype(color_col) or isinstance(color_col.dtype, pd.CategoricalDtype)
 
 
 def _get_top_data_array(element: xr.DataArray | DataTree) -> xr.DataArray:
@@ -700,6 +752,23 @@ def _render_shapes(
         if outline_color_spec is not None:
             outline_color_spec = outline_color_spec.filter(keep)
 
+    # On-the-fly crop: drop shapes outside the box. Keep a reference to the pre-crop colour spec so the
+    # matplotlib backend can pin the uncropped norm; the range itself is resolved lazily below (only on
+    # the matplotlib path — datashader autoscales over the window, so it must not pay the full scan).
+    full_color_spec: ColorSpec | None = None
+    if fig_params.crop is not None:
+        elem_bbox = _bbox_to_element_space(sdata_filt.shapes[element], coordinate_system, fig_params.crop)
+        if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
+            full_color_spec = color_spec  # capture before filtering (filter returns a new object)
+            keep_crop = _bbox_mask_shapes(shapes, elem_bbox)
+            color_spec = color_spec.filter(keep_crop)
+            shapes = shapes[keep_crop].reset_index(drop=True)
+            if len(shapes) == 0:
+                return
+            sdata_filt[element] = shapes
+            if outline_color_spec is not None:
+                outline_color_spec = outline_color_spec.filter(keep_crop)
+
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
 
     norm = render_params.cmap_params.fresh_norm()
@@ -917,6 +986,10 @@ def _render_shapes(
         cax = _build_ds_colorbar(reduction_bounds, norm, render_params.cmap_params.cmap)
 
     elif method == "matplotlib":
+        # Under crop, pin the norm to the full-element range so the zoom matches the uncropped plot
+        # (datashader, handled above, autoscales over the window instead). Resolved here (not in the crop
+        # block) so the datashader path never pays the full-element scan.
+        _pin_norm_to_full_range(norm, full_color_spec, render_params.cmap_params, render_params.transfunc)
         # Build the paths once and share them across the fill and outline collections (geometry is
         # identical; only colours/alpha/linewidth differ), then apply the coordinate-system affine
         # once to the shared Path objects rather than once per collection.
@@ -1451,6 +1524,22 @@ def _render_points(
         points = points[keep].reset_index(drop=True)
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
+    # On-the-fly crop: drop points outside the box. Keep a reference to the pre-crop colour spec so the
+    # matplotlib backend can pin the uncropped norm; the range itself is resolved lazily below (only on
+    # the matplotlib path — datashader autoscales over the window, so it must not pay the full scan).
+    full_color_spec: ColorSpec | None = None
+    if fig_params.crop is not None:
+        elem_bbox = _bbox_to_element_space(sdata.points[element], coordinate_system, fig_params.crop)
+        if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
+            keep_crop = _bbox_mask_points(points["x"].to_numpy(), points["y"].to_numpy(), elem_bbox)
+            if not keep_crop.any():
+                return
+            full_color_spec = color_spec  # capture before filtering (filter returns a new object)
+            color_spec = color_spec.filter(keep_crop)
+            points = points[keep_crop].reset_index(drop=True)
+            n_points = len(points)  # method auto-threshold below should see the drawn count
+            _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
+
     color_spec = color_spec.apply_transfunc(render_params.transfunc)
 
     trans, trans_data = _prepare_transformation(sdata.points[element], coordinate_system, ax)
@@ -1509,11 +1598,12 @@ def _render_points(
     elif method == "matplotlib":
         # matplotlib colors each point by its own value, so resolve the norm to match shapes/labels
         # instead of letting ax.scatter autoscale a fresh one. Non-continuous keeps the fresh norm.
-        norm = (
-            _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
-            if color_spec.is_continuous
-            else render_params.cmap_params.fresh_norm()
-        )
+        # Under crop, pin to the full-element range so the zoom matches the uncropped plot.
+        if color_spec.is_continuous:
+            norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
+            _pin_norm_to_full_range(norm, full_color_spec, render_params.cmap_params, render_params.transfunc)
+        else:
+            norm = render_params.cmap_params.fresh_norm()
         # update axis limits if plot was empty before (necessary if datashader comes after)
         update_parameters = not _mpl_ax_contains_elements(ax)
         cax = _scatter_points(
@@ -1756,6 +1846,8 @@ def _render_images(
             width=fig_params.fig.get_size_inches()[0],
             height=fig_params.fig.get_size_inches()[1],
             scale=scale,
+            crop=fig_params.crop,
+            extent=extent,
         )
     # rasterize spatial image if necessary to speed up performance
     use_datashader = render_params.method == "datashader"
@@ -1774,6 +1866,7 @@ def _render_images(
             coordinate_system=coordinate_system,
             extent=extent,
             downsample_method=downsample_method,
+            crop=fig_params.crop,
         )
     elif rasterize:
         img = _rasterize_if_necessary(
@@ -1783,6 +1876,7 @@ def _render_images(
             height=fig_params.fig.get_size_inches()[1],
             coordinate_system=coordinate_system,
             extent=extent,
+            crop=fig_params.crop,
         )
 
     channels = img.coords["c"].values.tolist() if render_params.channel is None else render_params.channel
@@ -2182,6 +2276,14 @@ def _render_labels(
     _guard_2d_only(label, element, "labels")
     extent = get_extent(label, coordinate_system=coordinate_system)
 
+    # Only window the label raster when doing so keeps colours stable; otherwise fall back to full
+    # render + axis-clip so cropped colours always match the uncropped plot (see _crop_color_is_stable).
+    crop_labels = fig_params.crop
+    if crop_labels is not None:
+        color_col = sdata[table_name].obs.get(col_for_color) if col_for_color and table_name else None
+        if not _crop_color_is_stable(color_col, palette):
+            crop_labels = None
+
     # get best scale out of multiscale label
     if isinstance(label, DataTree):
         label = _multiscale_to_spatial_image(
@@ -2191,6 +2293,8 @@ def _render_labels(
             height=fig_params.fig.get_size_inches()[1],
             scale=scale,
             is_label=True,
+            crop=crop_labels,
+            extent=extent,
         )
 
     # spatialdata >= 0.8 rejects non-integer label rasters at the model boundary, but the library
@@ -2212,6 +2316,7 @@ def _render_labels(
             height=fig_params.fig.get_size_inches()[1],
             coordinate_system=coordinate_system,
             extent=extent,
+            crop=crop_labels,
         )
 
         # the above adds a useless c dimension of 1 (y, x) -> (1, y, x)
@@ -2220,6 +2325,11 @@ def _render_labels(
     # Unique label values are needed for the instance ids, the overlap check, and the
     # rasterize mask below; compute them once over the (possibly rasterized) raster.
     unique_labels = np.unique(label.values)
+
+    if crop_labels is not None and not np.any(unique_labels != 0):
+        # The crop window covers no labels (only background). Nothing to draw; the panel's axis
+        # limits already clip to the box, so return before the instance-overlap/colour machinery.
+        return
 
     if table_name is None:
         instance_id = unique_labels
