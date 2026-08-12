@@ -1385,14 +1385,14 @@ class PlotAccessor:
             Restrict the plot to a bounding box ``(xmin, xmax, ymin, ymax)`` in the rendered coordinate
             system's units (same order as :meth:`matplotlib.axes.Axes.axis` and as ``crop_coord`` in
             :func:`scanpy.pl.spatial` / :func:`squidpy.pl.spatial_scatter`). Points and shapes are
-            subsetted before drawing for speed; large images on the default matplotlib backend are
-            rasterized to the window only, so the full image is never materialized (fast at Visium HD
-            scale) and the zoom keeps full figure resolution; labels, and ``method='datashader'`` images,
-            are drawn in full and clipped to the box. For points and shapes, auto-scaled color ranges are
-            computed from the full element so colors match the uncropped plot; a cropped image's contrast
-            auto-scales over the window (pass explicit ``vmin``/``vmax`` or a ``norm`` to fix it).
-            Requires a single coordinate system (pass ``coordinate_systems`` with one entry if several
-            would otherwise be rendered).
+            subsetted before drawing for speed; large images (both the matplotlib and ``datashader``
+            backends) are rasterized to the window only, so the full image is never materialized (fast
+            at Visium HD scale) and the zoom keeps full figure resolution; labels are drawn in full and
+            clipped to the box. For points and shapes, auto-scaled color ranges are computed from the
+            full element so colors match the uncropped plot; a cropped image's contrast auto-scales over
+            the window (pass explicit ``vmin``/``vmax`` or a ``norm`` to fix it). Requires a single
+            coordinate system (pass ``coordinate_systems`` with one entry if several would otherwise be
+            rendered).
         ax : list[Axes] | Axes | None
             Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
             matching the number of coordinate systems. If ``None``, a new figure and axes are created.

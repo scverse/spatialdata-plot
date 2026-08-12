@@ -278,6 +278,28 @@ def test_crop_image_rasterizes_only_window():
     plt.close("all")
 
 
+def test_crop_datashader_image_rasterizes_only_window():
+    """method='datashader' images are windowed under crop too, not full-rendered then clipped (#764 F4)."""
+    from spatialdata.models import Image2DModel
+    from spatialdata.transformations import Scale, Sequence, Translation
+
+    n = 3000
+    rng = np.random.default_rng(0)
+    transform = Sequence([Scale([2.0, 2.0], axes=("x", "y")), Translation([1000.0, 500.0], axes=("x", "y"))])
+    img = Image2DModel.parse(
+        rng.random((1, n, n), dtype=np.float32), dims=("c", "y", "x"), transformations={"global": transform}
+    )
+    sdata = SpatialData(images={"img": img})
+    ax = sdata.pl.render_images("img", method="datashader").pl.show(
+        crop_coord=(3500, 3900, 3500, 3900), return_ax=True, show=False
+    )
+    assert ax.get_xlim() == pytest.approx((3500, 3900))
+    assert ax.get_ylim() == pytest.approx((3900, 3500))  # inverted y
+    (im,) = ax.get_images()
+    assert max(im.get_array().shape[:2]) < n // 2  # window at figure resolution, not the full source
+    plt.close("all")
+
+
 def test_crop_invalid_order_raises(sdata_blobs: SpatialData):
     with pytest.raises(ValueError, match="xmin < xmax and ymin < ymax"):
         sdata_blobs.pl.render_points().pl.show(crop_coord=(300, 100, 120, 260), show=False)

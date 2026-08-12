@@ -1839,6 +1839,7 @@ def _render_images(
             coordinate_system=coordinate_system,
             extent=extent,
             downsample_method=downsample_method,
+            crop=crop,
         )
     elif rasterize:
         img = _rasterize_if_necessary(

@@ -889,6 +889,55 @@ def _rasterize_if_necessary(
     return image
 
 
+def _datashader_window_image(
+    image: DataArray,
+    crop: tuple[float, float, float, float],
+    coordinate_system: str,
+    target_x_dims: int,
+    target_y_dims: int,
+    downsample_method: str,
+    has_c_dim: bool,
+    x_dims: int,
+    y_dims: int,
+) -> DataArray | None:
+    """Datashader-aggregate only the crop window of an image; ``None`` to fall back to the full path.
+
+    ``rasterize`` produces the target grid with correct world coords/transform for the ``crop`` box;
+    the source is sliced to the window in element-pixel space and aggregated with the datashader
+    reduction in that pixel space, then index-assigned onto the grid. The full image is never read.
+    Returns ``None`` for rotation/shear (box does not map to a box) or an empty window.
+    """
+    elem_bbox = _bbox_to_element_space(image, coordinate_system, crop)
+    if elem_bbox is None:
+        return None
+    px0, py0, px1, py1 = (int(round(v)) for v in elem_bbox)
+    px0, py0 = max(px0, 0), max(py0, 0)
+    px1, py1 = min(px1, x_dims), min(py1, y_dims)
+    if px1 <= px0 or py1 <= py0:
+        return None
+
+    cx0, cy0, cx1, cy1 = crop
+    target_unit_to_pixels = min(target_y_dims / (cy1 - cy0), target_x_dims / (cx1 - cx0))
+    base = rasterize(
+        image, ("y", "x"), [cy0, cx0], [cy1, cx1], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
+    )
+    out_y, out_x = (base.shape[1], base.shape[2]) if has_c_dim else base.shape
+    src = image.isel(x=slice(px0, px1), y=slice(py0, py1))
+    src = src.compute() if hasattr(src.data, "compute") else src
+    # Canvas is in the sliced source's own (pixel) coordinate space; the aggregated grid is
+    # index-assigned onto base, which already carries the correct world coords/transform.
+    cvs = ds.Canvas(plot_width=out_x, plot_height=out_y, x_range=(px0, px1), y_range=(py0, py1))
+    if has_c_dim:
+        agg = np.stack(
+            [np.asarray(cvs.raster(src.isel(c=i), downsample_method=downsample_method).values) for i in range(src.sizes["c"])],
+            axis=0,
+        )
+    else:
+        agg = np.asarray(cvs.raster(src, downsample_method=downsample_method).values)
+    base.values = agg.astype(base.dtype, copy=False)
+    return base
+
+
 def _rasterize_if_necessary_datashader(
     image: DataArray,
     dpi: float,
@@ -897,18 +946,32 @@ def _rasterize_if_necessary_datashader(
     coordinate_system: str,
     extent: dict[str, tuple[float, float]],
     downsample_method: str,
+    crop: tuple[float, float, float, float] | None = None,
 ) -> DataArray:
     """Downsample to canvas resolution with a configurable datashader reduction.
 
     Used by ``render_images(method='datashader')`` so sparse images (mostly
     zeros, rare non-zero pixels) survive the downsample step instead of
     being averaged away by the default mean aggregation.
+
+    When ``crop`` (a cs-space ``(x0, y0, x1, y1)`` box) is given, the aggregation is restricted to the
+    window: ``rasterize`` supplies the correct window coords/transform and only the sliced source is
+    materialized (so the full image is never read — this scales to Visium HD). Falls back to the full
+    path for rotation/shear or an empty window.
     """
     has_c_dim = len(image.shape) == 3
     y_dims, x_dims = (image.shape[1], image.shape[2]) if has_c_dim else image.shape
 
     target_y_dims = int(dpi * height)
     target_x_dims = int(dpi * width)
+
+    if crop is not None:
+        windowed = _datashader_window_image(
+            image, crop, coordinate_system, target_x_dims, target_y_dims, downsample_method, has_c_dim, x_dims, y_dims
+        )
+        if windowed is not None:
+            return windowed
+        # rotation/shear or empty window: fall through to the full render (axis limits clip)
 
     if y_dims <= target_y_dims and x_dims <= target_x_dims:
         return image
