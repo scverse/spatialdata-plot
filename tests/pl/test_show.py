@@ -29,6 +29,10 @@ class TestShow(PlotTester, metaclass=PlotTesterMeta):
     def test_plot_pad_extent_adds_padding(self, sdata_blobs: SpatialData):
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(pad_extent=100)
 
+    def test_plot_xlabel_ylabel(self, sdata_blobs: SpatialData):
+        """Visual test: xlabel/ylabel label the axes (feature for #763)."""
+        sdata_blobs.pl.render_images(element="blobs_image").pl.show(xlabel="x (µm)", ylabel="y (µm)")
+
     def test_plot_frameon_false_single_panel(self, sdata_blobs: SpatialData):
         """Visual test: frameon=False hides axes decorations on a single panel (regression for #204)."""
         sdata_blobs.pl.render_images(element="blobs_image").pl.show(frameon=False)
