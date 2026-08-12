@@ -1316,6 +1316,8 @@ class PlotAccessor:
         dpi: int | None = None,
         fig: Figure | None = None,
         title: list[str] | str | None = None,
+        xlabel: str | None = None,
+        ylabel: str | None = None,
         pad_extent: int | float = 0,
         crop_coord: tuple[float, float, float, float] | None = None,
         ax: list[Axes] | Axes | None = None,
@@ -1380,6 +1382,10 @@ class PlotAccessor:
             Title(s) for the plot. A single string is applied to all panels; a list must match the number
             of panels. If ``None``, each panel is titled with its coordinate system name, or, in multi-panel
             color mode, with its color key.
+        xlabel : str | None, default None
+            Label for the x axis, applied to every rendered panel. ``None`` leaves it unlabelled.
+        ylabel : str | None, default None
+            Label for the y axis, applied to every rendered panel. ``None`` leaves it unlabelled.
         pad_extent : int | float, default 0
             Padding added around the computed spatial extent on all sides. Ignored when ``crop_coord`` is set.
         crop_coord : tuple[float, float, float, float] | None, default None
@@ -1456,6 +1462,8 @@ class PlotAccessor:
             dpi=dpi,
             fig=fig,
             title=title,
+            xlabel=xlabel,
+            ylabel=ylabel,
             pad_extent=pad_extent,
             crop_coord=crop_coord,
             ax=ax,
@@ -1596,6 +1604,8 @@ class PlotAccessor:
                 axis_channel_legend_entries=axis_channel_legend_entries,
                 cs_row=cs_row,
                 title=title,
+                xlabel=xlabel,
+                ylabel=ylabel,
                 dpi=dpi,
                 figsize=figsize,
             )
@@ -2021,15 +2031,18 @@ def _finalize_panel(
     ax: Axes,
     panel_idx: int,
     title: list[str] | None,
+    xlabel: str | None,
+    ylabel: str | None,
     panel_key: str | None,
     cs: str,
     frameon: bool | None,
 ) -> None:
-    """Set a panel's title, equal aspect ratio and frame visibility.
+    """Set a panel's title, axis labels, equal aspect ratio and frame visibility.
 
     With no explicit ``title`` the panel is labelled with its color key (multi-panel color mode)
     or its coordinate-system name; a single-element list applies to every panel, otherwise the
-    title at ``panel_idx`` is used.
+    title at ``panel_idx`` is used. ``xlabel``/``ylabel`` are applied to every panel; ``None``
+    leaves the respective axis unlabelled.
     """
     if title is None:
         t = panel_key if panel_key is not None else cs
@@ -2039,6 +2052,10 @@ def _finalize_panel(
         # len(title) == num_panels is guaranteed by the up-front check in show().
         t = title[panel_idx]
     ax.set_title(t)
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
     ax.set_aspect("equal")
     if frameon is False:
         ax.axis("off")
@@ -2095,6 +2112,8 @@ def _render_panel(
     axis_channel_legend_entries: list[ChannelLegendEntry],
     cs_row: pd.Series,
     title: list[str] | None,
+    xlabel: str | None,
+    ylabel: str | None,
     dpi: int | None,
     figsize: tuple[float, float] | None,
 ) -> tuple[list[str], dict[str, bool]]:
@@ -2163,5 +2182,5 @@ def _render_panel(
                 _RENDERERS[cmd](**kwargs)
 
     # Panel finalization depends only on per-panel values, so run it once after the loop.
-    _finalize_panel(ax, panel_idx, title, panel_key, cs, fig_params.frameon)
+    _finalize_panel(ax, panel_idx, title, xlabel, ylabel, panel_key, cs, fig_params.frameon)
     return wanted_elements, wants
