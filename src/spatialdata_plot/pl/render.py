@@ -724,13 +724,14 @@ def _render_shapes(
         if outline_color_spec is not None:
             outline_color_spec = outline_color_spec.filter(keep)
 
-    # On-the-fly crop: drop shapes outside the box. Capture the full-element colour range first so the
-    # matplotlib backend keeps the uncropped norm (datashader autoscales over the window instead).
-    crop_norm_range: tuple[float, float] | None = None
+    # On-the-fly crop: drop shapes outside the box. Keep a reference to the pre-crop colour spec so the
+    # matplotlib backend can pin the uncropped norm; the range itself is resolved lazily below (only on
+    # the matplotlib path — datashader autoscales over the window, so it must not pay the full scan).
+    full_color_spec: ColorSpec | None = None
     if crop is not None:
         elem_bbox = _bbox_to_element_space(sdata_filt.shapes[element], coordinate_system, crop)
         if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
-            crop_norm_range = _full_element_norm_range(color_spec, render_params.cmap_params, render_params.transfunc)
+            full_color_spec = color_spec  # capture before filtering (filter returns a new object)
             keep_crop = _bbox_mask_shapes(shapes, elem_bbox)
             color_spec = color_spec.filter(keep_crop)
             shapes = shapes[keep_crop].reset_index(drop=True)
@@ -958,9 +959,12 @@ def _render_shapes(
 
     elif method == "matplotlib":
         # Under crop, pin the norm to the full-element range so the zoom matches the uncropped plot
-        # (datashader, handled above, autoscales over the window instead).
-        if crop_norm_range is not None:
-            norm.vmin, norm.vmax = crop_norm_range
+        # (datashader, handled above, autoscales over the window instead). Resolved here (not in the crop
+        # block) so the datashader path never pays the full-element scan.
+        if full_color_spec is not None:
+            crop_norm_range = _full_element_norm_range(full_color_spec, render_params.cmap_params, render_params.transfunc)
+            if crop_norm_range is not None:
+                norm.vmin, norm.vmax = crop_norm_range
         # Build the paths once and share them across the fill and outline collections (geometry is
         # identical; only colours/alpha/linewidth differ), then apply the coordinate-system affine
         # once to the shared Path objects rather than once per collection.
@@ -1496,16 +1500,17 @@ def _render_points(
         points = points[keep].reset_index(drop=True)
         _reparse_points(sdata_filt, element, points, transformation_in_cs, coordinate_system, col_for_color)
 
-    # On-the-fly crop: drop points outside the box. Capture the full-element colour range first so the
-    # matplotlib backend keeps the uncropped norm (datashader autoscales over the window instead).
-    crop_norm_range: tuple[float, float] | None = None
+    # On-the-fly crop: drop points outside the box. Keep a reference to the pre-crop colour spec so the
+    # matplotlib backend can pin the uncropped norm; the range itself is resolved lazily below (only on
+    # the matplotlib path — datashader autoscales over the window, so it must not pay the full scan).
+    full_color_spec: ColorSpec | None = None
     if crop is not None:
         elem_bbox = _bbox_to_element_space(sdata.points[element], coordinate_system, crop)
         if elem_bbox is not None:  # None = rotation/shear; render full and let axis limits clip
-            crop_norm_range = _full_element_norm_range(color_spec, render_params.cmap_params, render_params.transfunc)
             keep_crop = _bbox_mask_points(points["x"].to_numpy(), points["y"].to_numpy(), elem_bbox)
             if not keep_crop.any():
                 return
+            full_color_spec = color_spec  # capture before filtering (filter returns a new object)
             color_spec = color_spec.filter(keep_crop)
             points = points[keep_crop].reset_index(drop=True)
             n_points = len(points)  # method auto-threshold below should see the drawn count
@@ -1572,8 +1577,11 @@ def _render_points(
         # Under crop, pin to the full-element range so the zoom matches the uncropped plot.
         if color_spec.is_continuous:
             norm = _resolve_continuous_norm(color_spec.color_vector, render_params.cmap_params)
-            if crop_norm_range is not None:
-                norm.vmin, norm.vmax = crop_norm_range
+            if full_color_spec is not None:
+                # pin to the full-element range so the cropped zoom matches the uncropped plot
+                crop_norm_range = _full_element_norm_range(full_color_spec, render_params.cmap_params, render_params.transfunc)
+                if crop_norm_range is not None:
+                    norm.vmin, norm.vmax = crop_norm_range
         else:
             norm = render_params.cmap_params.fresh_norm()
         # update axis limits if plot was empty before (necessary if datashader comes after)

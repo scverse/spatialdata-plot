@@ -805,6 +805,24 @@ def _get_valid_cs(
     return valid_cs
 
 
+def _rasterize_to_bbox(
+    image: DataArray,
+    bbox: tuple[float, float, float, float],
+    coordinate_system: str,
+    target_x_dims: float,
+    target_y_dims: float,
+) -> DataArray:
+    """Rasterize ``image`` to the world bbox ``(x0, y0, x1, y1)`` at ~``target_*_dims`` figure pixels.
+
+    ``rasterize`` interprets ``target_unit_to_pixels`` in world units (not intrinsic pixels), so
+    dividing the target pixel count by the world span keeps placement correct for any transformation
+    (translation, scale, etc.) without a transform rewrite.
+    """
+    x0, y0, x1, y1 = bbox
+    target_unit_to_pixels = min(target_y_dims / (y1 - y0), target_x_dims / (x1 - x0))
+    return rasterize(image, ("y", "x"), [y0, x0], [y1, x1], coordinate_system, target_unit_to_pixels=target_unit_to_pixels)
+
+
 def _rasterize_if_necessary(
     image: DataArray,
     dpi: float,
@@ -851,41 +869,23 @@ def _rasterize_if_necessary(
     target_x_dims = dpi * width
 
     if crop is not None:
-        # Restrict rasterization to the crop window. ``rasterize`` maps the target bbox
-        # through the element transform internally, so the window is placed correctly
-        # without a transform rewrite, only its source pixels are read (cost bounded by
-        # the window, not the full image), and the zoom keeps full figure resolution.
-        # ``crop`` is (x0, y0, x1, y1) in coordinate-system units.
-        raster_extent = {"x": (crop[0], crop[2]), "y": (crop[1], crop[3])}
-        do_rasterization = True
+        # Restrict rasterization to the crop window: only its source pixels are read (cost bounded by
+        # the window, not the full image), and the zoom keeps full figure resolution. ``crop`` is
+        # (x0, y0, x1, y1) in coordinate-system units.
+        bbox = crop
+    elif y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100:
+        # Rasterize when the source is substantially larger than the figure DPI × size requires; the
+        # +100 margin avoids rasterizing when the image is only slightly larger than the target.
+        bbox = (extent["x"][0], extent["y"][0], extent["x"][1], extent["y"][1])
     else:
-        raster_extent = extent
-        # Rasterize when the source image is substantially larger than what the
-        # current figure DPI × size requires.  The +100 margin avoids rasterizing
-        # when the image is only slightly larger than the target.
-        do_rasterization = y_dims > target_y_dims + 100 or x_dims > target_x_dims + 100
+        return image
 
-    if do_rasterization:
-        logger.info("Rasterizing image for faster rendering.")
-        # ``rasterize`` interprets ``target_unit_to_pixels`` in world units, not
-        # intrinsic pixels. Dividing by world extent keeps the result correct
-        # for any transformation (translation, scale, etc.).
-        world_x = float(raster_extent["x"][1]) - float(raster_extent["x"][0])
-        world_y = float(raster_extent["y"][1]) - float(raster_extent["y"][0])
-        target_unit_to_pixels = min(target_y_dims / world_y, target_x_dims / world_x)
-        image = rasterize(
-            image,
-            ("y", "x"),
-            [raster_extent["y"][0], raster_extent["x"][0]],
-            [raster_extent["y"][1], raster_extent["x"][1]],
-            coordinate_system,
-            target_unit_to_pixels=target_unit_to_pixels,
-        )
-        if hasattr(image.data, "compute"):
-            # rasterize is lazy; downstream reads the result once per channel (NaN check,
-            # compositing, draw), so materialize once instead of re-running the warp each time.
-            image = image.copy(data=image.data.compute())
-
+    logger.info("Rasterizing image for faster rendering.")
+    image = _rasterize_to_bbox(image, bbox, coordinate_system, target_x_dims, target_y_dims)
+    if hasattr(image.data, "compute"):
+        # rasterize is lazy; downstream reads the result once per channel (NaN check, compositing,
+        # draw), so materialize once instead of re-running the warp each time.
+        image = image.copy(data=image.data.compute())
     return image
 
 
@@ -896,9 +896,6 @@ def _datashader_window_image(
     target_x_dims: int,
     target_y_dims: int,
     downsample_method: str,
-    has_c_dim: bool,
-    x_dims: int,
-    y_dims: int,
 ) -> DataArray | None:
     """Datashader-aggregate only the crop window of an image; ``None`` to fall back to the full path.
 
@@ -907,6 +904,8 @@ def _datashader_window_image(
     reduction in that pixel space, then index-assigned onto the grid. The full image is never read.
     Returns ``None`` for rotation/shear (box does not map to a box) or an empty window.
     """
+    has_c_dim = len(image.shape) == 3
+    y_dims, x_dims = (image.shape[1], image.shape[2]) if has_c_dim else image.shape
     elem_bbox = _bbox_to_element_space(image, coordinate_system, crop)
     if elem_bbox is None:
         return None
@@ -916,11 +915,7 @@ def _datashader_window_image(
     if px1 <= px0 or py1 <= py0:
         return None
 
-    cx0, cy0, cx1, cy1 = crop
-    target_unit_to_pixels = min(target_y_dims / (cy1 - cy0), target_x_dims / (cx1 - cx0))
-    base = rasterize(
-        image, ("y", "x"), [cy0, cx0], [cy1, cx1], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
-    )
+    base = _rasterize_to_bbox(image, crop, coordinate_system, target_x_dims, target_y_dims)
     out_y, out_x = (base.shape[1], base.shape[2]) if has_c_dim else base.shape
     src = image.isel(x=slice(px0, px1), y=slice(py0, py1))
     src = src.compute() if hasattr(src.data, "compute") else src
@@ -966,9 +961,7 @@ def _rasterize_if_necessary_datashader(
     target_x_dims = int(dpi * width)
 
     if crop is not None:
-        windowed = _datashader_window_image(
-            image, crop, coordinate_system, target_x_dims, target_y_dims, downsample_method, has_c_dim, x_dims, y_dims
-        )
+        windowed = _datashader_window_image(image, crop, coordinate_system, target_x_dims, target_y_dims, downsample_method)
         if windowed is not None:
             return windowed
         # rotation/shear or empty window: fall through to the full render (axis limits clip)
