@@ -4,7 +4,7 @@ Runnable examples demonstrating `spatialdata-plot` on real spatial-omics
 datasets and on the lightweight `blobs` dataset.
 
 Sources live in
-[`scverse/spatialdata-plot-notebooks`](https://github.com/scverse/spatialdata-plot-notebooks);
+[`scverse/spatialdata-plot-tutorials`](https://github.com/scverse/spatialdata-plot-tutorials);
 every notebook is executable end-to-end and re-executed on a weekly schedule
 against the latest `spatialdata-plot` release.
 
