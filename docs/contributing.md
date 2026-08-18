@@ -134,7 +134,7 @@ we describe how you can manage environments manually using `pip`:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,test,doc]"
+pip install -e . --group dev --group test --group doc
 ```
 
 The `.venv` directory is typically automatically discovered by IDEs such as VS Code.
