@@ -24,9 +24,7 @@ dynamic = [
   "version", # allow version to be set by git tags
 ]
 dependencies = [
-  # >=3.8 is the first release supporting Python 3.12 (our floor) and provides Legend.legend_handles
-  # (3.7) and the ncols kwarg / Legend._ncols (3.6) the legend_params rebuild relies on.
-  "matplotlib>=3.8",
+  "matplotlib",
   "matplotlib-scalebar",
   "scanpy",
   "scikit-learn",
