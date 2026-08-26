@@ -770,8 +770,8 @@ def test_legend_params_ncols_override(sdata_blobs: SpatialData):
     assert leg_default._ncols == 2
     plt.close("all")
 
-    leg_forced = _categorical_labels_legend(sdata_blobs, {"ncols": 1})
-    assert leg_forced._ncols == 1
+    leg_forced = _categorical_labels_legend(sdata_blobs, {"ncols": 3})
+    assert leg_forced._ncols == 3
     plt.close("all")
 
 
@@ -859,9 +859,9 @@ class TestLegendParams(PlotTester, metaclass=PlotTesterMeta):
         obs[key] = pd.Categorical([f"g{i % n_groups}" for i in range(len(obs))])
 
     def test_plot_legend_ncols(self, sdata_blobs: SpatialData):
-        """ncols=1 forces a single column where the auto count would be 2 (16 categories)."""
+        """ncols=3 lays the 16-category legend out in three columns (auto count would be 2)."""
         self._color_labels(sdata_blobs, 16)
-        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"ncols": 1})
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"ncols": 3})
 
     def test_plot_legend_markerscale(self, sdata_blobs: SpatialData):
         """markerscale enlarges the legend handle dots."""

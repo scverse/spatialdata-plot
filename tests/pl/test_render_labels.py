@@ -173,7 +173,7 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
     def test_legend_params_ncols_applies_to_both_stacked_legends(self, sdata_blobs: SpatialData):
         # Regression test for #770: a forced legend_params override must reach BOTH the scanpy-built
         # primary legend and the stacked (2nd) legend builder. State-based. Each column has >14
-        # categories so the auto column count is 2 -- forcing ncols=1 is therefore a real override,
+        # categories so the auto column count is 2 -- forcing ncols=3 is therefore a real override,
         # not a no-op that would pass even if the override were ignored.
         n = sdata_blobs["table"].n_obs
         sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
@@ -184,14 +184,14 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         (
             sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
             .pl.render_labels("blobs_labels", color="cat1")
-            .pl.show(legend_params={"ncols": 1, "frameon": True, "title_fontsize": 22})
+            .pl.show(legend_params={"ncols": 3, "frameon": True, "title_fontsize": 22})
         )
 
         ax = plt.gcf().axes[0]
         legends = [c for c in ax.get_children() if isinstance(c, Legend)]
         assert len(legends) == 2
         for leg in legends:
-            assert leg._ncols == 1  # auto would be 2 for >14 categories
+            assert leg._ncols == 3  # auto would be 2 for >14 categories
             assert leg.get_frame_on() is True
             assert leg.get_title().get_fontsize() == 22  # stacked legends carry column-name titles
         plt.close()
