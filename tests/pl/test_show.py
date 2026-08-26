@@ -432,6 +432,18 @@ def test_legend_params_ncol_alias(sdata_blobs: SpatialData):
     plt.close("all")
 
 
+def test_legend_params_override_with_non_margin_loc(sdata_blobs: SpatialData):
+    """Regression #770: an override on a non-'right margin' loc rebuilds via the else-branch.
+
+    The default is legend_loc='right margin'; a custom loc must still honour the override and keep
+    the frame matplotlib gives that loc (frameon=True) rather than the right-margin default.
+    """
+    leg = _categorical_labels_legend(sdata_blobs, {"loc": "upper left", "ncols": 2})
+    assert leg._ncols == 2
+    assert leg.get_frame_on() is True  # mpl default for a non-margin loc, preserved by the rebuild
+    plt.close("all")
+
+
 def test_legend_params_frame_overrides(sdata_blobs: SpatialData):
     """Regression #770: frameon/framealpha reach the categorical legend (default is frameon=False)."""
     leg_default = _categorical_labels_legend(sdata_blobs, None)
@@ -447,6 +459,11 @@ def test_legend_params_frame_overrides(sdata_blobs: SpatialData):
     leg_alpha = _categorical_labels_legend(sdata_blobs, {"framealpha": 0.3})
     assert leg_alpha.get_frame_on() is True
     assert leg_alpha.get_frame().get_alpha() == 0.3
+    plt.close("all")
+
+    # An explicit frameon=False wins over framealpha (matplotlib ignores alpha on a hidden frame).
+    leg_off = _categorical_labels_legend(sdata_blobs, {"frameon": False, "framealpha": 0.5})
+    assert leg_off.get_frame_on() is False
     plt.close("all")
 
 

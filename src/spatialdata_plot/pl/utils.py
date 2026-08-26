@@ -416,7 +416,8 @@ def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameo
     """Curated legend styling (#770) as ``ax.legend()`` kwargs, shared by every legend builder.
 
     Unset ``ncols``/``frameon`` fall back to the builder defaults; the rest are omitted so
-    matplotlib's defaults apply. ``framealpha`` implies ``frameon`` (it is invisible otherwise).
+    matplotlib's defaults apply. ``framealpha`` implies ``frameon``, but an explicit
+    ``frameon=False`` wins (matplotlib ignores ``framealpha`` on a hidden frame either way).
     """
     kwargs: dict[str, Any] = {
         "fontsize": lp.legend_fontsize,
@@ -463,6 +464,9 @@ def _apply_legend_overrides(ax: Axes, legend_loc: str | None, lp: LegendParams) 
         list(leg.legend_handles),
         [t.get_text() for t in leg.get_texts()],
         title=leg.get_title().get_text() or None,
+        # `_ncols` is private but has been the column-count attr since mpl 3.6 (our floor is >=3.8);
+        # there is no public getter. A loud AttributeError on a future rename is preferable to a
+        # silent wrong default that would reset the preserved column count.
         **_legend_style_kwargs(lp, default_ncols=leg._ncols, default_frameon=leg.get_frame_on()),
         **placement,
     )
