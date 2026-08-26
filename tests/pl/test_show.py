@@ -848,3 +848,53 @@ def test_legend_params_ncols_alias_precedence(sdata_blobs: SpatialData):
     leg_none = _categorical_labels_legend(sdata_blobs, {"ncols": None, "ncol": 1})
     assert leg_none._ncols == 1
     plt.close("all")
+
+
+class TestLegendParams(PlotTester, metaclass=PlotTesterMeta):
+    """Minimal visual regression tests for each curated legend_params styling key (#770)."""
+
+    @staticmethod
+    def _color_labels(sdata_blobs: SpatialData, n_groups: int, key: str = "cat") -> None:
+        obs = sdata_blobs["table"].obs
+        obs[key] = pd.Categorical([f"g{i % n_groups}" for i in range(len(obs))])
+
+    def test_plot_legend_ncols(self, sdata_blobs: SpatialData):
+        """ncols=1 forces a single column where the auto count would be 2 (16 categories)."""
+        self._color_labels(sdata_blobs, 16)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"ncols": 1})
+
+    def test_plot_legend_markerscale(self, sdata_blobs: SpatialData):
+        """markerscale enlarges the legend handle dots."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"markerscale": 3})
+
+    def test_plot_legend_frameon(self, sdata_blobs: SpatialData):
+        """frameon draws the legend box (placed over the image so it is visible)."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "frameon": True}
+        )
+
+    def test_plot_legend_framealpha(self, sdata_blobs: SpatialData):
+        """framealpha makes the (implied) frame semi-transparent over the image."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "framealpha": 0.3}
+        )
+
+    def test_plot_legend_title_fontsize(self, sdata_blobs: SpatialData):
+        """title_fontsize sizes the (column-name) titles of stacked categorical legends."""
+        self._color_labels(sdata_blobs, 3, key="cat0")
+        self._color_labels(sdata_blobs, 3, key="cat1")
+        (
+            sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
+            .pl.render_labels("blobs_labels", color="cat1")
+            .pl.show(legend_params={"title_fontsize": 24})
+        )
+
+    def test_plot_legend_labelcolor(self, sdata_blobs: SpatialData):
+        """labelcolor recolours the legend entry labels."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "labelcolor": "red"}
+        )
