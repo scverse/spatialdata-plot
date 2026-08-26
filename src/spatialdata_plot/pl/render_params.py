@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -15,6 +15,20 @@ _FontWeight = Literal["light", "normal", "medium", "semibold", "bold", "heavy", 
 _FontSize = Literal["xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large"]
 _DsReduction = Literal["sum", "mean", "any", "count", "std", "var", "max", "min"]
 _ImageDsReduction = Literal["max", "min", "mean", "mode", "first", "last", "var", "std"]
+
+
+class BBox(NamedTuple):
+    """Axis-aligned bounding box in one coordinate space, corners sorted so ``x0 <= x1`` and ``y0 <= y1``.
+
+    On-the-fly cropping uses a single ``(x0, y0, x1, y1)`` ordering everywhere internally, so no crop
+    helper has to restate which order it received. ``show()`` converts the public
+    ``crop_coord=(xmin, xmax, ymin, ymax)`` into this once at the boundary.
+    """
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
 
 # Canonical definition for the package; imported by basic.py and utils.py.
 # replace with
@@ -195,6 +209,7 @@ class FigParams:
     title: str | Sequence[str] | None = None
     ax_labels: Sequence[str] | None = None
     frameon: bool | None = None
+    crop: BBox | None = None
 
 
 @dataclass

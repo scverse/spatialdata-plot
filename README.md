@@ -7,7 +7,7 @@
 [![Codecov][badge-codecov]][link-codecov]
 [![Documentation][badge-pypi]][link-pypi]
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/spatialdata-plot/badges/version.svg)](https://anaconda.org/conda-forge/spatialdata-plot)
-[![DOI](https://zenodo.org/badge/588223127.svg)](https://zenodo.org/badge/latestdoi/588223127)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21876186.svg)](https://doi.org/10.5281/zenodo.21876186)
 
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/spatialdata-plot/test.yaml?branch=main
 [link-tests]: https://github.com/scverse/spatialdata-plot/actions/workflows/test.yml
