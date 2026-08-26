@@ -370,8 +370,15 @@ def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
     [
         ({"legend_params": []}, TypeError),
         ({"legend_params": "loc=upper right"}, TypeError),
-        ({"legend_params": {"loc": "upper right", "frameon": True}}, ValueError),
+        ({"legend_params": {"loc": "upper right", "unknown_key": True}}, ValueError),
         ({"legend_params": {"locaton": "upper right"}}, ValueError),  # typo of "location"
+        ({"legend_params": {"ncols": 0}}, ValueError),  # must be positive
+        ({"legend_params": {"ncols": 1.5}}, ValueError),  # must be an int
+        ({"legend_params": {"markerscale": -1}}, ValueError),  # must be positive
+        ({"legend_params": {"frameon": "yes"}}, TypeError),  # must be a bool
+        ({"legend_params": {"framealpha": 2.0}}, ValueError),  # must be in [0, 1]
+        ({"legend_params": {"title_fontsize": True}}, TypeError),  # bool is not a valid size
+        ({"legend_params": {"ncol": 2, "ncols": 3}}, ValueError),  # conflicting aliases
     ],
 )
 def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs, exc):
@@ -392,4 +399,63 @@ def test_legend_params_location_alias_for_loc(sdata_blobs: SpatialData):
     sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(
         legend_params={"loc": "upper left", "location": "lower right"}, return_ax=True, show=False
     )
+    plt.close("all")
+
+
+def _categorical_labels_legend(sdata_blobs: SpatialData, legend_params, n_groups: int = 20):
+    """Render ``blobs_labels`` coloured by a fresh ``n_groups``-category obs column, return the legend."""
+    import pandas as pd
+
+    adata = sdata_blobs["table"]
+    adata.obs["_cat"] = pd.Categorical([f"g{i % n_groups}" for i in range(adata.n_obs)])
+    ax = sdata_blobs.pl.render_labels(element="blobs_labels", color="_cat").pl.show(
+        legend_params=legend_params, return_ax=True, show=False
+    )
+    return ax.get_legend()
+
+
+def test_legend_params_ncols_override(sdata_blobs: SpatialData):
+    """Regression #770: a forced ncols sticks on the categorical legend (default would be 2 for 20 groups)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default._ncols == 2
+    plt.close("all")
+
+    leg_forced = _categorical_labels_legend(sdata_blobs, {"ncols": 1})
+    assert leg_forced._ncols == 1
+    plt.close("all")
+
+
+def test_legend_params_ncol_alias(sdata_blobs: SpatialData):
+    """Regression #770: 'ncol' (matplotlib pre-3.6 spelling) is accepted as an alias of 'ncols'."""
+    leg = _categorical_labels_legend(sdata_blobs, {"ncol": 3})
+    assert leg._ncols == 3
+    plt.close("all")
+
+
+def test_legend_params_frame_overrides(sdata_blobs: SpatialData):
+    """Regression #770: frameon/framealpha reach the categorical legend (default is frameon=False)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default.get_frame_on() is False
+    plt.close("all")
+
+    leg = _categorical_labels_legend(sdata_blobs, {"frameon": True, "framealpha": 0.5})
+    assert leg.get_frame_on() is True
+    assert leg.get_frame().get_alpha() == 0.5
+    plt.close("all")
+
+    # framealpha alone implies frameon, else it would be invisible on the default frameless legend.
+    leg_alpha = _categorical_labels_legend(sdata_blobs, {"framealpha": 0.3})
+    assert leg_alpha.get_frame_on() is True
+    assert leg_alpha.get_frame().get_alpha() == 0.3
+    plt.close("all")
+
+
+def test_legend_params_markerscale_override(sdata_blobs: SpatialData):
+    """Regression #770: markerscale is forwarded to the categorical legend (default 1.0)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default.markerscale == 1.0
+    plt.close("all")
+
+    leg = _categorical_labels_legend(sdata_blobs, {"markerscale": 2.0})
+    assert leg.markerscale == 2.0
     plt.close("all")

@@ -213,12 +213,56 @@ def _validate_show_parameters(
         if not isinstance(legend_params, dict):
             raise TypeError("Parameter 'legend_params' must be a dictionary or None.")
         # `loc` is matplotlib.Legend's native key; `location` aligns with colorbar_params / scalebar_params.
-        allowed_legend_keys = {"loc", "location", "fontsize", "fontweight", "fontoutline", "na_in_legend"}
+        # `ncol` is accepted as an alias of `ncols` (matplotlib renamed it in 3.6); we normalise later.
+        allowed_legend_keys = {
+            "loc",
+            "location",
+            "fontsize",
+            "fontweight",
+            "fontoutline",
+            "na_in_legend",
+            "ncols",
+            "ncol",
+            "markerscale",
+            "frameon",
+            "framealpha",
+            "title_fontsize",
+        }
         unknown = set(legend_params) - allowed_legend_keys
         if unknown:
             raise ValueError(
                 f"Unknown legend_params key(s): {sorted(unknown)}. Allowed keys: {sorted(allowed_legend_keys)}."
             )
+        ncol, ncols = legend_params.get("ncol"), legend_params.get("ncols")
+        if ncol is not None and ncols is not None and ncol != ncols:
+            raise ValueError("legend_params got conflicting 'ncol' and 'ncols'; pass only one.")
+        _check_legend_styling_params(legend_params)
+
+
+def _is_number(val: Any) -> bool:
+    """Return ``True`` for a real int/float, excluding bool (which is an ``int`` subclass)."""
+    return isinstance(val, int | float) and not isinstance(val, bool)
+
+
+def _check_legend_styling_params(legend_params: dict[str, Any]) -> None:
+    """Validate the curated categorical-legend styling keys (issue #770) with actionable errors."""
+    for key in ("ncols", "ncol"):
+        if key in legend_params and legend_params[key] is not None:
+            val = legend_params[key]
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"legend_params['{key}'] must be a positive integer, got {val!r}.")
+
+    if (ms := legend_params.get("markerscale")) is not None and (not _is_number(ms) or ms <= 0):
+        raise ValueError(f"legend_params['markerscale'] must be a positive number, got {ms!r}.")
+
+    if (fo := legend_params.get("frameon")) is not None and not isinstance(fo, bool):
+        raise TypeError(f"legend_params['frameon'] must be a bool, got {fo!r}.")
+
+    if (fa := legend_params.get("framealpha")) is not None and (not _is_number(fa) or not 0.0 <= fa <= 1.0):
+        raise ValueError(f"legend_params['framealpha'] must be a number in [0, 1], got {fa!r}.")
+
+    if (tf := legend_params.get("title_fontsize")) is not None and not (_is_number(tf) or isinstance(tf, str)):
+        raise TypeError(f"legend_params['title_fontsize'] must be a number or a matplotlib size string, got {tf!r}.")
 
 
 def _check_color_column_collision(

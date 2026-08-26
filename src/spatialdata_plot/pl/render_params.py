@@ -222,6 +222,12 @@ class LegendParams:
     # column, in which case they default to "fill" / "outline" to disambiguate.
     legend_title: str | None = None
     outline_legend_title: str | None = None
+    # Curated categorical-legend styling overrides (#770); None => existing auto behaviour.
+    legend_ncols: int | None = None
+    legend_markerscale: int | float | None = None
+    legend_frameon: bool | None = None
+    legend_framealpha: float | None = None
+    legend_title_fontsize: int | float | _FontSize | None = None
 
 
 @dataclass

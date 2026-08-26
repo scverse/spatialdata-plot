@@ -63,6 +63,7 @@ from spatialdata_plot.pl.render_params import (
     GraphRenderParams,
     ImageRenderParams,
     LabelsRenderParams,
+    LegendParams,
     PointsRenderParams,
     ScalebarParams,
     ShapesRenderParams,
@@ -411,6 +412,64 @@ def _legend_ncol(n: int) -> int:
     return 1 if n <= 14 else 2 if n <= 30 else 3
 
 
+def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameon: bool) -> dict[str, Any]:
+    """Curated legend styling (#770) as ``ax.legend()`` kwargs, shared by every legend builder.
+
+    Unset ``ncols``/``frameon`` fall back to the builder defaults; the rest are omitted so
+    matplotlib's defaults apply. ``framealpha`` implies ``frameon`` (it is invisible otherwise).
+    """
+    kwargs: dict[str, Any] = {
+        "fontsize": lp.legend_fontsize,
+        "ncols": lp.legend_ncols or default_ncols,
+        "frameon": lp.legend_frameon
+        if lp.legend_frameon is not None
+        else (default_frameon or lp.legend_framealpha is not None),
+    }
+    for key, val in (
+        ("markerscale", lp.legend_markerscale),
+        ("framealpha", lp.legend_framealpha),
+        ("title_fontsize", lp.legend_title_fontsize),
+    ):
+        if val is not None:
+            kwargs[key] = val
+    return kwargs
+
+
+def _apply_legend_overrides(ax: Axes, legend_loc: str | None, lp: LegendParams) -> None:
+    """Re-lay-out scanpy's categorical legend to honour the curated styling overrides (#770).
+
+    scanpy's ``_add_categorical_legend`` takes none of these kwargs and ``ncols``/``markerscale``
+    cannot be changed on a built ``Legend``, so we rebuild from its handles/labels/title. Placement
+    mirrors scanpy so a lone override does not move the legend; unset values preserve its layout.
+    """
+    if not any(
+        v is not None
+        for v in (
+            lp.legend_ncols,
+            lp.legend_markerscale,
+            lp.legend_frameon,
+            lp.legend_framealpha,
+            lp.legend_title_fontsize,
+        )
+    ):
+        return
+    if (leg := ax.get_legend()) is None:
+        return
+    placement = (
+        {"loc": "center left", "bbox_to_anchor": (1, 0.5)} if legend_loc == "right margin" else {"loc": legend_loc}
+    )
+    tag = getattr(leg, "_sdata_column", None)
+    new_leg = ax.legend(
+        list(leg.legend_handles),
+        [t.get_text() for t in leg.get_texts()],
+        title=leg.get_title().get_text() or None,
+        **_legend_style_kwargs(lp, default_ncols=leg._ncols, default_frameon=leg.get_frame_on()),
+        **placement,
+    )
+    if tag is not None:
+        new_leg._sdata_column = tag  # type: ignore[attr-defined]
+
+
 def _categorical_legend_handles(ax: Axes, color_map: Mapping[Any, Any], na_hex: str | None = None) -> list[Any]:
     """Empty-scatter handles (colored dots) for a categorical legend, with an optional NA entry."""
     handles = [ax.scatter([], [], c=color, label=str(cat)) for cat, color in color_map.items()]
@@ -426,11 +485,12 @@ def _stack_categorical_legend(
     na_hex: str | None,
     title: str | None,
     column: str | None,
-    legend_fontsize: int | float | _FontSize | None,
+    lp: LegendParams,
 ) -> None:
     """Build the 2nd+ categorical legend on a shared axes without dropping existing ones (#364).
 
     Placement and the column auto-title are finalized later by ``_setup_stacked_legends``.
+    Curated styling overrides (#770) are honoured here directly since we own this ``ax.legend()``.
     """
     handles = _categorical_legend_handles(ax, color_mapping, na_hex)
     if (cur := ax.get_legend()) is not None:
@@ -438,11 +498,9 @@ def _stack_categorical_legend(
     new_leg = ax.legend(
         handles=handles,
         title=title,
-        frameon=False,
         loc="upper left",
         bbox_to_anchor=(1.02, 1.0),
-        fontsize=legend_fontsize,
-        ncol=_legend_ncol(len(handles)),
+        **_legend_style_kwargs(lp, default_ncols=_legend_ncol(len(handles)), default_frameon=False),
     )
     new_leg._sdata_column = column  # type: ignore[attr-defined]
 
@@ -491,7 +549,10 @@ def _decorate_axs(
     colorbar_requests: list[ColorbarSpec] | None = None,
     colorbar_label: str | None = None,
     legend_title: str | None = None,
+    legend_params: LegendParams | None = None,
 ) -> Axes:
+    # Curated styling overrides (#770); the flat legend_* args above stay authoritative otherwise.
+    lp = legend_params if legend_params is not None else LegendParams()
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
         # there is not need to plot a legend or a colorbar
@@ -532,7 +593,7 @@ def _decorate_axs(
                     na_hex=na_hex,
                     title=legend_title,
                     column=value_to_plot,
-                    legend_fontsize=legend_fontsize,
+                    lp=lp,
                 )
             else:
                 _add_categorical_legend(
@@ -547,6 +608,7 @@ def _decorate_axs(
                     na_in_legend=na_in_legend,
                     multi_panel=fig_params.axs is not None,
                 )
+                _apply_legend_overrides(ax, legend_loc, lp)  # before tagging: may rebuild the legend
                 # Tag with the column; the column auto-title (when 2+ legends) is applied in
                 # `_setup_stacked_legends`. An explicit title wins now.
                 if (legend := ax.get_legend()) is not None:

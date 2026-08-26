@@ -78,12 +78,14 @@ from spatialdata_plot.pl.render_params import (
     colormap_with_alpha,
 )
 from spatialdata_plot.pl.utils import (
+    _apply_legend_overrides,
     _categorical_legend_handles,
     _decorate_axs,
     _fast_extent,
     _first_color_per_category,
     _join_table_for_element,
     _legend_ncol,
+    _legend_style_kwargs,
     _mpl_ax_contains_elements,
     _multiscale_to_spatial_image,
     _pixel_to_coord,
@@ -403,6 +405,7 @@ def _add_legend_and_colorbar(
                 col_for_color if isinstance(col_for_color, str) else None,
             ),
             legend_title=fill_title,
+            legend_params=legend_params,
         )
 
     if outline_has_decorations and outline_cmap_params is not None:
@@ -542,11 +545,9 @@ def _add_outline_legend(
     ax.legend(
         handles=outline_handles,
         title=title,
-        frameon=False,
         loc=loc,
         bbox_to_anchor=anchor,
-        fontsize=legend_params.legend_fontsize,
-        ncol=_legend_ncol(len(outline_handles)),
+        **_legend_style_kwargs(legend_params, default_ncols=_legend_ncol(len(outline_handles)), default_frameon=False),
     )
 
 
@@ -1707,6 +1708,8 @@ def _draw_channel_legend(
         na_in_legend=False,
         multi_panel=needs_multi_panel,
     )
+    # Honour the curated styling overrides (#770) on the channel legend too.
+    _apply_legend_overrides(ax, legend_loc, legend_params)
 
 
 def _composite_channels(
