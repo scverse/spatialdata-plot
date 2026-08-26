@@ -728,6 +728,7 @@ def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
         ({"legend_params": {"frameon": "yes"}}, TypeError),  # must be a bool
         ({"legend_params": {"framealpha": 2.0}}, ValueError),  # must be in [0, 1]
         ({"legend_params": {"title_fontsize": True}}, TypeError),  # bool is not a valid size
+        ({"legend_params": {"labelcolor": "notacolor"}}, ValueError),  # not a matplotlib color
     ],
 )
 def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs, exc):
@@ -824,6 +825,17 @@ def test_legend_params_markerscale_override(sdata_blobs: SpatialData):
 
     leg = _categorical_labels_legend(sdata_blobs, {"markerscale": 2.0})
     assert leg.markerscale == 2.0
+    plt.close("all")
+
+
+def test_legend_params_labelcolor_override(sdata_blobs: SpatialData):
+    """Regression #770: labelcolor recolours the legend entry labels."""
+    from matplotlib.colors import to_rgba
+
+    leg = _categorical_labels_legend(sdata_blobs, {"labelcolor": "white"})
+    assert leg.get_texts()  # a real categorical legend was built
+    for text in leg.get_texts():
+        assert to_rgba(text.get_color()) == to_rgba("white")
     plt.close("all")
 
 

@@ -431,6 +431,7 @@ def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameo
         ("markerscale", lp.legend_markerscale),
         ("framealpha", lp.legend_framealpha),
         ("title_fontsize", lp.legend_title_fontsize),
+        ("labelcolor", lp.legend_labelcolor),
     ):
         if val is not None:
             kwargs[key] = val

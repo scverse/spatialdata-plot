@@ -1431,9 +1431,9 @@ class PlotAccessor:
             Bundled legend options; overrides the matching ``legend_*`` flat kwargs. Accepted keys:
             ``location`` (or ``loc``), ``fontsize``, ``fontweight``, ``fontoutline``, ``na_in_legend``,
             and the categorical-legend styling overrides ``ncols`` (or ``ncol``), ``markerscale``,
-            ``frameon``, ``framealpha`` and ``title_fontsize``. Styling overrides default to the current
-            auto behaviour (column count picked from the number of entries, no frame). Unknown keys raise
-            ``ValueError``.
+            ``frameon``, ``framealpha``, ``title_fontsize`` and ``labelcolor``. Styling overrides default
+            to the current auto behaviour (column count picked from the number of entries, no frame).
+            Unknown keys raise ``ValueError``.
 
         Returns
         -------
@@ -1869,6 +1869,7 @@ def _build_legend_params(
             "legend_frameon": legend_params.get("frameon"),
             "legend_framealpha": legend_params.get("framealpha"),
             "legend_title_fontsize": legend_params.get("title_fontsize"),
+            "legend_labelcolor": legend_params.get("labelcolor"),
         }
 
     if legend_loc == "on data":

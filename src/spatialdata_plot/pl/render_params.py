@@ -244,6 +244,7 @@ class LegendParams:
     legend_frameon: bool | None = None
     legend_framealpha: float | None = None
     legend_title_fontsize: int | float | _FontSize | None = None
+    legend_labelcolor: ColorLike | None = None
 
     @property
     def has_style_overrides(self) -> bool:
@@ -256,6 +257,7 @@ class LegendParams:
                 self.legend_frameon,
                 self.legend_framealpha,
                 self.legend_title_fontsize,
+                self.legend_labelcolor,
             )
         )
 

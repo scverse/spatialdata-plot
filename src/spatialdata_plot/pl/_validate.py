@@ -14,7 +14,7 @@ import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
 from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, Normalize
+from matplotlib.colors import Colormap, Normalize, is_color_like
 from matplotlib.figure import Figure
 from spatialdata import (
     SpatialData,
@@ -249,6 +249,7 @@ def _validate_show_parameters(
             "frameon",
             "framealpha",
             "title_fontsize",
+            "labelcolor",
         }
         unknown = set(legend_params) - allowed_legend_keys
         if unknown:
@@ -287,6 +288,9 @@ def _check_legend_styling_params(legend_params: dict[str, Any]) -> None:
 
     if (tf := legend_params.get("title_fontsize")) is not None and not (_is_number(tf) or isinstance(tf, str)):
         raise TypeError(f"legend_params['title_fontsize'] must be a number or a matplotlib size string, got {tf!r}.")
+
+    if (lc := legend_params.get("labelcolor")) is not None and not is_color_like(lc):
+        raise ValueError(f"legend_params['labelcolor'] must be a matplotlib color, got {lc!r}.")
 
 
 def _check_color_column_collision(
@@ -655,8 +659,6 @@ def _check_cmap_palette_groups(param_dict: dict[str, Any], element_type: str) ->
 
     # dict palettes (e.g. from make_palette_from_data) bypass groups validation
     if isinstance(palette, dict):
-        from matplotlib.colors import is_color_like
-
         invalid = [f"'{k}': '{v}'" for k, v in palette.items() if not is_color_like(v)]
         if invalid:
             raise ValueError(f"Dict palette contains invalid color values: {', '.join(invalid)}.")
