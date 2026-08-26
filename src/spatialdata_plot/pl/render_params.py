@@ -30,6 +30,7 @@ class BBox(NamedTuple):
     x1: float
     y1: float
 
+
 # Canonical definition for the package; imported by basic.py and utils.py.
 # replace with
 # from spatialdata._types import ColorLike
@@ -237,12 +238,26 @@ class LegendParams:
     # column, in which case they default to "fill" / "outline" to disambiguate.
     legend_title: str | None = None
     outline_legend_title: str | None = None
-    # Curated categorical-legend styling overrides (#770); None => existing auto behaviour.
+    # Curated categorical-legend styling overrides; None => existing auto behaviour.
     legend_ncols: int | None = None
     legend_markerscale: int | float | None = None
     legend_frameon: bool | None = None
     legend_framealpha: float | None = None
     legend_title_fontsize: int | float | _FontSize | None = None
+
+    @property
+    def has_style_overrides(self) -> bool:
+        """True if any curated styling override is set (else the auto legend behaviour applies)."""
+        return any(
+            v is not None
+            for v in (
+                self.legend_ncols,
+                self.legend_markerscale,
+                self.legend_frameon,
+                self.legend_framealpha,
+                self.legend_title_fontsize,
+            )
+        )
 
 
 @dataclass

@@ -183,7 +183,9 @@ def test_crop_sets_exact_axis_limits(sdata_blobs: SpatialData):
 
 def test_crop_ignores_pad_extent(sdata_blobs: SpatialData):
     """pad_extent must not widen a crop box (the view is exactly the box)."""
-    ax = sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False)
+    ax = sdata_blobs.pl.render_points().pl.show(
+        crop_coord=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False
+    )
     assert ax.get_xlim() == pytest.approx((100, 300))
     assert ax.get_ylim() == pytest.approx((260, 120))
     plt.close("all")
@@ -246,11 +248,17 @@ def test_crop_transfunc_norm_matches_uncropped():
 def test_crop_datashader_autoscales_over_window():
     """Datashader crop autoscales over the visible window: a value far outside the box can't recolor it."""
     rng = np.random.default_rng(0)
-    base = pd.DataFrame({"x": rng.uniform(20, 50, 12000), "y": rng.uniform(30, 60, 12000), "val": rng.uniform(0, 1, 12000)})
+    base = pd.DataFrame(
+        {"x": rng.uniform(20, 50, 12000), "y": rng.uniform(30, 60, 12000), "val": rng.uniform(0, 1, 12000)}
+    )
     outside = pd.DataFrame({"x": [200.0], "y": [200.0], "val": [1000.0]})  # far outside the crop window
     s_a = SpatialData(points={"p": PointsModel.parse(base, transformations={"global": Identity()})})
     s_b = SpatialData(
-        points={"p": PointsModel.parse(pd.concat([base, outside], ignore_index=True), transformations={"global": Identity()})}
+        points={
+            "p": PointsModel.parse(
+                pd.concat([base, outside], ignore_index=True), transformations={"global": Identity()}
+            )
+        }
     )
 
     def raster(s):
@@ -279,7 +287,12 @@ def test_crop_multiscale_selects_finer_level():
     extent = {"x": (0.0, float(n)), "y": (0.0, float(n))}
     coarse = _multiscale_to_spatial_image(tree, dpi=10, width=5, height=5)  # target ~50px over the full image
     fine = _multiscale_to_spatial_image(
-        tree, dpi=10, width=5, height=5, crop=BBox(0.0, 0.0, 80.0, 80.0), extent=extent  # 10% window -> 10x boost
+        tree,
+        dpi=10,
+        width=5,
+        height=5,
+        crop=BBox(0.0, 0.0, 80.0, 80.0),
+        extent=extent,  # 10% window -> 10x boost
     )
     assert fine.shape[-1] > coarse.shape[-1]
 
@@ -685,11 +698,20 @@ def test_legend_params_overrides_flat_kwarg(sdata_blobs: SpatialData):
 
 
 def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
-    """legend_params=None preserves identical behavior to omitting the kwarg."""
-    ax_a = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(return_ax=True, show=False)
+    """legend_params=None gives a real categorical legend identical to omitting the kwarg."""
+    import pandas as pd
+
+    sdata_blobs["table"].obs["_cat"] = pd.Categorical([f"g{i % 20}" for i in range(sdata_blobs["table"].n_obs)])
+    ax_a = sdata_blobs.pl.render_labels("blobs_labels", color="_cat").pl.show(return_ax=True, show=False)
+    leg_a = ax_a.get_legend()
+    auto = (leg_a._ncols, leg_a.get_frame_on())
     plt.close("all")
-    ax_b = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(legend_params=None, return_ax=True, show=False)
-    assert (ax_a.get_legend() is None) == (ax_b.get_legend() is None)
+    ax_b = sdata_blobs.pl.render_labels("blobs_labels", color="_cat").pl.show(
+        legend_params=None, return_ax=True, show=False
+    )
+    leg_b = ax_b.get_legend()
+    assert leg_a is not None and leg_b is not None
+    assert (leg_b._ncols, leg_b.get_frame_on()) == auto
     plt.close("all")
 
 
@@ -706,7 +728,6 @@ def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
         ({"legend_params": {"frameon": "yes"}}, TypeError),  # must be a bool
         ({"legend_params": {"framealpha": 2.0}}, ValueError),  # must be in [0, 1]
         ({"legend_params": {"title_fontsize": True}}, TypeError),  # bool is not a valid size
-        ({"legend_params": {"ncol": 2, "ncols": 3}}, ValueError),  # conflicting aliases
     ],
 )
 def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs, exc):
@@ -803,4 +824,15 @@ def test_legend_params_markerscale_override(sdata_blobs: SpatialData):
 
     leg = _categorical_labels_legend(sdata_blobs, {"markerscale": 2.0})
     assert leg.markerscale == 2.0
+    plt.close("all")
+
+
+def test_legend_params_ncols_alias_precedence(sdata_blobs: SpatialData):
+    """Regression #770: 'ncols' wins over 'ncol', and an explicit None 'ncols' falls back to 'ncol'."""
+    leg_both = _categorical_labels_legend(sdata_blobs, {"ncol": 3, "ncols": 1})
+    assert leg_both._ncols == 1
+    plt.close("all")
+
+    leg_none = _categorical_labels_legend(sdata_blobs, {"ncols": None, "ncol": 1})
+    assert leg_none._ncols == 1
     plt.close("all")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -254,24 +255,26 @@ def _validate_show_parameters(
             raise ValueError(
                 f"Unknown legend_params key(s): {sorted(unknown)}. Allowed keys: {sorted(allowed_legend_keys)}."
             )
-        ncol, ncols = legend_params.get("ncol"), legend_params.get("ncols")
-        if ncol is not None and ncols is not None and ncol != ncols:
-            raise ValueError("legend_params got conflicting 'ncol' and 'ncols'; pass only one.")
         _check_legend_styling_params(legend_params)
 
 
 def _is_number(val: Any) -> bool:
-    """Return ``True`` for a real int/float, excluding bool (which is an ``int`` subclass)."""
-    return isinstance(val, int | float) and not isinstance(val, bool)
+    """Return ``True`` for a real number (incl. numpy scalars), excluding bool."""
+    return isinstance(val, numbers.Real) and not isinstance(val, bool)
+
+
+def _resolve_ncols(legend_params: dict[str, Any]) -> Any:
+    """Resolve the ``ncols``/``ncol`` alias by precedence (``ncols`` wins), treating None as unset."""
+    ncols = legend_params.get("ncols")
+    return legend_params.get("ncol") if ncols is None else ncols
 
 
 def _check_legend_styling_params(legend_params: dict[str, Any]) -> None:
-    """Validate the curated categorical-legend styling keys (issue #770) with actionable errors."""
-    for key in ("ncols", "ncol"):
-        if key in legend_params and legend_params[key] is not None:
-            val = legend_params[key]
-            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
-                raise ValueError(f"legend_params['{key}'] must be a positive integer, got {val!r}.")
+    """Validate the curated categorical-legend styling keys with actionable errors."""
+    if (n := _resolve_ncols(legend_params)) is not None and (
+        not isinstance(n, numbers.Integral) or isinstance(n, bool) or n < 1
+    ):
+        raise ValueError(f"legend_params 'ncols' must be a positive integer, got {n!r}.")
 
     if (ms := legend_params.get("markerscale")) is not None and (not _is_number(ms) or ms <= 0):
         raise ValueError(f"legend_params['markerscale'] must be a positive number, got {ms!r}.")

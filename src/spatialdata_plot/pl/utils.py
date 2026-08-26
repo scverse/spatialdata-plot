@@ -414,7 +414,7 @@ def _legend_ncol(n: int) -> int:
 
 
 def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameon: bool) -> dict[str, Any]:
-    """Curated legend styling (#770) as ``ax.legend()`` kwargs, shared by every legend builder.
+    """Curated legend styling as ``ax.legend()`` kwargs, shared by every legend builder.
 
     Unset ``ncols``/``frameon`` fall back to the builder defaults; the rest are omitted so
     matplotlib's defaults apply. ``framealpha`` implies ``frameon``, but an explicit
@@ -422,7 +422,7 @@ def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameo
     """
     kwargs: dict[str, Any] = {
         "fontsize": lp.legend_fontsize,
-        "ncols": lp.legend_ncols or default_ncols,
+        "ncols": default_ncols if lp.legend_ncols is None else lp.legend_ncols,
         "frameon": lp.legend_frameon
         if lp.legend_frameon is not None
         else (default_frameon or lp.legend_framealpha is not None),
@@ -438,22 +438,14 @@ def _legend_style_kwargs(lp: LegendParams, *, default_ncols: int, default_frameo
 
 
 def _apply_legend_overrides(ax: Axes, legend_loc: str | None, lp: LegendParams) -> None:
-    """Re-lay-out scanpy's categorical legend to honour the curated styling overrides (#770).
+    """Re-lay-out scanpy's categorical legend to honour the curated styling overrides.
 
     scanpy's ``_add_categorical_legend`` takes none of these kwargs and ``ncols``/``markerscale``
     cannot be changed on a built ``Legend``, so we rebuild from its handles/labels/title. Placement
     mirrors scanpy so a lone override does not move the legend; unset values preserve its layout.
     """
-    if not any(
-        v is not None
-        for v in (
-            lp.legend_ncols,
-            lp.legend_markerscale,
-            lp.legend_frameon,
-            lp.legend_framealpha,
-            lp.legend_title_fontsize,
-        )
-    ):
+    # No legend is built when placement is suppressed, so there is nothing to restyle.
+    if not lp.has_style_overrides or legend_loc in (None, "none"):
         return
     if (leg := ax.get_legend()) is None:
         return
@@ -465,9 +457,7 @@ def _apply_legend_overrides(ax: Axes, legend_loc: str | None, lp: LegendParams) 
         list(leg.legend_handles),
         [t.get_text() for t in leg.get_texts()],
         title=leg.get_title().get_text() or None,
-        # `_ncols` is private but has been the column-count attr since mpl 3.6 (our floor is >=3.8);
-        # there is no public getter. A loud AttributeError on a future rename is preferable to a
-        # silent wrong default that would reset the preserved column count.
+        # `_ncols`: private column-count attr, stable since mpl 3.6 (floor >=3.8); no public getter.
         **_legend_style_kwargs(lp, default_ncols=leg._ncols, default_frameon=leg.get_frame_on()),
         **placement,
     )
@@ -495,7 +485,7 @@ def _stack_categorical_legend(
     """Build the 2nd+ categorical legend on a shared axes without dropping existing ones (#364).
 
     Placement and the column auto-title are finalized later by ``_setup_stacked_legends``.
-    Curated styling overrides (#770) are honoured here directly since we own this ``ax.legend()``.
+    Curated styling overrides are honoured here directly since we own this ``ax.legend()``.
     """
     handles = _categorical_legend_handles(ax, color_mapping, na_hex)
     if (cur := ax.get_legend()) is not None:
@@ -556,7 +546,7 @@ def _decorate_axs(
     legend_title: str | None = None,
     legend_params: LegendParams | None = None,
 ) -> Axes:
-    # Curated styling overrides (#770); the flat legend_* args above stay authoritative otherwise.
+    # Curated styling overrides; the flat legend_* args above stay authoritative otherwise.
     lp = legend_params if legend_params is not None else LegendParams()
     if value_to_plot is not None:
         # if only dots were plotted without an associated value
@@ -887,7 +877,9 @@ def _rasterize_to_bbox(
     """
     x0, y0, x1, y1 = bbox
     target_unit_to_pixels = min(target_y_dims / (y1 - y0), target_x_dims / (x1 - x0))
-    return rasterize(image, ("y", "x"), [y0, x0], [y1, x1], coordinate_system, target_unit_to_pixels=target_unit_to_pixels)
+    return rasterize(
+        image, ("y", "x"), [y0, x0], [y1, x1], coordinate_system, target_unit_to_pixels=target_unit_to_pixels
+    )
 
 
 def _rasterize_if_necessary(
@@ -1000,7 +992,10 @@ def _datashader_window_image(
     # aggregated grid then lines up with ``base`` (same window, same resolution).
     cvs = ds.Canvas(plot_width=out_x, plot_height=out_y, x_range=(px0, px1), y_range=(py0, py1))
     agg = np.stack(
-        [np.asarray(cvs.raster(src.isel(c=i), downsample_method=downsample_method).values) for i in range(src.sizes["c"])],
+        [
+            np.asarray(cvs.raster(src.isel(c=i), downsample_method=downsample_method).values)
+            for i in range(src.sizes["c"])
+        ],
         axis=0,
     )
     base.values = agg.astype(base.dtype, copy=False)
@@ -1035,7 +1030,9 @@ def _rasterize_if_necessary_datashader(
     target_x_dims = int(dpi * width)
 
     if crop is not None:
-        windowed = _datashader_window_image(image, crop, coordinate_system, target_x_dims, target_y_dims, downsample_method)
+        windowed = _datashader_window_image(
+            image, crop, coordinate_system, target_x_dims, target_y_dims, downsample_method
+        )
         if windowed is not None:
             return windowed
         # rotation/shear or empty window: fall through to the full render (axis limits clip)

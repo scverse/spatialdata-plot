@@ -1798,7 +1798,7 @@ def _draw_channel_legend(
         na_in_legend=False,
         multi_panel=needs_multi_panel,
     )
-    # Honour the curated styling overrides (#770) on the channel legend too.
+    # Honour the curated styling overrides on the channel legend too.
     _apply_legend_overrides(ax, legend_loc, legend_params)
 
 
