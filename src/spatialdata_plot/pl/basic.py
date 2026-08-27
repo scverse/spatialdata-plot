@@ -38,6 +38,7 @@ from spatialdata_plot.pl._color import (
 )
 from spatialdata_plot.pl._validate import (
     _expand_color_panels,
+    _resolve_ncols,
     _validate_as_points_size,
     _validate_graph_render_params,
     _validate_image_render_params,
@@ -1428,8 +1429,11 @@ class PlotAccessor:
             See the matplotlib-scalebar documentation for the full list of options.
         legend_params : dict[str, Any] | None
             Bundled legend options; overrides the matching ``legend_*`` flat kwargs. Accepted keys:
-            ``location`` (or ``loc``), ``fontsize``, ``fontweight``, ``fontoutline``,
-            ``na_in_legend``. Unknown keys raise ``ValueError``.
+            ``location`` (or ``loc``), ``fontsize``, ``fontweight``, ``fontoutline``, ``na_in_legend``,
+            and the categorical-legend styling overrides ``ncols`` (or ``ncol``), ``markerscale``,
+            ``frameon``, ``framealpha``, ``title_fontsize`` and ``labelcolor``. Styling overrides default
+            to the current auto behaviour (column count picked from the number of entries, no frame).
+            Unknown keys raise ``ValueError``.
 
         Returns
         -------
@@ -1850,6 +1854,8 @@ def _build_legend_params(
     Keys in the ``legend_params`` dict take precedence over the matching flat ``legend_*``
     keyword arguments.
     """
+    # Curated styling overrides; absent keys stay at LegendParams' None defaults.
+    styling: dict[str, Any] = {}
     if legend_params:
         legend_fontsize = legend_params.get("fontsize", legend_fontsize)
         legend_fontweight = legend_params.get("fontweight", legend_fontweight)
@@ -1857,6 +1863,14 @@ def _build_legend_params(
         legend_loc = legend_params.get("location", legend_params.get("loc", legend_loc))
         legend_fontoutline = legend_params.get("fontoutline", legend_fontoutline)
         na_in_legend = legend_params.get("na_in_legend", na_in_legend)
+        styling = {
+            "legend_ncols": _resolve_ncols(legend_params),
+            "legend_markerscale": legend_params.get("markerscale"),
+            "legend_frameon": legend_params.get("frameon"),
+            "legend_framealpha": legend_params.get("framealpha"),
+            "legend_title_fontsize": legend_params.get("title_fontsize"),
+            "legend_labelcolor": legend_params.get("labelcolor"),
+        }
 
     if legend_loc == "on data":
         raise ValueError("legend_loc='on data' is not supported in spatialdata-plot.")
@@ -1870,6 +1884,7 @@ def _build_legend_params(
         colorbar=colorbar,
         legend_title=legend_title,
         outline_legend_title=outline_legend_title,
+        **styling,
     )
 
 

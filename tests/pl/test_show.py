@@ -183,7 +183,9 @@ def test_crop_sets_exact_axis_limits(sdata_blobs: SpatialData):
 
 def test_crop_ignores_pad_extent(sdata_blobs: SpatialData):
     """pad_extent must not widen a crop box (the view is exactly the box)."""
-    ax = sdata_blobs.pl.render_points().pl.show(crop_coord=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False)
+    ax = sdata_blobs.pl.render_points().pl.show(
+        crop_coord=(100, 300, 120, 260), pad_extent=50, return_ax=True, show=False
+    )
     assert ax.get_xlim() == pytest.approx((100, 300))
     assert ax.get_ylim() == pytest.approx((260, 120))
     plt.close("all")
@@ -246,11 +248,17 @@ def test_crop_transfunc_norm_matches_uncropped():
 def test_crop_datashader_autoscales_over_window():
     """Datashader crop autoscales over the visible window: a value far outside the box can't recolor it."""
     rng = np.random.default_rng(0)
-    base = pd.DataFrame({"x": rng.uniform(20, 50, 12000), "y": rng.uniform(30, 60, 12000), "val": rng.uniform(0, 1, 12000)})
+    base = pd.DataFrame(
+        {"x": rng.uniform(20, 50, 12000), "y": rng.uniform(30, 60, 12000), "val": rng.uniform(0, 1, 12000)}
+    )
     outside = pd.DataFrame({"x": [200.0], "y": [200.0], "val": [1000.0]})  # far outside the crop window
     s_a = SpatialData(points={"p": PointsModel.parse(base, transformations={"global": Identity()})})
     s_b = SpatialData(
-        points={"p": PointsModel.parse(pd.concat([base, outside], ignore_index=True), transformations={"global": Identity()})}
+        points={
+            "p": PointsModel.parse(
+                pd.concat([base, outside], ignore_index=True), transformations={"global": Identity()}
+            )
+        }
     )
 
     def raster(s):
@@ -279,7 +287,12 @@ def test_crop_multiscale_selects_finer_level():
     extent = {"x": (0.0, float(n)), "y": (0.0, float(n))}
     coarse = _multiscale_to_spatial_image(tree, dpi=10, width=5, height=5)  # target ~50px over the full image
     fine = _multiscale_to_spatial_image(
-        tree, dpi=10, width=5, height=5, crop=BBox(0.0, 0.0, 80.0, 80.0), extent=extent  # 10% window -> 10x boost
+        tree,
+        dpi=10,
+        width=5,
+        height=5,
+        crop=BBox(0.0, 0.0, 80.0, 80.0),
+        extent=extent,  # 10% window -> 10x boost
     )
     assert fine.shape[-1] > coarse.shape[-1]
 
@@ -685,11 +698,20 @@ def test_legend_params_overrides_flat_kwarg(sdata_blobs: SpatialData):
 
 
 def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
-    """legend_params=None preserves identical behavior to omitting the kwarg."""
-    ax_a = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(return_ax=True, show=False)
+    """legend_params=None gives a real categorical legend identical to omitting the kwarg."""
+    import pandas as pd
+
+    sdata_blobs["table"].obs["_cat"] = pd.Categorical([f"g{i % 20}" for i in range(sdata_blobs["table"].n_obs)])
+    ax_a = sdata_blobs.pl.render_labels("blobs_labels", color="_cat").pl.show(return_ax=True, show=False)
+    leg_a = ax_a.get_legend()
+    auto = (leg_a._ncols, leg_a.get_frame_on())
     plt.close("all")
-    ax_b = sdata_blobs.pl.render_shapes(element="blobs_circles").pl.show(legend_params=None, return_ax=True, show=False)
-    assert (ax_a.get_legend() is None) == (ax_b.get_legend() is None)
+    ax_b = sdata_blobs.pl.render_labels("blobs_labels", color="_cat").pl.show(
+        legend_params=None, return_ax=True, show=False
+    )
+    leg_b = ax_b.get_legend()
+    assert leg_a is not None and leg_b is not None
+    assert (leg_b._ncols, leg_b.get_frame_on()) == auto
     plt.close("all")
 
 
@@ -698,8 +720,15 @@ def test_legend_params_default_none_is_noop(sdata_blobs: SpatialData):
     [
         ({"legend_params": []}, TypeError),
         ({"legend_params": "loc=upper right"}, TypeError),
-        ({"legend_params": {"loc": "upper right", "frameon": True}}, ValueError),
+        ({"legend_params": {"loc": "upper right", "unknown_key": True}}, ValueError),
         ({"legend_params": {"locaton": "upper right"}}, ValueError),  # typo of "location"
+        ({"legend_params": {"ncols": 0}}, ValueError),  # must be positive
+        ({"legend_params": {"ncols": 1.5}}, ValueError),  # must be an int
+        ({"legend_params": {"markerscale": -1}}, ValueError),  # must be positive
+        ({"legend_params": {"frameon": "yes"}}, TypeError),  # must be a bool
+        ({"legend_params": {"framealpha": 2.0}}, ValueError),  # must be in [0, 1]
+        ({"legend_params": {"title_fontsize": True}}, TypeError),  # bool is not a valid size
+        ({"legend_params": {"labelcolor": "notacolor"}}, ValueError),  # not a matplotlib color
     ],
 )
 def test_legend_params_validation_rejects_bad_inputs(sdata_blobs: SpatialData, kwargs, exc):
@@ -721,3 +750,151 @@ def test_legend_params_location_alias_for_loc(sdata_blobs: SpatialData):
         legend_params={"loc": "upper left", "location": "lower right"}, return_ax=True, show=False
     )
     plt.close("all")
+
+
+def _categorical_labels_legend(sdata_blobs: SpatialData, legend_params, n_groups: int = 20):
+    """Render ``blobs_labels`` coloured by a fresh ``n_groups``-category obs column, return the legend."""
+    import pandas as pd
+
+    adata = sdata_blobs["table"]
+    adata.obs["_cat"] = pd.Categorical([f"g{i % n_groups}" for i in range(adata.n_obs)])
+    ax = sdata_blobs.pl.render_labels(element="blobs_labels", color="_cat").pl.show(
+        legend_params=legend_params, return_ax=True, show=False
+    )
+    return ax.get_legend()
+
+
+def test_legend_params_ncols_override(sdata_blobs: SpatialData):
+    """Regression #770: a forced ncols sticks on the categorical legend (default would be 2 for 20 groups)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default._ncols == 2
+    plt.close("all")
+
+    leg_forced = _categorical_labels_legend(sdata_blobs, {"ncols": 3})
+    assert leg_forced._ncols == 3
+    plt.close("all")
+
+
+def test_legend_params_ncol_alias(sdata_blobs: SpatialData):
+    """Regression #770: 'ncol' (matplotlib pre-3.6 spelling) is accepted as an alias of 'ncols'."""
+    leg = _categorical_labels_legend(sdata_blobs, {"ncol": 3})
+    assert leg._ncols == 3
+    plt.close("all")
+
+
+def test_legend_params_override_with_non_margin_loc(sdata_blobs: SpatialData):
+    """Regression #770: an override on a non-'right margin' loc rebuilds via the else-branch.
+
+    The default is legend_loc='right margin'; a custom loc must still honour the override and keep
+    the frame matplotlib gives that loc (frameon=True) rather than the right-margin default.
+    """
+    leg = _categorical_labels_legend(sdata_blobs, {"loc": "upper left", "ncols": 2})
+    assert leg._ncols == 2
+    assert leg.get_frame_on() is True  # mpl default for a non-margin loc, preserved by the rebuild
+    plt.close("all")
+
+
+def test_legend_params_frame_overrides(sdata_blobs: SpatialData):
+    """Regression #770: frameon/framealpha reach the categorical legend (default is frameon=False)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default.get_frame_on() is False
+    plt.close("all")
+
+    leg = _categorical_labels_legend(sdata_blobs, {"frameon": True, "framealpha": 0.5})
+    assert leg.get_frame_on() is True
+    assert leg.get_frame().get_alpha() == 0.5
+    plt.close("all")
+
+    # framealpha alone implies frameon, else it would be invisible on the default frameless legend.
+    leg_alpha = _categorical_labels_legend(sdata_blobs, {"framealpha": 0.3})
+    assert leg_alpha.get_frame_on() is True
+    assert leg_alpha.get_frame().get_alpha() == 0.3
+    plt.close("all")
+
+    # An explicit frameon=False wins over framealpha (matplotlib ignores alpha on a hidden frame).
+    leg_off = _categorical_labels_legend(sdata_blobs, {"frameon": False, "framealpha": 0.5})
+    assert leg_off.get_frame_on() is False
+    plt.close("all")
+
+
+def test_legend_params_markerscale_override(sdata_blobs: SpatialData):
+    """Regression #770: markerscale is forwarded to the categorical legend (default 1.0)."""
+    leg_default = _categorical_labels_legend(sdata_blobs, None)
+    assert leg_default.markerscale == 1.0
+    plt.close("all")
+
+    leg = _categorical_labels_legend(sdata_blobs, {"markerscale": 2.0})
+    assert leg.markerscale == 2.0
+    plt.close("all")
+
+
+def test_legend_params_labelcolor_override(sdata_blobs: SpatialData):
+    """Regression #770: labelcolor recolours the legend entry labels."""
+    from matplotlib.colors import to_rgba
+
+    leg = _categorical_labels_legend(sdata_blobs, {"labelcolor": "white"})
+    assert leg.get_texts()  # a real categorical legend was built
+    for text in leg.get_texts():
+        assert to_rgba(text.get_color()) == to_rgba("white")
+    plt.close("all")
+
+
+def test_legend_params_ncols_alias_precedence(sdata_blobs: SpatialData):
+    """Regression #770: 'ncols' wins over 'ncol', and an explicit None 'ncols' falls back to 'ncol'."""
+    leg_both = _categorical_labels_legend(sdata_blobs, {"ncol": 3, "ncols": 1})
+    assert leg_both._ncols == 1
+    plt.close("all")
+
+    leg_none = _categorical_labels_legend(sdata_blobs, {"ncols": None, "ncol": 1})
+    assert leg_none._ncols == 1
+    plt.close("all")
+
+
+class TestLegendParams(PlotTester, metaclass=PlotTesterMeta):
+    """Minimal visual regression tests for each curated legend_params styling key (#770)."""
+
+    @staticmethod
+    def _color_labels(sdata_blobs: SpatialData, n_groups: int, key: str = "cat") -> None:
+        obs = sdata_blobs["table"].obs
+        obs[key] = pd.Categorical([f"g{i % n_groups}" for i in range(len(obs))])
+
+    def test_plot_legend_ncols(self, sdata_blobs: SpatialData):
+        """ncols=3 lays the 16-category legend out in three columns (auto count would be 2)."""
+        self._color_labels(sdata_blobs, 16)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"ncols": 3})
+
+    def test_plot_legend_markerscale(self, sdata_blobs: SpatialData):
+        """markerscale enlarges the legend handle dots."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(legend_params={"markerscale": 3})
+
+    def test_plot_legend_frameon(self, sdata_blobs: SpatialData):
+        """frameon draws the legend box (placed over the image so it is visible)."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "frameon": True}
+        )
+
+    def test_plot_legend_framealpha(self, sdata_blobs: SpatialData):
+        """framealpha makes the (implied) frame semi-transparent over the image."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "framealpha": 0.3}
+        )
+
+    def test_plot_legend_title_fontsize(self, sdata_blobs: SpatialData):
+        """title_fontsize sizes the (column-name) titles of stacked categorical legends."""
+        self._color_labels(sdata_blobs, 3, key="cat0")
+        self._color_labels(sdata_blobs, 3, key="cat1")
+        (
+            sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
+            .pl.render_labels("blobs_labels", color="cat1")
+            .pl.show(legend_params={"title_fontsize": 24})
+        )
+
+    def test_plot_legend_labelcolor(self, sdata_blobs: SpatialData):
+        """labelcolor recolours the legend entry labels."""
+        self._color_labels(sdata_blobs, 5)
+        sdata_blobs.pl.render_labels("blobs_labels", color="cat").pl.show(
+            legend_params={"loc": "upper right", "labelcolor": "red"}
+        )

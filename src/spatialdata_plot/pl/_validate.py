@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -13,7 +14,7 @@ import pandas as pd
 import spatialdata as sd
 from anndata import AnnData
 from matplotlib.axes import Axes
-from matplotlib.colors import Colormap, Normalize
+from matplotlib.colors import Colormap, Normalize, is_color_like
 from matplotlib.figure import Figure
 from spatialdata import (
     SpatialData,
@@ -234,12 +235,62 @@ def _validate_show_parameters(
         if not isinstance(legend_params, dict):
             raise TypeError("Parameter 'legend_params' must be a dictionary or None.")
         # `loc` is matplotlib.Legend's native key; `location` aligns with colorbar_params / scalebar_params.
-        allowed_legend_keys = {"loc", "location", "fontsize", "fontweight", "fontoutline", "na_in_legend"}
+        # `ncol` is accepted as an alias of `ncols` (matplotlib renamed it in 3.6); we normalise later.
+        allowed_legend_keys = {
+            "loc",
+            "location",
+            "fontsize",
+            "fontweight",
+            "fontoutline",
+            "na_in_legend",
+            "ncols",
+            "ncol",
+            "markerscale",
+            "frameon",
+            "framealpha",
+            "title_fontsize",
+            "labelcolor",
+        }
         unknown = set(legend_params) - allowed_legend_keys
         if unknown:
             raise ValueError(
                 f"Unknown legend_params key(s): {sorted(unknown)}. Allowed keys: {sorted(allowed_legend_keys)}."
             )
+        _check_legend_styling_params(legend_params)
+
+
+def _is_number(val: Any) -> bool:
+    """Return ``True`` for a real number (incl. numpy scalars), excluding bool."""
+    return isinstance(val, numbers.Real) and not isinstance(val, bool)
+
+
+def _resolve_ncols(legend_params: dict[str, Any]) -> Any:
+    """Resolve the ``ncols``/``ncol`` alias by precedence (``ncols`` wins), treating None as unset."""
+    ncols = legend_params.get("ncols")
+    return legend_params.get("ncol") if ncols is None else ncols
+
+
+def _check_legend_styling_params(legend_params: dict[str, Any]) -> None:
+    """Validate the curated categorical-legend styling keys with actionable errors."""
+    if (n := _resolve_ncols(legend_params)) is not None and (
+        not isinstance(n, numbers.Integral) or isinstance(n, bool) or n < 1
+    ):
+        raise ValueError(f"legend_params 'ncols' must be a positive integer, got {n!r}.")
+
+    if (ms := legend_params.get("markerscale")) is not None and (not _is_number(ms) or ms <= 0):
+        raise ValueError(f"legend_params['markerscale'] must be a positive number, got {ms!r}.")
+
+    if (fo := legend_params.get("frameon")) is not None and not isinstance(fo, bool):
+        raise TypeError(f"legend_params['frameon'] must be a bool, got {fo!r}.")
+
+    if (fa := legend_params.get("framealpha")) is not None and (not _is_number(fa) or not 0.0 <= fa <= 1.0):
+        raise ValueError(f"legend_params['framealpha'] must be a number in [0, 1], got {fa!r}.")
+
+    if (tf := legend_params.get("title_fontsize")) is not None and not (_is_number(tf) or isinstance(tf, str)):
+        raise TypeError(f"legend_params['title_fontsize'] must be a number or a matplotlib size string, got {tf!r}.")
+
+    if (lc := legend_params.get("labelcolor")) is not None and not is_color_like(lc):
+        raise ValueError(f"legend_params['labelcolor'] must be a matplotlib color, got {lc!r}.")
 
 
 def _check_color_column_collision(
@@ -608,8 +659,6 @@ def _check_cmap_palette_groups(param_dict: dict[str, Any], element_type: str) ->
 
     # dict palettes (e.g. from make_palette_from_data) bypass groups validation
     if isinstance(palette, dict):
-        from matplotlib.colors import is_color_like
-
         invalid = [f"'{k}': '{v}'" for k, v in palette.items() if not is_color_like(v)]
         if invalid:
             raise ValueError(f"Dict palette contains invalid color values: {', '.join(invalid)}.")

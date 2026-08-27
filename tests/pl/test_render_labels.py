@@ -170,6 +170,32 @@ class TestLabels(PlotTester, metaclass=PlotTesterMeta):
         assert abs(boxes[0].y1 - boxes[1].y1) < 0.01  # tops aligned
         plt.close()
 
+    def test_legend_params_ncols_applies_to_both_stacked_legends(self, sdata_blobs: SpatialData):
+        # Regression test for #770: a forced legend_params override must reach BOTH the scanpy-built
+        # primary legend and the stacked (2nd) legend builder. State-based. Each column has >14
+        # categories so the auto column count is 2 -- forcing ncols=3 is therefore a real override,
+        # not a no-op that would pass even if the override were ignored.
+        n = sdata_blobs["table"].n_obs
+        sdata_blobs["table"].obs["region"] = pd.Categorical(["blobs_labels"] * n)
+        sdata_blobs["table"].uns["spatialdata_attrs"]["region"] = "blobs_labels"
+        sdata_blobs["table"].obs["cat0"] = pd.Categorical([f"a{i % 15}" for i in range(n)])
+        sdata_blobs["table"].obs["cat1"] = pd.Categorical([f"b{i % 15}" for i in range(n)])
+
+        (
+            sdata_blobs.pl.render_labels("blobs_labels", color="cat0")
+            .pl.render_labels("blobs_labels", color="cat1")
+            .pl.show(legend_params={"ncols": 3, "frameon": True, "title_fontsize": 22})
+        )
+
+        ax = plt.gcf().axes[0]
+        legends = [c for c in ax.get_children() if isinstance(c, Legend)]
+        assert len(legends) == 2
+        for leg in legends:
+            assert leg._ncols == 3  # auto would be 2 for >14 categories
+            assert leg.get_frame_on() is True
+            assert leg.get_title().get_fontsize() == 22  # stacked legends carry column-name titles
+        plt.close()
+
     def test_three_categorical_label_renders_make_three_legends(self, sdata_blobs: SpatialData):
         # Regression test for #364: re-adding prior legends must not duplicate them; three renders
         # yield exactly three distinct legends (not four with a repeat).
