@@ -20,7 +20,7 @@ import xarray as xr
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import BoundaryNorm, Colormap, ListedColormap, Normalize, to_rgba_array
-from spatialdata import get_extent, get_values
+from spatialdata import get_element_instances, get_extent, get_values
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -2349,8 +2349,14 @@ def _render_labels(
                 "instance_id=0 before plotting."
             )
 
-        # get instance id based on subsetted table
-        instance_id = np.unique(table.obs[instance_key].values)
+        # Restrict to instances that actually exist in the element (canonical scale-0),
+        # matching the colour vector's basis from get_values; table rows for absent
+        # instances are dropped instead of misaligning the mask (#775). Rasterize/multiscale
+        # display drops are reconciled against both vectors below (~L2405).
+        instance_id = np.intersect1d(
+            np.unique(table.obs[instance_key].values),
+            np.asarray(get_element_instances(sdata_filt[element])),
+        )
 
     trans, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
