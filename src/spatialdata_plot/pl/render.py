@@ -20,7 +20,7 @@ import xarray as xr
 from matplotlib import patheffects
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import BoundaryNorm, Colormap, ListedColormap, Normalize, to_rgba_array
-from spatialdata import get_extent, get_values
+from spatialdata import get_element_instances, get_extent, get_values
 from spatialdata.models import PointsModel, ShapesModel, get_table_keys
 from spatialdata.transformations import set_transformation
 from spatialdata.transformations.transformations import Identity
@@ -2334,6 +2334,12 @@ def _render_labels(
         # limits already clip to the box, so return before the instance-overlap/colour machinery.
         return
 
+    # instance_id must line up with the per-instance colour/outline vectors only when one of these
+    # drives the render; the same gate guards the rasterize reconciliation below.
+    needs_aligned_instances = (
+        col_for_color is not None or render_params.col_for_outline_color is not None or render_params.as_points
+    )
+
     if table_name is None:
         instance_id = unique_labels
         table = None
@@ -2349,8 +2355,19 @@ def _render_labels(
                 "instance_id=0 before plotting."
             )
 
-        # get instance id based on subsetted table
-        instance_id = np.unique(table.obs[instance_key].values)
+        if needs_aligned_instances:
+            # Restrict to instances that actually exist in the element (canonical scale-0),
+            # matching the colour vector's basis from get_values; table rows for absent
+            # instances are dropped instead of misaligning the mask. Rasterize/multiscale
+            # display drops are reconciled against both vectors by the block below.
+            # ponytail: this rescans the canonical raster get_values also scans; thread
+            # get_values' instance index out of resolve_color if the double pass ever bites.
+            instance_id = np.intersect1d(
+                np.unique(table.obs[instance_key].values),
+                np.asarray(get_element_instances(sdata_filt[element])),
+            )
+        else:
+            instance_id = np.unique(table.obs[instance_key].values)
 
     trans, trans_data = _prepare_transformation(label, coordinate_system, ax)
 
@@ -2402,7 +2419,7 @@ def _render_labels(
 
     # rasterize/downsampling can drop labels from the raster; remove their (now-absent) instance ids
     # so per-instance colors stay aligned and as_points does not emit dots for dropped cells.
-    if rasterize and (col_for_color is not None or col_for_outline_color is not None or render_params.as_points):
+    if rasterize and needs_aligned_instances:
         mask = np.isin(instance_id, unique_labels)
         instance_id = instance_id[mask]
         if col_for_color is not None:
