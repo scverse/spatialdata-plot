@@ -72,9 +72,10 @@ def _gate_palette_and_groups(
     element_params: dict[str, Any],
     param_dict: dict[str, Any],
 ) -> None:
-    """Set palette/groups on element_params only when col_for_color is present, else warn."""
+    """Keep palette when a fill or outline column is present; groups only with a fill column, else warn."""
     has_col = element_params.get("col_for_color") is not None
-    element_params["palette"] = param_dict["palette"] if has_col else None
+    has_outline_col = element_params.get("col_for_outline_color") is not None
+    element_params["palette"] = param_dict["palette"] if has_col or has_outline_col else None
     if not has_col and param_dict["groups"] is not None:
         logger.warning(_GROUPS_IGNORED_WARNING)
     element_params["groups"] = param_dict["groups"] if has_col else None
