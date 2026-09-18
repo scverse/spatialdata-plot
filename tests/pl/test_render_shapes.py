@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import scanpy as sc
 from anndata import AnnData
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, to_hex
 from shapely.geometry import MultiPolygon, Point, Polygon
 from spatialdata import SpatialData, deepcopy
 from spatialdata.models import ShapesModel, TableModel
@@ -1686,6 +1686,19 @@ def test_outline_color_column_groups_filter_aligns(sdata_blobs: SpatialData):
         outline_color="stage",
     ).pl.show(ax=ax)
     plt.close(fig)
+
+
+def test_outline_color_column_respects_palette_without_fill_column(sdata_blobs: SpatialData):
+    # Regression test for #777: palette was dropped when only `outline_color` named a column.
+    sdata_blobs = _annotate_polygons_with_outline_columns(sdata_blobs)
+    palette = {"c1": "#ff00ff", "c2": "#00ff00"}
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_shapes(
+        "blobs_polygons", outline_color="cluster", palette=palette, fill_alpha=0, outline_width=1.5
+    ).pl.show(ax=ax)
+    edge_colors = {to_hex(c) for c in ax.collections[0].get_edgecolor()}
+    plt.close(fig)
+    assert set(palette.values()) <= edge_colors
 
 
 def test_outline_color_column_collision_raises(sdata_blobs: SpatialData):
