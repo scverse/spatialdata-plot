@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 import scanpy as sc
 from anndata import AnnData
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, to_hex
 from matplotlib.legend import Legend
 from spatial_image import to_spatial_image
 from spatialdata import SpatialData, deepcopy, get_element_instances
@@ -850,6 +850,17 @@ def test_labels_outline_color_groups_filter_aligns(sdata_blobs: SpatialData):
         outline_color="stage",
     ).pl.show(ax=ax)
     plt.close(fig)
+
+
+def test_render_labels_respects_dict_palette(sdata_blobs: SpatialData):
+    # Regression test: default colors materialized in `.uns` used to override an explicit dict palette.
+    sdata_blobs = _annotate_labels_with_outline_columns(sdata_blobs)
+    palette = {"c1": "#ff00ff", "c2": "#00ff00"}
+    fig, ax = plt.subplots()
+    sdata_blobs.pl.render_labels("blobs_labels", color="cluster", palette=palette).pl.show(ax=ax)
+    pixels = np.asarray(ax.images[0].get_array())[..., :3].reshape(-1, 3)
+    plt.close(fig)
+    assert set(palette.values()) <= {to_hex(p) for p in np.unique(pixels, axis=0)}
 
 
 def test_render_labels_color_list_creates_one_panel_per_key(sdata_blobs: SpatialData):
