@@ -823,6 +823,60 @@ def test_render_labels_disjoint_instance_ids_clear_error():
         plt.close(fig)
 
 
+def _labels_with_partial_table(instance_id, *, scale_factors=None):
+    # labels contain instances 1, 2; the table's instance_id set is caller-controlled so tests can
+    # add phantom rows (instances absent from the raster) or omit a present instance.
+    arr = np.zeros((20, 20), dtype=np.int32)
+    arr[3:8, 3:8] = 1
+    arr[12:17, 12:17] = 2
+    obs = pd.DataFrame(
+        {
+            "instance_id": instance_id,
+            "region": pd.Categorical(["lbl"] * len(instance_id)),
+            "cat": pd.Categorical([c for c, _ in zip("ABCDEFG", instance_id, strict=False)]),
+        }
+    )
+    obs.index = obs.index.astype(str)
+    table = TableModel.parse(
+        AnnData(X=np.zeros((len(instance_id), 1)), obs=obs),
+        region=["lbl"],
+        region_key="region",
+        instance_key="instance_id",
+    )
+    table.obs["value"] = np.arange(len(instance_id), dtype=float)
+    labels = Labels2DModel.parse(arr, dims=["y", "x"], scale_factors=scale_factors)
+    return SpatialData(labels={"lbl": labels}, tables={"t": table})
+
+
+@pytest.mark.parametrize("color", ["value", "cat"])
+@pytest.mark.parametrize(
+    "instance_id",
+    [
+        [1, 2, 3],  # phantom row: instance 3 is absent from the raster (#775)
+        [1],  # present instance 2 has no table row
+    ],
+)
+def test_render_labels_partial_table_does_not_raise(color, instance_id):
+    # Regression test for #775: a table annotating instances that are not present in the labels
+    # (or missing a present instance) must render as missing, not raise IndexError.
+    sdata = _labels_with_partial_table(instance_id)
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_labels("lbl", color=color, table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
+def test_render_labels_phantom_row_survives_rasterization():
+    # #775: the alignment must also hold once rasterization/multiscale drops labels from the raster.
+    sdata = _labels_with_partial_table([1, 2, 3], scale_factors=[2])
+    fig, ax = plt.subplots()
+    try:
+        sdata.pl.render_labels("lbl", color="value", table_name="t").pl.show(ax=ax)
+    finally:
+        plt.close(fig)
+
+
 @pytest.mark.parametrize("scale_factors", [None, [2]])
 def test_render_labels_raises_on_3d(scale_factors):
     # Regression test for #608: 3D labels must raise a clear ValueError, not crash
