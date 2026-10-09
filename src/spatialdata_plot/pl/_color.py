@@ -662,9 +662,11 @@ def _set_color_source_vec(
         table_to_use = _resolve_color_table(value_from_element, table_name, sdata)
         adata_for_mapping = sdata[table_to_use] if table_to_use is not None else None
 
-        # Check if custom colors exist in the resolved table's .uns slot
+        # Check if custom colors exist in the resolved table's .uns slot; an explicit
+        # category->color dict palette takes precedence over them.
         if (
             value_to_plot is not None
+            and not isinstance(palette, dict)
             and table_to_use is not None
             and _has_colors_in_uns(sdata, table_to_use, value_to_plot)
         ):
