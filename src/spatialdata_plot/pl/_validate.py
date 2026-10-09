@@ -33,7 +33,9 @@ from spatialdata_plot.pl.render_params import (
     _FontWeight,
 )
 
-_GROUPS_IGNORED_WARNING = "Parameter 'groups' is ignored when 'color' is a literal color, not a column name."
+_GROUPS_IGNORED_WARNING = (
+    "Parameter 'groups' is ignored unless 'color' names a column (it does not apply to outline-only coloring)."
+)
 
 
 def _check_obs_var_shadow(
