@@ -97,12 +97,40 @@ def test_single_ax_explicit_multi_cs_raises(sdata_multi_cs):
         sdata_multi_cs.pl.render_shapes("shp").pl.show(ax=ax, coordinate_systems=["aligned", "global"])
 
 
-def test_single_ax_auto_cs_unresolvable_raises(sdata_multi_cs):
-    """When strict filtering can't resolve the mismatch, error includes hint."""
+def test_single_ax_auto_cs_redundant_duplicates_resolved(sdata_multi_cs):
+    # Regression test for #749: when an element has transformations to multiple coordinate
+    # systems that render the *same* elements, a single ax should render one of them (dropping
+    # the redundant duplicate) with a warning, instead of raising a mismatch error.
+    _, ax = plt.subplots(1, 1)
+    with pytest.warns(UserWarning, match="render identically"):
+        # "shp" is present in both "aligned" and "global" with identical content.
+        sdata_multi_cs.pl.render_shapes("shp").pl.show(ax=ax)
+    assert ax.get_title() in ("aligned", "global")
+
+
+def test_single_ax_auto_cs_distinct_elements_raises():
+    # Regression test for #749: the dedup only collapses coordinate systems that render the
+    # *same* elements. When the detected coordinate systems render genuinely different content
+    # (an image-only CS and a shapes-only CS), they are distinct panels, so a single ax must
+    # still raise the mismatch error.
+    from geopandas import GeoDataFrame
+    from shapely.geometry import Point
+    from spatialdata.models import ShapesModel
+
+    image = Image2DModel.parse(
+        np.zeros((1, 10, 10)),
+        dims=("c", "y", "x"),
+        transformations={"aligned": Identity()},
+    )
+    shp = ShapesModel.parse(
+        GeoDataFrame(geometry=[Point(5, 5)], data={"radius": [2]}),
+        transformations={"global": Identity()},
+    )
+    sdata = SpatialData(images={"img": image}, shapes={"shp": shp})
+
     _, ax = plt.subplots(1, 1)
     with pytest.raises(ValueError, match="coordinate_systems="):
-        # Only render shapes (present in both CS), so strict filter can't narrow down
-        sdata_multi_cs.pl.render_shapes("shp").pl.show(ax=ax)
+        sdata.pl.render_images("img").pl.render_shapes("shp").pl.show(ax=ax)
 
 
 def test_cs_name_with_apostrophe_does_not_crash():

@@ -1790,6 +1790,37 @@ def _resolve_coordinate_systems(
             if strict_cs:
                 coordinate_systems = strict_cs
 
+        # strict_cs above handles the *subset* case (keep the CS that renders all element types);
+        # this complementary step handles the *duplicate* case. If CS still outnumber the axes
+        # because an element carries transformations to several coordinate systems that render the
+        # *same* elements (e.g. visium's "<cs>" and "<cs>_downscaled_lowres"; upstream #176), those
+        # extra panels are redundant. Keep the first coordinate system of each distinct
+        # renderable-element set so a single axes can be satisfied, and tell the user which ones
+        # were dropped. Genuinely distinct coordinate systems keep more sets than axes and fall
+        # through to the mismatch error in _plan_panels.
+        if len(coordinate_systems) > n_ax:
+            seen_element_sets: set[frozenset[str]] = set()
+            deduped: list[str] = []
+            dropped: list[str] = []
+            for cs_name in coordinate_systems:
+                element_set = frozenset(_get_elements_to_be_rendered(render_cmds, cs_index, cs_name))
+                if element_set in seen_element_sets:
+                    dropped.append(cs_name)
+                else:
+                    seen_element_sets.add(element_set)
+                    deduped.append(cs_name)
+            # Entering under len(coordinate_systems) > n_ax, so len(deduped) <= n_ax implies
+            # deduped shrank, i.e. `dropped` is non-empty.
+            if len(deduped) <= n_ax:
+                warnings.warn(
+                    f"Element(s) render identically in coordinate systems {dropped} as in "
+                    f"{deduped}; rendering {deduped} on the provided axes and dropping the "
+                    "redundant duplicate(s). Pass `coordinate_systems=` to choose explicitly.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                coordinate_systems = deduped
+
     return coordinate_systems
 
 
