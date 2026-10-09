@@ -1331,10 +1331,10 @@ def test_plot_can_handle_non_numeric_radius_values(sdata_blobs: SpatialData):
 def test_groups_filtering_preserves_transformation(sdata_blobs: SpatialData):
     """Regression test for #420: groups filtering must not strip coordinate-system metadata.
 
-    Simulates the exact sequence that ``_render_shapes`` performs —
+    Simulates the sequence that ``_render_shapes`` performs —
     filter_by_coordinate_system -> groups boolean-index -> reset_index ->
-    re-assign to sdata_filt -> GeoDataFrame re-wrap — then asserts that
-    ``_prepare_transformation`` can still retrieve the correct transformation.
+    re-assign to sdata_filt — then asserts that ``_prepare_transformation``
+    can still retrieve the correct transformation.
     """
     from spatialdata_plot.pl._datashader import _prepare_transformation
 
@@ -1354,19 +1354,12 @@ def test_groups_filtering_preserves_transformation(sdata_blobs: SpatialData):
     keep = shapes["cluster"] == "c1"
     shapes = shapes[keep].reset_index(drop=True)
     sdata_filt["blobs_polygons"] = shapes
-    # GeoDataFrame re-wrap strips .attrs (this is what _render_shapes does next)
-    shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
     # sdata_filt's element must still carry the correct transformation
     trans, _ = _prepare_transformation(sdata_filt.shapes["blobs_polygons"], cs)
     matrix = trans.get_matrix()
     np.testing.assert_allclose(matrix[0, 0], scale_factor, err_msg="x-scale lost after groups filtering")
     np.testing.assert_allclose(matrix[1, 1], scale_factor, err_msg="y-scale lost after groups filtering")
-
-    # The GeoDataFrame re-wrap strips attrs — reading the transform from
-    # the re-wrapped object must fail, proving why early capture matters.
-    with pytest.raises(AssertionError):
-        _prepare_transformation(shapes, cs)
 
 
 def test_plot_can_handle_mixed_numeric_and_color_data(sdata_blobs: SpatialData):

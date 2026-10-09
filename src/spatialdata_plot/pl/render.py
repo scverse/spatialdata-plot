@@ -895,11 +895,17 @@ def _render_shapes(
         transformed_geometry = shapes["geometry"].transform(
             lambda x: (np.hstack([x, np.ones((x.shape[0], 1))]) @ tm.T)[:, :2]
         )
+        transformed_geodataframe = gpd.GeoDataFrame(
+            data=shapes.drop("geometry", axis=1),
+            geometry=transformed_geometry,
+        )
+        # Geometry is already in the target CS, so tag the wrapped element with an identity transform
+        # there. Depending on the pandas/geopandas version the constructor above may carry over the
+        # source element's transform attrs; drop them first so parse does not see conflicting ones.
+        transformed_geodataframe.attrs.pop("transform", None)
         transformed_element = ShapesModel.parse(
-            gpd.GeoDataFrame(
-                data=shapes.drop("geometry", axis=1),
-                geometry=transformed_geometry,
-            )
+            transformed_geodataframe,
+            transformations={coordinate_system: Identity()},
         )
 
         if len(transformed_element) == 0:
@@ -908,7 +914,7 @@ def _render_shapes(
             return
 
         plot_width, plot_height, x_ext, y_ext, factor = _get_extent_and_range_for_datashader_canvas(
-            transformed_element, "global", fig_params
+            transformed_element, coordinate_system, fig_params
         )
 
         cvs = ds.Canvas(plot_width=plot_width, plot_height=plot_height, x_range=x_ext, y_range=y_ext)
