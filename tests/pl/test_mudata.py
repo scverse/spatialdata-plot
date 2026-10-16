@@ -9,7 +9,7 @@ import pytest
 from matplotlib.colors import Normalize, to_rgb
 from shapely import Point
 from spatialdata import SpatialData
-from spatialdata.models import ShapesModel, TableModel
+from spatialdata.models import Labels2DModel, ShapesModel, TableModel
 
 import spatialdata_plot  # noqa: F401
 from spatialdata_plot.pl.utils import _table_has_key
@@ -101,3 +101,34 @@ def test_render_shapes_colored_by_modality_category(sdata_mudata: SpatialData):
 def test_ambiguous_variable_requires_modality_prefix(sdata_mudata: SpatialData):
     with pytest.raises(ValueError, match="prefix it with the name of the modality"):
         sdata_mudata.pl.render_shapes("cells", color="CD45", table_name="table").pl.show()
+
+
+@pytest.fixture
+def sdata_mudata_labels(sdata_mudata: SpatialData) -> SpatialData:
+    # one 3x3 square per cell, with label ids 1..N_CELLS
+    labels = np.zeros((3, 3 * N_CELLS), dtype=np.int64)
+    for i in range(N_CELLS):
+        labels[:, 3 * i : 3 * i + 3] = i + 1
+    table = sdata_mudata["table"]
+    table.obs["region"] = pd.Categorical(["cell_labels"] * N_CELLS)
+    table.obs["label_id"] = np.arange(1, N_CELLS + 1)
+    table.uns["spatialdata_attrs"] = {"region": "cell_labels", "region_key": "region", "instance_key": "label_id"}
+    return SpatialData(labels={"cell_labels": Labels2DModel.parse(labels, dims=("y", "x"))}, tables={"table": table})
+
+
+@pytest.mark.parametrize("color", ["score", "prot:CD68", "rna:CD45"])
+def test_render_labels_colored_by_mudata_values(sdata_mudata_labels: SpatialData, color: str):
+    fig, ax = plt.subplots()
+    sdata_mudata_labels.pl.render_labels("cell_labels", color=color, table_name="table").pl.show(ax=ax)
+    assert len(ax.get_images()) == 1
+    plt.close(fig)
+
+
+def test_render_labels_colored_by_modality_category(sdata_mudata_labels: SpatialData):
+    fig, ax = plt.subplots()
+    sdata_mudata_labels.pl.render_labels("cell_labels", color="rna:leiden", table_name="table").pl.show(ax=ax)
+    legend_labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    plt.close(fig)
+    assert legend_labels == ["a", "b"]
+    # scanpy's convention for the colors of a categorical column, in the global uns of the MuData table
+    assert len(sdata_mudata_labels["table"].uns["rna:leiden_colors"]) == 2

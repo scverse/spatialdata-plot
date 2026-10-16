@@ -85,6 +85,7 @@ from spatialdata_plot.pl.utils import (
     _get_extent_fast,
     _get_valid_cs,
     _get_wanted_render_elements,
+    _is_mudata,
     _mpl_ax_contains_elements,
     _prepare_params_plot,
     _verify_plotting_tree,
@@ -2132,13 +2133,21 @@ def _maybe_set_label_colors(
     col = render_params.col_for_color
     if table is None or col is None:
         return
-    colors = sc.get.obs_df(sdata[table], [col])
+    # MuData tables have no `.X`: their values (also from the modalities) are read as in `spatialdata.get_values`
+    colors = (
+        sd.get_values(col, element=sdata[table]) if _is_mudata(sdata[table]) else sc.get.obs_df(sdata[table], [col])
+    )
     if not isinstance(colors[col].dtype, pd.CategoricalDtype):
         return
     adata = sdata[table]
     color_key = f"{col}_colors"
     if render_params.palette is None and used_colors and color_key not in adata.uns:
         adata.uns[color_key] = _next_palette_colors(used_colors, len(colors[col].cat.categories))
+    elif _is_mudata(adata) and col not in adata.obs.columns:
+        # a column of a modality: the palette is computed on its values and stored in the global uns
+        values = AnnData(obs=colors.set_axis(colors.index.astype(str)))
+        _maybe_set_colors(source=adata, target=values, key=col, palette=render_params.palette)
+        adata.uns[color_key] = values.uns[color_key]
     else:
         _maybe_set_colors(source=adata, target=adata, key=col, palette=render_params.palette)
     if used_colors is not None and color_key in adata.uns:
