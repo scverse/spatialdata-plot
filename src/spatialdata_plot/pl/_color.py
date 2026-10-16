@@ -59,6 +59,7 @@ from spatialdata_plot.pl.utils import (
     _ensure_one_to_one_mapping,
     _first_color_per_category,
     _format_element_name,
+    _is_mudata,
     to_hex,
 )
 
@@ -526,6 +527,8 @@ def _fetch_color_source_vector(
         and table_name is not None
         and table_name in sdata.tables
         and origins[0].origin in ("obs", "var")
+        # the values of a MuData table come from its modalities, aligned to the global obs by `get_values`
+        and not _is_mudata(sdata[table_name])
     ):
         # Fast path: read the single aligned column directly instead of joining/copying the
         # whole annotating table (the join's out-of-order sparse row-gather dominates large renders).

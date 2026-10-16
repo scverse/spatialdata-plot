@@ -32,6 +32,7 @@ from spatialdata_plot.pl.render_params import (
     _FontSize,
     _FontWeight,
 )
+from spatialdata_plot.pl.utils import _table_has_key
 
 _GROUPS_IGNORED_WARNING = (
     "Parameter 'groups' is ignored unless 'color' names a column (it does not apply to outline-only coloring)."
@@ -319,7 +320,7 @@ def _check_color_column_collision(
             tables = set()
         for t in tables:
             adata = sdata[t]
-            if color in adata.obs.columns or color in adata.var_names:
+            if _table_has_key(adata, color):
                 matches.append(f"table '{t}' (annotating '{el}')")
                 break
     if matches:
@@ -396,7 +397,7 @@ def _validate_col_for_column_table(
         if table_name not in tables:
             logger.warning(f"Table '{table_name}' does not annotate element '{element_name}'.")
             raise KeyError(f"Table '{table_name}' does not annotate element '{element_name}'.")
-        if col_for_color not in sdata[table_name].obs.columns and col_for_color not in sdata[table_name].var_names:
+        if not _table_has_key(sdata[table_name], col_for_color):
             if gene_symbols is not None:
                 col_for_color = _resolve_gene_symbols(sdata[table_name], col_for_color, gene_symbols)
             else:
@@ -422,7 +423,7 @@ def _validate_col_for_column_table(
                 f"Available var columns: {available}"
             )
         for annotates in tables.copy():
-            if col_for_color not in sdata[annotates].obs.columns and col_for_color not in sdata[annotates].var_names:
+            if not _table_has_key(sdata[annotates], col_for_color):
                 if gene_symbols is not None:
                     try:
                         resolved_var_name = _resolve_gene_symbols(sdata[annotates], col_for_color, gene_symbols)

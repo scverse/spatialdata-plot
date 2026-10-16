@@ -95,6 +95,7 @@ from spatialdata_plot.pl.utils import (
     _rasterize_if_necessary,
     _rasterize_if_necessary_datashader,
     _stream_label_centroid_stats,
+    _table_has_key,
 )
 
 _Normalize = Normalize | abc.Sequence[Normalize]
@@ -1423,10 +1424,7 @@ def _render_points(
             f"To improve performance, it is advisable to store point annotations directly in the .parquet file."
         )
 
-    if col_for_color is None or (
-        table_name is not None
-        and (col_for_color in sdata_filt[table_name].obs.columns or col_for_color in sdata_filt[table_name].var_names)
-    ):
+    if col_for_color is None or (table_name is not None and _table_has_key(sdata_filt[table_name], col_for_color)):
         points = points[coords].compute()
     else:
         if col_for_color not in coords:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
@@ -80,6 +81,30 @@ _RENDER_CMD_TO_CS_FLAG: dict[str, str] = {
     "render_points": "has_points",
     "render_labels": "has_labels",
 }
+
+
+def _is_mudata(table: Any) -> bool:
+    """Whether ``table`` is a MuData table (supported by SpatialData versions with multimodal tables)."""
+    # mudata is not a dependency: if it is not imported, there cannot be any MuData object
+    mudata = sys.modules.get("mudata")
+    return mudata is not None and isinstance(table, mudata.MuData)
+
+
+def _table_has_key(table: Any, key: str) -> bool:
+    """
+    Whether ``key`` names a column of ``table.obs`` or one of its variables.
+
+    For a MuData table, ``key`` can also name a column of the obs or a variable of a modality, as
+    ``"<modality>:<key>"`` (or just the variable name, if it is found in only one modality); the lookup is the one of
+    :func:`spatialdata.get_values`.
+    """
+    if key in table.obs.columns:
+        return True
+    if _is_mudata(table):
+        from spatialdata._core.query.relational_query import _get_table_origins
+
+        return len(_get_table_origins(element=table, value_key=key, origins=[])) > 0
+    return key in table.var_names
 
 
 def _extract_scalar_value(value: Any, default: float = 0.0) -> float:
