@@ -136,6 +136,8 @@ html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 html_title = project
 html_logo = "_static/img/spatialdata_horizontal.svg"
+# sphinxext-opengraph social cards cannot use an SVG, so keep the PNG for them
+ogp_social_cards = {"image": "_static/img/spatialdata_horizontal.png"}
 
 html_theme_options = {
     "repository_url": repository_url,
