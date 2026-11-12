@@ -3,7 +3,7 @@
 ## Root cause
 
 When a SpatialElement carries transformations to **multiple coordinate systems**
-(e.g. visium's `"<cs>"` and `"<cs>_downscaled_lowres"` pair), `filter_by_coordinate_system`
+(e.g. visium’s `"<cs>"` and `"<cs>_downscaled_lowres"` pair), `filter_by_coordinate_system`
 cannot strip the extra transformation (upstream spatialdata #176). `show()` then
 auto-detects **more coordinate systems than the user intended**. When the user
 passes a single `ax`, `_plan_panels` raises:
@@ -31,10 +31,10 @@ dropped (redundant) coordinate systems and pointing to `coordinate_systems=`.
 If the sets are genuinely distinct (count still `> n_ax`), fall through to the
 existing, correct `ValueError`.
 
-| File | Change | Rationale |
-|------|--------|-----------|
-| `src/spatialdata_plot/pl/basic.py` (`_resolve_coordinate_systems`) | After `strict_cs`, dedup redundant CS by element set when `ax` given + auto-detected; warn | Fixes the mismatch only on the path that currently errors → strictly backward compatible |
-| `tests/pl/test_show.py` | Regression test: multi-CS element + single `ax` no longer raises; distinct-CS case still raises | Lock behavior |
+  | File                                                               | Change                                                                                          | Rationale                                                                                |
+  | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+  | `src/spatialdata_plot/pl/basic.py` (`_resolve_coordinate_systems`) | After `strict_cs`, dedup redundant CS by element set when `ax` given + auto-detected; warn      | Fixes the mismatch only on the path that currently errors → strictly backward compatible |
+  | `tests/pl/test_show.py`                                            | Regression test: multi-CS element + single `ax` no longer raises; distinct-CS case still raises | Lock behavior                                                                            |
 
 Why scope to the `ax`-provided path only: the no-`ax` case currently produces
 one panel per coordinate system (redundant but not an error). Collapsing that
@@ -43,6 +43,7 @@ break the reporter explicitly asked to avoid. The `ax` path currently *errors*,
 so fixing it breaks nothing that worked before.
 
 ## Edge cases
+
 - [ ] 2 CS, same element set, single `ax` → collapse to 1, warn, render (main fix).
 - [ ] 2 CS, **different** element sets, single `ax` → still raise ValueError (correct; genuinely 2 panels).
 - [ ] N CS redundant, `ax` is a list of N → counts already match, no change.
@@ -52,16 +53,19 @@ so fixing it breaks nothing that worked before.
 - [ ] Multi-panel `color=[...]` → single CS required already; unaffected.
 
 ## Downstream impact
+
 - Public API unchanged (no new/changed kwargs).
 - Only converts a previously-raised `ValueError` into a successful render + warning.
 - No baseline image changes expected (new path only exercised by the regression test, which is non-visual).
 
 ## Test plan
+
 - [ ] Regression test (non-visual): multi-CS element, `filter_by_coordinate_system`, `render_shapes().show(ax=ax)` → no raise; assert 1 axis used.
 - [ ] Negative test: 2 CS with different elements + single `ax` → still raises `ValueError`.
 - [ ] Assert a `UserWarning` is emitted mentioning the dropped CS.
 
 ## Risks
+
 - Representative choice is "first in coordinate-system order", which may be the
   `_downscaled_lowres` variant. Visually identical for a standalone plot (axes
   autoscale), but a user overlaying multiple `show()` calls on one `ax` should
@@ -69,6 +73,7 @@ so fixing it breaks nothing that worked before.
 - Low risk overall: new code runs only where the code previously raised.
 
 ## Alternative (Approach 2 — not recommended)
+
 Deduplicate redundant coordinate systems in auto-detect for **both** `ax` and
 no-`ax` paths. More internally consistent, but changes existing no-`ax`
 multi-panel output and possibly visual baselines → backward-incompatible.

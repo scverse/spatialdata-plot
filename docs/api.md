@@ -5,5 +5,4 @@
 :caption: API
 
 plotting.rst
-
 ```

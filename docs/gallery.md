@@ -19,7 +19,7 @@ Learn the API on synthetic data. Start with *Getting started*.
 
 ## Examples
 
-Apply the API to real datasets you'd actually analyse.
+Apply the API to real datasets you’d actually analyse.
 
 :::{include} notebooks/examples/index.md
 :start-after: <!-- gallery-cards-start -->
