@@ -10,7 +10,7 @@ against the latest `spatialdata-plot` release.
 
 ## Tutorials
 
-Learn the API on synthetic data. Start with *Getting started*.
+Learn the API on synthetic data. Start with _Getting started_.
 
 :::{include} notebooks/tutorials/index.md
 :start-after: <!-- gallery-cards-start -->
