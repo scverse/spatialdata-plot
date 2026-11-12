@@ -57,10 +57,10 @@ from spatialdata_plot.pl.render import (
     _split_colorbar_params,
 )
 from spatialdata_plot.pl.render_params import (
-    BBox,
     CBAR_DEFAULT_FRACTION,
     CBAR_DEFAULT_LOCATION,
     CBAR_DEFAULT_PAD,
+    BBox,
     ChannelLegendEntry,
     CmapParams,
     ColorbarSpec,
