@@ -36,7 +36,7 @@ For more information on the `spatialdata-plot` library, please refer to the [doc
 
 ## Installation
 
-You need to have Python 3.12 or newer installed on your system. If you don't have
+You need to have Python 3.12 or newer installed on your system. If you don’t have
 Python installed, we recommend installing [Mambaforge](https://github.com/conda-forge/miniforge#mambaforge).
 
 There are several alternative options to install spatialdata-plot:
@@ -79,6 +79,6 @@ If you like scverse® and want to support our mission, please consider making a 
   <img
     src="https://raw.githubusercontent.com/numfocus/templates/master/images/numfocus-logo.png"
     width="200"
-  >
+>
 </a>
 </div>
