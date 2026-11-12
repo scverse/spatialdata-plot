@@ -19,6 +19,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
 ]
 dynamic = [
   "version", # allow version to be set by git tags
@@ -103,7 +104,9 @@ dependencies.python = ">=3.12"
 pypi-dependencies.spatialdata-plot = { path = ".", editable = true }
 tasks.format = "ruff format ."
 tasks.kernel-install = 'python -m ipykernel install --user --name pixi-dev --display-name "sdata-plot (dev)"'
-tasks.kernel-install-interactive = "python -m ipykernel install --user --name sdata-plot-interactive --display-name \"sdata-plot (interactive)\""
+tasks.kernel-install-interactive = """\
+  python -m ipykernel install --user --name sdata-plot-interactive --display-name \"sdata-plot (interactive)\"\
+  """
 tasks.lab = "jupyter lab"
 tasks.lint = "ruff check ."
 tasks.pre-commit-install = "pre-commit install"
@@ -194,12 +197,12 @@ ini_options.filterwarnings = [
 ]
 
 [tool.coverage]
-run.branch = true
+run.source = [ "spatialdata_plot" ]
 run.omit = [
   "**/test_*.py",
 ]
+run.branch = true
 run.parallel = true
-run.source = [ "spatialdata_plot" ]
 paths.source = [
   "src/spatialdata_plot",
   "*/site-packages/spatialdata_plot",
