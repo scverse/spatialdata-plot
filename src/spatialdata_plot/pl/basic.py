@@ -1402,7 +1402,8 @@ class PlotAccessor:
             default palette fall back to full render + clip (windowing could otherwise reshuffle
             colours); use a categorical dtype or an explicit palette to keep the windowed fast path.
             Requires a single coordinate system (pass ``coordinate_systems`` with one entry if several
-            would otherwise be rendered).
+            would otherwise be rendered). See the
+            `cropping tutorial <https://spatialdata.scverse.org/projects/plot/en/latest/notebooks/tutorials/cropping.html>`_.
         ax : list[Axes] | Axes | None
             Pre-existing matplotlib axes to plot on. Can be a single :class:`~matplotlib.axes.Axes` or a list
             matching the number of coordinate systems. If ``None``, a new figure and axes are created.
