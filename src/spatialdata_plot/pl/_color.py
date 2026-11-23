@@ -142,6 +142,10 @@ class PercentileNormalize(Normalize):
     backend contrast autoscales to the aggregate range rather than to these percentiles.
     """
 
+    # Declared for type checkers only (no runtime attribute, so Normalize's vmin/vmax properties still apply).
+    vmin: float | None
+    vmax: float | None
+
     def __init__(self, pmin: float = 0.0, pmax: float = 100.0, clip: bool = False) -> None:
         if not 0.0 <= pmin < pmax <= 100.0:
             raise ValueError(f"Require 0 <= pmin < pmax <= 100, got pmin={pmin}, pmax={pmax}.")
@@ -523,6 +527,7 @@ def _fetch_color_source_vector(
     if (
         isinstance(element, GeoDataFrame)
         and isinstance(element_name, str)
+        and isinstance(value_to_plot, str)
         and table_name is not None
         and table_name in sdata.tables
         and origins[0].origin in ("obs", "var")
@@ -530,7 +535,7 @@ def _fetch_color_source_vector(
         # Fast path: read the single aligned column directly instead of joining/copying the
         # whole annotating table (the join's out-of-order sparse row-gather dominates large renders).
         return _extract_color_column(
-            sdata[table_name],
+            sdata.tables[table_name],
             value_to_plot,
             origin=origins[0].origin,
             element=element,
@@ -564,7 +569,7 @@ def _resolve_color_table(value_from_element: bool, table_name: str | None, sdata
             return table_name
         logger.warning(f"Table '{table_name}' not found in `sdata.tables`. Falling back to default behavior.")
         return None
-    table_keys = list(sdata.tables.keys())
+    table_keys: list[str] = list(sdata.tables.keys())
     if not table_keys:
         return None
     if len(table_keys) > 1:
@@ -770,6 +775,13 @@ class ColorSpec:
         return self.colortype == "categorical"
 
     @property
+    def categorical_source_vector(self) -> pd.Categorical:
+        """``source_vector``, when :attr:`is_categorical` is True and ``source_vector`` is categorical,."""
+        assert self.is_categorical, f"categorical_source requested on a {self.colortype!r} color spec"
+        assert isinstance(self.source_vector, pd.Categorical), "categorical color spec without a pd.Categorical source"
+        return self.source_vector
+
+    @property
     def is_continuous(self) -> bool:
         return self.colortype == "continuous"
 
@@ -819,7 +831,7 @@ class ColorSpec:
             return None
         if not (na_color.default_color_set or na_color.is_fully_transparent()):
             return None
-        return self.source_vector.isin(groups)
+        return self.categorical_source_vector.isin(groups)
 
     def to_rgba(self, cmap_params: CmapParams) -> np.ndarray:
         """Map this layer's color to an ``(N, 4)`` RGBA array; the one fill+outline mapping.
@@ -833,11 +845,13 @@ class ColorSpec:
                 # categories are hex (resolution fills NaN with an na_color category -> codes >= 0),
                 # so parse the few categories once and gather by code instead of parsing every row
                 lut = np.asarray(colors.to_rgba_array(cv.categories.to_numpy()))
-                return lut[cv.codes]
+                cat_rgba: np.ndarray = lut[cv.codes]
+                return cat_rgba
             # object vector (align_to_length pad / uniform na): factorize the distinct colours and
             # gather back (factorize keeps any NaN as a real code, so the gather stays in-bounds)
             codes, uniq = pd.factorize(np.asarray(cv, dtype=object), sort=False, use_na_sentinel=False)
-            return np.asarray(colors.to_rgba_array(list(uniq)))[codes]
+            obj_rgba: np.ndarray = np.asarray(colors.to_rgba_array(list(uniq)))[codes]
+            return obj_rgba
         arr = np.asarray(self.color_vector)
         if arr.ndim == 2 and arr.shape[1] in (3, 4) and np.issubdtype(arr.dtype, np.number):
             return np.asarray(colors.to_rgba_array(arr))
@@ -881,7 +895,10 @@ class ColorSpec:
         na_hex = na_color.get_hex_with_alpha()
         padded = np.concatenate([np.asarray(vec, dtype=object), np.full(pad, na_hex, dtype=object)])
         if self.is_categorical:
-            source = pd.Categorical(list(self.source_vector) + [None] * pad, categories=self.source_vector.categories)
+            source = pd.Categorical(
+                list(self.categorical_source_vector) + [None] * pad,
+                categories=self.categorical_source_vector.categories,
+            )
         else:  # none: source is an na array, not a Categorical — extend it with na entries
             source = np.concatenate([np.asarray(self.source_vector, dtype=object), np.full(pad, na_hex, dtype=object)])
         return replace(self, source_vector=source, color_vector=padded)
