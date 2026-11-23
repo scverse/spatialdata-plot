@@ -43,6 +43,6 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --upgrade pip wheel
 
-RUN pip install -e ".[dev,test]"
+RUN pip install -e . --group dev --group test
 
 CMD ["pytest", "-v", "tests/pl/test_render.py"]
