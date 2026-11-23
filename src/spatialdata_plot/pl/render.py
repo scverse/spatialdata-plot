@@ -136,8 +136,10 @@ def _pin_norm_to_full_range(
     cmap_params: CmapParams,
     transfunc: Callable[..., Any] | None,
 ) -> None:
-    """Pin ``norm`` in place to the full (pre-crop) continuous range so a cropped matplotlib zoom keeps
-    the uncropped plot's colours. No-op when uncropped (``full_color_spec is None``) or categorical.
+    """Pin ``norm`` in place to the full (pre-crop) continuous range.
+
+    This keeps a cropped matplotlib zoom on the uncropped plot's colours.
+    No-op when uncropped (``full_color_spec is None``) or categorical.
     """
     if full_color_spec is None:
         return
@@ -419,7 +421,7 @@ def _add_legend_and_colorbar(
         palette = color_spec.make_palette()
 
     if color_spec.is_categorical:
-        color_source_vector = color_source_vector.remove_unused_categories()
+        color_source_vector = color_spec.categorical_source_vector.remove_unused_categories()
 
     wants_colorbar = _should_request_colorbar(
         colorbar, has_mappable=cax is not None, is_continuous=color_spec.is_continuous
@@ -427,7 +429,9 @@ def _add_legend_and_colorbar(
 
     if fill_has_decorations:
         # Auto-title the fill legend only when an outline legend will also be drawn.
-        outline_legend_will_render = outline_has_decorations and outline_color_spec.is_categorical
+        outline_legend_will_render = (
+            outline_has_decorations and outline_color_spec is not None and outline_color_spec.is_categorical
+        )
         if legend_params.legend_title is not None:
             fill_title: str | None = legend_params.legend_title or None
         elif outline_legend_will_render and color_spec.is_categorical:
@@ -460,7 +464,8 @@ def _add_legend_and_colorbar(
             legend_params=legend_params,
         )
 
-    if outline_has_decorations and outline_cmap_params is not None:
+    if outline_has_decorations and outline_color_spec is not None and outline_cmap_params is not None:
+        # mypy doesn't understand that `outline_has_decorations` already means `outline_color_spec is not None`
         _decorate_outline(
             ax=ax,
             fig_params=fig_params,
@@ -801,7 +806,7 @@ def _render_shapes(
     )
     if has_valid_color and color_spec.is_categorical and col_for_color is not None:
         # necessary in case different shapes elements are annotated with one table
-        color_spec = color_spec.evolve(source_vector=color_spec.source_vector.remove_unused_categories())
+        color_spec = color_spec.evolve(source_vector=color_spec.categorical_source_vector.remove_unused_categories())
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
@@ -1005,7 +1010,8 @@ def _render_shapes(
             path.vertices = trans.transform(path.vertices)
 
         # render outlines separately to ensure they are always underneath the shape
-        if col_for_outline_color is not None and render_params.outline_alpha[0] > 0:
+        if col_for_outline_color is not None and outline_color_spec is not None and render_params.outline_alpha[0] > 0:
+            # extra `outline_color_spec is not None` is needed only for mypy
             outline_rgba = outline_color_spec.to_rgba(render_params.cmap_params)
             _cax = _get_collection_shape(
                 shapes=shapes,
@@ -1818,7 +1824,7 @@ def _composite_channels(
     Holds O(1) full-resolution buffers instead of the full ``(n_channels, H, W, 4)`` cube;
     byte-identical to stacking then summing because the reduction is sequential.
     """
-    acc = channel_cmaps[0](layers[channels[0]])[:, :, :3].copy()
+    acc: np.ndarray = channel_cmaps[0](layers[channels[0]])[:, :, :3].copy()
     for cmap, ch in zip(channel_cmaps[1:], channels[1:], strict=True):
         acc += cmap(layers[ch])[:, :, :3]
     return acc

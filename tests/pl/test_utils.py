@@ -750,7 +750,7 @@ class TestGetExtentFast:
         }
         set_transformation(sdata_blobs[element], transforms[kind], "cs")
         sub = SpatialData(shapes={element: sdata_blobs[element]})
-        kw = dict(has_images=False, has_labels=False, has_points=False)
+        kw = {"has_images": False, "has_labels": False, "has_points": False}
         fast = _get_extent_fast(sub, "cs", **kw)
         exact = get_extent(sub, "cs", exact=True, **kw)
         for ax in ("x", "y"):
