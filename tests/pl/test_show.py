@@ -380,7 +380,7 @@ def _legend_colors(ax):
     out = {}
     if leg is None:
         return out
-    for text, handle in zip(leg.get_texts(), leg.legend_handles):
+    for text, handle in zip(leg.get_texts(), leg.legend_handles, strict=True):
         for attr in ("get_facecolor", "get_color"):
             try:
                 v = np.ravel(getattr(handle, attr)())
@@ -419,7 +419,7 @@ def test_crop_labels_no_color_reshuffle(col):
     )
     crop_colors = _legend_colors(cropped)
     plt.close("all")
-    shared = [c for c in set(full_colors) & set(crop_colors)]
+    shared = list(set(full_colors) & set(crop_colors))
     assert shared  # the window keeps several categories
     for c in shared:
         assert full_colors[c] == pytest.approx(crop_colors[c], abs=0.02)
