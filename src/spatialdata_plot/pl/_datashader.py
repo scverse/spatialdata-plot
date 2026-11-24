@@ -331,7 +331,7 @@ def _ds_shade_categorical(
 
 
 def _color_vector_is_uniform(color_vector: Any) -> bool:
-    """True if every entry of the per-point colour vector is identical (so per-point colouring collapses).
+    """Return whether every entry of the per-point colour vector is identical (so per-point colouring collapses).
 
     Shared by the datashader categorical collapse and the matplotlib scalar-colour fast path.
     """
@@ -343,7 +343,7 @@ def _color_vector_is_uniform(color_vector: Any) -> bool:
     arr = np.asarray(color_vector)
     if arr.dtype.kind in "US":  # fixed-width strings (the resolved-hex case): cheap vectorised compare
         return bool((arr == arr[0]).all())
-    return pd.Series(arr).nunique(dropna=False) == 1  # object/other: hash-based, no sort
+    return bool(pd.Series(arr).nunique(dropna=False) == 1)  # object/other: hash-based, no sort
 
 
 def _shade_datashader_aggregate(
