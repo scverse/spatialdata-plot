@@ -775,13 +775,6 @@ class ColorSpec:
         return self.colortype == "categorical"
 
     @property
-    def categorical_source_vector(self) -> pd.Categorical:
-        """``source_vector``, when :attr:`is_categorical` is True and ``source_vector`` is categorical,."""
-        assert self.is_categorical, f"categorical_source requested on a {self.colortype!r} color spec"
-        assert isinstance(self.source_vector, pd.Categorical), "categorical color spec without a pd.Categorical source"
-        return self.source_vector
-
-    @property
     def is_continuous(self) -> bool:
         return self.colortype == "continuous"
 
@@ -831,7 +824,11 @@ class ColorSpec:
             return None
         if not (na_color.default_color_set or na_color.is_fully_transparent()):
             return None
-        return self.categorical_source_vector.isin(groups)
+
+        # needed to tell mypy that, in this case, `source_vector` is expected to be `pd.Categorical`
+        assert isinstance(self.source_vector, pd.Categorical)
+
+        return self.source_vector.isin(groups)
 
     def to_rgba(self, cmap_params: CmapParams) -> np.ndarray:
         """Map this layer's color to an ``(N, 4)`` RGBA array; the one fill+outline mapping.
@@ -895,9 +892,11 @@ class ColorSpec:
         na_hex = na_color.get_hex_with_alpha()
         padded = np.concatenate([np.asarray(vec, dtype=object), np.full(pad, na_hex, dtype=object)])
         if self.is_categorical:
+            # needed to tell mypy that, in this case, `source_vector` is expected to be `pd.Categorical`
+            assert isinstance(self.source_vector, pd.Categorical)
             source = pd.Categorical(
-                list(self.categorical_source_vector) + [None] * pad,
-                categories=self.categorical_source_vector.categories,
+                list(self.source_vector) + [None] * pad,
+                categories=self.source_vector.categories,
             )
         else:  # none: source is an na array, not a Categorical — extend it with na entries
             source = np.concatenate([np.asarray(self.source_vector, dtype=object), np.full(pad, na_hex, dtype=object)])

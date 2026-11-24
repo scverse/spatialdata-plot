@@ -421,7 +421,9 @@ def _add_legend_and_colorbar(
         palette = color_spec.make_palette()
 
     if color_spec.is_categorical:
-        color_source_vector = color_spec.categorical_source_vector.remove_unused_categories()
+        # needed to tell mypy that, in this case, `source_vector` is expected to be `pd.Categorical`
+        assert isinstance(color_spec.source_vector, pd.Categorical)
+        color_source_vector = color_spec.source_vector.remove_unused_categories()
 
     wants_colorbar = _should_request_colorbar(
         colorbar, has_mappable=cax is not None, is_continuous=color_spec.is_continuous
@@ -805,8 +807,11 @@ def _render_shapes(
         or next(iter(distinct_colors)) != render_params.cmap_params.na_color.get_hex_with_alpha()
     )
     if has_valid_color and color_spec.is_categorical and col_for_color is not None:
+        # needed to tell mypy that, in this case, `source_vector` is expected to be `pd.Categorical`
+        assert isinstance(color_spec.source_vector, pd.Categorical)
+
         # necessary in case different shapes elements are annotated with one table
-        color_spec = color_spec.evolve(source_vector=color_spec.categorical_source_vector.remove_unused_categories())
+        color_spec = color_spec.evolve(source_vector=color_spec.source_vector.remove_unused_categories())
 
     shapes = gpd.GeoDataFrame(shapes, geometry="geometry")
 
