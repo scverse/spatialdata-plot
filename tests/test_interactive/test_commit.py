@@ -73,7 +73,16 @@ def test_point_to_circle_has_expected_centroid_and_radius():
 
 
 def test_collect_geoms_orders_rois_polygons_points():
-    f_args = dict(xmin=0.0, xmax=100.0, y_lo=0.0, y_hi=100.0, image_w=100, image_h=100, point_radius=1.0)
+    f_args = {
+        "xmin": 0.0,
+        "xmax": 100.0,
+        "y_lo": 0.0,
+        "y_hi": 100.0,
+        "image_w": 100,
+        "image_h": 100,
+        "point_radius": 1.0,
+    }
+
     viewer = SimpleNamespace(
         _rois_data=[{"x": 0, "y": 0, "width": 10, "height": 10}],
         _polygons_data=[{"points": [{"x": 20, "y": 20}, {"x": 30, "y": 20}, {"x": 30, "y": 30}]}],
@@ -91,7 +100,15 @@ def test_collect_geoms_orders_rois_polygons_points():
 
 
 def test_collect_geoms_silently_skips_invalid_entries():
-    f_args = dict(xmin=0.0, xmax=10.0, y_lo=0.0, y_hi=10.0, image_w=10, image_h=10, point_radius=0.5)
+    f_args = {
+        "xmin": 0.0,
+        "xmax": 10.0,
+        "y_lo": 0.0,
+        "y_hi": 10.0,
+        "image_w": 10,
+        "image_h": 10,
+        "point_radius": 0.5,
+    }
     viewer = SimpleNamespace(
         _rois_data=[{"x": 0, "y": 0}],  # missing width/height
         _polygons_data=[{"points": [{"x": 0, "y": 0}]}],  # only 1 vertex
@@ -101,14 +118,30 @@ def test_collect_geoms_silently_skips_invalid_entries():
 
 
 def test_collect_geoms_handles_none_buffers():
-    f_args = dict(xmin=0.0, xmax=10.0, y_lo=0.0, y_hi=10.0, image_w=10, image_h=10, point_radius=0.5)
+    f_args = {
+        "xmin": 0.0,
+        "xmax": 10.0,
+        "y_lo": 0.0,
+        "y_hi": 10.0,
+        "image_w": 10,
+        "image_h": 10,
+        "point_radius": 0.5,
+    }
     viewer = SimpleNamespace(_rois_data=None, _polygons_data=None, _points_data=None)
     assert collect_geoms_from_viewer(viewer, **f_args) == []
 
 
 def test_collect_geoms_returns_polygon_typed_geometries():
     """All three input categories should produce Polygons (points → buffered circles)."""
-    f_args = dict(xmin=0.0, xmax=10.0, y_lo=0.0, y_hi=10.0, image_w=10, image_h=10, point_radius=0.5)
+    f_args = {
+        "xmin": 0.0,
+        "xmax": 10.0,
+        "y_lo": 0.0,
+        "y_hi": 10.0,
+        "image_w": 10,
+        "image_h": 10,
+        "point_radius": 0.5,
+    }
     viewer = SimpleNamespace(
         _rois_data=[{"x": 1, "y": 1, "width": 1, "height": 1}],
         _polygons_data=[{"points": [{"x": 4, "y": 4}, {"x": 5, "y": 4}, {"x": 5, "y": 5}]}],
