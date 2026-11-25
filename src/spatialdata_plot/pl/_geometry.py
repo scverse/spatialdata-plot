@@ -48,7 +48,10 @@ def _scale_geometries(geometries: np.ndarray, scale: float) -> np.ndarray:
     bbox = shapely.bounds(geometries)  # (n, 4): minx, miny, maxx, maxy
     centre = np.column_stack([(bbox[:, 0] + bbox[:, 2]) / 2, (bbox[:, 1] + bbox[:, 3]) / 2])
     coords, idx = shapely.get_coordinates(geometries, return_index=True)
-    return shapely.set_coordinates(geometries.copy(), (coords - centre[idx]) * scale + centre[idx])
+    scaled_geometries: np.ndarray = shapely.set_coordinates(
+        geometries.copy(), (coords - centre[idx]) * scale + centre[idx]
+    )
+    return scaled_geometries
 
 
 def _normalize_geom(geom: Any) -> Any:
